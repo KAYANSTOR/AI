@@ -5,7 +5,7 @@ export default function DashboardPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Overview</h1>
-        <p className="text-slate-500 text-sm mt-1">Here's what's happening in your organization today.</p>
+        <p className="text-slate-500 text-sm mt-1">Here&apos;s what&apos;s happening in your organization today.</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -84,7 +84,7 @@ function StatCard({
   value: string
   change: string
   isPositive: boolean
-  icon: any
+  icon: React.ElementType
   color: string
 }) {
   return (
