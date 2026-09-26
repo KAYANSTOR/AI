@@ -7,8 +7,9 @@ ALTER TABLE contacts
   ADD COLUMN IF NOT EXISTS full_name VARCHAR(255);
 
 -- Backfill full_name from first/last when present
+-- CONCAT_WS skips NULLs (no empty-string literals)
 UPDATE contacts
-SET full_name = TRIM(CONCAT(COALESCE(first_name, ''), ' ', COALESCE(last_name, '')))
+SET full_name = TRIM(BOTH FROM CONCAT_WS(' ', first_name, last_name))
 WHERE full_name IS NULL
   AND (first_name IS NOT NULL OR last_name IS NOT NULL);
 
