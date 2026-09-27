@@ -22,6 +22,15 @@ export async function executeTool(
   ctx: ToolContext
 ): Promise<{ ok: true; result: unknown } | { ok: false; error: string }> {
   try {
+    const { getEnabledCapabilities, isToolAllowed } = await import('@/lib/ai/capabilities')
+    const enabled = await getEnabledCapabilities(ctx.supabase, ctx.organizationId)
+    if (!isToolAllowed(name, enabled)) {
+      return {
+        ok: false,
+        error: `Tool "${name}" is not enabled for this business profile. Enable the required capability in Settings.`,
+      }
+    }
+
     switch (name) {
       case 'get_customer':
         return { ok: true, result: await toolGetCustomer(ctx, rawArgs) }
