@@ -10,6 +10,7 @@ export default function SignupPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [orgName, setOrgName] = useState('')
+  const [businessType, setBusinessType] = useState('appointments')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const router = useRouter()
@@ -20,23 +21,21 @@ export default function SignupPage() {
     setLoading(true)
     setError(null)
 
-    // In a real production app, we would ideally use a database trigger to create the Organization 
-    // when a new user signs up, or we can use Supabase RPC functions. For MVP, we sign them up.
     const { error: signUpError } = await supabase.auth.signUp({
       email,
       password,
       options: {
         data: {
-          organization_name: orgName
-        }
-      }
+          organization_name: orgName,
+          business_type_id: businessType,
+        },
+      },
     })
 
     if (signUpError) {
       setError(signUpError.message)
       setLoading(false)
     } else {
-      // Check your email for verification link
       alert('Success! Please check your email to verify your account.')
       router.push('/login')
     }
@@ -90,7 +89,30 @@ export default function SignupPage() {
                 />
               </div>
             </div>
-            
+
+            <div>
+              <label htmlFor="businessType" className="block text-sm font-medium text-slate-700">
+                Business type
+              </label>
+              <div className="mt-1">
+                <select
+                  id="businessType"
+                  name="businessType"
+                  required
+                  value={businessType}
+                  onChange={(e) => setBusinessType(e.target.value)}
+                  className="appearance-none block w-full px-3 py-2 border border-slate-300 rounded-lg shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+                >
+                  <option value="appointments">Appointments & Booking (salon, clinic)</option>
+                  <option value="weddings_events">Weddings & Events</option>
+                  <option value="sales">Sales</option>
+                  <option value="home_services">Home Services</option>
+                  <option value="custom">Custom</option>
+                </select>
+              </div>
+              <p className="mt-1 text-xs text-slate-500">You can change modules later in Business setup.</p>
+            </div>
+
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-slate-700">
                 Work Email address
