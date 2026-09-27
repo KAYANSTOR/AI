@@ -8,26 +8,45 @@ import {
   Calendar,
   Users,
   Settings,
-  PhoneCall,
-  Bot,
   Contact,
   Wrench,
+  Bot,
+  SlidersHorizontal,
 } from 'lucide-react'
 
-const navItems = [
-  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { name: 'Conversations', href: '/dashboard/conversations', icon: MessageSquare },
-  { name: 'Appointments', href: '/dashboard/appointments', icon: Calendar },
-  { name: 'Leads', href: '/dashboard/leads', icon: Users },
-  { name: 'Contacts', href: '/dashboard/contacts', icon: Contact },
-  { name: 'Services', href: '/dashboard/services', icon: Wrench },
-  { name: 'AI Agents', href: '/dashboard/agents', icon: Bot },
-  { name: 'Telephony', href: '/dashboard/telephony', icon: PhoneCall },
-  { name: 'Settings', href: '/dashboard/settings', icon: Settings },
+type NavItem = {
+  name: string
+  href: string
+  icon: React.ElementType
+  capability: string | null
+}
+
+const navItems: NavItem[] = [
+  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, capability: null },
+  { name: 'Inbox', href: '/dashboard/conversations', icon: MessageSquare, capability: 'inbox' },
+  { name: 'Appointments', href: '/dashboard/appointments', icon: Calendar, capability: 'appointments' },
+  { name: 'Leads', href: '/dashboard/leads', icon: Users, capability: 'lead_capture' },
+  { name: 'Contacts', href: '/dashboard/contacts', icon: Contact, capability: 'lead_capture' },
+  { name: 'Services', href: '/dashboard/services', icon: Wrench, capability: 'appointments' },
+  { name: 'Business setup', href: '/dashboard/setup', icon: SlidersHorizontal, capability: null },
+  { name: 'Settings', href: '/dashboard/settings', icon: Settings, capability: null },
 ]
 
-export function Sidebar({ orgName, role }: { orgName?: string; role?: string }) {
+export function Sidebar({
+  orgName,
+  role,
+  enabledCapabilities = [],
+}: {
+  orgName?: string
+  role?: string
+  enabledCapabilities?: string[]
+}) {
   const pathname = usePathname()
+  const enabled = new Set(enabledCapabilities)
+
+  const visible = navItems.filter(
+    (item) => item.capability === null || enabled.has(item.capability)
+  )
 
   return (
     <aside className="w-64 bg-slate-900 border-r border-slate-800 text-slate-300 flex flex-col h-full">
@@ -48,7 +67,7 @@ export function Sidebar({ orgName, role }: { orgName?: string; role?: string }) 
           Overview
         </div>
         <nav className="flex flex-col gap-1">
-          {navItems.map((item) => {
+          {visible.map((item) => {
             const Icon = item.icon
             const active =
               pathname === item.href ||
@@ -72,14 +91,9 @@ export function Sidebar({ orgName, role }: { orgName?: string; role?: string }) 
       </div>
 
       <div className="p-4 border-t border-slate-800">
-        <div className="flex items-center gap-3 px-3 py-2 rounded-md bg-slate-800/50">
-          <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-white font-bold text-sm">
-            {(orgName?.[0] ?? 'O').toUpperCase()}
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-white truncate">{orgName ?? 'Organization'}</p>
-            <p className="text-xs text-slate-400 truncate capitalize">{role ?? 'member'}</p>
-          </div>
+        <div className="px-3 py-2">
+          <p className="text-sm font-medium text-white truncate">{orgName || 'Organization'}</p>
+          <p className="text-xs text-slate-500 capitalize">{role || 'member'}</p>
         </div>
       </div>
     </aside>
