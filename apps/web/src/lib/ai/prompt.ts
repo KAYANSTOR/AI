@@ -8,12 +8,12 @@ export async function buildBusinessSystemPrompt(
   supabase: SupabaseClient,
   organizationId: string
 ): Promise<string> {
-  const [{ data: org }, { data: profile }, { data: services }, { data: hours }] =
+  const [{ data: org }, { data: profile }, { data: services }, { data: hours }, { data: orgCaps }] =
     await Promise.all([
       supabase.from('organizations').select('name').eq('id', organizationId).maybeSingle(),
       supabase
         .from('business_profiles')
-        .select('industry, timezone, system_prompt_addition')
+        .select('industry, timezone, system_prompt_addition, business_type_id, business_types(name)')
         .eq('organization_id', organizationId)
         .maybeSingle(),
       supabase
@@ -27,6 +27,11 @@ export async function buildBusinessSystemPrompt(
         .select('day_of_week, open_time, close_time, is_closed')
         .eq('organization_id', organizationId)
         .order('day_of_week'),
+      supabase
+        .from('organization_capabilities')
+        .select('capability_id')
+        .eq('organization_id', organizationId)
+        .eq('is_enabled', true),
     ])
 
   const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
@@ -59,6 +64,8 @@ export async function buildBusinessSystemPrompt(
     'BUSINESS CONTEXT',
     `Business name: ${org?.name ?? 'Business'}`,
     `Industry: ${profile?.industry ?? 'beauty_wellness'}`,
+    `Business type: ${(profile?.business_types as { name?: string } | null)?.name ?? profile?.business_type_id ?? 'appointments'}`,
+    `Enabled capabilities: ${(orgCaps ?? []).map((c) => c.capability_id).join(', ') || 'none'}`,
     `Timezone: ${profile?.timezone ?? 'UTC'}`,
     profile?.system_prompt_addition
       ? `Extra instructions: ${profile.system_prompt_addition}`
