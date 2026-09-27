@@ -5,6 +5,33 @@
 CREATE SCHEMA IF NOT EXISTS private;
 REVOKE ALL ON SCHEMA private FROM PUBLIC;
 
+CREATE OR REPLACE FUNCTION private.get_user_organizations()
+RETURNS SETOF UUID LANGUAGE sql STABLE SECURITY DEFINER SET search_path=public,pg_temp
+AS $ SELECT organization_id FROM organization_members WHERE user_id=auth.uid(); $;
+CREATE OR REPLACE FUNCTION private.is_org_member(org_id UUID)
+RETURNS BOOLEAN LANGUAGE sql STABLE SECURITY DEFINER SET search_path=public,pg_temp
+AS $ SELECT auth.uid() IS NOT NULL AND EXISTS(SELECT 1 FROM organization_members WHERE organization_id=org_id AND user_id=auth.uid()); $;
+CREATE OR REPLACE FUNCTION private.is_org_admin(org_id UUID)
+RETURNS BOOLEAN LANGUAGE sql STABLE SECURITY DEFINER SET search_path=public,pg_temp
+AS $ SELECT auth.uid() IS NOT NULL AND EXISTS(SELECT 1 FROM organization_members WHERE organization_id=org_id AND user_id=auth.uid() AND role IN('owner','admin')); $;
+REVOKE ALL ON FUNCTION private.get_user_organizations() FROM PUBLIC;
+REVOKE ALL ON FUNCTION private.is_org_member(UUID) FROM PUBLIC;
+REVOKE ALL ON FUNCTION private.is_org_admin(UUID) FROM PUBLIC;
+GRANT USAGE ON SCHEMA private TO authenticated;
+GRANT EXECUTE ON FUNCTION private.get_user_organizations() TO authenticated;
+GRANT EXECUTE ON FUNCTION private.is_org_member(UUID) TO authenticated;
+GRANT EXECUTE ON FUNCTION private.is_org_admin(UUID) TO authenticated;
+
+CREATE OR REPLACE FUNCTION public.get_user_organizations()
+RETURNS SETOF UUID LANGUAGE sql STABLE SECURITY INVOKER SET search_path=public,pg_temp
+AS $ SELECT * FROM private.get_user_organizations(); $;
+CREATE OR REPLACE FUNCTION public.is_org_member(org_id UUID)
+RETURNS BOOLEAN LANGUAGE sql STABLE SECURITY INVOKER SET search_path=public,pg_temp
+AS $ SELECT private.is_org_member(org_id); $;
+CREATE OR REPLACE FUNCTION public.is_org_admin(org_id UUID)
+RETURNS BOOLEAN LANGUAGE sql STABLE SECURITY INVOKER SET search_path=public,pg_temp
+AS $ SELECT private.is_org_admin(org_id); $;
+
 CREATE TABLE IF NOT EXISTS businesses (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
@@ -291,3 +318,29 @@ CREATE POLICY entitlements_select ON billing_entitlements FOR SELECT TO authenti
 ALTER TABLE webhook_events ENABLE ROW LEVEL SECURITY;
 CREATE POLICY webhook_events_select ON webhook_events FOR SELECT TO authenticated
 USING(organization_id IS NOT NULL AND public.is_org_member(organization_id));
+
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp
+AS $$
+DECLARE new_org_id UUID; new_business_id UUID; org_name TEXT; business_type TEXT; business_slug TEXT;
+BEGIN
+  org_name:=COALESCE(NEW.raw_user_meta_data->>'organization_name',split_part(NEW.email,'@',1)||'''s Business');
+  business_type:=COALESCE(NEW.raw_user_meta_data->>'business_type_id','appointments');
+  business_slug:=COALESCE(NULLIF(trim(both '-' from regexp_replace(lower(COALESCE(NULLIF(org_name,''),'business')),'[^a-z0-9]+','-','g')),''),'business-'||substr(NEW.id::text,1,8));
+  INSERT INTO organizations(name) VALUES(org_name) RETURNING id INTO new_org_id;
+  INSERT INTO organization_members(organization_id,user_id,role) VALUES(new_org_id,NEW.id,'owner');
+  INSERT INTO businesses(organization_id,name,slug,business_type_id,timezone) VALUES(new_org_id,org_name,business_slug,business_type,'UTC') RETURNING id INTO new_business_id;
+  INSERT INTO business_profiles(organization_id,business_id,industry,timezone,business_type_id) VALUES(new_org_id,new_business_id,business_type,'UTC',business_type);
+  INSERT INTO business_hours(organization_id,day_of_week,open_time,close_time,is_closed) VALUES
+    (new_org_id,0,'09:00','18:00',TRUE),(new_org_id,1,'09:00','18:00',FALSE),(new_org_id,2,'09:00','18:00',FALSE),
+    (new_org_id,3,'09:00','18:00',FALSE),(new_org_id,4,'09:00','18:00',FALSE),(new_org_id,5,'09:00','18:00',FALSE),(new_org_id,6,'10:00','16:00',FALSE);
+  INSERT INTO ai_agents(organization_id,business_id,name,slug,model_provider,temperature,status,locale)
+    VALUES(new_org_id,new_business_id,org_name||' AI','frontdesk','anthropic',0.2,'active','ar');
+  INSERT INTO billing_entitlements(organization_id,feature_key,limit_value,period,enabled) VALUES
+    (new_org_id,'ai_messages_monthly',10000,'monthly',TRUE),(new_org_id,'phone_minutes_monthly',300,'monthly',TRUE),(new_org_id,'sms_monthly',500,'monthly',TRUE)
+    ON CONFLICT(organization_id,feature_key) DO NOTHING;
+  RETURN NEW;
+END;
+$$;
+REVOKE EXECUTE ON FUNCTION public.handle_new_user() FROM PUBLIC,anon,authenticated;
+GRANT EXECUTE ON FUNCTION public.handle_new_user() TO postgres;
