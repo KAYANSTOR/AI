@@ -1,0 +1,23 @@
+{
+  "name": "frontdesk-db",
+  "version": "1.0.0",
+  "private": true,
+  "description": "FrontDesk AI runtime database: migrations, drizzle config and migration runner.",
+  "type": "module",
+  "license": "UNLICENSED",
+  "scripts": {
+    "migrate": "bun run --cwd ../.. scripts/db/migrate.ts",
+    "migrate:up": "bun run --cwd ../.. scripts/db/migrate.ts up",
+    "migrate:down": "bun run --cwd ../.. scripts/db/migrate.ts down",
+    "drizzle:generate": "drizzle-kit generate",
+    "drizzle:migrate": "drizzle-kit migrate",
+    "drizzle:studio": "drizzle-kit studio"
+  },
+  "dependencies": {
+    "drizzle-orm": "^0.44.0",
+    "postgres": "^3.4.9"
+  },
+  "devDependencies": {
+    "drizzle-kit": "^0.31.11"
+  }
+}
