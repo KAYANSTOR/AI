@@ -9,6 +9,155 @@
 > **موظف AI واحد يمثل الشركة على Phone + WhatsApp + Instagram**
 > يستقبل → يفهم → يرد → يؤهل → يحجز → يتابع → يستعيد العميل → يسجل كل شيء
 
+# 🧩 مبدأ أساسي: منصة واحدة تتكيّف مع نوع نشاط الشركة
+
+> **FrontDesk AI ليس منتجًا ثابت الوظائف لكل الشركات.** كل شركة تحدد **نوع نشاطها الأساسي** أثناء الإعداد، ثم يحمّل النظام تلقائيًا الوحدات والحقول وسير العمل وأدوات الـAI المناسبة لهذا النشاط.
+
+### الفكرة المعمارية
+
+```
+CORE PLATFORM
+├── الحسابات والمنظمات
+├── العملاء والمحادثات
+├── القنوات: Phone / WhatsApp / Instagram / Web
+├── AI Brain
+├── Knowledge Base
+├── Follow-up Engine
+├── الإشعارات
+├── Billing
+└── Audit / Analytics
+
+BUSINESS OPERATING PROFILE
+├── نوع النشاط
+├── الوحدات المفعّلة
+├── الحقول الخاصة بالنشاط
+├── سير العمل
+├── قوالب الرسائل
+├── أدوات AI المسموحة
+├── إعدادات الحجز/المبيعات
+└── مؤشرات الأداء الخاصة بالنشاط
+```
+
+### Onboarding الجديد
+
+```
+1. أنشئ الشركة
+        ↓
+2. اختر نوع النشاط الأساسي
+        ↓
+3. تظهر الوحدات المناسبة تلقائيًا
+        ↓
+4. يختار صاحب الشركة ما يحتاجه منها
+        ↓
+5. يحمّل النظام الإعدادات والقوالب وسير العمل الافتراضي
+        ↓
+6. AI Agent يبني سياقه وأدواته من هذا الـProfile
+        ↓
+7. لوحة التحكم تتشكل حسب النشاط
+```
+
+### أمثلة للفئات
+
+| الفئة | أمثلة للشركات | الوظائف التي يفعّلها النظام |
+|---|---|---|
+| **تنسيق وتنظيم الأعراس والفعاليات** | شركات تنسيق الأعراس، منظمو الفعاليات | طلب المناسبة، التاريخ، المكان، عدد الضيوف، الباقات، الخدمات الإضافية، معاينة/استشارة، متابعة العميل، حجز موعد |
+| **المبيعات** | متاجر، موزعون، شركات بيع الخدمات والمنتجات | المنتجات، الأسعار، عروض الأسعار، الطلبات، متابعة العملاء، حالة الطلب، إعادة التواصل |
+| **الحجز والمواعيد** | عيادات، صالونات، مراكز، خدمات تعتمد على المواعيد | الخدمات، المدة، الموارد، التوفر، الحجز، الإلغاء، إعادة الجدولة، التذكيرات |
+| **الخدمات المنزلية** | تنظيف، صيانة، تكييف، سباكة | نوع الخدمة، موقع العميل، وقت الزيارة، تقدير الخدمة، جدولة الفني، متابعة الطلب |
+| **الفئة المخصصة** | أي نشاط غير موجود مسبقًا | اختيار وحدات عامة + حقول مخصصة + قوالب وسير عمل قابل للتهيئة |
+
+> **مهم:** الفئة لا تغيّر هوية المنصة ولا تنشئ تطبيقًا جديدًا لكل صناعة. هي **Configuration + Capability Layer** فوق نواة واحدة.
+
+### قاعدة التوسع
+
+في الـMVP يكون لكل شركة **نوع نشاط أساسي واحد**، لكن يمكنها تفعيل عدة قدرات داخله. لاحقًا يمكن دعم أكثر من نشاط/فرع للشركة بدون تغيير النواة.
+
+```
+شركة "روائع الأعراس"
+Type = wedding_events
+
+Capabilities:
+✓ Leads
+✓ Consultations
+✓ Event Date
+✓ Venue
+✓ Packages
+✓ Quotes
+✓ Appointments
+✓ Follow-up
+```
+
+### AI لا يخمّن نوع الوظيفة
+
+الـAI لا يكتب كودًا جديدًا ولا "يخترع" نظامًا للشركة. بدلاً من ذلك، **Capability Registry** يحدد:
+
+```
+Business Type
+      ↓
+Enabled Capabilities
+      ↓
+Allowed AI Tools
+      ↓
+Allowed Workflows
+      ↓
+Prompt Context
+      ↓
+Dashboard Modules
+```
+
+وبذلك إذا كانت الشركة "تنسيق أعراس" فلا تظهر أدوات مخزون غير مفعّلة، وإذا كانت شركة مبيعات فلا تظهر وظائف الحجز إلا عند تفعيلها.
+
+### أمثلة عملية
+
+**شركة تنسيق أعراس:**
+```
+العميل: أريد تنسيق عرسي في 20 ديسمبر لـ 250 شخصًا
+        ↓
+AI يسأل عن المكان + نوع الباقة + الخدمات الإضافية
+        ↓
+يسجل Lead ومواصفات المناسبة
+        ↓
+يعرض الباقات/الأسعار المسموح بها
+        ↓
+يحجز موعد استشارة
+        ↓
+Follow-up تلقائي حتى يتم الحجز أو إغلاق الفرصة
+```
+
+**شركة مبيعات:**
+```
+العميل: أريد 50 قطعة من المنتج X
+        ↓
+AI يقرأ المنتج والسعر والتوفر
+        ↓
+ينشئ عرض/طلب
+        ↓
+يسجل قيمة الفرصة
+        ↓
+يرسل تأكيدًا ويتابع الطلب
+```
+
+**شركة حجز:**
+```
+العميل: أريد حجزًا غدًا الساعة 6
+        ↓
+AI يتحقق من التوفر
+        ↓
+يعرض الخيارات
+        ↓
+ينشئ الحجز
+        ↓
+يرسل التذكير
+```
+
+### قاعدة تصميم مهمة
+
+> **لا نبني نسخة منفصلة من النظام لكل فئة.** نبني Nucleus واحدًا + Modules قابلة للتفعيل + Configurable Workflows.
+
+هذا يمنع تشعب الكود، ويجعل إضافة فئة جديدة عملية إضافة تعريفات ووحدات واختبارات، لا إعادة بناء المنتج.
+
+
+
 ---
 
 # 🎯 الجزء الأول: الاستراتيجية (وكيل Claude Opus 5.5)
@@ -26,7 +175,7 @@
 | **Lost Lead = Gold** | لا يتابعون العملاء القدامى — Follow-up Engine يجلب تحويلات مباشرة |
 | **انخفاض Churn** | لا تُغلق كالمطاعم — عميل طويل الأمد |
 
-> **الاستراتيجية:** أول 6 أشهر في هذا الـ Niche حصراً. ابدأ بمدينة واحدة.
+> **الاستراتيجية التجارية:** أول 6 أشهر يمكن أن تركز المبيعات والتسويق على هذا الـNiche، **لكن المعمارية البرمجية من اليوم الأول Multi-Industry** حتى لا نضطر لإعادة بناء المنتج لاحقًا.
 
 ### 🥈 الثاني: Home Services (HVAC, Plumbing, Roofing)
 مناسب لكن يخسرون عملاء بآلاف الدولارات من مكالمات فائتة.
@@ -240,6 +389,35 @@ CREATE TYPE plan_type AS ENUM ('starter', 'growth', 'pro');
 CREATE TYPE user_role AS ENUM ('owner', 'admin', 'member');
 
 -- ══════════════════════════════════════
+-- ADAPTIVE BUSINESS MODEL
+-- ══════════════════════════════════════
+CREATE TABLE business_types (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  key          TEXT UNIQUE NOT NULL,
+  name         TEXT NOT NULL,
+  description  TEXT,
+  is_active    BOOLEAN DEFAULT TRUE,
+  created_at   TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE business_capabilities (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  key           TEXT UNIQUE NOT NULL,
+  name          TEXT NOT NULL,
+  description   TEXT,
+  config_schema JSONB DEFAULT '{}',
+  is_active     BOOLEAN DEFAULT TRUE,
+  created_at    TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE business_type_capabilities (
+  business_type_id UUID NOT NULL REFERENCES business_types(id) ON DELETE CASCADE,
+  capability_id    UUID NOT NULL REFERENCES business_capabilities(id) ON DELETE CASCADE,
+  is_default       BOOLEAN DEFAULT TRUE,
+  PRIMARY KEY (business_type_id, capability_id)
+);
+
+-- ══════════════════════════════════════
 -- CORE: Organizations & Users
 -- ══════════════════════════════════════
 CREATE TABLE organizations (
@@ -265,17 +443,31 @@ CREATE INDEX idx_users_org ON users(org_id);
 -- BUSINESSES (tenant's clients)
 -- ══════════════════════════════════════
 CREATE TABLE businesses (
-  id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  org_id         UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-  name           TEXT NOT NULL,
-  phone          TEXT,
-  address        TEXT,
-  website        TEXT,
-  timezone       TEXT DEFAULT 'UTC',
-  business_hours JSONB DEFAULT '{}',
-  created_at     TIMESTAMPTZ DEFAULT NOW(),
-  updated_at     TIMESTAMPTZ DEFAULT NOW()
+  id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_id           UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  name             TEXT NOT NULL,
+  business_type_id UUID REFERENCES business_types(id),
+  phone            TEXT,
+  address          TEXT,
+  website          TEXT,
+  timezone         TEXT DEFAULT 'UTC',
+  business_hours   JSONB DEFAULT '{}',
+  configuration    JSONB DEFAULT '{}',
+  created_at       TIMESTAMPTZ DEFAULT NOW(),
+  updated_at       TIMESTAMPTZ DEFAULT NOW()
 );
+CREATE INDEX idx_businesses_type ON businesses(business_type_id);
+
+CREATE TABLE business_enabled_capabilities (
+  business_id   UUID NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+  capability_id UUID NOT NULL REFERENCES business_capabilities(id) ON DELETE CASCADE,
+  is_enabled    BOOLEAN DEFAULT TRUE,
+  config        JSONB DEFAULT '{}',
+  created_at    TIMESTAMPTZ DEFAULT NOW(),
+  updated_at    TIMESTAMPTZ DEFAULT NOW(),
+  PRIMARY KEY (business_id, capability_id)
+);
+CREATE INDEX idx_enabled_capabilities_business ON business_enabled_capabilities(business_id);
 CREATE INDEX idx_businesses_org ON businesses(org_id);
 
 -- ══════════════════════════════════════
@@ -464,7 +656,8 @@ CREATE TABLE ai_agents (
   system_prompt  TEXT NOT NULL,
   model          TEXT DEFAULT 'claude-opus-latest',
   temperature    DECIMAL(3,2) DEFAULT 0.3,
-  tools_enabled  JSONB DEFAULT '["lookup_customer","get_business_info","check_availability","create_booking","create_lead","send_sms","transfer_call"]',
+  tools_enabled  JSONB DEFAULT '[]', -- resolved from enabled capabilities; no hard-coded industry tools
+  profile_version TEXT DEFAULT 'v1',
   created_at     TIMESTAMPTZ DEFAULT NOW(),
   updated_at     TIMESTAMPTZ DEFAULT NOW()
 );
@@ -540,6 +733,10 @@ CREATE POLICY "Users see own org data" ON businesses
 - [ ] DB migrations: كل الجداول + RLS policies
 - [ ] **اختبر RLS بحسابين — لا تتجاوز هذه الخطوة**
 - [ ] Business Setup UI: المعلومات + الخدمات + ساعات العمل
+- [ ] **Adaptive Business Setup:** اختيار نوع النشاط الأساسي + تحميل capabilities الافتراضية
+- [ ] **Capability Manager:** تفعيل/تعطيل الوحدات الخاصة بالنشاط
+- [ ] **Dynamic Navigation/Dashboard:** لا تظهر الوحدات غير المفعّلة
+- [ ] **Seed Industry Profiles:** فئة تنسيق الأعراس + المبيعات + الحجز كـprofiles أولية
 - [ ] Calendar داخلي: عرض المواعيد + إضافة يدوية
 - [ ] Contacts/Customers صفحة بسيطة
 - [ ] Dashboard هيكلي: Calls / Leads / Bookings (أرقام فارغة)
@@ -559,7 +756,11 @@ CREATE POLICY "Users see own org data" ON businesses
 
 **A. Phone AI (Retell + Claude):**
 - [ ] Retell setup: إنشاء Agent، شراء رقم، `api/retell/webhook`
-- [ ] System Prompt ديناميكي: `{{business.name}}`, `{{business.services}}`, `{{business.hours}}`
+- [ ] System Prompt ديناميكي من Business Profile + Enabled Capabilities
+- [ ] Tool Registry يحدد الأدوات المسموحة لكل Capability
+- [ ] AI Intent Routing يعتمد على نوع النشاط وسير العمل المفعّل
+- [ ] لا تُعرّف أو تُنفّذ أداة Industry غير مفعّلة
+- [ ] دعم prompts/templates خاصة بكل Business Type
 - [ ] 4 Tool Functions في Claude:
   - `check_availability(date, service)` → Supabase
   - `book_appointment(name, phone, start, service)` → INSERT + SMS
@@ -635,6 +836,7 @@ CREATE POLICY "Users see own org data" ON businesses
 > 2. **أعطِ 3 عملاء تجريبيين المرحلة 2 مجاناً.** أخطاؤهم تساوي أسبوعين من الكود
 > 3. **قطع النطاق بلا رحمة:** في MVP لا reschedule بـ AI، لا multi-language، لا voice cloning
 > 4. **الخطوة الأولى غداً:** `npx create-next-app@latest` + Supabase project + اختبار RLS
+> 5. **قاعدة المنتج:** لا تبنِ منطقًا خاصًا بنشاط واحد داخل Core؛ أي وظيفة خاصة بالصناعة يجب أن تدخل عبر Capability/Module Registry.
 
 ---
 
@@ -651,6 +853,7 @@ CREATE POLICY "Users see own org data" ON businesses
  الـ Niche الأول: Beauty & Health Wellness
  السعر الرئيسي: $99/شهر (Growth Plan)
  أول عميل مستهدف: خلال نهاية المرحلة 2
+ المبدأ المعماري: Multi-Industry Core + Business Type Profiles + Capability Modules
 ```
 
 ---
