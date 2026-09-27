@@ -1,0 +1,40 @@
+name: FrontDesk AI CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/web
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder
+      SUPABASE_SERVICE_ROLE_KEY: ci-placeholder
+      ANTHROPIC_API_KEY: ci-placeholder
+      ANTHROPIC_MODEL: ci-placeholder
+      VAPI_WEBHOOK_SECRET: ci-placeholder
+      META_APP_SECRET: ci-placeholder
+      META_GRAPH_BASE_URL: https://graph.facebook.com/vXX.X
+      WHATSAPP_VERIFY_TOKEN: ci-placeholder
+      WHATSAPP_ACCESS_TOKEN: ci-placeholder
+      INSTAGRAM_VERIFY_TOKEN: ci-placeholder
+      INSTAGRAM_ACCESS_TOKEN: ci-placeholder
+      TWILIO_ACCOUNT_SID: ci-placeholder
+      TWILIO_AUTH_TOKEN: ci-placeholder
+      CRON_SECRET: ci-placeholder
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build
