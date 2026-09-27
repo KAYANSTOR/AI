@@ -19,6 +19,9 @@ WITH CHECK((select public.is_org_admin(organization_id)) OR user_id=(select auth
 DROP POLICY IF EXISTS businesses_write ON businesses;
 DROP POLICY IF EXISTS locations_write ON business_locations;
 DROP POLICY IF EXISTS oc_write ON organization_capabilities;
+CREATE POLICY oc_insert ON organization_capabilities FOR INSERT TO authenticated WITH CHECK(public.is_org_admin(organization_id));
+CREATE POLICY oc_update ON organization_capabilities FOR UPDATE TO authenticated USING(public.is_org_admin(organization_id)) WITH CHECK(public.is_org_admin(organization_id));
+CREATE POLICY oc_delete ON organization_capabilities FOR DELETE TO authenticated USING(public.is_org_admin(organization_id));
 
 CREATE INDEX IF NOT EXISTS idx_business_profiles_business ON business_profiles(business_id);
 CREATE INDEX IF NOT EXISTS idx_business_type_caps_capability ON business_type_capabilities(capability_id);
