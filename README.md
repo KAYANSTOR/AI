@@ -3,7 +3,7 @@
 > موظف AI واحد يمثل شركتك على Phone + WhatsApp + Instagram — يعمل 24/7
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Status: Planning](https://img.shields.io/badge/Status-Planning-yellow.svg)]()
+[![Status: Phase 2](https://img.shields.io/badge/Status-Phase%202-blue.svg)]()
 
 ---
 
@@ -15,35 +15,14 @@
 - 💬 **WhatsApp** — يرد ويحجز ويتابع العملاء
 - 📸 **Instagram** — يرد على DMs تلقائياً
 
-ويقوم بكل هذا:
-```
-استقبال → فهم → رد → تأهيل → حجز → متابعة → استعادة العملاء
-```
-
----
-
-## المميزات الرئيسية
-
-| الميزة | الوصف |
-|--------|-------|
-| **AI Brain موحد** | نفس الذكاء لكل القنوات |
-| **Follow-up Engine** | متابعة تلقائية للعملاء الذين لم يحجزوا |
-| **Lost Lead Recovery** | استعادة العملاء الضائعين خلال 30 يوماً |
-| **Unified Inbox** | كل القنوات في مكان واحد |
-| **Revenue Dashboard** | نُظهر الدولارات لا المحادثات |
-| **Call Forwarding** | لا حاجة لشراء رقم جديد أو التواصل مع شركة الاتصالات |
-
 ---
 
 ## Tech Stack
 
-- **Frontend/Backend:** Next.js 14 App Router + TypeScript
+- **Frontend/Backend:** Next.js App Router + TypeScript
 - **Database:** Supabase PostgreSQL + RLS
-- **AI:** Vercel AI SDK (Provider-agnostic)
 - **Voice:** Vapi
-- **Messaging:** Meta WhatsApp Cloud API + Instagram Graph API
-- **SMS:** Twilio
-- **Payments:** Stripe
+- **Messaging:** Meta WhatsApp Cloud API
 - **Hosting:** Vercel + Supabase Cloud
 
 ---
@@ -52,38 +31,36 @@
 
 ```
 frontdesk-ai/
-├── apps/
-│   └── web/          # Next.js Application
-├── packages/
-│   ├── db/           # Database schema & migrations
-│   └── shared/       # Shared types & utilities
-├── docs/             # Documentation & Architecture
-└── tools/
-    └── mcp-server/   # Development tools
+├── apps/web/          # Next.js Application
+├── packages/db/       # Database schema & migrations
+├── docs/              # Documentation
+└── tools/             # Dev tools
 ```
 
 ---
 
-## خارطة الطريق (MVP — 11 أسبوع)
+## خارطة الطريق (MVP)
 
-- [x] **التخطيط والهندسة** ← أنت هنا
-- [ ] **المرحلة 1:** Foundation — Auth + DB + Business Setup (أسبوعان)
-- [ ] **المرحلة 2:** AI Receptionist — Phone + WhatsApp (4 أسابيع)
-- [ ] **المرحلة 3:** Follow-up Engine (أسبوعان)
-- [ ] **المرحلة 4:** SaaS + Billing (3 أسابيع)
+- [x] **التخطيط والهندسة**
+- [x] **المرحلة 1:** Foundation — Auth + DB + Business Setup
+- [ ] **المرحلة 2:** AI Receptionist — Phone + WhatsApp ← قيد التنفيذ
+- [ ] **المرحلة 3:** Follow-up Engine
+- [ ] **المرحلة 4:** SaaS + Billing
+
+### مرحلة 2 — ما هو في الكود الآن
+
+- `POST /api/vapi/webhook` — tool calls + dynamic system prompt + idempotency
+- `GET|POST /api/whatsapp/webhook` — Meta verify + inbound messages
+- AI tools: `get_customer`, `find_available_slots`, `create_appointment`, `request_human_handoff`
+- Unified Inbox UI: `/dashboard/conversations`
+- Env template: `apps/web/.env.example` (no secrets in repo)
 
 ---
 
 ## التوثيق
 
-- 📄 [الوثيقة الموحدة النهائية](docs/PLAN.md) — الخطة الكاملة للمشروع
-- 🏗️ [Architecture](docs/architecture/) — تصميم النظام
-
----
-
-## الـ Niche الأول
-
-**Beauty, Health & Wellness** — Med Spa + Dental + Aesthetic Clinics + Premium Salons
+- 📄 [الوثيقة الموحدة النهائية](docs/PLAN.md)
+- 📄 [FrontDesk_AI_Final_Plan.md](FrontDesk_AI_Final_Plan.md)
 
 ---
 
