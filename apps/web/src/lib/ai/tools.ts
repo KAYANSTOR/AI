@@ -67,13 +67,12 @@ async function toolGetCustomer(ctx: ToolContext, args: Record<string, unknown>) 
 async function toolFindSlots(ctx: ToolContext, args: Record<string, unknown>) {
   const date = String(args.date ?? '').trim()
   const serviceName = String(args.service_name ?? args.service ?? '').trim()
-  const serviceIdArg = args.service_id ? String(args.service_id) : null
+  let serviceId: string | null = args.service_id ? String(args.service_id) : null
 
   if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
     throw new Error('date must be YYYY-MM-DD')
   }
 
-  let serviceId = serviceIdArg
   if (!serviceId) {
     if (!serviceName) throw new Error('service_name or service_id is required')
     const { data: svc } = await ctx.supabase
@@ -91,8 +90,14 @@ async function toolFindSlots(ctx: ToolContext, args: Record<string, unknown>) {
     serviceId = svc.id
   }
 
-  const slots = await findAvailableSlots(ctx.supabase, ctx.organizationId, serviceId, date)
-  return { serviceId, date, slots }
+  const resolvedServiceId: string = serviceId
+  const slots = await findAvailableSlots(
+    ctx.supabase,
+    ctx.organizationId,
+    resolvedServiceId,
+    date
+  )
+  return { serviceId: resolvedServiceId, date, slots }
 }
 
 async function toolCreateAppointment(ctx: ToolContext, args: Record<string, unknown>) {
