@@ -1580,3 +1580,341 @@ Analytics + Observability
 ---
 
 > **الخلاصة:** FrontDesk AI يبني "موظفًا ذكيًا لكل شركة" من خلال **Agent Runtime واحد + Business Type Profile + Capabilities + Tools + Workflows + Customer Context + Channel Adapters**. هذا هو النموذج الرسمي الذي يجب أن يتبع التنفيذ اللاحق.
+
+---
+
+# 39. Operational Resilience — صاحب الشركة مغلق أو بلا إنترنت
+
+هذه حالة يجب أن تكون جزءًا من التصميم الأساسي.
+
+~~~text
+Customer
+  ↓
+Company Mobile Number
+  ↓
+Carrier-level Call Forwarding
+  ↓
+Voice Provider
+  ↓
+AI Agent
+~~~
+
+إذا كان هاتف صاحب الشركة مغلقًا أو لا يوجد فيه إنترنت، فهذا لا يمنع استقبال المكالمات المحوّلة، متى كان Call Forwarding مفعّلًا على مستوى الخط وكان المشغل يدعم نوع التحويل المناسب.
+
+## Phone
+
+الأنواع المطلوبة:
+
+~~~text
+Unconditional forwarding
+→ كل المكالمات تذهب إلى AI
+
+Conditional forwarding
+→ عند عدم الرد
+→ عند الانشغال
+→ عند عدم التوفر/عدم الوصول
+~~~
+
+### قاعدة أساسية
+
+لا يعتمد AI Phone على أن تطبيق المنصة مفتوح على هاتف صاحب الشركة.
+
+الهاتف هو نقطة الرقم الأصلية فقط، بينما استقبال المكالمة بعد التحويل يتم في طبقة الاتصالات السحابية.
+
+إذا لم يدعم المشغل التحويل المناسب، فلا يمكن للموقع وحده اعتراض المكالمة التقليدية عن بُعد. يجب عندها توفير إعداد يدوي أو مزود اتصالات بديل.
+
+---
+
+# 40. SMS — الرسائل النصية قناة رسمية
+
+**SMS تصبح قناة أساسية في المنصة مثل Phone وWhatsApp وInstagram وWeb.**
+
+~~~text
+CHANNELS
+├── Phone
+├── SMS
+├── WhatsApp
+├── Instagram
+└── Web
+~~~
+
+## قدرات AI عبر SMS
+
+حسب صلاحيات الشركة والـCapabilities:
+
+- استقبال رسائل العملاء.
+- الرد على الأسئلة.
+- التعرف على العميل.
+- تأهيل Lead.
+- حجز موعد.
+- إنشاء طلب أو عملية عندما تكون Capability مفعّلة.
+- إرسال التأكيدات.
+- متابعة العملاء.
+- تشغيل Follow-up.
+- طلب Human Handoff.
+
+## لا يوجد SMS Agent منفصل
+
+~~~text
+Customer SMS
+  ↓
+SMS Adapter
+  ↓
+Unified Inbound Event
+  ↓
+Same Agent Runtime
+  ↓
+Business Context + Customer Context
+  ↓
+Tool Calls when needed
+  ↓
+Response
+  ↓
+SMS Sender
+~~~
+
+---
+
+# 41. الفرق بين Phone وSMS
+
+Phone Call Forwarding وSMS Forwarding ليسا الشيء نفسه.
+
+يجب **ألا نفترض** أن:
+
+~~~text
+Call Forwarding ⇒ SMS Forwarding
+~~~
+
+### Phone
+
+يمكن استخدام الرقم الحالي للشركة مع Call Forwarding على مستوى الشبكة، لذلك لا يلزم إنترنت على هاتف صاحب الشركة أثناء المكالمة المحوّلة.
+
+### SMS
+
+حتى يعمل AI على SMS بشكل سحابي وموثوق، يجب أن تصل الرسالة إلى قناة SMS يمكن للمنصة استقبال Webhooks منها.
+
+## المسار الأول — Cloud SMS
+
+~~~text
+Customer
+  ↓
+SMS-capable Provider
+  ↓
+SMS Webhook
+  ↓
+Agent Runtime
+  ↓
+SMS API
+  ↓
+Customer
+~~~
+
+هذا المسار يعمل حتى لو كان هاتف صاحب الشركة مغلقًا أو بلا إنترنت.
+
+## المسار الثاني — Existing SIM SMS Gateway
+
+يمكن لاحقًا إضافة تطبيق Bridge على Android يستخدم شريحة الشركة الحالية:
+
+~~~text
+Customer
+  ↓
+Existing SIM
+  ↓
+Android SMS Gateway
+  ↓
+Platform
+  ↓
+AI
+  ↓
+Gateway
+  ↓
+SIM SMS
+  ↓
+Customer
+~~~
+
+لكن هذا المسار ليس أساس MVP لأن المعالجة الفورية تعتمد على تشغيل الجهاز واتصاله اللازم لمزامنة الحدث مع المنصة.
+
+### القرار المعماري
+
+لا نجعل تكاملًا خاصًا مع شركة الاتصالات شرطًا للـMVP.
+
+~~~text
+Phone
+→ Existing Company Number + Call Forwarding
+
+SMS
+→ Cloud SMS Channel
+
+Future
+→ Optional Existing-SIM SMS Gateway
+~~~
+
+---
+
+# 42. Channel Availability Matrix
+
+| الوظيفة | هاتف الشركة مغلق | هاتف الشركة بلا إنترنت | يعتمد على إنترنت الهاتف |
+|---|---:|---:|---:|
+| Phone عبر Call Forwarding | ✅ عند دعم التحويل | ✅ | ❌ |
+| Cloud SMS | ✅ | ✅ | ❌ |
+| WhatsApp Cloud | ✅ | ✅ | ❌ |
+| Instagram Messaging API | ✅ | ✅ | ❌ |
+| Existing-SIM SMS Gateway | ❌ للمعالجة الفورية | ⚠️ محدود/مؤجل للمزامنة | يعتمد على اتصال المنصة |
+| Web Chat | ✅ | ✅ | ❌ |
+
+---
+
+# 43. SMS + Customer Identity
+
+العميل نفسه يجب أن يبقى عميلًا واحدًا عبر القنوات عندما يمكن توحيد الهوية بثقة.
+
+~~~text
+Customer #182
+├── Phone identity
+├── SMS identity
+├── WhatsApp identity
+└── Instagram identity
+~~~
+
+والهدف:
+
+~~~text
+ONE CUSTOMER
+ONE PROFILE
+ONE CONTEXT
+~~~
+
+---
+
+# 44. SMS Inbound Flow
+
+~~~text
+Incoming SMS
+   ↓
+Provider Webhook
+   ↓
+Idempotency
+   ↓
+Resolve Business
+   ↓
+Resolve Contact
+   ↓
+Create/Open Conversation
+   ↓
+Persist Inbound Message
+   ↓
+Load Agent Runtime
+   ↓
+Intent / Workflow
+   ↓
+Tool Calls if needed
+   ↓
+Response Policy
+   ↓
+Send SMS
+   ↓
+Persist Outbound Message
+   ↓
+Analytics / Audit
+~~~
+
+مثال:
+
+~~~text
+Customer:
+"أريد موعد بكرة الساعة 5"
+
+AI:
+check_availability()
+
+↓
+
+"متوفر 5:00 و6:30. أيهما يناسبك؟"
+
+↓
+
+Customer:
+"5"
+
+↓
+
+AI:
+create_appointment()
+
+↓
+
+SMS:
+"تم تأكيد موعدك غداً الساعة 5:00 ✅"
+~~~
+
+---
+
+# 45. SMS + Follow-up Engine
+
+SMS ليست فقط للرد المباشر.
+
+~~~text
+Missed Call
+ ↓
+Create Lead
+ ↓
+Follow-up Policy
+ ↓
+SMS
+ ↓
+Customer replies
+ ↓
+Same Agent Runtime
+~~~
+
+يمكن استخدامها أيضًا في:
+
+- تذكير الموعد.
+- تأكيد الحجز.
+- متابعة Lead.
+- استعادة عميل.
+- إشعار حالة الطلب.
+
+مع تطبيق سياسات القناة والاشتراك والموافقة حيث تكون مطلوبة.
+
+---
+
+# 46. قاعدة تصميم القنوات
+
+~~~text
+                AI AGENT RUNTIME
+                       │
+          ┌────────────┼─────────────┐
+          │            │             │
+       Phone          SMS        WhatsApp
+          │            │             │
+          └────────────┼─────────────┘
+                       │
+                   Same Context
+                       │
+                  Same Customer
+                       │
+                  Same Workflows
+                       │
+                  Same Tool Rules
+~~~
+
+القناة تغيّر طريقة النقل والعرض، ولا تغيّر عقل الوكيل.
+
+---
+
+# 47. Acceptance Criteria — Resilience & SMS
+
+- [ ] AI Phone يستمر عند إغلاق هاتف الشركة عندما يكون Call Forwarding المناسب مفعّلًا.
+- [ ] AI Phone لا يعتمد على إنترنت هاتف الشركة.
+- [ ] SMS قناة رسمية في Core Architecture.
+- [ ] SMS تستخدم نفس Agent Runtime.
+- [ ] SMS تدعم inbound + outbound.
+- [ ] SMS مرتبطة بـCustomer Identity وConversation.
+- [ ] SMS تدعم الحجز والطلبات والـLeads عندما تكون Capabilities مفعّلة.
+- [ ] SMS تدخل Follow-up Engine.
+- [ ] لا يُفترض أن Call Forwarding يحوّل SMS.
+- [ ] لا يكون تكامل شركة الاتصالات شرطًا لـMVP.
+- [ ] Cloud SMS يعمل عند إغلاق هاتف الشركة.
+- [ ] Existing-SIM SMS Gateway اختياري لاحقًا وليس أساس المنصة.
