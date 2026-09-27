@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { sendTwilioSms } from '@/lib/providers/twilio'
-import { sendWhatsAppText, sendInstagramText } from '@/lib/providers/meta'
+import { deliverOutbound } from '@/lib/runtime/outbound'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -11,9 +10,13 @@ export async function GET(req: NextRequest) {
   if (!secret || req.headers.get('authorization') !== 'Bearer ' + secret) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
 
   const supabase = createAdminClient()
+  // Stale workers (crashed mid-send) leave rows in 'processing'; they become claimable
+  // again after the lock window instead of being stuck forever.
+  const staleBefore = new Date(Date.now() - 5 * 60 * 1000).toISOString()
+  const claimable = `status.in.(pending,failed),and(status.eq.processing,locked_at.lt.${staleBefore})`
   const { data: events, error } = await supabase.from('outbox_events')
     .select('id, organization_id, channel_id, recipient, payload, attempts')
-    .in('status', ['pending', 'failed'])
+    .or(claimable)
     .lte('scheduled_at', new Date().toISOString())
     .lt('attempts', 8)
     .order('scheduled_at')
@@ -25,14 +28,14 @@ export async function GET(req: NextRequest) {
     const claim = await supabase.from('outbox_events')
       .update({ status: 'processing', attempts: Number(event.attempts ?? 0) + 1, locked_at: new Date().toISOString() })
       .eq('id', event.id)
-      .in('status', ['pending', 'failed'])
+      .or(claimable)
       .select('id')
       .maybeSingle()
     if (!claim.data) continue
 
     try {
       const { data: channel, error: channelError } = await supabase.from('channels')
-        .select('channel_type, provider_account_id, external_identifier')
+        .select('id, organization_id, business_id, channel_type, provider_account_id, external_identifier')
         .eq('id', event.channel_id)
         .maybeSingle()
       if (channelError) throw new Error(channelError.message)
@@ -40,10 +43,22 @@ export async function GET(req: NextRequest) {
 
       const payload = event.payload as Record<string, unknown>
       const body = String(payload.body ?? '')
-      if (channel.channel_type === 'sms') await sendTwilioSms({ to: event.recipient, from: channel.external_identifier ?? '', body })
-      else if (channel.channel_type === 'whatsapp') await sendWhatsAppText(String(channel.provider_account_id ?? ''), event.recipient, body)
-      else if (channel.channel_type === 'instagram') await sendInstagramText(String(channel.provider_account_id ?? ''), event.recipient, body)
-      else throw new Error('unsupported_outbox_channel:' + channel.channel_type)
+      // Same delivery path as the live routes; failures here are recorded by the
+      // worker itself so retries and dead-letter stay authoritative.
+      await deliverOutbound(supabase, {
+        channel: {
+          id: channel.id,
+          organizationId: channel.organization_id,
+          businessId: channel.business_id,
+          channelType: channel.channel_type,
+          providerAccountId: channel.provider_account_id,
+          externalIdentifier: channel.external_identifier,
+        },
+        recipient: event.recipient,
+        body,
+        idempotencyKey: 'outbox:' + event.id,
+        queueOnFailure: false,
+      })
 
       await supabase.from('outbox_events').update({ status: 'sent', sent_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('id', event.id)
       sent++

@@ -1,6 +1,13 @@
-import type { Metadata } from 'next'
-import { Geist, Geist_Mono } from 'next/font/google'
+import type { Metadata, Viewport } from 'next'
+import { Geist, Geist_Mono, IBM_Plex_Sans_Arabic } from 'next/font/google'
 import './globals.css'
+
+const plexArabic = IBM_Plex_Sans_Arabic({
+  variable: '--font-plex-arabic',
+  subsets: ['arabic', 'latin'],
+  weight: ['400', '500', '600', '700'],
+  display: 'swap',
+})
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -12,19 +19,65 @@ const geistMono = Geist_Mono({
   subsets: ['latin'],
 })
 
+/**
+ * Absolute base URL for canonical / Open Graph metadata.
+ * Set NEXT_PUBLIC_SITE_URL in production; localhost is the dev default.
+ */
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'
+
+const title = 'FrontDesk AI — موظّف استقبال بالذكاء الاصطناعي لشركتك'
+const description =
+  'منصة واحدة يستقبل بها الذكاء الاصطناعي عملاء شركتك على الهاتف وواتساب: يفهم الطلب، يؤهّل العميل، يحجز الموعد، ويتابع كل فرصة — مع لوحة تسجّل كل محادثة وعميل.'
+
 export const metadata: Metadata = {
-  title: 'FrontDesk AI — AI Receptionist for Beauty & Wellness',
-  description:
-    'One AI employee for Phone, WhatsApp, and Instagram. Book appointments and recover lost leads 24/7.',
+  metadataBase: new URL(siteUrl),
+  title: {
+    default: title,
+    template: '%s · FrontDesk AI',
+  },
+  description,
+  applicationName: 'FrontDesk AI',
+  keywords: [
+    'موظف استقبال ذكاء اصطناعي',
+    'أتمتة استقبال العملاء',
+    'إدارة العملاء المحتملين',
+    'حجز المواعيد',
+    'واتساب للأعمال',
+    'AI receptionist',
+  ],
+  authors: [{ name: 'FrontDesk AI' }],
+  alternates: { canonical: '/' },
+  openGraph: {
+    type: 'website',
+    locale: 'ar_SA',
+    siteName: 'FrontDesk AI',
+    title,
+    description,
+    url: '/',
+  },
+  twitter: {
+    card: 'summary',
+    title,
+    description,
+  },
+  robots: { index: true, follow: true },
+  // Brand mark icon is provided by src/app/icon.svg (Next.js file convention).
+}
+
+export const viewport: Viewport = {
+  // Primary brand token value — metadata requires a literal color.
+  themeColor: '#d97757',
+  colorScheme: 'light',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html
-      lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      lang="ar"
+      dir="rtl"
+      className={`${plexArabic.variable} ${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col bg-slate-50 text-slate-900">{children}</body>
+      <body className="flex min-h-full flex-col bg-background text-text">{children}</body>
     </html>
   )
 }

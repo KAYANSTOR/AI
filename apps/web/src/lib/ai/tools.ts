@@ -10,8 +10,9 @@ export type ToolName = (typeof TOOL_NAMES)[number]
 export type ToolContext = {
   organizationId:string
   businessId:string
-  conversationId:string
-  contactId:string
+  /** Absent only when the channel has no conversation context yet (e.g. a voice call with no caller identity). */
+  conversationId?:string|null
+  contactId?:string|null
   supabase:SupabaseClient
   agentId?:string|null
 }

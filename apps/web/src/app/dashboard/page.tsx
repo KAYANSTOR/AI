@@ -33,22 +33,22 @@ export default async function DashboardPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Overview</h1>
-        <p className="text-slate-500 text-sm mt-1">
+        <h1 className="text-2xl font-bold tracking-tight text-text">Overview</h1>
+        <p className="mt-1 text-sm text-text-muted">
           {org.organizationName} · Phase 2: AI Receptionist foundation
         </p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <StatCard title="Leads" value={String(leadsCount ?? 0)} icon={Users} color="bg-blue-500" />
-        <StatCard title="Contacts" value={String(contactsCount ?? 0)} icon={MessageCircle} color="bg-indigo-500" />
-        <StatCard title="Upcoming" value={String(appointmentsCount ?? 0)} icon={Calendar} color="bg-emerald-500" />
-        <StatCard title="Conversations" value={String(conversationsCount ?? 0)} icon={TrendingUp} color="bg-amber-500" />
+        <StatCard title="Leads" value={String(leadsCount ?? 0)} icon={Users} />
+        <StatCard title="Contacts" value={String(contactsCount ?? 0)} icon={MessageCircle} />
+        <StatCard title="Upcoming" value={String(appointmentsCount ?? 0)} icon={Calendar} />
+        <StatCard title="Conversations" value={String(conversationsCount ?? 0)} icon={TrendingUp} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 bg-white border border-slate-200 rounded-xl shadow-sm p-6">
-          <h2 className="text-lg font-semibold text-slate-900 mb-4">Phase checklist</h2>
+        <div className="rounded-xl border border-border bg-surface p-6 shadow-sm lg:col-span-2">
+          <h2 className="mb-4 text-lg font-semibold text-text">Phase checklist</h2>
           <ul className="space-y-2 text-sm">
             <CheckItem done label="Phase 1: Auth, RLS, CRM, services, appointments" />
             <CheckItem done label="Phase 2: Vapi webhook + tool execution layer" />
@@ -58,12 +58,12 @@ export default async function DashboardPage() {
             <CheckItem done={false} label="Phase 3: Follow-up engine" />
           </ul>
           <p className="text-xs text-slate-500 mt-4">
-            Webhooks: <code className="bg-slate-100 px-1 rounded">/api/vapi/webhook</code> ·{' '}
-            <code className="bg-slate-100 px-1 rounded">/api/whatsapp/webhook</code>
+            Webhooks:            <code className="rounded bg-slate-100 px-1">/api/vapi/webhook</code> ·{' '}
+            <code className="rounded bg-slate-100 px-1">/api/whatsapp/webhook</code>
           </p>
         </div>
-        <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
-          <h2 className="text-lg font-semibold text-slate-900 mb-4">Upcoming</h2>
+        <div className="rounded-xl border border-border bg-surface p-6 shadow-sm">
+          <h2 className="mb-4 text-lg font-semibold text-text">Upcoming</h2>
           <div className="space-y-3">
             {!upcoming?.length ? (
               <p className="text-sm text-slate-400">No upcoming appointments</p>
@@ -71,9 +71,8 @@ export default async function DashboardPage() {
               upcoming.map((a) => {
                 const contact = a.contacts as unknown as { full_name: string | null } | null
                 const service = a.services as unknown as { name: string } | null
-                return (
-                  <div key={a.id} className="flex items-start gap-3 p-3 rounded-lg hover:bg-slate-50">
-                    <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-medium text-sm">
+                return (                    <div key={a.id} className="flex items-start gap-3 rounded-lg p-3 hover:bg-background">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary-light/40 text-sm font-medium text-primary-dark">
                       {(contact?.full_name?.[0] ?? '?').toUpperCase()}
                     </div>
                     <div>
@@ -87,7 +86,7 @@ export default async function DashboardPage() {
               })
             )}
           </div>
-          <Link href="/dashboard/services" className="inline-block mt-4 text-sm text-indigo-600 font-medium">
+          <Link href="/dashboard/services" className="mt-4 inline-block text-sm font-medium text-primary-dark hover:underline">
             Manage services →
           </Link>
         </div>
@@ -96,13 +95,13 @@ export default async function DashboardPage() {
   )
 }
 
-function StatCard({ title, value, icon: Icon, color }: { title: string; value: string; icon: React.ElementType; color: string }) {
+function StatCard({ title, value, icon: Icon }: { title: string; value: string; icon: React.ElementType }) {
   return (
-    <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+    <div className="bg-surface p-6 rounded-xl border border-border shadow-sm">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-sm font-medium text-slate-500">{title}</h3>
-        <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${color} bg-opacity-10`}>
-          <Icon size={20} className={color.replace('bg-', 'text-')} />
+        <h3 className="text-sm font-medium text-text-muted">{title}</h3>
+        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary-light/40">
+          <Icon size={20} className="text-primary-dark" />
         </div>
       </div>
       <h4 className="text-3xl font-bold text-slate-900 tracking-tight">{value}</h4>
@@ -113,7 +112,7 @@ function StatCard({ title, value, icon: Icon, color }: { title: string; value: s
 function CheckItem({ done, label }: { done: boolean; label: string }) {
   return (
     <li className="flex items-center gap-2">
-      <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs ${done ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-400'}`}>
+      <span className={`flex h-5 w-5 items-center justify-center rounded-full text-xs ${done ? 'bg-success/20 text-text' : 'bg-slate-100 text-slate-400'}`}>
         {done ? '✓' : '·'}
       </span>
       <span className={done ? 'text-slate-800' : 'text-slate-500'}>{label}</span>

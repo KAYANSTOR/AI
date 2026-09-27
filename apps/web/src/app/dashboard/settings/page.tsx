@@ -69,7 +69,7 @@ export default async function SettingsPage() {
         </dl>
         <Link
           href="/dashboard/setup"
-          className="inline-flex text-sm font-medium text-indigo-600 hover:text-indigo-500"
+          className="inline-flex text-sm font-medium text-primary-dark hover:underline"
         >
           Change business type & defaults →
         </Link>

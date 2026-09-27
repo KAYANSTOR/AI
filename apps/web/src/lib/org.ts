@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { isSupabaseConfigured } from '@/lib/supabase/env'
 
 export type OrgContext = {
   userId: string
@@ -12,6 +13,10 @@ export type OrgContext = {
  * Phase 1 assumes one org per user (owner). Multi-org comes later.
  */
 export async function getCurrentOrg(): Promise<OrgContext | null> {
+  // لا مزوّد مصادقة مُهيّأ بعد: لا توجد جلسة ممكنة، والمسار المحمي يعيد الزائر
+  // إلى صفحة تسجيل الدخول بدل أن يسقط بخطأ مزوّد غير مضبوط.
+  if (!isSupabaseConfigured()) return null
+
   const supabase = await createClient()
   const {
     data: { user },

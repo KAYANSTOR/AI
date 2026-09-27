@@ -50,10 +50,10 @@ export function AppointmentForm({ organizationId, services, contacts }: { organi
 
   return (
     <form onSubmit={onSubmit} className="space-y-4">
-      {error && <div className="text-sm text-rose-600 bg-rose-50 border border-rose-200 rounded-lg p-3">{error}</div>}
+      {error && <div className="rounded-lg border border-error/40 bg-error/10 p-3 text-sm text-text">{error}</div>}
       <div>
         <label className="block text-sm font-medium text-slate-700 mb-1">Contact</label>
-        <select required value={contactId} onChange={(e) => setContactId(e.target.value)} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+        <select required value={contactId} onChange={(e) => setContactId(e.target.value)} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30">
           <option value="">Select…</option>
           {contacts.map((c) => (
             <option key={c.id} value={c.id}>{c.full_name || c.phone || c.id.slice(0, 8)}</option>
@@ -62,7 +62,7 @@ export function AppointmentForm({ organizationId, services, contacts }: { organi
       </div>
       <div>
         <label className="block text-sm font-medium text-slate-700 mb-1">Service</label>
-        <select required value={serviceId} onChange={(e) => setServiceId(e.target.value)} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+        <select required value={serviceId} onChange={(e) => setServiceId(e.target.value)} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30">
           <option value="">Select…</option>
           {services.map((s) => (
             <option key={s.id} value={s.id}>{s.name} ({s.duration_minutes}m)</option>
@@ -71,9 +71,9 @@ export function AppointmentForm({ organizationId, services, contacts }: { organi
       </div>
       <div>
         <label className="block text-sm font-medium text-slate-700 mb-1">Starts at</label>
-        <input type="datetime-local" required value={startsAt} onChange={(e) => setStartsAt(e.target.value)} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+        <input type="datetime-local" required value={startsAt} onChange={(e) => setStartsAt(e.target.value)} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
       </div>
-      <button type="submit" disabled={loading} className="w-full flex justify-center items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium py-2.5 rounded-lg disabled:opacity-60">
+      <button type="submit" disabled={loading} className="w-full flex justify-center items-center gap-2 bg-primary-dark hover:bg-primary text-surface text-sm font-medium py-2.5 rounded-lg disabled:opacity-60">
         {loading ? <Loader2 className="animate-spin h-4 w-4" /> : 'Confirm appointment'}
       </button>
     </form>

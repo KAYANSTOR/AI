@@ -16,7 +16,7 @@ export default async function DashboardLayout({
   const profile = await getOrgProfile(org.organizationId)
 
   return (
-    <div className="flex h-screen bg-slate-50 font-sans">
+    <div className="flex h-screen bg-background font-sans">
       <Sidebar
         orgName={org.organizationName}
         role={org.role}
@@ -27,7 +27,7 @@ export default async function DashboardLayout({
         <main className="flex-1 overflow-y-auto p-6">
           <div className="max-w-6xl mx-auto space-y-4">
             {!profile.setupComplete && (
-              <div className="bg-amber-50 border border-amber-200 text-amber-900 rounded-xl px-4 py-3 text-sm">
+              <div className="rounded-xl border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-text">
                 Complete{' '}
                 <Link href="/dashboard/setup" className="font-semibold underline">
                   business setup

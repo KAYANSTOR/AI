@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 export async function enqueueOutbound(args:{
-  supabase:SupabaseClient;organizationId:string;businessId:string;channelId:string;
+  supabase:SupabaseClient;organizationId:string;businessId:string|null;channelId:string;
   eventType:string;idempotencyKey:string;recipient:string;payload:Record<string,unknown>
 }){
   const {data,error}=await args.supabase.from('outbox_events').insert({

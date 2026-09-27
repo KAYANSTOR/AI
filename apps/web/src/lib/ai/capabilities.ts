@@ -10,14 +10,11 @@ export type CapabilityId =
   | 'inbox'
   | 'knowledge_base'
 
-/** Map AI tools → required capability (PLAN: Tool Registry per capability) */
-export const TOOL_CAPABILITY: Record<string, CapabilityId | null> = {
-  get_customer: 'lead_capture',
-  find_available_slots: 'appointments',
-  create_appointment: 'appointments',
-  request_human_handoff: null,
-}
-
+/**
+ * Enabled capabilities for one organization.
+ * The tool → capability mapping lives only in the tool registry
+ * (lib/ai/registry.ts), which is the governance source of truth.
+ */
 export async function getEnabledCapabilities(
   supabase: SupabaseClient,
   organizationId: string
@@ -29,11 +26,4 @@ export async function getEnabledCapabilities(
     .eq('is_enabled', true)
 
   return new Set((data ?? []).map((r) => r.capability_id as string))
-}
-
-export function isToolAllowed(toolName: string, enabled: Set<string>): boolean {
-  const required = TOOL_CAPABILITY[toolName]
-  if (required === undefined) return false
-  if (required === null) return true
-  return enabled.has(required)
 }

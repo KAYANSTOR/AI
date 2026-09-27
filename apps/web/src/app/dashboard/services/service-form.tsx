@@ -53,27 +53,27 @@ export function ServiceForm({ organizationId }: { organizationId: string }) {
   return (
     <form onSubmit={onSubmit} className="space-y-4">
       {error && (
-        <div className="text-sm text-rose-600 bg-rose-50 border border-rose-200 rounded-lg p-3">{error}</div>
+        <div className="rounded-lg border border-error/40 bg-error/10 p-3 text-sm text-text">{error}</div>
       )}
       <div>
         <label className="block text-sm font-medium text-slate-700 mb-1">Name</label>
-        <input required value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Teeth Cleaning" />
+        <input required value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" placeholder="Teeth Cleaning" />
       </div>
       <div>
         <label className="block text-sm font-medium text-slate-700 mb-1">Description</label>
-        <textarea value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} rows={2} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Optional details the AI can use" />
+        <textarea value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} rows={2} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" placeholder="Optional details the AI can use" />
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-1">Duration (min)</label>
-          <input type="number" min={5} required value={form.duration_minutes} onChange={(e) => setForm((f) => ({ ...f, duration_minutes: Number(e.target.value) }))} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+          <input type="number" min={5} required value={form.duration_minutes} onChange={(e) => setForm((f) => ({ ...f, duration_minutes: Number(e.target.value) }))} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
         </div>
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-1">Price</label>
-          <input type="number" min={0} step="0.01" value={form.price_amount} onChange={(e) => setForm((f) => ({ ...f, price_amount: e.target.value }))} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="150" />
+          <input type="number" min={0} step="0.01" value={form.price_amount} onChange={(e) => setForm((f) => ({ ...f, price_amount: e.target.value }))} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" placeholder="150" />
         </div>
       </div>
-      <button type="submit" disabled={loading} className="w-full flex justify-center items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium py-2.5 rounded-lg disabled:opacity-60 transition-colors">
+      <button type="submit" disabled={loading} className="w-full flex justify-center items-center gap-2 bg-primary-dark hover:bg-primary text-surface text-sm font-medium py-2.5 rounded-lg disabled:opacity-60 transition-colors">
         {loading ? <Loader2 className="animate-spin h-4 w-4" /> : 'Add service'}
       </button>
     </form>

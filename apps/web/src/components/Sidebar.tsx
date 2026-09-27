@@ -10,9 +10,10 @@ import {
   Settings,
   Contact,
   Wrench,
-  Bot,
   SlidersHorizontal,
+  ShieldCheck,
 } from 'lucide-react'
+import { BrandMark } from '@/components/site/brand'
 
 type NavItem = {
   name: string
@@ -49,21 +50,19 @@ export function Sidebar({
   )
 
   return (
-    <aside className="w-64 bg-slate-900 border-r border-slate-800 text-slate-300 flex flex-col h-full">
-      <div className="h-16 flex items-center px-6 border-b border-slate-800">
+    <aside className="flex h-full w-64 flex-col border-e border-white/10 bg-dark text-white">
+      <div className="flex h-16 items-center border-b border-white/10 px-6">
         <Link
           href="/dashboard"
-          className="flex items-center gap-2 text-white font-bold text-xl tracking-tight"
+          className="flex items-center gap-2 text-xl font-bold tracking-tight text-white"
         >
-          <div className="bg-indigo-500 w-8 h-8 rounded-lg flex items-center justify-center">
-            <Bot size={20} className="text-white" />
-          </div>
+          <BrandMark className="h-8 w-8" />
           FrontDesk AI
         </Link>
       </div>
 
-      <div className="p-4 flex-1 overflow-y-auto">
-        <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-4 px-3">
+      <div className="flex-1 overflow-y-auto p-4">
+        <div className="mb-4 px-3 text-xs font-semibold tracking-wider text-white/50 uppercase">
           Overview
         </div>
         <nav className="flex flex-col gap-1">
@@ -76,13 +75,11 @@ export function Sidebar({
               <Link
                 key={item.name}
                 href={item.href}
-                className={`flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-sm font-medium ${
-                  active
-                    ? 'bg-indigo-600/20 text-white'
-                    : 'hover:bg-slate-800 hover:text-white'
+                className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                  active ? 'bg-primary/25 text-white' : 'text-white/70 hover:bg-white/5 hover:text-white'
                 }`}
               >
-                <Icon size={18} className={active ? 'text-indigo-300' : 'text-slate-400'} />
+                <Icon size={18} className={active ? 'text-primary-light' : 'text-white/60'} />
                 {item.name}
               </Link>
             )
@@ -90,10 +87,13 @@ export function Sidebar({
         </nav>
       </div>
 
-      <div className="p-4 border-t border-slate-800">
-        <div className="px-3 py-2">
-          <p className="text-sm font-medium text-white truncate">{orgName || 'Organization'}</p>
-          <p className="text-xs text-slate-500 capitalize">{role || 'member'}</p>
+      <div className="border-t border-white/10 p-4">
+        <div className="flex items-center gap-2 px-3 py-2">
+          <ShieldCheck size={16} className="shrink-0 text-primary-light" />
+          <div className="min-w-0">
+            <p className="truncate text-sm font-medium text-white">{orgName || 'Organization'}</p>
+            <p className="text-xs text-white/60 capitalize">{role || 'member'}</p>
+          </div>
         </div>
       </div>
     </aside>

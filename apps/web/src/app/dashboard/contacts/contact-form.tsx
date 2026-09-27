@@ -37,21 +37,21 @@ export function ContactForm({ organizationId }: { organizationId: string }) {
   return (
     <form onSubmit={onSubmit} className="space-y-4">
       {error && (
-        <div className="text-sm text-rose-600 bg-rose-50 border border-rose-200 rounded-lg p-3">{error}</div>
+        <div className="rounded-lg border border-error/40 bg-error/10 p-3 text-sm text-text">{error}</div>
       )}
       <div>
         <label className="block text-sm font-medium text-slate-700 mb-1">Full name</label>
-        <input value={form.full_name} onChange={(e) => setForm((f) => ({ ...f, full_name: e.target.value }))} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Sara Ahmed" />
+        <input value={form.full_name} onChange={(e) => setForm((f) => ({ ...f, full_name: e.target.value }))} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" placeholder="Sara Ahmed" />
       </div>
       <div>
         <label className="block text-sm font-medium text-slate-700 mb-1">Phone</label>
-        <input value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="+9665..." />
+        <input value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" placeholder="+9665..." />
       </div>
       <div>
         <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
-        <input type="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="sara@example.com" />
+        <input type="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" placeholder="sara@example.com" />
       </div>
-      <button type="submit" disabled={loading} className="w-full flex justify-center items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium py-2.5 rounded-lg disabled:opacity-60">
+      <button type="submit" disabled={loading} className="w-full flex justify-center items-center gap-2 bg-primary-dark hover:bg-primary text-surface text-sm font-medium py-2.5 rounded-lg disabled:opacity-60">
         {loading ? <Loader2 className="animate-spin h-4 w-4" /> : 'Save contact'}
       </button>
     </form>

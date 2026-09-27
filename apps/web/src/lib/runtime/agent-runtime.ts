@@ -1,18 +1,14 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { buildBusinessSystemPrompt } from '@/lib/ai/prompt'
 import { executeTool,getToolDefinitionsForAgent } from '@/lib/ai/tools'
-
-type ModelBlock={type:'text';text:string}|{type:'tool_use';id:string;name:string;input:Record<string,unknown>}
-type ModelMessage={role:'user'|'assistant';content:string|Record<string,unknown>[]}
-type AnthropicResponse={content?:ModelBlock[];usage?:{input_tokens?:number;output_tokens?:number};error?:{message?:string}}
+import { callAnthropic } from '@/lib/providers/anthropic'
+import type { ModelMessage } from '@/lib/providers/anthropic'
 
 export async function runAgentTurn(args:{
   supabase:SupabaseClient;organizationId:string;businessId:string;conversationId:string;contactId:string;channel:string;userText:string;
   agentId?:string|null;serverActionResult?:unknown;
 }){
-  const apiKey=process.env.ANTHROPIC_API_KEY
-  const model=process.env.ANTHROPIC_MODEL
-  if(!apiKey || !model) throw new Error('ANTHROPIC_API_KEY and ANTHROPIC_MODEL are required')
+  const model=process.env.ANTHROPIC_MODEL ?? null
 
   const [{data:history,error:historyError},prompt,toolSet]=await Promise.all([
     args.supabase.from('messages').select('direction,content,created_at').eq('organization_id',args.organizationId).eq('conversation_id',args.conversationId).order('created_at',{ascending:false}).limit(20),
@@ -41,17 +37,11 @@ export async function runAgentTurn(args:{
   let inputTokens=0,outputTokens=0
   try{
     for(let round=0;round<5;round+=1){
-      const response=await fetch('https://api.anthropic.com/v1/messages',{
-        method:'POST',
-        headers:{'x-api-key':apiKey,'anthropic-version':'2023-06-01','Content-Type':'application/json'},
-        body:JSON.stringify({model,max_tokens:700,temperature:0.2,system:prompt,messages,tools:toolSet}),
-      })
-      const payload=await response.json() as AnthropicResponse
-      if(!response.ok) throw new Error(payload.error?.message ?? 'Anthropic request failed: HTTP '+response.status)
-      inputTokens+=Number(payload.usage?.input_tokens ?? 0);outputTokens+=Number(payload.usage?.output_tokens ?? 0)
+      const result=await callAnthropic({system:prompt,messages,tools:toolSet})
+      inputTokens+=result.inputTokens;outputTokens+=result.outputTokens
 
-      const textParts=(payload.content ?? []).filter((b):b is {type:'text';text:string}=>b.type==='text').map(b=>b.text)
-      const toolBlocks=(payload.content ?? []).filter((b):b is {type:'tool_use';id:string;name:string;input:Record<string,unknown>}=>b.type==='tool_use')
+      const textParts=result.content.filter((b):b is {type:'text';text:string}=>b.type==='text').map(b=>b.text)
+      const toolBlocks=result.content.filter((b):b is {type:'tool_use';id:string;name:string;input:Record<string,unknown>}=>b.type==='tool_use')
       if(!toolBlocks.length){
         const reply=textParts.join('\n').trim()
         if(!reply) throw new Error('Model returned an empty response')
@@ -63,7 +53,7 @@ export async function runAgentTurn(args:{
         return reply
       }
 
-      messages.push({role:'assistant',content:payload.content as unknown as Record<string,unknown>[]})
+      messages.push({role:'assistant',content:result.content as unknown as Record<string,unknown>[]})
       const results:Record<string,unknown>[]=[]
       for(const tool of toolBlocks){
         const result=await executeTool(tool.name,tool.input,{

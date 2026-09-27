@@ -25,8 +25,3 @@ export async function resolveBusinessAgent(supabase:SupabaseClient,businessId:st
   return data ?? null
 }
 
-export async function resolveSingleBusinessForOrg(supabase:SupabaseClient,organizationId:string){
-  const {data,error}=await supabase.from('businesses').select('id').eq('organization_id',organizationId).eq('status','active').limit(2)
-  if(error) throw new Error(error.message)
-  return (data ?? []).length===1 ? data![0].id : null
-}

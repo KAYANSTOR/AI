@@ -2,22 +2,31 @@ import { Bell, Search } from 'lucide-react'
 
 export function Header() {
   return (
-    <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 sticky top-0 z-10">
-      <div className="flex items-center gap-4 flex-1">
+    <header className="sticky top-0 z-10 flex h-16 items-center justify-between border-b border-border bg-surface px-6">
+      <div className="flex flex-1 items-center gap-4">
         <div className="relative w-64">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
+          <Search
+            size={16}
+            aria-hidden="true"
+            className="absolute start-2.5 top-2.5 text-text-muted"
+          />
           <input
             type="text"
             placeholder="Search leads, chats..."
-            className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+            aria-label="Search leads, chats"
+            className="w-full rounded-lg border border-border bg-background py-2 pe-4 ps-9 text-sm transition-all focus:border-primary-dark focus:outline-none focus:ring-2 focus:ring-primary/20"
           />
         </div>
       </div>
 
       <div className="flex items-center gap-4">
-        <button className="relative p-2 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-full transition-colors">
-          <Bell size={20} />
-          <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full ring-2 ring-white" />
+        <button
+          type="button"
+          aria-label="Notifications"
+          className="relative rounded-full p-2 text-text-muted transition-colors hover:bg-background hover:text-text"
+        >
+          <Bell size={20} aria-hidden="true" />
+          <span className="absolute end-1.5 top-1.5 h-2 w-2 rounded-full bg-error ring-2 ring-surface" />
         </button>
       </div>
     </header>

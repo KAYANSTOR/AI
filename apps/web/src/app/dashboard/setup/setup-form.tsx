@@ -66,7 +66,7 @@ export function SetupForm({
   return (
     <form onSubmit={onSubmit} className="space-y-8">
       {error && (
-        <div className="bg-rose-50 border border-rose-200 text-rose-700 rounded-lg p-3 text-sm">
+        <div className="rounded-lg border border-error/40 bg-error/10 p-3 text-sm text-text">
           {error}
         </div>
       )}
@@ -83,13 +83,13 @@ export function SetupForm({
                 onClick={() => onTypeChange(t.id)}
                 className={`text-left rounded-xl border p-4 transition-colors ${
                   active
-                    ? 'border-indigo-500 bg-indigo-50 ring-2 ring-indigo-200'
+                    ? 'border-primary-dark bg-primary-light/25 ring-2 ring-primary-light'
                     : 'border-slate-200 bg-white hover:border-slate-300'
                 }`}
               >
                 <div className="flex items-start justify-between gap-2">
                   <p className="font-medium text-slate-900">{t.name}</p>
-                  {active && <CheckCircle2 className="text-indigo-600 shrink-0" size={18} />}
+                  {active && <CheckCircle2 className="shrink-0 text-primary-dark" size={18} />}
                 </div>
                 {t.description && (
                   <p className="text-xs text-slate-500 mt-1 leading-relaxed">{t.description}</p>
@@ -116,7 +116,7 @@ export function SetupForm({
                 type="checkbox"
                 checked={selected.has(c.id)}
                 onChange={() => toggle(c.id)}
-                className="mt-1 h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                className="mt-1 h-4 w-4 rounded border-border text-primary-dark focus:ring-primary"
               />
               <label htmlFor={`cap-${c.id}`} className="cursor-pointer">
                 <span className="text-sm font-medium text-slate-900">{c.name}</span>
@@ -135,7 +135,7 @@ export function SetupForm({
       <button
         type="submit"
         disabled={pending || !typeId}
-        className="inline-flex items-center justify-center gap-2 rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 disabled:opacity-60"
+        className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary-dark px-5 py-2.5 text-sm font-semibold text-surface shadow-sm transition-colors hover:bg-primary disabled:opacity-60"
       >
         {pending && <Loader2 className="animate-spin" size={16} />}
         Save business profile

@@ -9,12 +9,15 @@ export async function resolveContactIdentity(supabase:SupabaseClient,organizatio
   const externalUserId=input.externalUserId?.trim() || null
 
   if(externalUserId){
+    // Exact external identity, scoped to this tenant: the same provider identity can
+    // legitimately exist in another organization, so the tenant filter is part of the key.
     const {data,error}=await supabase.from('contact_identities')
       .select('contact_id,contacts!inner(id,full_name,phone,organization_id)')
-      .eq('channel',input.channel).eq('external_user_id',externalUserId).maybeSingle()
+      .eq('channel',input.channel).eq('external_user_id',externalUserId)
+      .eq('contacts.organization_id',organizationId).maybeSingle()
     if(error) throw new Error(error.message)
     const contact=data?.contacts as unknown as {id:string;full_name:string|null;phone:string|null;organization_id:string}|null
-    if(contact?.organization_id===organizationId){
+    if(contact){
       return {contactId:contact.id,organizationId,fullName:contact.full_name,phone:contact.phone,isNew:false}
     }
   }
@@ -56,4 +59,12 @@ export function normalizePhone(phone:string){
   if(digits.startsWith('+')) return digits
   if(digits.startsWith('00')) return '+'+digits.slice(2)
   return digits
+}
+
+/** Provider payloads (WhatsApp/MSISDN, Vapi caller numbers) carry E.164 without the plus. */
+export function normalizeE164(phone:string){
+  const digits=phone.replace(/[^\d+]/g,'')
+  if(digits.startsWith('+')) return digits
+  if(digits.startsWith('00')) return '+'+digits.slice(2)
+  return digits.length>=8 ? '+'+digits : digits
 }

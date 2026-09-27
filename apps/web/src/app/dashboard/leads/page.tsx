@@ -4,13 +4,13 @@ import { redirect } from 'next/navigation'
 
 const STATUS_STYLE: Record<string, string> = {
   new: 'bg-blue-50 text-blue-700',
-  qualified: 'bg-indigo-50 text-indigo-700',
+  qualified: 'bg-primary-light/30 text-primary-dark',
   contacted: 'bg-amber-50 text-amber-700',
   booked: 'bg-emerald-50 text-emerald-700',
   waiting: 'bg-slate-100 text-slate-700',
   won: 'bg-emerald-100 text-emerald-800',
   lost: 'bg-rose-50 text-rose-700',
-  recovered: 'bg-purple-50 text-purple-700',
+  recovered: 'bg-primary-light/30 text-primary-dark',
 }
 
 export default async function LeadsPage() {

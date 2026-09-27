@@ -4,8 +4,7 @@ import { acquireWebhookEvent, markWebhookProcessed } from '@/lib/channels/idempo
 import { processInboundMessage } from '@/lib/runtime/process-inbound'
 import { resolveChannelExact } from '@/lib/runtime/tenant'
 import { verifyMetaSignature } from '@/lib/runtime/security'
-import { sendInstagramText } from '@/lib/providers/meta'
-import { enqueueOutbound } from '@/lib/channels/outbox'
+import { deliverOutbound } from '@/lib/runtime/outbound'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -28,8 +27,6 @@ export async function POST(req: NextRequest) {
 
     for (const entry of (body.entry as Array<Record<string, unknown>> | undefined) ?? []) {
       const accountId = String(entry.id ?? '').trim()
-      const channel = await resolveChannelExact(supabase, { channelType: 'instagram', providerAccountId: accountId })
-      if (!channel) continue
 
       for (const event of (entry.messaging as Array<Record<string, unknown>> | undefined) ?? []) {
         const sender = event.sender as Record<string, unknown> | undefined
@@ -43,6 +40,16 @@ export async function POST(req: NextRequest) {
         if (acquired.status === 'duplicate') continue
         if (acquired.status === 'error') throw new Error(acquired.message)
         eventRowId = acquired.eventRowId
+
+        // Exact tenant binding: Instagram account ID → channels.provider_account_id.
+        const channel = accountId
+          ? await resolveChannelExact(supabase, { channelType: 'instagram', providerAccountId: accountId })
+          : null
+        if (!channel) {
+          await markWebhookProcessed(supabase, eventRowId, 'failed', 'unmapped_instagram_account')
+          eventRowId = null
+          continue
+        }
 
         await supabase.from('webhook_events').update({
           organization_id: channel.organizationId,
@@ -64,20 +71,19 @@ export async function POST(req: NextRequest) {
         })
 
         if (result.reply) {
-          try {
-            await sendInstagramText(accountId, senderId, result.reply)
-          } catch {
-            await enqueueOutbound({
-              supabase,
+          await deliverOutbound(supabase, {
+            channel: {
+              id: channel.id,
               organizationId: channel.organizationId,
               businessId: channel.businessId,
-              channelId: channel.id,
-              eventType: 'message.send',
-              idempotencyKey: 'instagram:' + externalEventId + ':reply',
-              recipient: senderId,
-              payload: { body: result.reply },
-            })
-          }
+              channelType: 'instagram',
+              providerAccountId: channel.providerAccountId ?? accountId,
+              externalIdentifier: channel.externalIdentifier,
+            },
+            recipient: senderId,
+            body: result.reply,
+            idempotencyKey: 'instagram:' + externalEventId + ':reply',
+          })
         }
 
         await markWebhookProcessed(supabase, eventRowId, 'processed')

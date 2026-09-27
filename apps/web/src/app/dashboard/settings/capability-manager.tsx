@@ -36,7 +36,7 @@ export function CapabilityManager({ rows }: { rows: Row[] }) {
   return (
     <div className="space-y-3">
       {error && (
-        <div className="text-sm text-rose-600 bg-rose-50 border border-rose-100 rounded-lg px-3 py-2">
+        <div className="rounded-lg border border-error/40 bg-error/10 px-3 py-2 text-sm text-text">
           {error}
         </div>
       )}
@@ -54,7 +54,7 @@ export function CapabilityManager({ rows }: { rows: Row[] }) {
               disabled={pending && pendingId === r.id}
               onClick={() => onToggle(r.id, !r.enabled)}
               className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${
-                r.enabled ? 'bg-indigo-600' : 'bg-slate-200'
+                r.enabled ? 'bg-primary-dark' : 'bg-slate-200'
               }`}
               aria-pressed={r.enabled}
             >

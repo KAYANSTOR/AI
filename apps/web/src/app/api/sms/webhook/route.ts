@@ -4,8 +4,7 @@ import { acquireWebhookEvent, markWebhookProcessed } from '@/lib/channels/idempo
 import { processInboundMessage } from '@/lib/runtime/process-inbound'
 import { resolveChannelExact } from '@/lib/runtime/tenant'
 import { verifyTwilioSignature } from '@/lib/runtime/security'
-import { sendTwilioSms } from '@/lib/providers/twilio'
-import { enqueueOutbound } from '@/lib/channels/outbox'
+import { deliverOutbound } from '@/lib/runtime/outbound'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -55,20 +54,19 @@ export async function POST(req: NextRequest) {
     })
 
     if (result.reply) {
-      try {
-        await sendTwilioSms({ to: from, from: to, body: result.reply })
-      } catch {
-        await enqueueOutbound({
-          supabase,
+      await deliverOutbound(supabase, {
+        channel: {
+          id: channel.id,
           organizationId: channel.organizationId,
           businessId: channel.businessId,
-          channelId: channel.id,
-          eventType: 'message.send',
-          idempotencyKey: 'sms:' + sid + ':reply',
-          recipient: from,
-          payload: { body: result.reply },
-        })
-      }
+          channelType: 'sms',
+          providerAccountId: channel.providerAccountId,
+          externalIdentifier: channel.externalIdentifier ?? to,
+        },
+        recipient: from,
+        body: result.reply,
+        idempotencyKey: 'sms:' + sid + ':reply',
+      })
     }
 
     await markWebhookProcessed(supabase, eventRowId, 'processed')

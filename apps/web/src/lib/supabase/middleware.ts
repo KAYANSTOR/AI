@@ -1,14 +1,25 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import { getSupabaseEnv } from './env'
+
+/** Routes that require a signed-in user. */
+const PROTECTED_PREFIXES = ['/dashboard', '/settings']
 
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
     request,
   })
 
+  // لا يوجد مزوّد مصادقة مُهيّأ (متغيرات البيئة غير مضبوطة): لا شيء لتحديثه،
+  // والسماح بمرور الطلبات حتى تظهر الصفحة العامة بدل أن يفشل الطلب بالكامل.
+  const env = getSupabaseEnv()
+  if (!env) {
+    return supabaseResponse
+  }
+
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    env.url,
+    env.anonKey,
     {
       cookies: {
         getAll() {
@@ -35,14 +46,16 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
-  // Define routes that require authentication
-  const isProtectedRoute = request.nextUrl.pathname.startsWith('/dashboard') || 
-                           request.nextUrl.pathname.startsWith('/settings')
+  const { pathname } = request.nextUrl
+  const isProtectedRoute = PROTECTED_PREFIXES.some((prefix) => pathname.startsWith(prefix))
 
   if (isProtectedRoute && !user) {
-    // no user, potentially respond by redirecting the user to the login page
+    // Send the visitor to /login and keep the page they wanted, so the app
+    // returns them there right after signing in.
     const url = request.nextUrl.clone()
     url.pathname = '/login'
+    url.search = ''
+    url.searchParams.set('returnTo', pathname)
     return NextResponse.redirect(url)
   }
 

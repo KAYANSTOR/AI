@@ -53,7 +53,7 @@ export function ServiceList({ services, organizationId }: { services: Service[];
               <td className="px-4 py-3 text-slate-600">{s.duration_minutes} min</td>
               <td className="px-4 py-3 text-slate-600">{s.price_amount != null ? `${s.price_currency} ${Number(s.price_amount).toFixed(2)}` : '—'}</td>
               <td className="px-4 py-3 text-right">
-                <button type="button" onClick={() => remove(s.id)} className="inline-flex items-center gap-1 text-rose-600 hover:text-rose-700 text-xs font-medium">
+                <button type="button" onClick={() => remove(s.id)} className="inline-flex items-center gap-1 text-error hover:underline text-xs font-medium">
                   <Trash2 size={14} /> Delete
                 </button>
               </td>
