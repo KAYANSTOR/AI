@@ -2,53 +2,88 @@ import { getCurrentOrg } from '@/lib/org'
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
-import { Building2, Clock, Wrench, Phone } from 'lucide-react'
+import { CapabilityManager } from './capability-manager'
 
 export default async function SettingsPage() {
   const org = await getCurrentOrg()
   if (!org) redirect('/login')
 
   const supabase = await createClient()
-  const [{ data: profile }, { count: servicesCount }, { count: hoursCount }] = await Promise.all([
-    supabase.from('business_profiles').select('*').eq('organization_id', org.organizationId).maybeSingle(),
-    supabase.from('services').select('*', { count: 'exact', head: true }).eq('organization_id', org.organizationId),
-    supabase.from('business_hours').select('*', { count: 'exact', head: true }).eq('organization_id', org.organizationId),
+
+  const [{ data: profile }, { data: allCaps }, { data: orgCaps }] = await Promise.all([
+    supabase
+      .from('business_profiles')
+      .select('business_type_id, industry, timezone, business_types(name)')
+      .eq('organization_id', org.organizationId)
+      .maybeSingle(),
+    supabase.from('capabilities').select('id, name, description').order('name'),
+    supabase
+      .from('organization_capabilities')
+      .select('capability_id, is_enabled')
+      .eq('organization_id', org.organizationId),
   ])
 
-  const cards = [
-    { title: 'Business Profile', description: profile ? `${profile.industry ?? 'Not set'} · ${profile.timezone ?? 'UTC'}` : 'Set industry, timezone, and AI context', href: '/dashboard/settings/profile', icon: Building2, status: profile ? 'Configured' : 'Required' },
-    { title: 'Services & Pricing', description: `${servicesCount ?? 0} services defined`, href: '/dashboard/services', icon: Wrench, status: (servicesCount ?? 0) > 0 ? 'Ready' : 'Add services' },
-    { title: 'Business Hours', description: `${hoursCount ?? 0} day schedules`, href: '/dashboard/settings/hours', icon: Clock, status: (hoursCount ?? 0) >= 7 ? 'Complete' : 'Incomplete' },
-    { title: 'Phone Forwarding', description: 'Connect existing number via Call Forwarding', href: '/dashboard/telephony', icon: Phone, status: 'Phase 2' },
-  ]
+  const enabledMap = new Map(
+    (orgCaps ?? []).map((c) => [c.capability_id as string, Boolean(c.is_enabled)])
+  )
+
+  const rows = (allCaps ?? []).map((c) => ({
+    id: c.id as string,
+    name: c.name as string,
+    description: (c.description as string | null) ?? null,
+    enabled: enabledMap.get(c.id as string) ?? false,
+  }))
+
+  const bt = profile?.business_types as unknown as { name: string } | null
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8 max-w-3xl">
       <div>
         <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Settings</h1>
-        <p className="text-slate-500 text-sm mt-1">Configure {org.organizationName} for the AI receptionist.</p>
+        <p className="text-slate-500 text-sm mt-1">
+          Organization profile and capability modules (PLAN: Capability Manager).
+        </p>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {cards.map((card) => {
-          const Icon = card.icon
-          return (
-            <Link key={card.href} href={card.href} className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm hover:border-indigo-300 hover:shadow-md transition-all group">
-              <div className="flex items-start gap-4">
-                <div className="w-11 h-11 rounded-lg bg-indigo-50 flex items-center justify-center group-hover:bg-indigo-100 transition-colors">
-                  <Icon size={22} className="text-indigo-600" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between gap-2">
-                    <h2 className="font-semibold text-slate-900">{card.title}</h2>
-                    <span className="text-xs font-medium text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">{card.status}</span>
-                  </div>
-                  <p className="text-sm text-slate-500 mt-1">{card.description}</p>
-                </div>
-              </div>
-            </Link>
-          )
-        })}
-      </div>
+
+      <section className="bg-white border border-slate-200 rounded-xl shadow-sm p-6 space-y-3">
+        <h2 className="text-sm font-semibold text-slate-900">Business profile</h2>
+        <dl className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+          <div>
+            <dt className="text-slate-500">Organization</dt>
+            <dd className="font-medium text-slate-900">{org.organizationName}</dd>
+          </div>
+          <div>
+            <dt className="text-slate-500">Your role</dt>
+            <dd className="font-medium text-slate-900 capitalize">{org.role}</dd>
+          </div>
+          <div>
+            <dt className="text-slate-500">Business type</dt>
+            <dd className="font-medium text-slate-900">
+              {bt?.name ?? profile?.business_type_id ?? 'Not set'}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-slate-500">Timezone</dt>
+            <dd className="font-medium text-slate-900">{profile?.timezone ?? 'UTC'}</dd>
+          </div>
+        </dl>
+        <Link
+          href="/dashboard/setup"
+          className="inline-flex text-sm font-medium text-indigo-600 hover:text-indigo-500"
+        >
+          Change business type & defaults →
+        </Link>
+      </section>
+
+      <section className="space-y-3">
+        <div>
+          <h2 className="text-sm font-semibold text-slate-900">Capability Manager</h2>
+          <p className="text-xs text-slate-500 mt-0.5">
+            Enable only what this business needs. AI tools for disabled modules are blocked.
+          </p>
+        </div>
+        <CapabilityManager rows={rows} />
+      </section>
     </div>
   )
 }
