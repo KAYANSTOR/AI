@@ -7,6 +7,7 @@ import { getPendingAction, isAffirmative, isNegative, markPendingAction } from '
 import { ensureOpenConversation, getConversationRef } from '@/lib/runtime/conversation'
 import { resolveBusinessAgent } from '@/lib/runtime/tenant'
 import { executeTool } from '@/lib/ai/tools'
+import { armConversationSla, markFirstResponse } from '@/lib/sla'
 
 /** Provider channels that terminate in an agent conversation. */
 export type RuntimeChannel = 'sms' | 'whatsapp' | 'instagram' | 'phone'
@@ -61,12 +62,17 @@ export async function processInboundMessage(
     .update({ last_message_at: new Date().toISOString(), last_inbound_at: new Date().toISOString() })
     .eq('id', conversationId)
 
+  // First inbound arms SLA timers (idempotent if already set).
+  await armConversationSla(supabase, {
+    organizationId: input.organizationId,
+    conversationId,
+  })
+
   const conversation = await getConversationRef(supabase, conversationId)
   if (!conversation || !conversation.aiEnabled || conversation.status === 'handed_off') {
     return { reply: null, conversationId, contactId: contact.contactId }
   }
 
-  // Explicit customer opt-out is a channel fact: store it and stop automation.
   if (isOptOutMessage(input.text)) {
     await recordOptOut(supabase, {
       organizationId: input.organizationId,
@@ -117,8 +123,6 @@ export async function processInboundMessage(
         contactId: contact.contactId,
         supabase,
         agentId: agent?.id ?? null,
-        // The stored action originated from the agent and is only executed here because the
-        // customer explicitly affirmed it, so the agent remains the responsible actor.
         actor: 'agent',
       },
       { confirmed: true }
@@ -134,10 +138,10 @@ export async function processInboundMessage(
   const agent = await resolveBusinessAgent(supabase, input.businessId)
   if (!agent) return { reply: null, conversationId, contactId: contact.contactId }
 
-  // A just-received inbound message opens the reply window for this conversation.
   const eligibility = checkEligibility({
     channel: input.channelType,
     lastInboundAt: new Date().toISOString(),
+    optedOut: consent === 'opted_out',
   })
   if (!eligibility.allowed) return { reply: null, conversationId, contactId: contact.contactId }
   if (eligibility.mode === 'template_only' && input.channelType !== 'sms') {
@@ -165,6 +169,11 @@ export async function processInboundMessage(
     content: reply,
   })
   if (outbound.error) throw new Error(outbound.error.message)
+
+  await markFirstResponse(supabase, {
+    organizationId: input.organizationId,
+    conversationId,
+  })
 
   await supabase
     .from('conversations')
