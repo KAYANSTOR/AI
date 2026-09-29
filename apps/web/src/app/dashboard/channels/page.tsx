@@ -2,10 +2,11 @@ import { redirect } from 'next/navigation'
 import { Info } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { getCurrentOrg } from '@/lib/org'
-import { CHANNEL_SPECS, type ChannelType } from '@/lib/channels/management'
+import { CHANNEL_SPECS, getChannelSpec, type ChannelType } from '@/lib/channels/management'
 import { credentialsStorageConfigured, listCredentialMetadata } from '@/lib/credentials/service'
 import { PROVIDER_FOR_CHANNEL, type CredentialMetadata } from '@/lib/credentials/catalog'
 import { ChannelCard, type ChannelCardData } from './channel-card'
+import { PhonePanel } from './phone-panel'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,7 +24,7 @@ export default async function ChannelsPage() {
   if (!org) redirect('/login')
 
   const supabase = await createClient()
-  const [{ data: rows, error }, { data: business }] = await Promise.all([
+  const [{ data: rows, error }, { data: business }, { data: phoneConnection }] = await Promise.all([
     supabase
       .from('channels')
       .select('id, channel_type, provider_account_id, external_identifier, verification_status, is_active')
@@ -34,6 +35,12 @@ export default async function ChannelsPage() {
       .eq('organization_id', org.organizationId)
       .order('created_at', { ascending: true })
       .limit(1)
+      .maybeSingle(),
+    // The phone connection carries the forwarding state that a channels row cannot express.
+    supabase
+      .from('phone_connections')
+      .select('existing_phone_number, internal_vapi_number, forward_type, forwarding_status, last_verified_at')
+      .eq('organization_id', org.organizationId)
       .maybeSingle(),
   ])
 
@@ -112,6 +119,22 @@ export default async function ChannelsPage() {
           <ChannelCard key={card.spec.type} data={card} channelType={card.spec.type} />
         ))}
       </div>
+
+      <PhonePanel
+        canManage={canManage}
+        instructions={getChannelSpec('phone')?.setup ?? []}
+        initial={
+          phoneConnection
+            ? {
+                existingPhoneNumber: phoneConnection.existing_phone_number ?? null,
+                vapiNumber: phoneConnection.internal_vapi_number ?? null,
+                forwardType: phoneConnection.forward_type ?? 'no_answer',
+                forwardingStatus: phoneConnection.forwarding_status ?? 'pending_test',
+                lastVerifiedAt: phoneConnection.last_verified_at ?? null,
+              }
+            : null
+        }
+      />
     </div>
   )
 }
