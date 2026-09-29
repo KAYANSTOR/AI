@@ -3,6 +3,9 @@ import { notFound, redirect } from 'next/navigation'
 import { ArrowRight, Bot, StickyNote, User } from 'lucide-react'
 import { requireCapability, CapabilityDisabledError } from '@/lib/capabilities/guard'
 import { InboxControls } from '../inbox-controls'
+import { ar } from '@/lib/i18n/ar'
+import { formatDateTime } from '@/lib/i18n/format'
+import { channelLabel } from '@/lib/i18n/labels'
 
 export default async function ConversationThreadPage({
   params,
@@ -54,28 +57,28 @@ export default async function ConversationThreadPage({
       <div>
         <Link
           href="/dashboard/conversations"
-          className="inline-flex items-center gap-1 text-xs text-muted transition-colors hover:text-text"
+          className="inline-flex min-h-11 items-center gap-1 text-xs text-text-muted transition-colors hover:text-text"
         >
           <ArrowRight size={13} />
           كل المحادثات
         </Link>
         <h1 className="mt-2 text-2xl font-bold tracking-tight text-text">
-          {contact?.full_name || contact?.phone || 'عميل غير معروف'}
+          {contact?.full_name || contact?.phone || ar.conversations.unknownCustomer}
         </h1>
-        <p className="mt-1 text-sm text-muted">
-          {channel?.channel_type?.toUpperCase() ?? 'CHANNEL'}
+        <p className="mt-1 text-sm text-text-muted">
+          {channel ? channelLabel(channel.channel_type) : ar.common.unknown}
           {contact?.phone ? ` · ${contact.phone}` : ''}
-          {conversation.handoff_reason ? ` · سبب التحويل: ${conversation.handoff_reason}` : ''}
+          {conversation.handoff_reason ? ` · ${ar.conversations.handoffReason}: ${conversation.handoff_reason}` : ''}
         </p>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
         <section className="overflow-hidden rounded-xl border border-border bg-surface">
           <header className="border-b border-border px-4 py-3">
-            <h2 className="text-sm font-semibold text-text">المحادثة</h2>
+            <h2 className="text-sm font-semibold text-text">{ar.conversations.thread}</h2>
           </header>
           {!messages?.length ? (
-            <p className="px-4 py-8 text-center text-sm text-muted">لا توجد رسائل مسجلة.</p>
+            <p className="px-4 py-8 text-center text-sm text-text-muted">{ar.conversations.noMessages}</p>
           ) : (
             <ul className="max-h-[520px] space-y-3 overflow-y-auto p-4">
               {messages.map((message) => {
@@ -90,9 +93,9 @@ export default async function ConversationThreadPage({
                       }`}
                     >
                       <p className="whitespace-pre-wrap break-words">{message.content ?? '—'}</p>
-                      <p className="mt-1 flex items-center gap-1 text-[11px] text-muted">
+                      <p className="mt-1 flex items-center gap-1 text-[11px] text-text-muted">
                         {inbound ? <User size={11} /> : <Bot size={11} />}
-                        {new Date(message.created_at as string).toLocaleString('ar')}
+                        {formatDateTime(message.created_at as string, ctx.timezone)}
                       </p>
                     </div>
                   </li>
@@ -104,7 +107,7 @@ export default async function ConversationThreadPage({
 
         <div className="space-y-6">
           <section className="rounded-xl border border-border bg-surface p-4">
-            <h2 className="mb-3 text-sm font-semibold text-text">التحكم</h2>
+            <h2 className="mb-3 text-sm font-semibold text-text">{ar.conversations.controls}</h2>
             <InboxControls
               conversationId={conversationId}
               status={String(conversation.status ?? 'active')}
@@ -115,17 +118,17 @@ export default async function ConversationThreadPage({
           <section className="overflow-hidden rounded-xl border border-border bg-surface">
             <header className="flex items-center gap-2 border-b border-border px-4 py-3">
               <StickyNote size={15} className="text-primary-dark" />
-              <h2 className="text-sm font-semibold text-text">ملاحظات داخلية</h2>
+              <h2 className="text-sm font-semibold text-text">{ar.conversations.notes}</h2>
             </header>
             {!notes?.length ? (
-              <p className="px-4 py-6 text-center text-sm text-muted">لا توجد ملاحظات.</p>
+              <p className="px-4 py-6 text-center text-sm text-text-muted">{ar.conversations.noNotes}</p>
             ) : (
               <ul className="divide-y divide-border">
                 {notes.map((note) => (
                   <li key={note.id} className="px-4 py-3">
                     <p className="text-sm text-text">{note.body}</p>
-                    <p className="mt-1 text-[11px] text-muted">
-                      {new Date(note.created_at as string).toLocaleString('ar')}
+                    <p className="mt-1 text-[11px] text-text-muted">
+                      {formatDateTime(note.created_at as string, ctx.timezone)}
                     </p>
                   </li>
                 ))}

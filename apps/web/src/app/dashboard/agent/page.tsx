@@ -2,23 +2,23 @@ import { redirect } from 'next/navigation'
 import { Bot } from 'lucide-react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
-import { getCurrentOrg } from '@/lib/org'
+import { getDashboardContext } from '@/lib/dashboard/context'
 import { TOOL_POLICIES } from '@/lib/ai/registry'
-import { getEnabledCapabilities } from '@/lib/ai/capabilities'
 import { AgentConsole, type AgentConsoleData } from './agent-console'
+import { ar } from '@/lib/i18n/ar'
 
 export const dynamic = 'force-dynamic'
 
 export default async function AgentPage() {
-  const org = await getCurrentOrg()
-  if (!org) redirect('/login')
+  const context = await getDashboardContext()
+  if (!context) redirect('/login')
 
   const supabase = await createClient()
 
   const { data: business } = await supabase
     .from('businesses')
     .select('id, name')
-    .eq('organization_id', org.organizationId)
+    .eq('organization_id', context.organizationId)
     .order('created_at', { ascending: true })
     .limit(1)
     .maybeSingle()
@@ -38,24 +38,22 @@ export default async function AgentPage() {
     )
   }
 
-  const [{ data: agent, error: agentError }, enabled] = await Promise.all([
-    supabase
-      .from('ai_agents')
-      .select('id, name, locale, temperature, status, model_provider, business_id')
-      .eq('business_id', business.id)
-      .neq('status', 'archived')
-      .order('created_at', { ascending: true })
-      .limit(1)
-      .maybeSingle(),
-    getEnabledCapabilities(supabase, org.organizationId),
-  ])
+  const { data: agent, error: agentError } = await supabase
+    .from('ai_agents')
+    .select('id, name, locale, temperature, status, model_provider, business_id')
+    .eq('business_id', business.id)
+    .neq('status', 'archived')
+    .order('created_at', { ascending: true })
+    .limit(1)
+    .maybeSingle()
+  const enabled = new Set(context.enabledCapabilities)
 
   if (agentError) {
     return (
       <div className="space-y-4">
         <h1 className="text-2xl font-bold tracking-tight text-text">الوكيل الذكي</h1>
         <p className="rounded-xl border border-error/40 bg-error/10 px-4 py-3 text-sm text-text">
-          تعذّر تحميل الوكيل: {agentError.message}
+          {ar.errors.load}
         </p>
       </div>
     )

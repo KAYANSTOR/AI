@@ -3,11 +3,10 @@
 import { useRef, useState } from 'react'
 import { CheckCircle2, LayoutGrid } from 'lucide-react'
 import { Chip, Section, SectionHeading } from './section'
+import { businessTypeHint, businessTypeLabel, capabilityLabel } from '@/lib/i18n/labels'
 
 type Profile = {
   id: string
-  label: string
-  audience: string
   focus: readonly string[]
   /**
    * الوحدات الافتراضية لهذا النشاط — تعكس جدول business_type_capabilities
@@ -19,8 +18,6 @@ type Profile = {
 const PROFILES: readonly Profile[] = [
   {
     id: 'weddings_events',
-    label: 'تنسيق وتنظيم الأعراس والفعاليات',
-    audience: 'شركات تنسيق الأعراس ومنظّمو الفعاليات',
     focus: [
       'المناسبة',
       'التاريخ',
@@ -31,12 +28,10 @@ const PROFILES: readonly Profile[] = [
       'الاستشارات والمواعيد',
       'متابعة العميل',
     ],
-    modules: ['العملاء المحتملون', 'عروض الأسعار والباقات', 'الحجز والمواعيد', 'المتابعة', 'الصندوق الموحّد'],
+    modules: ['lead_capture', 'quotes', 'appointments', 'follow_up', 'inbox'],
   },
   {
     id: 'sales',
-    label: 'المبيعات',
-    audience: 'متاجر وموزّعون وشركات بيع المنتجات والخدمات',
     focus: [
       'المنتجات',
       'الأسعار',
@@ -45,40 +40,34 @@ const PROFILES: readonly Profile[] = [
       'متابعة العملاء',
       'حالة الطلب',
     ],
-    modules: ['العملاء المحتملون', 'عروض الأسعار والباقات', 'الطلبات', 'المتابعة', 'الصندوق الموحّد'],
+    modules: ['lead_capture', 'quotes', 'orders', 'follow_up', 'inbox'],
   },
   {
     id: 'appointments',
-    label: 'الحجز والمواعيد',
-    audience: 'عيادات وصالونات ومراكز وخدمات تعتمد على المواعيد',
     focus: ['الخدمات', 'المدة', 'التوفر', 'الحجز', 'الإلغاء', 'إعادة الجدولة', 'التذكيرات'],
     modules: [
-      'العملاء المحتملون',
-      'الحجز والمواعيد',
-      'المتابعة',
-      'الصندوق الموحّد',
-      'قاعدة معلومات الشركة',
+      'lead_capture',
+      'appointments',
+      'follow_up',
+      'inbox',
+      'knowledge_base',
     ],
   },
   {
     id: 'home_services',
-    label: 'الخدمات المنزلية',
-    audience: 'تنظيف وصيانة وتكييف وسباكة وزيارات ميدانية',
     focus: ['نوع الخدمة', 'موقع العميل', 'الموعد', 'تقدير الخدمة', 'الفني', 'متابعة الطلب'],
     modules: [
-      'العملاء المحتملون',
-      'الحجز والمواعيد',
-      'عروض الأسعار والباقات',
-      'المتابعة',
-      'الصندوق الموحّد',
+      'lead_capture',
+      'appointments',
+      'quotes',
+      'follow_up',
+      'inbox',
     ],
   },
   {
     id: 'custom',
-    label: 'فئة مخصّصة',
-    audience: 'أي نشاط آخر لا يندرج تحت الفئات الجاهزة',
     focus: ['وحدات عامة', 'حقول مخصّصة', 'قوالب رسائل', 'سير عمل قابل للتهيئة'],
-    modules: ['العملاء المحتملون', 'الصندوق الموحّد', 'المتابعة'],
+    modules: ['lead_capture', 'inbox', 'follow_up'],
   },
 ] as const
 
@@ -142,7 +131,7 @@ export function BusinessProfiles() {
                     : 'border-border bg-background text-text-muted hover:border-primary-light hover:text-text'
                 }`}
               >
-                {profile.label}
+                {businessTypeLabel(profile.id)}
               </button>
             )
           })}
@@ -161,9 +150,9 @@ export function BusinessProfiles() {
               <div className="flex flex-wrap items-center gap-3">
                 <Chip tone="brand">
                   <LayoutGrid size={14} aria-hidden="true" />
-                  {profile.label}
+                  {businessTypeLabel(profile.id)}
                 </Chip>
-                <span className="text-xs text-text-muted">{profile.audience}</span>
+                <span className="text-xs text-text-muted">{businessTypeHint(profile.id)}</span>
               </div>
 
               <h3 className="mt-5 text-base font-semibold text-text">
@@ -192,7 +181,7 @@ export function BusinessProfiles() {
                     key={module}
                     className="inline-flex rounded-full border border-primary-light bg-primary-light/25 px-3 py-1.5 text-xs font-semibold text-primary-dark"
                   >
-                    {module}
+                    {capabilityLabel(module)}
                   </li>
                 ))}
               </ul>

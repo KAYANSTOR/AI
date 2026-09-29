@@ -4,6 +4,8 @@ import { useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { saveBusinessSetup } from './actions'
 import { CheckCircle2, Loader2 } from 'lucide-react'
+import { ar } from '@/lib/i18n/ar'
+import { businessTypeHint, businessTypeLabel, capabilityDescription, capabilityLabel } from '@/lib/i18n/labels'
 
 type BusinessType = { id: string; name: string; description: string | null }
 type CapRow = { id: string; name: string; description: string | null; is_default: boolean }
@@ -56,9 +58,8 @@ export function SetupForm({
       try {
         await saveBusinessSetup(fd)
         router.push('/dashboard')
-        router.refresh()
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to save')
+      } catch {
+        setError(ar.errors.save)
       }
     })
   }
@@ -72,7 +73,7 @@ export function SetupForm({
       )}
 
       <section>
-        <h2 className="text-sm font-semibold text-slate-900 mb-3">1. Choose your business type</h2>
+        <h2 className="mb-3 text-sm font-semibold text-text">{ar.setup.chooseBusinessType}</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {types.map((t) => {
             const active = typeId === t.id
@@ -81,18 +82,18 @@ export function SetupForm({
                 key={t.id}
                 type="button"
                 onClick={() => onTypeChange(t.id)}
-                className={`text-left rounded-xl border p-4 transition-colors ${
+                className={`min-h-11 text-start rounded-xl border p-4 transition-colors ${
                   active
                     ? 'border-primary-dark bg-primary-light/25 ring-2 ring-primary-light'
-                    : 'border-slate-200 bg-white hover:border-slate-300'
+                    : 'border-border bg-surface hover:border-primary-light'
                 }`}
               >
                 <div className="flex items-start justify-between gap-2">
-                  <p className="font-medium text-slate-900">{t.name}</p>
+                  <p className="font-medium text-text">{businessTypeLabel(t.id, t.name)}</p>
                   {active && <CheckCircle2 className="shrink-0 text-primary-dark" size={18} />}
                 </div>
-                {t.description && (
-                  <p className="text-xs text-slate-500 mt-1 leading-relaxed">{t.description}</p>
+                {(businessTypeHint(t.id, t.description ?? undefined)) && (
+                  <p className="mt-1 text-xs leading-relaxed text-text-muted">{businessTypeHint(t.id, t.description ?? undefined)}</p>
                 )}
               </button>
             )
@@ -101,33 +102,33 @@ export function SetupForm({
       </section>
 
       <section>
-        <h2 className="text-sm font-semibold text-slate-900 mb-1">2. Enable capabilities</h2>
-        <p className="text-xs text-slate-500 mb-3">
-          Only enabled modules appear in the dashboard and to the AI tools registry.
-        </p>
+        <h2 className="mb-1 text-sm font-semibold text-text">{ar.setup.chooseCapabilities}</h2>
+        <p className="mb-3 text-xs text-text-muted">{ar.setup.capabilityHint}</p>
         <ul className="space-y-2">
           {caps.map((c) => (
             <li
               key={c.id}
-              className="flex items-start gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3"
+              className="rounded-lg border border-border bg-surface px-4 py-2"
             >
-              <input
-                id={`cap-${c.id}`}
-                type="checkbox"
-                checked={selected.has(c.id)}
-                onChange={() => toggle(c.id)}
-                className="mt-1 h-4 w-4 rounded border-border text-primary-dark focus:ring-primary"
-              />
-              <label htmlFor={`cap-${c.id}`} className="cursor-pointer">
-                <span className="text-sm font-medium text-slate-900">{c.name}</span>
-                {c.description && (
-                  <span className="block text-xs text-slate-500 mt-0.5">{c.description}</span>
-                )}
+              <label htmlFor={`cap-${c.id}`} className="flex min-h-11 cursor-pointer items-center gap-3">
+                <input
+                  id={`cap-${c.id}`}
+                  type="checkbox"
+                  checked={selected.has(c.id)}
+                  onChange={() => toggle(c.id)}
+                  className="h-5 w-5 shrink-0 rounded border-border text-primary-dark focus:ring-primary"
+                />
+                <span>
+                  <span className="text-sm font-medium text-text">{capabilityLabel(c.id, c.name)}</span>
+                  {(capabilityDescription(c.id, c.description ?? undefined)) && (
+                    <span className="block text-xs text-text-muted">{capabilityDescription(c.id, c.description ?? undefined)}</span>
+                  )}
+                </span>
               </label>
             </li>
           ))}
           {!caps.length && (
-            <li className="text-sm text-slate-400">No capabilities defined for this type.</li>
+            <li className="text-sm text-text-muted">{ar.setup.noCapabilities}</li>
           )}
         </ul>
       </section>
@@ -135,10 +136,10 @@ export function SetupForm({
       <button
         type="submit"
         disabled={pending || !typeId}
-        className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary-dark px-5 py-2.5 text-sm font-semibold text-surface shadow-sm transition-colors hover:bg-primary disabled:opacity-60"
+        className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary-dark px-5 py-2.5 text-base font-semibold text-surface shadow-sm transition-colors hover:bg-primary disabled:opacity-60 md:w-auto md:text-sm"
       >
         {pending && <Loader2 className="animate-spin" size={16} />}
-        Save business profile
+        {pending ? ar.common.saving : ar.setup.save}
       </button>
     </form>
   )

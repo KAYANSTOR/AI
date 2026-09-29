@@ -1,31 +1,19 @@
-import { getCurrentOrg } from '@/lib/org'
+import { getDashboardContext } from '@/lib/dashboard/context'
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { SetupForm } from './setup-form'
+import { BUSINESS_TYPES } from '@/lib/capabilities/business-types'
+import { ar } from '@/lib/i18n/ar'
 
 export default async function SetupPage() {
-  const org = await getCurrentOrg()
-  if (!org) redirect('/login')
+  const context = await getDashboardContext()
+  if (!context) redirect('/login')
 
   const supabase = await createClient()
 
-  const [{ data: types }, { data: profile }, { data: enabled }, { data: typeCaps }] =
-    await Promise.all([
-      supabase.from('business_types').select('id, name, description').order('name'),
-      supabase
-        .from('business_profiles')
-        .select('business_type_id')
-        .eq('organization_id', org.organizationId)
-        .maybeSingle(),
-      supabase
-        .from('organization_capabilities')
-        .select('capability_id')
-        .eq('organization_id', org.organizationId)
-        .eq('is_enabled', true),
-      supabase
-        .from('business_type_capabilities')
-        .select('business_type_id, is_default, capabilities(id, name, description)'),
-    ])
+  const { data: typeCaps } = await supabase
+    .from('business_type_capabilities')
+    .select('business_type_id, capability_id, is_default, capabilities(id, name, description)')
 
   const capsByType: Record<
     string,
@@ -51,19 +39,16 @@ export default async function SetupPage() {
   return (
     <div className="max-w-3xl space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Business setup</h1>
-        <p className="text-slate-500 text-sm mt-1">
-          Choose your activity type. FrontDesk AI loads the right modules — one core product, not a
-          separate app per industry.
-        </p>
+        <h1 className="text-2xl font-bold tracking-tight text-text">{ar.setup.title}</h1>
+        <p className="mt-1 text-sm text-text-muted">{ar.setup.description}</p>
       </div>
 
-      <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
+      <div className="rounded-xl border border-border bg-surface p-4 shadow-sm sm:p-6">
         <SetupForm
-          types={types ?? []}
-          initialTypeId={profile?.business_type_id ?? null}
+          types={BUSINESS_TYPES.map((type) => ({ id: type.id, name: type.label, description: type.hint }))}
+          initialTypeId={context.businessTypeId}
           capsByType={capsByType}
-          enabledIds={(enabled ?? []).map((e) => e.capability_id as string)}
+          enabledIds={context.enabledCapabilities}
         />
       </div>
     </div>

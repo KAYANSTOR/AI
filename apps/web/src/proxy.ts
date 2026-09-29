@@ -14,9 +14,9 @@ export const config = {
     /*
      * كل المسارات ما عدا:
      * - api (الwebhooks تعمل بدون جلسة: تستخدم مفاتيح الخدمة الخاصة بها)
-     * - _next/static و _next/image و favicon وملفات الأصول
+     * - _next/static و _next/image و favicon وmanifest وicons وملفات الأصول
      * حتى لا يُشغَّل منطق الجلسة على ملفات ثابتة أو على نداءات مزوّدي القنوات.
      */
-    '/((?!api|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!api|_next/static|_next/image|favicon.ico|manifest.webmanifest|robots.txt|sitemap.xml|icons/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|webmanifest)$).*)',
   ],
 }

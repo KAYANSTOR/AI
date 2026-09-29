@@ -1,70 +1,100 @@
-import { getCurrentOrg } from '@/lib/org'
+import { getDashboardContext } from '@/lib/dashboard/context'
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
+import { ar } from '@/lib/i18n/ar'
+import { formatDate, formatNumber } from '@/lib/i18n/format'
+import { leadStatusLabel } from '@/lib/i18n/labels'
 
 const STATUS_STYLE: Record<string, string> = {
-  new: 'bg-blue-50 text-blue-700',
+  new: 'bg-info/15 text-text',
   qualified: 'bg-primary-light/30 text-primary-dark',
-  contacted: 'bg-amber-50 text-amber-700',
-  booked: 'bg-emerald-50 text-emerald-700',
-  waiting: 'bg-slate-100 text-slate-700',
-  won: 'bg-emerald-100 text-emerald-800',
-  lost: 'bg-rose-50 text-rose-700',
+  contacted: 'bg-warning/15 text-text',
+  booked: 'bg-success/15 text-text',
+  waiting: 'bg-background text-text-muted',
+  won: 'bg-success/15 text-text',
+  lost: 'bg-error/15 text-text',
   recovered: 'bg-primary-light/30 text-primary-dark',
 }
 
 export default async function LeadsPage() {
-  const org = await getCurrentOrg()
-  if (!org) redirect('/login')
+  const context = await getDashboardContext()
+  if (!context) redirect('/login')
 
   const supabase = await createClient()
   const { data: leads } = await supabase
     .from('leads')
-    .select('*, contacts(full_name, phone)')
-    .eq('organization_id', org.organizationId)
+    .select('id, status, intent, estimated_value, created_at, contact_id, contacts(full_name, phone)')
+    .eq('organization_id', context.organizationId)
     .order('created_at', { ascending: false })
     .limit(100)
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Leads</h1>
-        <p className="text-slate-500 text-sm mt-1">Pipeline from first contact to booked appointment. Recovery sequences come in Phase 3.</p>
+        <h1 className="text-2xl font-bold tracking-tight text-text">{ar.leads.title}</h1>
+        <p className="mt-1 text-sm text-text-muted">{ar.leads.description}</p>
       </div>
-      <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+      <div className="min-w-0 overflow-hidden rounded-xl border border-border bg-surface shadow-sm">
         {!leads?.length ? (
-          <div className="p-10 text-center text-sm text-slate-500">No leads yet. They will be created automatically by the AI when channels go live.</div>
+          <div className="p-10 text-center text-sm text-text-muted">{ar.leads.empty}</div>
         ) : (
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50 border-b border-slate-200">
-              <tr>
-                <th className="text-left font-medium text-slate-600 px-4 py-3">Contact</th>
-                <th className="text-left font-medium text-slate-600 px-4 py-3">Status</th>
-                <th className="text-left font-medium text-slate-600 px-4 py-3">Intent</th>
-                <th className="text-left font-medium text-slate-600 px-4 py-3">Value</th>
-                <th className="text-left font-medium text-slate-600 px-4 py-3">Created</th>
-              </tr>
-            </thead>
-            <tbody>
+          <>
+            <ul className="divide-y divide-border md:hidden">
               {leads.map((lead) => {
                 const contact = lead.contacts as unknown as { full_name: string | null; phone: string | null } | null
                 return (
-                  <tr key={lead.id} className="border-b border-slate-100 last:border-0">
+                  <li key={lead.id} className="space-y-2 p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="font-medium text-text">{contact?.full_name || ar.leads.unknownContact}</p>
+                        {contact?.phone && <p dir="ltr" className="text-start text-sm text-text-muted">{contact.phone}</p>}
+                      </div>
+                      <span className={`rounded-full px-2 py-1 text-xs font-medium ${STATUS_STYLE[lead.status] ?? 'bg-background text-text-muted'}`}>
+                        {leadStatusLabel(lead.status)}
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap justify-between gap-2 text-sm text-text-muted">
+                      <span>{lead.intent || ar.common.unknown}</span>
+                      <span>{lead.estimated_value != null ? formatNumber(String(lead.estimated_value)) : ar.common.unknown}</span>
+                    </div>
+                    <p className="text-xs text-text-muted">{formatDate(lead.created_at, context.timezone)}</p>
+                  </li>
+                )
+              })}
+            </ul>
+            <div className="hidden overflow-x-auto md:block">
+              <table className="w-full text-sm">
+                <thead className="border-b border-border bg-background">
+                  <tr>
+                    <th className="px-4 py-3 text-start font-medium text-text-muted">{ar.leads.contact}</th>
+                    <th className="px-4 py-3 text-start font-medium text-text-muted">{ar.leads.status}</th>
+                    <th className="px-4 py-3 text-start font-medium text-text-muted">{ar.leads.intent}</th>
+                    <th className="px-4 py-3 text-start font-medium text-text-muted">{ar.leads.value}</th>
+                    <th className="px-4 py-3 text-start font-medium text-text-muted">{ar.leads.created}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {leads.map((lead) => {
+                const contact = lead.contacts as unknown as { full_name: string | null; phone: string | null } | null
+                return (
+                  <tr key={lead.id} className="border-b border-border last:border-0">
                     <td className="px-4 py-3">
-                      <div className="font-medium text-slate-900">{contact?.full_name || 'Unknown'}</div>
-                      <div className="text-xs text-slate-500">{contact?.phone}</div>
+                      <div className="font-medium text-text">{contact?.full_name || ar.leads.unknownContact}</div>
+                      {contact?.phone && <div dir="ltr" className="text-start text-xs text-text-muted">{contact.phone}</div>}
                     </td>
                     <td className="px-4 py-3">
-                      <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium capitalize ${STATUS_STYLE[lead.status] ?? 'bg-slate-100 text-slate-700'}`}>{lead.status}</span>
+                      <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLE[lead.status] ?? 'bg-background text-text-muted'}`}>{leadStatusLabel(lead.status)}</span>
                     </td>
-                    <td className="px-4 py-3 text-slate-600">{lead.intent || '—'}</td>
-                    <td className="px-4 py-3 text-slate-600">{lead.estimated_value != null ? `$${Number(lead.estimated_value).toFixed(0)}` : '—'}</td>
-                    <td className="px-4 py-3 text-slate-500 text-xs">{new Date(lead.created_at).toLocaleDateString()}</td>
+                    <td className="px-4 py-3 text-text-muted">{lead.intent || ar.common.unknown}</td>
+                    <td dir="ltr" className="px-4 py-3 text-start text-text-muted">{lead.estimated_value != null ? formatNumber(String(lead.estimated_value)) : ar.common.unknown}</td>
+                    <td className="px-4 py-3 text-xs text-text-muted">{formatDate(lead.created_at, context.timezone)}</td>
                   </tr>
                 )
               })}
-            </tbody>
-          </table>
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </div>
     </div>

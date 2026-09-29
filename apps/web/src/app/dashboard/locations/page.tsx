@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { requireMember } from '@/lib/capabilities/guard'
 import { LocationsManager, type LocationRow } from './locations-manager'
+import { ar } from '@/lib/i18n/ar'
 
 export default async function LocationsPage() {
   const ctx = await requireMember().catch(() => null)
@@ -19,16 +20,13 @@ export default async function LocationsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight text-text">الفروع</h1>
-        <p className="mt-1 text-sm text-muted">
-          الفروع تُربط بالنشاط، ويمكن ربط القنوات بفرع محدد لاحقًا. تعطيل الفرع يحفظ تاريخه
-          ولا يحذفه.
-        </p>
+        <h1 className="text-2xl font-bold tracking-tight text-text">{ar.locations.title}</h1>
+        <p className="mt-1 text-sm text-text-muted">{ar.locations.description}</p>
       </div>
 
       {!ctx.businessId && (
         <div className="rounded-xl border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-text">
-          أكمل إعداد النشاط أولًا حتى تصبح الفروع مرتبطة به.
+          {ar.locations.setupRequired}
         </div>
       )}
 

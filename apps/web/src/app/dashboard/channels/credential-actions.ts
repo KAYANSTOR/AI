@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { getCurrentOrg, type OrgContext } from '@/lib/org'
+import { actionErrorMessage, supabaseActionError } from '@/lib/i18n/action-error'
 import {
   credentialsStorageConfigured,
   deleteChannelCredential,
@@ -40,7 +41,10 @@ async function audit(
     p_business_id: businessId,
     p_metadata: metadata,
   })
-  if (error) throw new Error('تعذّر تسجيل العملية في سجل التدقيق: ' + error.message)
+  if (error) {
+    console.error('Unable to record credential audit event', error)
+    throw new Error('تعذّر تسجيل العملية في سجل التدقيق.')
+  }
 }
 
 /** Resolves the tenant's channel row for a channel type, or explains why it cannot. */
@@ -98,7 +102,7 @@ export async function saveChannelCredentialAction(input: {
       p_encrypted_value: encryptSecret(value),
       p_status: 'active',
     })
-    if (error) return { ok: false, error: error.message }
+    if (error) return { ok: false, error: supabaseActionError(error) }
 
     await audit(org.organizationId, channel.business_id, 'channel.credential_saved', channel.id, {
       channel_type: spec.type,
@@ -109,7 +113,7 @@ export async function saveChannelCredentialAction(input: {
     revalidatePath('/dashboard/channels')
     return { ok: true, message: 'تم حفظ بيانات الاعتماد.' }
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : 'تعذّر حفظ بيانات الاعتماد.' }
+    return { ok: false, error: actionErrorMessage(error, 'تعذّر حفظ بيانات الاعتماد. حاول مرة أخرى.') }
   }
 }
 
@@ -146,7 +150,7 @@ export async function setChannelCredentialStatusAction(input: {
     revalidatePath('/dashboard/channels')
     return { ok: true, message: input.status === 'active' ? 'تم تفعيل بيانات الاعتماد.' : 'تم تعطيل بيانات الاعتماد.' }
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : 'تعذّر تحديث حالة بيانات الاعتماد.' }
+    return { ok: false, error: actionErrorMessage(error, 'تعذّر تحديث حالة بيانات الاعتماد. حاول مرة أخرى.') }
   }
 }
 
@@ -184,6 +188,6 @@ export async function deleteChannelCredentialAction(input: {
     revalidatePath('/dashboard/channels')
     return { ok: true, message: 'تم حذف بيانات الاعتماد.' }
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : 'تعذّر حذف بيانات الاعتماد.' }
+    return { ok: false, error: actionErrorMessage(error, 'تعذّر حذف بيانات الاعتماد. حاول مرة أخرى.') }
   }
 }

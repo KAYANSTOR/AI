@@ -51,7 +51,6 @@ export function SignupForm({ authConfigured }: { authConfigured: boolean }) {
 
       if (data.session) {
         router.replace(ONBOARDING_DESTINATION)
-        router.refresh()
         return
       }
 

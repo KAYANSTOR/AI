@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { requireCapability, audit, type AuthorizedContext } from '@/lib/capabilities/guard'
+import { actionErrorMessage, supabaseActionError } from '@/lib/i18n/action-error'
 
 export type InboxResult = { ok: boolean; error?: string; message?: string }
 
@@ -41,7 +42,7 @@ export async function takeOverAction(conversationId: string, reason?: string): P
   try {
     ctx = await requireCapability('inbox')
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : 'غير مصرح.' }
+    return { ok: false, error: actionErrorMessage(error, 'غير مصرح.') }
   }
 
   try {
@@ -64,14 +65,14 @@ export async function takeOverAction(conversationId: string, reason?: string): P
       })
       .eq('id', conversationId)
       .eq('organization_id', ctx.organizationId)
-    if (error) return { ok: false, error: error.message }
+    if (error) return { ok: false, error: supabaseActionError(error) }
 
     await audit(ctx, 'conversation.takeover', 'conversation', conversationId, { assigned: Boolean(memberId) })
     revalidatePath('/dashboard/conversations')
     revalidatePath(`/dashboard/conversations/${conversationId}`)
     return { ok: true, message: 'تم استلام المحادثة. الوكيل متوقف ولن يرد حتى تستأنفه.' }
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : 'تعذّر استلام المحادثة.' }
+    return { ok: false, error: actionErrorMessage(error, 'تعذّر استلام المحادثة. حاول مرة أخرى.') }
   }
 }
 
@@ -84,7 +85,7 @@ export async function resumeAiAction(conversationId: string): Promise<InboxResul
   try {
     ctx = await requireCapability('inbox')
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : 'غير مصرح.' }
+    return { ok: false, error: actionErrorMessage(error, 'غير مصرح.') }
   }
 
   try {
@@ -106,14 +107,14 @@ export async function resumeAiAction(conversationId: string): Promise<InboxResul
       })
       .eq('id', conversationId)
       .eq('organization_id', ctx.organizationId)
-    if (error) return { ok: false, error: error.message }
+    if (error) return { ok: false, error: supabaseActionError(error) }
 
     await audit(ctx, 'conversation.ai_resumed', 'conversation', conversationId)
     revalidatePath('/dashboard/conversations')
     revalidatePath(`/dashboard/conversations/${conversationId}`)
     return { ok: true, message: 'تمت إعادة الوكيل إلى المحادثة.' }
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : 'تعذّر استئناف الوكيل.' }
+    return { ok: false, error: actionErrorMessage(error, 'تعذّر استئناف الوكيل. حاول مرة أخرى.') }
   }
 }
 
@@ -122,7 +123,7 @@ export async function closeConversationAction(conversationId: string): Promise<I
   try {
     ctx = await requireCapability('inbox')
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : 'غير مصرح.' }
+    return { ok: false, error: actionErrorMessage(error, 'غير مصرح.') }
   }
 
   try {
@@ -138,14 +139,14 @@ export async function closeConversationAction(conversationId: string): Promise<I
       })
       .eq('id', conversationId)
       .eq('organization_id', ctx.organizationId)
-    if (error) return { ok: false, error: error.message }
+    if (error) return { ok: false, error: supabaseActionError(error) }
 
     await audit(ctx, 'conversation.closed', 'conversation', conversationId)
     revalidatePath('/dashboard/conversations')
     revalidatePath(`/dashboard/conversations/${conversationId}`)
     return { ok: true, message: 'تم إغلاق المحادثة. لن يبدأ الوكيل محادثة جديدة من تلقاء نفسه.' }
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : 'تعذّر إغلاق المحادثة.' }
+    return { ok: false, error: actionErrorMessage(error, 'تعذّر إغلاق المحادثة. حاول مرة أخرى.') }
   }
 }
 
@@ -154,7 +155,7 @@ export async function reopenConversationAction(conversationId: string): Promise<
   try {
     ctx = await requireCapability('inbox')
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : 'غير مصرح.' }
+    return { ok: false, error: actionErrorMessage(error, 'غير مصرح.') }
   }
 
   try {
@@ -165,14 +166,14 @@ export async function reopenConversationAction(conversationId: string): Promise<
       .update({ status: 'handed_off', ai_enabled: false, state: 'human_handoff', updated_at: new Date().toISOString() })
       .eq('id', conversationId)
       .eq('organization_id', ctx.organizationId)
-    if (error) return { ok: false, error: error.message }
+    if (error) return { ok: false, error: supabaseActionError(error) }
 
     await audit(ctx, 'conversation.reopened', 'conversation', conversationId)
     revalidatePath('/dashboard/conversations')
     revalidatePath(`/dashboard/conversations/${conversationId}`)
     return { ok: true, message: 'تمت إعادة فتح المحادثة، والوكيل ما زال متوقفًا.' }
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : 'تعذّرت إعادة الفتح.' }
+    return { ok: false, error: actionErrorMessage(error, 'تعذّرت إعادة الفتح. حاول مرة أخرى.') }
   }
 }
 
@@ -181,7 +182,7 @@ export async function addNoteAction(conversationId: string, body: string): Promi
   try {
     ctx = await requireCapability('inbox')
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : 'غير مصرح.' }
+    return { ok: false, error: actionErrorMessage(error, 'غير مصرح.') }
   }
 
   const note = body.trim()
@@ -199,12 +200,12 @@ export async function addNoteAction(conversationId: string, body: string): Promi
       author_id: memberId,
       body: note,
     })
-    if (error) return { ok: false, error: error.message }
+    if (error) return { ok: false, error: supabaseActionError(error) }
 
     await audit(ctx, 'conversation.note_added', 'conversation', conversationId)
     revalidatePath(`/dashboard/conversations/${conversationId}`)
     return { ok: true, message: 'تمت إضافة الملاحظة.' }
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : 'تعذّر إضافة الملاحظة.' }
+    return { ok: false, error: actionErrorMessage(error, 'تعذّر إضافة الملاحظة. حاول مرة أخرى.') }
   }
 }

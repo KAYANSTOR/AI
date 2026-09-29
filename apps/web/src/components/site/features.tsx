@@ -23,7 +23,7 @@ type Feature = {
 const FEATURES: readonly Feature[] = [
   {
     icon: Bot,
-    title: 'AI Receptionist',
+    title: 'موظف الاستقبال الذكي',
     body: 'وكيل واحد يرد نيابة عن شركتك، يفهم الطلب، ويقرّر الخطوة المناسبة داخل سجل العميل.',
     status: 'live',
   },

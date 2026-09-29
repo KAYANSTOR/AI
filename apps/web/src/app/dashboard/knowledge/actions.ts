@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { requireAdminCapability, audit, type AuthorizedContext } from '@/lib/capabilities/guard'
 import { searchKnowledge } from '@/lib/knowledge/retrieval'
+import { actionErrorMessage, supabaseActionError } from '@/lib/i18n/action-error'
 
 export type KnowledgeResult = { ok: boolean; error?: string; message?: string }
 
@@ -35,7 +36,7 @@ export async function saveKnowledgeAction(input: KnowledgeInput): Promise<Knowle
     // Disabling the capability removes the ability to change its data, not just its button.
     ctx = await requireAdminCapability('knowledge_base')
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : 'غير مصرح.' }
+    return { ok: false, error: actionErrorMessage(error, 'غير مصرح.') }
   }
 
   const title = input.title?.trim()
@@ -61,7 +62,7 @@ export async function saveKnowledgeAction(input: KnowledgeInput): Promise<Knowle
       .eq('organization_id', ctx.organizationId)
       .select('id')
       .maybeSingle()
-    if (error) return { ok: false, error: error.message }
+    if (error) return { ok: false, error: supabaseActionError(error) }
     if (!data) return { ok: false, error: 'لم يتم العثور على المدخل.' }
     await audit(ctx, 'knowledge.updated', 'knowledge_base', data.id, { category: payload.category })
     revalidatePath('/dashboard/knowledge')
@@ -69,7 +70,7 @@ export async function saveKnowledgeAction(input: KnowledgeInput): Promise<Knowle
   }
 
   const { data, error } = await ctx.supabase.from('knowledge_base').insert(payload).select('id').single()
-  if (error) return { ok: false, error: error.message }
+  if (error) return { ok: false, error: supabaseActionError(error) }
 
   await audit(ctx, 'knowledge.created', 'knowledge_base', data.id, { category: payload.category })
   revalidatePath('/dashboard/knowledge')
@@ -82,7 +83,7 @@ export async function setKnowledgeActiveAction(id: string, isActive: boolean): P
   try {
     ctx = await requireAdminCapability('knowledge_base')
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : 'غير مصرح.' }
+    return { ok: false, error: actionErrorMessage(error, 'غير مصرح.') }
   }
 
   const { data, error } = await ctx.supabase
@@ -92,7 +93,7 @@ export async function setKnowledgeActiveAction(id: string, isActive: boolean): P
     .eq('organization_id', ctx.organizationId)
     .select('id')
     .maybeSingle()
-  if (error) return { ok: false, error: error.message }
+  if (error) return { ok: false, error: supabaseActionError(error) }
   if (!data) return { ok: false, error: 'لم يتم العثور على المدخل.' }
 
   await audit(ctx, isActive ? 'knowledge.activated' : 'knowledge.deactivated', 'knowledge_base', id)
@@ -117,7 +118,7 @@ export async function previewKnowledgeAction(query: string): Promise<{
     const matches = await searchKnowledge(ctx.supabase, ctx.organizationId, trimmed)
     return { ok: true, titles: matches.map((match) => match.title) }
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : 'تعذّر تنفيذ البحث.' }
+    return { ok: false, error: actionErrorMessage(error, 'تعذّر تنفيذ البحث. حاول مرة أخرى.') }
   }
 }
 
@@ -126,7 +127,7 @@ export async function deleteKnowledgeAction(id: string): Promise<KnowledgeResult
   try {
     ctx = await requireAdminCapability('knowledge_base')
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : 'غير مصرح.' }
+    return { ok: false, error: actionErrorMessage(error, 'غير مصرح.') }
   }
 
   const { error } = await ctx.supabase
@@ -134,7 +135,7 @@ export async function deleteKnowledgeAction(id: string): Promise<KnowledgeResult
     .delete()
     .eq('id', id)
     .eq('organization_id', ctx.organizationId)
-  if (error) return { ok: false, error: error.message }
+  if (error) return { ok: false, error: supabaseActionError(error) }
 
   await audit(ctx, 'knowledge.deleted', 'knowledge_base', id)
   revalidatePath('/dashboard/knowledge')

@@ -2,6 +2,8 @@
 
 import { revalidatePath } from 'next/cache'
 import { requireAdminCapability, audit, type AuthorizedContext } from '@/lib/capabilities/guard'
+import { actionErrorMessage, supabaseActionError } from '@/lib/i18n/action-error'
+import { ar } from '@/lib/i18n/ar'
 
 export type HoursResult = { ok: boolean; error?: string; message?: string }
 
@@ -14,16 +16,6 @@ export type DayInput = {
 
 const TIME_PATTERN = /^([01]\d|2[0-3]):([0-5]\d)$/
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
-const DAY_LABELS = [
-  'الأحد',
-  'الاثنين',
-  'الثلاثاء',
-  'الأربعاء',
-  'الخميس',
-  'الجمعة',
-  'السبت',
-]
-
 function normalizeTime(value: string): string {
   return TIME_PATTERN.test(value) ? value : value.slice(0, 5)
 }
@@ -34,13 +26,13 @@ function validateDay(day: DayInput): string | null {
   }
   if (day.isClosed) return null
   if (!TIME_PATTERN.test(normalizeTime(day.openTime))) {
-    return `وقت الفتح غير صالح في ${DAY_LABELS[day.dayOfWeek]}.`
+    return `وقت الفتح غير صالح في ${ar.hours.weekdays[day.dayOfWeek]}.`
   }
   if (!TIME_PATTERN.test(normalizeTime(day.closeTime))) {
-    return `وقت الإغلاق غير صالح في ${DAY_LABELS[day.dayOfWeek]}.`
+    return `وقت الإغلاق غير صالح في ${ar.hours.weekdays[day.dayOfWeek]}.`
   }
   if (normalizeTime(day.closeTime) <= normalizeTime(day.openTime)) {
-    return `وقت الإغلاق يجب أن يكون بعد وقت الفتح في ${DAY_LABELS[day.dayOfWeek]}.`
+    return `وقت الإغلاق يجب أن يكون بعد وقت الفتح في ${ar.hours.weekdays[day.dayOfWeek]}.`
   }
   return null
 }
@@ -51,7 +43,7 @@ export async function saveWeeklyHoursAction(days: DayInput[]): Promise<HoursResu
   try {
     ctx = await requireAdminCapability(null)
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : 'غير مصرح.' }
+    return { ok: false, error: actionErrorMessage(error, 'غير مصرح.') }
   }
 
   if (!Array.isArray(days) || days.length === 0) return { ok: false, error: 'لا توجد بيانات لحفظها.' }
@@ -77,7 +69,7 @@ export async function saveWeeklyHoursAction(days: DayInput[]): Promise<HoursResu
     .from('business_hours')
     .upsert(payload, { onConflict: 'organization_id,day_of_week' })
 
-  if (error) return { ok: false, error: error.message }
+  if (error) return { ok: false, error: supabaseActionError(error) }
 
   await audit(ctx, 'business_hours.updated', 'business_hours', null, {
     closed_days: payload.filter((row) => row.is_closed).map((row) => row.day_of_week),
@@ -101,7 +93,7 @@ export async function saveExceptionAction(input: ExceptionInput): Promise<HoursR
   try {
     ctx = await requireAdminCapability(null)
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : 'غير مصرح.' }
+    return { ok: false, error: actionErrorMessage(error, 'غير مصرح.') }
   }
 
   if (!DATE_PATTERN.test(input.exceptionDate)) return { ok: false, error: 'تاريخ غير صالح.' }
@@ -129,7 +121,7 @@ export async function saveExceptionAction(input: ExceptionInput): Promise<HoursR
     .eq('organization_id', ctx.organizationId)
     .eq('exception_date', input.exceptionDate)
     .is('location_id', null)
-  if (deleteError) return { ok: false, error: deleteError.message }
+  if (deleteError) return { ok: false, error: supabaseActionError(deleteError) }
 
   const { error } = await ctx.supabase.from('business_hour_exceptions').insert({
     organization_id: ctx.organizationId,
@@ -140,7 +132,7 @@ export async function saveExceptionAction(input: ExceptionInput): Promise<HoursR
     close_time: closeTime,
     reason,
   })
-  if (error) return { ok: false, error: error.message }
+  if (error) return { ok: false, error: supabaseActionError(error) }
 
   await audit(ctx, 'business_hours.exception_saved', 'business_hour_exception', null, {
     exception_date: input.exceptionDate,
@@ -156,7 +148,7 @@ export async function deleteExceptionAction(id: string): Promise<HoursResult> {
   try {
     ctx = await requireAdminCapability(null)
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : 'غير مصرح.' }
+    return { ok: false, error: actionErrorMessage(error, 'غير مصرح.') }
   }
 
   const { error } = await ctx.supabase
@@ -164,7 +156,7 @@ export async function deleteExceptionAction(id: string): Promise<HoursResult> {
     .delete()
     .eq('id', id)
     .eq('organization_id', ctx.organizationId)
-  if (error) return { ok: false, error: error.message }
+  if (error) return { ok: false, error: supabaseActionError(error, 'تعذّر حذف الاستثناء. حاول مرة أخرى.') }
 
   await audit(ctx, 'business_hours.exception_deleted', 'business_hour_exception', id)
   revalidatePath('/dashboard/hours')

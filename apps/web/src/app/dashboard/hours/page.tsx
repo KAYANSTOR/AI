@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { requireMember, CapabilityDisabledError } from '@/lib/capabilities/guard'
 import { HoursEditor, type ExceptionRow } from './hours-editor'
 import type { DayInput } from './actions'
+import { ar } from '@/lib/i18n/ar'
 
 export default async function BusinessHoursPage() {
   let ctx
@@ -42,17 +43,15 @@ export default async function BusinessHoursPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight text-text">ساعات العمل</h1>
-        <p className="mt-1 text-sm text-muted">
-          تُستخدم هذه الساعات في حساب المواعيد المتاحة التي يقترحها الوكيل، وفي الإجازات
-          والاستثناءات.
+        <h1 className="text-2xl font-bold tracking-tight text-text">{ar.hours.title}</h1>
+        <p className="mt-1 text-sm text-text-muted">
+          {ar.hours.description}
         </p>
       </div>
 
       {!hours?.length && (
         <div className="rounded-xl border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-text">
-          لم تُضبط ساعات العمل بعد. الأيام غير المُعدّة تُعتبر مغلقة، ولن يقترح الوكيل أي موعد
-          فيها.
+          {ar.hours.notConfigured}
         </div>
       )}
 
@@ -60,6 +59,7 @@ export default async function BusinessHoursPage() {
         initialDays={days}
         exceptions={(exceptions ?? []) as ExceptionRow[]}
         canManage={canManage}
+        timezone={ctx.timezone}
       />
     </div>
   )

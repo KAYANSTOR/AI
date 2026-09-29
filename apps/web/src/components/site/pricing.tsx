@@ -15,7 +15,7 @@ type Plan = {
 const PLANS: readonly Plan[] = [
   {
     id: 'starter',
-    name: 'Starter',
+    name: 'الأساسية',
     price: '$49',
     cadence: 'شهريًا',
     audience: 'شركة صغيرة تبدأ بأول قناة تواصل',
@@ -28,13 +28,13 @@ const PLANS: readonly Plan[] = [
   },
   {
     id: 'growth',
-    name: 'Growth',
+    name: 'النمو',
     price: '$99',
     cadence: 'شهريًا',
     audience: 'الشركات التي تعتمد على المكالمات والمواعيد',
     featured: true,
     features: [
-      { label: 'كل ما في Starter' },
+      { label: 'كل ما في الخطة الأساسية' },
       { label: 'الوكيل الذكي على الهاتف' },
       { label: 'إدارة العملاء المحتملين' },
       { label: 'متابعة تلقائية للعملاء', soon: true },
@@ -44,12 +44,12 @@ const PLANS: readonly Plan[] = [
   },
   {
     id: 'pro',
-    name: 'Pro',
+    name: 'الاحترافية',
     price: '$199',
     cadence: 'شهريًا',
     audience: 'عيادات وفروع متعددة وحجم محادثات أعلى',
     features: [
-      { label: 'كل ما في Growth' },
+      { label: 'كل ما في خطة النمو' },
       { label: 'محادثات غير محدودة' },
       { label: 'مؤشرات الإيرادات والأداء' },
       { label: 'دعم مباشر ذو أولوية' },
@@ -61,7 +61,7 @@ const PLANS: readonly Plan[] = [
 const ADD_ONS = [
   { label: 'إعداد وتدريب أولي', value: '$149 لمرة واحدة' },
   { label: 'استعادة حجز من الفرص القديمة', value: '$5 لكل حجز' },
-  { label: 'White Label للوكالات', value: '$299' },
+  { label: 'علامة تجارية خاصة للوكالات', value: '$299' },
 ] as const
 
 export function Pricing() {

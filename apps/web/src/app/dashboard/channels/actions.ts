@@ -3,6 +3,8 @@
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { getCurrentOrg, type OrgContext } from '@/lib/org'
+import { actionErrorMessage, supabaseActionError } from '@/lib/i18n/action-error'
+import { ar } from '@/lib/i18n/ar'
 import {
   getChannelSpec,
   normalizeChannelNumber,
@@ -63,7 +65,10 @@ async function audit(
     p_metadata: metadata,
   })
   // An audit failure must not silently pass: the operation is only complete with a trail.
-  if (error) throw new Error('تعذّر تسجيل العملية في سجل التدقيق: ' + error.message)
+  if (error) {
+    console.error('Unable to record channel audit event', error)
+    throw new Error('تعذّر تسجيل العملية في سجل التدقيق.')
+  }
 }
 
 /** A provider identifier that is already active belongs to exactly one business. */
@@ -72,7 +77,7 @@ function describeWriteError(code: string | undefined, message: string): string {
     return 'هذا المعرّف مرتبط بشركة أخرى بالفعل. لا يمكن ربط الرقم أو الحساب نفسه لأكثر من شركة.'
   }
   if (code === '42501') return 'لا تملك صلاحية تعديل قنوات هذه الشركة.'
-  return message
+  return supabaseActionError({ code, message }, ar.errors.save)
 }
 
 export async function saveChannelAction(input: {
@@ -144,7 +149,7 @@ export async function saveChannelAction(input: {
     revalidatePath('/dashboard/channels')
     return { ok: true, message: 'تم ربط ' + spec.label + '.' }
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : 'تعذّر حفظ القناة.' }
+    return { ok: false, error: actionErrorMessage(error, 'تعذّر حفظ القناة. حاول مرة أخرى.') }
   }
 }
 
@@ -193,7 +198,7 @@ export async function setChannelActiveAction(input: {
     revalidatePath('/dashboard/channels')
     return { ok: true, message: input.active ? 'تم تفعيل ' + spec.label + '.' : 'تم إيقاف ' + spec.label + '.' }
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : 'تعذّر تحديث القناة.' }
+    return { ok: false, error: actionErrorMessage(error, 'تعذّر تحديث القناة. حاول مرة أخرى.') }
   }
 }
 
@@ -226,6 +231,6 @@ export async function testChannelAction(input: {
 
     return { ok: result.ok, result }
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : 'تعذّر تنفيذ الفحص.' }
+    return { ok: false, error: actionErrorMessage(error, 'تعذّر تنفيذ الفحص. حاول مرة أخرى.') }
   }
 }

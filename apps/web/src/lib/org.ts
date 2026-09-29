@@ -1,3 +1,4 @@
+import { cache } from 'react'
 import { createClient } from '@/lib/supabase/server'
 import { isSupabaseConfigured } from '@/lib/supabase/env'
 
@@ -12,22 +13,21 @@ export type OrgContext = {
  * Resolve the authenticated user's primary organization.
  * Phase 1 assumes one org per user (owner). Multi-org comes later.
  */
-export async function getCurrentOrg(): Promise<OrgContext | null> {
+export const getCurrentOrg = cache(async (): Promise<OrgContext | null> => {
   // لا مزوّد مصادقة مُهيّأ بعد: لا توجد جلسة ممكنة، والمسار المحمي يعيد الزائر
   // إلى صفحة تسجيل الدخول بدل أن يسقط بخطأ مزوّد غير مضبوط.
   if (!isSupabaseConfigured()) return null
 
   const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const { data } = await supabase.auth.getClaims()
 
-  if (!user) return null
+  const userId = typeof data?.claims.sub === 'string' ? data.claims.sub : null
+  if (!userId) return null
 
   const { data: membership } = await supabase
     .from('organization_members')
     .select('organization_id, role, organizations(name)')
-    .eq('user_id', user.id)
+    .eq('user_id', userId)
     .order('created_at', { ascending: true })
     .limit(1)
     .maybeSingle()
@@ -37,9 +37,9 @@ export async function getCurrentOrg(): Promise<OrgContext | null> {
   const org = membership.organizations as unknown as { name: string } | null
 
   return {
-    userId: user.id,
+    userId,
     organizationId: membership.organization_id,
-    organizationName: org?.name ?? 'Organization',
+    organizationName: org?.name ?? '—',
     role: membership.role,
   }
-}
+})

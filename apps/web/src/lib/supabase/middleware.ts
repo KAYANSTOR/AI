@@ -39,17 +39,16 @@ export async function updateSession(request: NextRequest) {
   )
 
   // IMPORTANT: Avoid writing any logic between createServerClient and
-  // supabase.auth.getUser(). A simple mistake could make it very hard to debug
+  // supabase.auth.getClaims(). A simple mistake could make it very hard to debug
   // issues with users being randomly logged out.
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const { data } = await supabase.auth.getClaims()
+  const claims = data?.claims
 
   const { pathname } = request.nextUrl
   const isProtectedRoute = PROTECTED_PREFIXES.some((prefix) => pathname.startsWith(prefix))
 
-  if (isProtectedRoute && !user) {
+  if (isProtectedRoute && !claims?.sub) {
     // Send the visitor to /login and keep the page they wanted, so the app
     // returns them there right after signing in.
     const url = request.nextUrl.clone()

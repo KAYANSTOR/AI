@@ -32,7 +32,6 @@ export function LoginForm({ returnTo, authConfigured }: { returnTo: string; auth
       }
 
       router.replace(returnTo)
-      router.refresh()
     } catch {
       setError(NETWORK_ERROR_MESSAGE)
       setLoading(false)

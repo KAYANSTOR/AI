@@ -13,14 +13,6 @@ export type Capability = {
   description: string | null
 }
 
-export type OrgProfile = {
-  organizationId: string
-  businessTypeId: string | null
-  businessTypeName: string | null
-  enabledCapabilities: string[]
-  setupComplete: boolean
-}
-
 export const NAV_CAPABILITY: Record<string, string | null> = {
   '/dashboard': null,
   '/dashboard/conversations': 'inbox',
@@ -37,35 +29,6 @@ export const NAV_CAPABILITY: Record<string, string | null> = {
   '/dashboard/locations': null,
   '/dashboard/setup': null,
   '/dashboard/settings': null,
-}
-
-export async function getOrgProfile(organizationId: string): Promise<OrgProfile> {
-  const supabase = await createClient()
-
-  const [{ data: profile }, { data: caps }] = await Promise.all([
-    supabase
-      .from('business_profiles')
-      .select('business_type_id, business_types(name)')
-      .eq('organization_id', organizationId)
-      .maybeSingle(),
-    supabase
-      .from('organization_capabilities')
-      .select('capability_id')
-      .eq('organization_id', organizationId)
-      .eq('is_enabled', true),
-  ])
-
-  const businessTypeId = profile?.business_type_id ?? null
-  const bt = profile?.business_types as unknown as { name: string } | null
-  const enabledCapabilities = (caps ?? []).map((c) => c.capability_id as string)
-
-  return {
-    organizationId,
-    businessTypeId,
-    businessTypeName: bt?.name ?? null,
-    enabledCapabilities,
-    setupComplete: Boolean(businessTypeId && enabledCapabilities.length > 0),
-  }
 }
 
 export async function listBusinessTypes(): Promise<BusinessType[]> {

@@ -1,13 +1,15 @@
-import { getCurrentOrg } from '@/lib/org'
-import { createClient } from '@/lib/supabase/server'
-import { redirect } from 'next/navigation'
 import { Users, Calendar, MessageCircle, TrendingUp } from 'lucide-react'
 import Link from 'next/link'
+import { redirect } from 'next/navigation'
+import { createClient } from '@/lib/supabase/server'
+import { getDashboardContext } from '@/lib/dashboard/context'
+import { formatDateTime, formatNumber } from '@/lib/i18n/format'
+import { ar } from '@/lib/i18n/ar'
+import { capabilityLabel } from '@/lib/i18n/labels'
 
 export default async function DashboardPage() {
-  const org = await getCurrentOrg()
-  if (!org) redirect('/login')
-
+  const context = await getDashboardContext()
+  if (!context) redirect('/login')
   const supabase = await createClient()
 
   const [
@@ -17,14 +19,14 @@ export default async function DashboardPage() {
     { count: conversationsCount },
     { data: upcoming },
   ] = await Promise.all([
-    supabase.from('leads').select('*', { count: 'exact', head: true }).eq('organization_id', org.organizationId),
-    supabase.from('contacts').select('*', { count: 'exact', head: true }).eq('organization_id', org.organizationId),
-    supabase.from('appointments').select('*', { count: 'exact', head: true }).eq('organization_id', org.organizationId).gte('starts_at', new Date().toISOString()),
-    supabase.from('conversations').select('*', { count: 'exact', head: true }).eq('organization_id', org.organizationId),
+    supabase.from('leads').select('id', { count: 'exact', head: true }).eq('organization_id', context.organizationId),
+    supabase.from('contacts').select('id', { count: 'exact', head: true }).eq('organization_id', context.organizationId),
+    supabase.from('appointments').select('id', { count: 'exact', head: true }).eq('organization_id', context.organizationId).gte('starts_at', new Date().toISOString()),
+    supabase.from('conversations').select('id', { count: 'exact', head: true }).eq('organization_id', context.organizationId),
     supabase
       .from('appointments')
       .select('id, starts_at, status, contacts(full_name), services(name)')
-      .eq('organization_id', org.organizationId)
+      .eq('organization_id', context.organizationId)
       .gte('starts_at', new Date().toISOString())
       .order('starts_at', { ascending: true })
       .limit(5),
@@ -33,52 +35,68 @@ export default async function DashboardPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight text-text">Overview</h1>
+        <h1 className="text-2xl font-bold tracking-tight text-text">{ar.dashboard.overview}</h1>
         <p className="mt-1 text-sm text-text-muted">
-          {org.organizationName} · Phase 2: AI Receptionist foundation
+          {context.organizationName} · {ar.dashboard.welcome}
         </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <StatCard title="Leads" value={String(leadsCount ?? 0)} icon={Users} />
-        <StatCard title="Contacts" value={String(contactsCount ?? 0)} icon={MessageCircle} />
-        <StatCard title="Upcoming" value={String(appointmentsCount ?? 0)} icon={Calendar} />
-        <StatCard title="Conversations" value={String(conversationsCount ?? 0)} icon={TrendingUp} />
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard title={ar.dashboard.stats.leads} value={leadsCount ?? 0} icon={Users} />
+        <StatCard title={ar.dashboard.stats.contacts} value={contactsCount ?? 0} icon={MessageCircle} />
+        <StatCard title={ar.dashboard.stats.upcoming} value={appointmentsCount ?? 0} icon={Calendar} />
+        <StatCard title={ar.dashboard.stats.conversations} value={conversationsCount ?? 0} icon={TrendingUp} />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="rounded-xl border border-border bg-surface p-6 shadow-sm lg:col-span-2">
-          <h2 className="mb-4 text-lg font-semibold text-text">Phase checklist</h2>
-          <ul className="space-y-2 text-sm">
-            <CheckItem done label="Phase 1: Auth, RLS, CRM, services, appointments" />
-            <CheckItem done label="Phase 2: Vapi webhook + tool execution layer" />
-            <CheckItem done label="Phase 2: WhatsApp webhook + idempotency + eligibility" />
-            <CheckItem done label="Phase 2: Unified inbox UI" />
-            <CheckItem done={false} label="Phase 2: Connect Vapi number + Meta app credentials" />
-            <CheckItem done={false} label="Phase 3: Follow-up engine" />
-          </ul>
-          <p className="text-xs text-slate-500 mt-4">
-            Webhooks:            <code className="rounded bg-slate-100 px-1">/api/vapi/webhook</code> ·{' '}
-            <code className="rounded bg-slate-100 px-1">/api/whatsapp/webhook</code>
-          </p>
-        </div>
-        <div className="rounded-xl border border-border bg-surface p-6 shadow-sm">
-          <h2 className="mb-4 text-lg font-semibold text-text">Upcoming</h2>
-          <div className="space-y-3">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <section className="min-w-0 rounded-xl border border-border bg-surface p-5 shadow-sm sm:p-6 lg:col-span-2">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold text-text">{ar.dashboard.setupTitle}</h2>
+              <p className="mt-1 text-sm text-text-muted">
+                {context.setupComplete ? ar.dashboard.setupComplete : ar.dashboard.setupIncomplete}
+              </p>
+            </div>
+            <span className={`rounded-full px-3 py-1 text-xs font-medium ${context.setupComplete ? 'bg-success/15 text-text' : 'bg-warning/15 text-text'}`}>
+              {context.setupComplete ? ar.common.complete : ar.common.notSet}
+            </span>
+          </div>
+          <h3 className="mb-2 mt-6 text-sm font-semibold text-text">{ar.dashboard.enabledCapabilities}</h3>
+          {context.enabledCapabilities.length ? (
+            <ul className="flex flex-wrap gap-2">
+              {context.enabledCapabilities.map((id) => (
+                <li key={id} className="rounded-full bg-primary-light/30 px-3 py-1 text-xs text-primary-dark">
+                  {capabilityLabel(id)}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <Link href="/dashboard/setup" className="text-sm font-medium text-primary-dark underline">
+              {ar.dashboard.setupLink}
+            </Link>
+          )}
+        </section>
+
+        <section className="min-w-0 rounded-xl border border-border bg-surface p-5 shadow-sm sm:p-6">
+          <h2 className="mb-4 text-lg font-semibold text-text">{ar.dashboard.upcomingTitle}</h2>
+          <div className="space-y-2">
             {!upcoming?.length ? (
-              <p className="text-sm text-slate-400">No upcoming appointments</p>
+              <p className="text-sm text-text-muted">{ar.dashboard.noUpcoming}</p>
             ) : (
-              upcoming.map((a) => {
-                const contact = a.contacts as unknown as { full_name: string | null } | null
-                const service = a.services as unknown as { name: string } | null
-                return (                    <div key={a.id} className="flex items-start gap-3 rounded-lg p-3 hover:bg-background">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary-light/40 text-sm font-medium text-primary-dark">
+              upcoming.map((appointment) => {
+                const contact = appointment.contacts as unknown as { full_name: string | null } | null
+                const service = appointment.services as unknown as { name: string } | null
+                return (
+                  <div key={appointment.id} className="flex min-w-0 items-start gap-3 rounded-lg p-3 hover:bg-background">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary-light/40 text-sm font-medium text-primary-dark">
                       {(contact?.full_name?.[0] ?? '?').toUpperCase()}
                     </div>
-                    <div>
-                      <p className="text-sm font-medium text-slate-900">{contact?.full_name || 'Contact'}</p>
-                      <p className="text-xs text-slate-500">
-                        {service?.name || 'Service'} · {new Date(a.starts_at).toLocaleString()}
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-text">
+                        {contact?.full_name || ar.contacts.empty}
+                      </p>
+                      <p className="text-xs text-text-muted">
+                        {service?.name || ar.services.title} · {formatDateTime(appointment.starts_at, context.timezone)}
                       </p>
                     </div>
                   </div>
@@ -86,36 +104,33 @@ export default async function DashboardPage() {
               })
             )}
           </div>
-          <Link href="/dashboard/services" className="mt-4 inline-block text-sm font-medium text-primary-dark hover:underline">
-            Manage services →
+          <Link href="/dashboard/appointments" className="mt-4 inline-flex min-h-11 items-center text-sm font-medium text-primary-dark hover:underline">
+            {ar.appointments.title} <span aria-hidden="true" className="rtl:rotate-180">→</span>
           </Link>
-        </div>
+        </section>
       </div>
     </div>
   )
 }
 
-function StatCard({ title, value, icon: Icon }: { title: string; value: string; icon: React.ElementType }) {
+function StatCard({
+  title,
+  value,
+  icon: Icon,
+}: {
+  title: string
+  value: number
+  icon: React.ElementType
+}) {
   return (
-    <div className="bg-surface p-6 rounded-xl border border-border shadow-sm">
-      <div className="flex items-center justify-between mb-4">
+    <div className="rounded-xl border border-border bg-surface p-5 shadow-sm">
+      <div className="mb-4 flex items-center justify-between gap-3">
         <h3 className="text-sm font-medium text-text-muted">{title}</h3>
         <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary-light/40">
           <Icon size={20} className="text-primary-dark" />
         </div>
       </div>
-      <h4 className="text-3xl font-bold text-slate-900 tracking-tight">{value}</h4>
+      <h4 className="text-3xl font-bold tracking-tight text-text">{formatNumber(value)}</h4>
     </div>
-  )
-}
-
-function CheckItem({ done, label }: { done: boolean; label: string }) {
-  return (
-    <li className="flex items-center gap-2">
-      <span className={`flex h-5 w-5 items-center justify-center rounded-full text-xs ${done ? 'bg-success/20 text-text' : 'bg-slate-100 text-slate-400'}`}>
-        {done ? '✓' : '·'}
-      </span>
-      <span className={done ? 'text-slate-800' : 'text-slate-500'}>{label}</span>
-    </li>
   )
 }

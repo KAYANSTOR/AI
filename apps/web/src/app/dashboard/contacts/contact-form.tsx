@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Loader2 } from 'lucide-react'
+import { ar } from '@/lib/i18n/ar'
 
 export function ContactForm({ organizationId }: { organizationId: string }) {
   const router = useRouter()
@@ -26,7 +27,7 @@ export function ContactForm({ organizationId }: { organizationId: string }) {
 
     setLoading(false)
     if (insertError) {
-      setError(insertError.message)
+      setError(ar.errors.save)
       return
     }
 
@@ -40,19 +41,19 @@ export function ContactForm({ organizationId }: { organizationId: string }) {
         <div className="rounded-lg border border-error/40 bg-error/10 p-3 text-sm text-text">{error}</div>
       )}
       <div>
-        <label className="block text-sm font-medium text-slate-700 mb-1">Full name</label>
-        <input value={form.full_name} onChange={(e) => setForm((f) => ({ ...f, full_name: e.target.value }))} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" placeholder="Sara Ahmed" />
+        <label className="mb-1 block text-sm font-medium text-text">{ar.contacts.fullName}</label>
+        <input value={form.full_name} onChange={(e) => setForm((f) => ({ ...f, full_name: e.target.value }))} className="min-h-11 w-full rounded-lg border border-border bg-surface px-3 py-2 text-base text-text focus:outline-none focus:ring-2 focus:ring-primary/30 md:text-sm" />
       </div>
       <div>
-        <label className="block text-sm font-medium text-slate-700 mb-1">Phone</label>
-        <input value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" placeholder="+9665..." />
+        <label className="mb-1 block text-sm font-medium text-text">{ar.contacts.phone}</label>
+        <input dir="ltr" value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} className="min-h-11 w-full rounded-lg border border-border bg-surface px-3 py-2 text-start text-base text-text focus:outline-none focus:ring-2 focus:ring-primary/30 md:text-sm" placeholder="+9665..." />
       </div>
       <div>
-        <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
-        <input type="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" placeholder="sara@example.com" />
+        <label className="mb-1 block text-sm font-medium text-text">{ar.contacts.email}</label>
+        <input dir="ltr" type="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} className="min-h-11 w-full rounded-lg border border-border bg-surface px-3 py-2 text-start text-base text-text focus:outline-none focus:ring-2 focus:ring-primary/30 md:text-sm" placeholder="sara@example.com" />
       </div>
-      <button type="submit" disabled={loading} className="w-full flex justify-center items-center gap-2 bg-primary-dark hover:bg-primary text-surface text-sm font-medium py-2.5 rounded-lg disabled:opacity-60">
-        {loading ? <Loader2 className="animate-spin h-4 w-4" /> : 'Save contact'}
+      <button type="submit" disabled={loading} className="flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary-dark py-2.5 text-base font-medium text-surface transition-colors hover:bg-primary disabled:opacity-60 md:text-sm">
+        {loading ? <Loader2 className="animate-spin" size={16} /> : ar.common.save}
       </button>
     </form>
   )

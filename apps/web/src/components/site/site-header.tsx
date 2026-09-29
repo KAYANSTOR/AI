@@ -6,6 +6,7 @@ import { Menu, X } from 'lucide-react'
 import { BrandLockup } from './brand'
 import { PrimaryCta, SecondaryCta } from './cta'
 import { SITE_NAV } from './nav'
+import { InstallAppButton } from '@/components/pwa/install-app-button'
 
 export function SiteHeader() {
   const [open, setOpen] = useState(false)
@@ -28,7 +29,7 @@ export function SiteHeader() {
   }, [open])
 
   return (
-    <header className="sticky top-0 z-50 border-b border-border bg-surface/95 backdrop-blur">
+    <header className="sticky top-0 z-50 border-b border-border bg-surface/95 pt-[env(safe-area-inset-top)] backdrop-blur">
       <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between gap-4 px-4 sm:px-6 lg:h-20 lg:px-8">
         <BrandLockup />
 
@@ -56,6 +57,8 @@ export function SiteHeader() {
           </PrimaryCta>
         </div>
 
+        <InstallAppButton compact />
+
         <button
           type="button"
           onClick={() => setOpen((value) => !value)}
@@ -70,7 +73,7 @@ export function SiteHeader() {
 
       {open ? (
         <div id="site-mobile-menu" className="border-t border-border bg-surface lg:hidden">
-          <nav aria-label="التنقل الرئيسي — الجوال" className="mx-auto w-full max-w-6xl px-4 py-4 sm:px-6">
+            <nav aria-label="التنقل الرئيسي — الجوال" className="mx-auto w-full max-w-6xl px-4 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-6">
             <ul className="flex flex-col">
               {SITE_NAV.map((item) => (
                 <li key={item.href}>

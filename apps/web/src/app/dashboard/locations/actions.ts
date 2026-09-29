@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { requireAdminCapability, audit, type AuthorizedContext } from '@/lib/capabilities/guard'
+import { actionErrorMessage, supabaseActionError } from '@/lib/i18n/action-error'
 
 export type LocationResult = { ok: boolean; error?: string; message?: string; locationId?: string }
 
@@ -28,7 +29,7 @@ export async function saveLocationAction(input: LocationInput): Promise<Location
   try {
     ctx = await requireAdminCapability(null)
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : 'غير مصرح.' }
+    return { ok: false, error: actionErrorMessage(error, 'غير مصرح.') }
   }
 
   const businessId = await requireBusiness(ctx)
@@ -57,7 +58,7 @@ export async function saveLocationAction(input: LocationInput): Promise<Location
       .eq('business_id', businessId)
       .select('id')
       .maybeSingle()
-    if (error) return { ok: false, error: error.message }
+    if (error) return { ok: false, error: supabaseActionError(error) }
     if (!data) return { ok: false, error: 'لم يتم العثور على الفرع.' }
     await audit(ctx, 'location.updated', 'business_location', data.id, { name })
     revalidatePath('/dashboard/locations')
@@ -69,7 +70,7 @@ export async function saveLocationAction(input: LocationInput): Promise<Location
     .insert(payload)
     .select('id')
     .single()
-  if (error) return { ok: false, error: error.message }
+  if (error) return { ok: false, error: supabaseActionError(error) }
 
   await audit(ctx, 'location.created', 'business_location', data.id, { name })
   revalidatePath('/dashboard/locations')
@@ -85,7 +86,7 @@ export async function setLocationActiveAction(id: string, isActive: boolean): Pr
   try {
     ctx = await requireAdminCapability(null)
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : 'غير مصرح.' }
+    return { ok: false, error: actionErrorMessage(error, 'غير مصرح.') }
   }
 
   if (!ctx.businessId) return { ok: false, error: 'أكمل إعداد النشاط أولًا.' }
@@ -97,7 +98,7 @@ export async function setLocationActiveAction(id: string, isActive: boolean): Pr
     .eq('business_id', ctx.businessId)
     .select('id')
     .maybeSingle()
-  if (error) return { ok: false, error: error.message }
+  if (error) return { ok: false, error: supabaseActionError(error) }
   if (!data) return { ok: false, error: 'لم يتم العثور على الفرع.' }
 
   await audit(ctx, isActive ? 'location.activated' : 'location.deactivated', 'business_location', id)

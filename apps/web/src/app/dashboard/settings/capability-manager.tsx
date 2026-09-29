@@ -1,9 +1,9 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { useRouter } from 'next/navigation'
 import { toggleCapabilityAction } from './actions'
 import { Loader2 } from 'lucide-react'
+import { ar } from '@/lib/i18n/ar'
 
 type Row = {
   id: string
@@ -13,7 +13,6 @@ type Row = {
 }
 
 export function CapabilityManager({ rows }: { rows: Row[] }) {
-  const router = useRouter()
   const [pendingId, setPendingId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
@@ -24,9 +23,8 @@ export function CapabilityManager({ rows }: { rows: Row[] }) {
     startTransition(async () => {
       try {
         await toggleCapabilityAction(id, enabled)
-        router.refresh()
-      } catch (e) {
-        setError(e instanceof Error ? e.message : 'Failed')
+      } catch {
+        setError(ar.errors.save)
       } finally {
         setPendingId(null)
       }
@@ -40,30 +38,31 @@ export function CapabilityManager({ rows }: { rows: Row[] }) {
           {error}
         </div>
       )}
-      <ul className="divide-y divide-slate-100 border border-slate-200 rounded-xl bg-white overflow-hidden">
+      <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-surface">
         {rows.map((r) => (
-          <li key={r.id} className="flex items-center justify-between gap-4 px-4 py-3">
+          <li key={r.id} className="flex min-h-14 items-center justify-between gap-4 px-4 py-3">
             <div>
-              <p className="text-sm font-medium text-slate-900">{r.name}</p>
+              <p className="text-sm font-medium text-text">{r.name}</p>
               {r.description && (
-                <p className="text-xs text-slate-500 mt-0.5">{r.description}</p>
+                <p className="mt-0.5 text-xs text-text-muted">{r.description}</p>
               )}
             </div>
             <button
               type="button"
               disabled={pending && pendingId === r.id}
               onClick={() => onToggle(r.id, !r.enabled)}
-              className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${
-                r.enabled ? 'bg-primary-dark' : 'bg-slate-200'
+              className={`relative inline-flex h-11 w-14 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors ${
+                r.enabled ? 'bg-primary-dark' : 'bg-border'
               }`}
               aria-pressed={r.enabled}
+              aria-label={r.name}
             >
               {pending && pendingId === r.id ? (
-                <Loader2 className="absolute inset-0 m-auto animate-spin text-white" size={14} />
+                <Loader2 className="absolute inset-0 m-auto animate-spin text-surface" size={14} />
               ) : (
                 <span
-                  className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow transition ${
-                    r.enabled ? 'translate-x-5' : 'translate-x-0'
+                  className={`pointer-events-none inline-block h-6 w-6 transform rounded-full bg-surface shadow transition ${
+                    r.enabled ? 'rtl:-translate-x-5 ltr:translate-x-5' : 'translate-x-0'
                   }`}
                 />
               )}
@@ -71,8 +70,8 @@ export function CapabilityManager({ rows }: { rows: Row[] }) {
           </li>
         ))}
       </ul>
-      <p className="text-xs text-slate-500">
-        Changes apply immediately to navigation and AI tool registry.
+      <p className="text-xs text-text-muted">
+        {ar.settings.capabilitySaved}
       </p>
     </div>
   )

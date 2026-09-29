@@ -39,7 +39,7 @@ export function TextField({
         minLength={minLength}
         required={required}
         aria-describedby={hintId}
-        className="mt-2 block w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-sm text-text shadow-sm outline-none transition-colors placeholder:text-text-muted/70 focus:border-primary-dark focus:ring-2 focus:ring-primary-light"
+        className="mt-2 block min-h-11 w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-base text-text shadow-sm outline-none transition-colors placeholder:text-text-muted/70 focus:border-primary-dark focus:ring-2 focus:ring-primary-light md:text-sm"
       />
       {hint ? (
         <p id={hintId} className="mt-1.5 text-xs leading-6 text-text-muted">

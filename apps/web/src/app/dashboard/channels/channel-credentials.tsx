@@ -11,9 +11,12 @@ import {
   saveChannelCredentialAction,
   setChannelCredentialStatusAction,
 } from './credential-actions'
+import { formatDateTime } from '@/lib/i18n/format'
+import { ar } from '@/lib/i18n/ar'
 
 export type CredentialPanelData = {
   channelType: ChannelType
+  timezone: string
   connected: boolean
   /** False when CREDENTIAL_ENCRYPTION_KEY is absent: nothing can be stored yet. */
   storageConfigured: boolean
@@ -119,9 +122,9 @@ export function ChannelCredentials({ data }: { data: CredentialPanelData }) {
 
               {entry && (
                 <p className="mt-1.5 text-[10px] text-text-muted">
-                  آخر تحديث: {entry.updated_at ? new Date(entry.updated_at).toLocaleString('ar') : '—'}
-                  {entry.last_verified_at
-                    ? ` · آخر تحقق: ${new Date(entry.last_verified_at).toLocaleString('ar')}`
+          آخر تحديث: {entry.updated_at ? formatDateTime(entry.updated_at, data.timezone) : ar.common.unknown}
+          {entry.last_verified_at
+                    ? ` · آخر تحقق: ${formatDateTime(entry.last_verified_at, data.timezone)}`
                     : ''}
                 </p>
               )}
@@ -135,13 +138,13 @@ export function ChannelCredentials({ data }: { data: CredentialPanelData }) {
                   disabled={isDisabled || pending}
                   autoComplete="off"
                   dir="ltr"
-                  className="min-w-0 flex-1 rounded-lg border border-border bg-background px-3 py-1.5 text-xs text-text focus:border-primary-dark focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-60"
+                  className="min-h-11 min-w-0 flex-1 rounded-lg border border-border bg-background px-3 py-1.5 text-base text-text focus:border-primary-dark focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-60 md:text-sm"
                 />
                 <button
                   type="button"
                   onClick={() => save(field.type)}
                   disabled={isDisabled || pending || !(drafts[field.type] ?? '').trim()}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-primary-dark px-3 py-1.5 text-[11px] font-medium text-surface transition-colors hover:bg-primary disabled:opacity-50"
+                  className="inline-flex min-h-11 items-center gap-1.5 rounded-lg bg-primary-dark px-3 py-1.5 text-base font-medium text-surface transition-colors hover:bg-primary disabled:opacity-50 md:text-sm"
                 >
                   {pending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save size={12} aria-hidden="true" />}
                   {entry ? 'استبدال' : 'حفظ'}
@@ -152,7 +155,7 @@ export function ChannelCredentials({ data }: { data: CredentialPanelData }) {
                     onClick={() => remove(field.type)}
                     disabled={pending || !data.canManage}
                     aria-label={'حذف ' + field.label}
-                    className="rounded-lg border border-border p-1.5 text-text-muted transition-colors hover:bg-background hover:text-error disabled:opacity-50"
+                    className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg border border-border text-text-muted transition-colors hover:bg-background hover:text-error disabled:opacity-50"
                   >
                     <Trash2 size={12} aria-hidden="true" />
                   </button>
@@ -174,7 +177,7 @@ export function ChannelCredentials({ data }: { data: CredentialPanelData }) {
             type="button"
             onClick={() => toggleStatus(active > 0 ? 'disabled' : 'active')}
             disabled={pending}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-[11px] font-medium text-text transition-colors hover:bg-surface disabled:opacity-50"
+            className="inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-base font-medium text-text transition-colors hover:bg-surface disabled:opacity-50 sm:w-auto md:text-sm"
           >
             <Power size={12} aria-hidden="true" />
             {active > 0 ? 'تعطيل بيانات الاعتماد' : 'تفعيل بيانات الاعتماد'}
@@ -183,7 +186,7 @@ export function ChannelCredentials({ data }: { data: CredentialPanelData }) {
             type="button"
             onClick={() => remove()}
             disabled={pending}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-[11px] font-medium text-text-muted transition-colors hover:bg-surface hover:text-error disabled:opacity-50"
+            className="inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-base font-medium text-text-muted transition-colors hover:bg-surface hover:text-error disabled:opacity-50 sm:w-auto md:text-sm"
           >
             <Trash2 size={12} aria-hidden="true" />
             حذف كل بيانات القناة

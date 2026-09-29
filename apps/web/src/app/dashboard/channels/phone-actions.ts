@@ -3,7 +3,10 @@
 import { revalidatePath } from 'next/cache'
 import { requireAdminCapability, audit, type AuthorizedContext } from '@/lib/capabilities/guard'
 import { normalizeChannelNumber } from '@/lib/channels/management'
+import { actionErrorMessage, supabaseActionError } from '@/lib/i18n/action-error'
 import { resolveChannelExact } from '@/lib/runtime/tenant'
+import { ar } from '@/lib/i18n/ar'
+import { forwardingStatusLabel } from '@/lib/i18n/labels'
 
 export type PhoneResult = { ok: boolean; error?: string; message?: string }
 
@@ -27,7 +30,7 @@ export async function savePhoneConnectionAction(input: PhoneSetupInput): Promise
   try {
     ctx = await phoneContext()
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : 'غير مصرح.' }
+    return { ok: false, error: actionErrorMessage(error, 'غير مصرح.') }
   }
 
   const existingPhoneNumber = normalizeChannelNumber(input.existingPhoneNumber ?? '')
@@ -51,7 +54,7 @@ export async function savePhoneConnectionAction(input: PhoneSetupInput): Promise
     .eq('organization_id', ctx.organizationId)
     .eq('channel_type', 'phone')
     .maybeSingle()
-  if (channelError) return { ok: false, error: channelError.message }
+  if (channelError) return { ok: false, error: supabaseActionError(channelError) }
   if (!channel) return { ok: false, error: 'قناة الهاتف غير مُهيّأة لهذه الشركة.' }
 
   const { error: channelUpdateError } = await ctx.supabase
@@ -63,7 +66,7 @@ export async function savePhoneConnectionAction(input: PhoneSetupInput): Promise
     })
     .eq('id', channel.id)
     .eq('organization_id', ctx.organizationId)
-  if (channelUpdateError) return { ok: false, error: channelUpdateError.message }
+  if (channelUpdateError) return { ok: false, error: supabaseActionError(channelUpdateError) }
 
   const { data: existing } = await ctx.supabase
     .from('phone_connections')
@@ -81,12 +84,12 @@ export async function savePhoneConnectionAction(input: PhoneSetupInput): Promise
 
   if (existing) {
     const { error } = await ctx.supabase.from('phone_connections').update(payload).eq('id', existing.id)
-    if (error) return { ok: false, error: error.message }
+    if (error) return { ok: false, error: supabaseActionError(error) }
   } else {
     const { error } = await ctx.supabase
       .from('phone_connections')
       .insert({ ...payload, forwarding_status: 'pending_test' })
-    if (error) return { ok: false, error: error.message }
+    if (error) return { ok: false, error: supabaseActionError(error) }
   }
 
   await audit(ctx, 'channel.phone_configured', 'channel', channel.id, {
@@ -114,11 +117,14 @@ export async function verifyPhoneSetupAction(): Promise<{
   scope: string
   error?: string
 }> {
-  const scope = 'أن المعرّف محفوظ ونشط وأن نظام الاتصال يوجّه مكالمات هذا الرقم إلى شركتك.'
+  const scope = ar.channels.phoneCheckScope
   try {
     const ctx = await phoneContext()
 
-    const [{ data: channel }, { data: connection }] = await Promise.all([
+    const [
+      { data: channel, error: channelError },
+      { data: connection, error: connectionError },
+    ] = await Promise.all([
       ctx.supabase
         .from('channels')
         .select('id, is_active, provider_account_id, external_identifier, business_id')
@@ -131,6 +137,8 @@ export async function verifyPhoneSetupAction(): Promise<{
         .eq('organization_id', ctx.organizationId)
         .maybeSingle(),
     ])
+    if (channelError) throw channelError
+    if (connectionError) throw connectionError
 
     const checks: PhoneCheck[] = [
       { label: 'رقم الشركة الحالي مسجّل', ok: Boolean(connection?.existing_phone_number), detail: connection?.existing_phone_number ?? 'غير مُدخل' },
@@ -160,7 +168,7 @@ export async function verifyPhoneSetupAction(): Promise<{
     checks.push({
       label: 'حالة التحويل المُعلنة',
       ok: connection?.forwarding_status === 'active',
-      detail: connection?.forwarding_status ?? 'pending_test',
+      detail: forwardingStatusLabel(connection?.forwarding_status ?? 'pending_test'),
     })
 
     const ok = checks.filter((check) => check.label !== 'حالة التحويل المُعلنة').every((check) => check.ok)
@@ -170,7 +178,7 @@ export async function verifyPhoneSetupAction(): Promise<{
       ok: false,
       checks: [],
       scope,
-      error: error instanceof Error ? error.message : 'تعذّر التحقق.',
+      error: actionErrorMessage(error, 'تعذّر التحقق. حاول مرة أخرى.'),
     }
   }
 }
@@ -184,7 +192,7 @@ export async function confirmForwardingAction(active: boolean): Promise<PhoneRes
   try {
     ctx = await phoneContext()
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : 'غير مصرح.' }
+    return { ok: false, error: actionErrorMessage(error, 'غير مصرح.') }
   }
 
   const { data: connection } = await ctx.supabase
@@ -203,7 +211,7 @@ export async function confirmForwardingAction(active: boolean): Promise<PhoneRes
     })
     .eq('id', connection.id)
     .eq('organization_id', ctx.organizationId)
-  if (error) return { ok: false, error: error.message }
+  if (error) return { ok: false, error: supabaseActionError(error) }
 
   await audit(ctx, active ? 'channel.forwarding_confirmed' : 'channel.forwarding_disabled', 'channel', null, {
     attested_by: ctx.userId,

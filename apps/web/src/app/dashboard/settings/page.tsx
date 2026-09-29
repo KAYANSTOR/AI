@@ -1,86 +1,73 @@
-import { getCurrentOrg } from '@/lib/org'
+import { getDashboardContext } from '@/lib/dashboard/context'
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { CapabilityManager } from './capability-manager'
+import { ar } from '@/lib/i18n/ar'
+import { businessTypeLabel, capabilityDescription, capabilityLabel, roleLabel } from '@/lib/i18n/labels'
 
 export default async function SettingsPage() {
-  const org = await getCurrentOrg()
-  if (!org) redirect('/login')
+  const context = await getDashboardContext()
+  if (!context) redirect('/login')
 
   const supabase = await createClient()
 
-  const [{ data: profile }, { data: allCaps }, { data: orgCaps }] = await Promise.all([
-    supabase
-      .from('business_profiles')
-      .select('business_type_id, industry, timezone, business_types(name)')
-      .eq('organization_id', org.organizationId)
-      .maybeSingle(),
-    supabase.from('capabilities').select('id, name, description').order('name'),
-    supabase
-      .from('organization_capabilities')
-      .select('capability_id, is_enabled')
-      .eq('organization_id', org.organizationId),
-  ])
+  const { data: allCaps } = await supabase
+    .from('capabilities')
+    .select('id, name, description')
+    .order('name')
 
-  const enabledMap = new Map(
-    (orgCaps ?? []).map((c) => [c.capability_id as string, Boolean(c.is_enabled)])
-  )
-
-  const rows = (allCaps ?? []).map((c) => ({
-    id: c.id as string,
-    name: c.name as string,
-    description: (c.description as string | null) ?? null,
-    enabled: enabledMap.get(c.id as string) ?? false,
+  const enabledMap = new Map(context.enabledCapabilities.map((id) => [id, true]))
+  const rows = (allCaps ?? []).map((capability) => ({
+    id: capability.id as string,
+    name: capabilityLabel(capability.id, capability.name),
+    description: capabilityDescription(capability.id, capability.description ?? undefined),
+    enabled: enabledMap.get(capability.id as string) ?? false,
   }))
 
-  const bt = profile?.business_types as unknown as { name: string } | null
-
   return (
-    <div className="space-y-8 max-w-3xl">
+    <div className="max-w-3xl space-y-8">
       <div>
-        <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Settings</h1>
-        <p className="text-slate-500 text-sm mt-1">
-          Organization profile and capability modules (PLAN: Capability Manager).
-        </p>
+        <h1 className="text-2xl font-bold tracking-tight text-text">{ar.settings.title}</h1>
+        <p className="mt-1 text-sm text-text-muted">{ar.settings.description}</p>
       </div>
 
-      <section className="bg-white border border-slate-200 rounded-xl shadow-sm p-6 space-y-3">
-        <h2 className="text-sm font-semibold text-slate-900">Business profile</h2>
-        <dl className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+      <section className="space-y-3 rounded-xl border border-border bg-surface p-5 sm:p-6">
+        <h2 className="text-sm font-semibold text-text">{ar.settings.profile}</h2>
+        <dl className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-2">
           <div>
-            <dt className="text-slate-500">Organization</dt>
-            <dd className="font-medium text-slate-900">{org.organizationName}</dd>
+            <dt className="text-text-muted">{ar.settings.organization}</dt>
+            <dd className="font-medium text-text">{context.organizationName}</dd>
           </div>
           <div>
-            <dt className="text-slate-500">Your role</dt>
-            <dd className="font-medium text-slate-900 capitalize">{org.role}</dd>
+            <dt className="text-text-muted">{ar.settings.role}</dt>
+            <dd className="font-medium text-text">{roleLabel(context.role)}</dd>
           </div>
           <div>
-            <dt className="text-slate-500">Business type</dt>
-            <dd className="font-medium text-slate-900">
-              {bt?.name ?? profile?.business_type_id ?? 'Not set'}
+            <dt className="text-text-muted">{ar.settings.businessType}</dt>
+            <dd className="font-medium text-text">
+              {context.businessTypeId
+                ? businessTypeLabel(context.businessTypeId)
+                : ar.common.notSet}
             </dd>
           </div>
           <div>
-            <dt className="text-slate-500">Timezone</dt>
-            <dd className="font-medium text-slate-900">{profile?.timezone ?? 'UTC'}</dd>
+            <dt className="text-text-muted">{ar.settings.timezone}</dt>
+            <dd dir="ltr" className="text-start font-medium text-text">{context.timezone}</dd>
           </div>
         </dl>
         <Link
           href="/dashboard/setup"
-          className="inline-flex text-sm font-medium text-primary-dark hover:underline"
+          className="inline-flex min-h-11 items-center text-sm font-medium text-primary-dark hover:underline"
         >
-          Change business type & defaults →
+          {ar.settings.changeBusinessType}
         </Link>
       </section>
 
       <section className="space-y-3">
         <div>
-          <h2 className="text-sm font-semibold text-slate-900">Capability Manager</h2>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Enable only what this business needs. AI tools for disabled modules are blocked.
-          </p>
+          <h2 className="text-sm font-semibold text-text">{ar.settings.capabilities}</h2>
+          <p className="mt-0.5 text-xs text-text-muted">{ar.settings.capabilityDescription}</p>
         </div>
         <CapabilityManager rows={rows} />
       </section>

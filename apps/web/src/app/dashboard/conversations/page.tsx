@@ -1,21 +1,9 @@
 import Link from 'next/link'
 import { requireCapability, CapabilityDisabledError } from '@/lib/capabilities/guard'
 import { redirect } from 'next/navigation'
-
-const STATUS_LABELS: Record<string, string> = {
-  active: 'نشطة',
-  handed_off: 'مع موظف',
-  closed: 'مغلقة',
-}
-
-const CHANNEL_LABELS: Record<string, string> = {
-  whatsapp: 'واتساب',
-  instagram: 'إنستغرام',
-  sms: 'رسائل نصية',
-  phone: 'هاتف',
-  website: 'الموقع',
-  email: 'بريد',
-}
+import { ar } from '@/lib/i18n/ar'
+import { formatDateTime } from '@/lib/i18n/format'
+import { channelLabel, conversationStatusLabel } from '@/lib/i18n/labels'
 
 export default async function ConversationsPage() {
   let ctx
@@ -25,13 +13,13 @@ export default async function ConversationsPage() {
     if (error instanceof CapabilityDisabledError) {
       return (
         <div className="rounded-xl border border-warning/40 bg-warning/10 px-4 py-4 text-sm text-text">
-          <p className="font-semibold">صندوق المحادثات غير مُفعّل لهذه الشركة.</p>
-          <p className="mt-1 text-muted">
-            فعّل ميزة «صندوق المحادثات» من{' '}
+          <p className="font-semibold">{ar.conversations.disabledNotice}</p>
+          <p className="mt-1 text-text-muted">
+            {ar.conversations.enableInstructionsBefore}{' '}
             <Link href="/dashboard/settings" className="font-semibold underline">
               الإعدادات
             </Link>{' '}
-            لعرض محادثات العملاء والتحويل البشري.
+            {ar.conversations.enableInstructionsAfter}
           </p>
         </div>
       )
@@ -49,15 +37,13 @@ export default async function ConversationsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight text-text">صندوق المحادثات</h1>
-        <p className="mt-1 text-sm text-muted">
-          كل محادثات القنوات في مكان واحد، مع حالة الوكيل والتحويل البشري.
-        </p>
+        <h1 className="text-2xl font-bold tracking-tight text-text">{ar.conversations.title}</h1>
+          <p className="mt-1 text-sm text-text-muted">{ar.conversations.description}</p>
       </div>
 
       {!conversations?.length ? (
-        <div className="rounded-xl border border-border bg-surface p-10 text-center text-sm text-muted">
-          لا توجد محادثات بعد. ستظهر هنا محادثات واتساب والهاتف والرسائل النصية فور وصولها.
+        <div className="rounded-xl border border-border bg-surface p-10 text-center text-sm text-text-muted">
+          {ar.conversations.empty}
         </div>
       ) : (
         <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-surface">
@@ -79,10 +65,10 @@ export default async function ConversationsPage() {
                     <p className="truncate font-medium text-text">
                       {contact?.full_name || contact?.phone || 'عميل غير معروف'}
                     </p>
-                    <p className="mt-0.5 text-xs text-muted">
-                      {CHANNEL_LABELS[channel?.channel_type ?? ''] ?? 'قناة'}
+                    <p className="mt-0.5 text-xs text-text-muted">
+                      {channelLabel(channel?.channel_type ?? '')}
                       {' · '}
-                      {conversation.ai_enabled ? 'الوكيل يرد' : 'الوكيل متوقف'}
+                      {conversation.ai_enabled ? ar.conversations.agentResponding : ar.conversations.agentPaused}
                     </p>
                   </div>
                   <div className="flex items-center gap-3">
@@ -91,15 +77,15 @@ export default async function ConversationsPage() {
                         status === 'handed_off'
                           ? 'bg-warning/15 text-text'
                           : status === 'closed'
-                            ? 'bg-background text-muted'
+                            ? 'bg-background text-text-muted'
                             : 'bg-success/15 text-text'
                       }`}
                     >
-                      {STATUS_LABELS[status] ?? status}
+                      {conversationStatusLabel(status)}
                     </span>
-                    <time className="whitespace-nowrap text-xs text-muted">
+                    <time className="whitespace-nowrap text-xs text-text-muted">
                       {conversation.last_message_at
-                        ? new Date(conversation.last_message_at as string).toLocaleString('ar')
+                        ? formatDateTime(conversation.last_message_at as string, ctx.timezone)
                         : ''}
                     </time>
                   </div>

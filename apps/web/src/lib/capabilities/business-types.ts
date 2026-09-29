@@ -1,3 +1,5 @@
+import { ar } from '@/lib/i18n/ar'
+
 /**
  * Canonical business types (Adaptive Business Profile — docs/PLAN.md).
  *
@@ -23,31 +25,10 @@ export type BusinessTypeOption = {
 }
 
 export const BUSINESS_TYPES: readonly BusinessTypeOption[] = [
-  {
-    id: 'appointments',
-    label: 'الحجز والمواعيد',
-    hint: 'عيادات، صالونات، مراكز وخدمات تعتمد على المواعيد',
-  },
-  {
-    id: 'weddings_events',
-    label: 'تنسيق وتنظيم الأعراس والفعاليات',
-    hint: 'شركات تنسيق الأعراس ومنظّمو الفعاليات',
-  },
-  {
-    id: 'sales',
-    label: 'المبيعات',
-    hint: 'متاجر وموزّعون وشركات تبيع منتجات أو خدمات',
-  },
-  {
-    id: 'home_services',
-    label: 'الخدمات المنزلية',
-    hint: 'تنظيف، صيانة، تكييف، سباكة وزيارات ميدانية',
-  },
-  {
-    id: 'custom',
-    label: 'فئة مخصّصة',
-    hint: 'نشاط آخر — وحدات عامة وحقول قابلة للتهيئة',
-  },
+  ...Object.entries(ar.businessTypes).map(([id, value]) => ({
+    id: id as BusinessTypeId,
+    ...value,
+  })),
 ] as const
 
 export const DEFAULT_BUSINESS_TYPE: BusinessTypeId = 'appointments'

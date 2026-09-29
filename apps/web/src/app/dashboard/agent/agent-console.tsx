@@ -3,6 +3,8 @@
 import { useState, useTransition } from 'react'
 import { CircleAlert, CheckCircle2, History, Loader2, Save, Send } from 'lucide-react'
 import type { ToolPolicy } from '@/lib/ai/registry'
+import { ar } from '@/lib/i18n/ar'
+import { capabilityLabel } from '@/lib/i18n/labels'
 import {
   publishPromptAction,
   rollbackPromptAction,
@@ -114,7 +116,7 @@ export function AgentConsole({ data }: { data: AgentConsoleData }) {
             <input
               value={name}
               onChange={(event) => setName(event.target.value)}
-              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-text focus:border-primary-dark focus:outline-none focus:ring-2 focus:ring-primary/20"
+              className="min-h-11 w-full rounded-lg border border-border bg-background px-3 py-2 text-base text-text focus:border-primary-dark focus:outline-none focus:ring-2 focus:ring-primary/20 md:text-sm"
             />
           </label>
           <label className="block">
@@ -122,10 +124,10 @@ export function AgentConsole({ data }: { data: AgentConsoleData }) {
             <select
               value={locale}
               onChange={(event) => setLocale(event.target.value)}
-              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-text focus:border-primary-dark focus:outline-none focus:ring-2 focus:ring-primary/20"
+              className="min-h-11 w-full rounded-lg border border-border bg-background px-3 py-2 text-base text-text focus:border-primary-dark focus:outline-none focus:ring-2 focus:ring-primary/20 md:text-sm"
             >
               <option value="ar">العربية</option>
-              <option value="en">English</option>
+              <option value="en">الإنجليزية</option>
             </select>
           </label>
           <label className="block">
@@ -133,7 +135,7 @@ export function AgentConsole({ data }: { data: AgentConsoleData }) {
             <select
               value={status}
               onChange={(event) => setStatus(event.target.value)}
-              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-text focus:border-primary-dark focus:outline-none focus:ring-2 focus:ring-primary/20"
+              className="min-h-11 w-full rounded-lg border border-border bg-background px-3 py-2 text-base text-text focus:border-primary-dark focus:outline-none focus:ring-2 focus:ring-primary/20 md:text-sm"
             >
               <option value="active">نشط</option>
               <option value="suspended">موقوف</option>
@@ -151,7 +153,7 @@ export function AgentConsole({ data }: { data: AgentConsoleData }) {
               step={0.05}
               value={temperature}
               onChange={(event) => setTemperature(Number(event.target.value))}
-              className="mt-2 w-full accent-[var(--color-primary-dark)]"
+              className="mt-2 min-h-11 w-full accent-[var(--color-primary-dark)]"
             />
             <span className="mt-1 block text-[11px] text-text-muted">
               القيم الأقل تعني التزامًا أكبر بالمعلومات المسجّلة وعدم الاجتهاد.
@@ -164,7 +166,7 @@ export function AgentConsole({ data }: { data: AgentConsoleData }) {
             type="button"
             onClick={saveProfile}
             disabled={pending}
-            className="inline-flex items-center gap-2 rounded-lg bg-primary-dark px-4 py-2 text-sm font-medium text-surface transition-colors hover:bg-primary disabled:opacity-60"
+            className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary-dark px-4 py-2 text-base font-medium text-surface transition-colors hover:bg-primary disabled:opacity-60 md:w-auto md:text-sm"
           >
             {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save size={16} aria-hidden="true" />}
             حفظ
@@ -189,7 +191,7 @@ export function AgentConsole({ data }: { data: AgentConsoleData }) {
           onChange={(event) => setInstructions(event.target.value)}
           rows={7}
           placeholder="مثال: رحّب بالعميل باسم النشاط، اسأل عن الخدمة المطلوبة، واقترح موعدين فقط…"
-          className="mt-3 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm leading-relaxed text-text focus:border-primary-dark focus:outline-none focus:ring-2 focus:ring-primary/20"
+          className="mt-3 min-h-11 w-full rounded-lg border border-border bg-background px-3 py-2 text-base leading-relaxed text-text focus:border-primary-dark focus:outline-none focus:ring-2 focus:ring-primary/20 md:text-sm"
         />
         <p className="mt-2 text-[11px] leading-relaxed text-text-muted">
           هذه التعليمات تُضاف إلى سياق النشاط ولا تلغي السياسة العامة: الأسعار والتوافر والصلاحيات
@@ -201,7 +203,7 @@ export function AgentConsole({ data }: { data: AgentConsoleData }) {
             type="button"
             onClick={publish}
             disabled={pending}
-            className="inline-flex items-center gap-2 rounded-lg bg-primary-dark px-4 py-2 text-sm font-medium text-surface transition-colors hover:bg-primary disabled:opacity-60"
+            className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary-dark px-4 py-2 text-base font-medium text-surface transition-colors hover:bg-primary disabled:opacity-60 md:w-auto md:text-sm"
           >
             {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send size={16} aria-hidden="true" />}
             نشر نسخة جديدة
@@ -250,7 +252,54 @@ export function AgentConsole({ data }: { data: AgentConsoleData }) {
           حتى لو سُمح بها هنا.
         </p>
 
-        <div className="mt-3 overflow-x-auto">
+        <ul className="mt-3 space-y-3 md:hidden">
+          {data.tools.map((tool) => (
+            <li key={tool.policy.name} className="min-w-0 rounded-lg border border-border bg-background p-3">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="font-medium text-text" dir="ltr">{tool.policy.name}</p>
+                  <p className="mt-1 text-xs leading-relaxed text-text-muted">
+                    {ar.agent.toolDescriptions[tool.policy.name as keyof typeof ar.agent.toolDescriptions] ??
+                      tool.policy.description}
+                  </p>
+                </div>
+                {tool.policy.capability && (
+                  <span className="rounded-full border border-border px-2 py-1 text-[11px] text-text">
+                    {capabilityLabel(tool.policy.capability)}
+                  </span>
+                )}
+              </div>
+              <div className="mt-2 flex flex-wrap items-center justify-between gap-x-3 border-t border-border pt-2 text-xs">
+                <span className="text-text-muted">
+                  {RISK_LABEL[tool.policy.risk] ?? tool.policy.risk}
+                </span>
+                <label className="inline-flex min-h-11 items-center gap-2 text-text">
+                  <input
+                    type="checkbox"
+                    checked={tool.isAllowed}
+                    disabled={pending}
+                    onChange={(event) => toggleTool(tool.policy.name, { isAllowed: event.target.checked }, tool)}
+                    className="h-5 w-5 accent-[var(--color-primary-dark)]"
+                  />
+                  مسموحة
+                </label>
+                <label className="inline-flex min-h-11 items-center gap-2 text-text">
+                  <input
+                    type="checkbox"
+                    checked={tool.requiresConfirmation}
+                    disabled={pending || tool.policy.risk === 'read'}
+                    onChange={(event) =>
+                      toggleTool(tool.policy.name, { requiresConfirmation: event.target.checked }, tool)
+                    }
+                    className="h-5 w-5 accent-[var(--color-primary-dark)]"
+                  />
+                  تتطلب تأكيدًا
+                </label>
+              </div>
+            </li>
+          ))}
+        </ul>
+        <div className="mt-3 hidden overflow-x-auto md:block">
           <table className="w-full text-xs">
             <thead>
               <tr className="border-b border-border text-text-muted">
@@ -268,7 +317,10 @@ export function AgentConsole({ data }: { data: AgentConsoleData }) {
                     <span className="font-medium text-text" dir="ltr">
                       {tool.policy.name}
                     </span>
-                    <span className="mt-0.5 block text-[11px] text-text-muted">{tool.policy.description}</span>
+                    <span className="mt-0.5 block text-[11px] text-text-muted">
+                      {ar.agent.toolDescriptions[tool.policy.name as keyof typeof ar.agent.toolDescriptions] ??
+                        tool.policy.description}
+                    </span>
                   </td>
                   <td className="py-2 pe-3">
                     {tool.policy.capability ? (
@@ -280,8 +332,8 @@ export function AgentConsole({ data }: { data: AgentConsoleData }) {
                         }`}
                         dir="ltr"
                       >
-                        {tool.policy.capability}
-                        {tool.capabilityEnabled ? '' : ' (معطّلة)'}
+                        {capabilityLabel(tool.policy.capability)}
+                        {tool.capabilityEnabled ? '' : ` (${ar.common.disabled})`}
                       </span>
                     ) : (
                       <span className="text-text-muted">—</span>
@@ -289,26 +341,30 @@ export function AgentConsole({ data }: { data: AgentConsoleData }) {
                   </td>
                   <td className="py-2 pe-3 text-text">{RISK_LABEL[tool.policy.risk] ?? tool.policy.risk}</td>
                   <td className="py-2 pe-3">
-                    <input
-                      type="checkbox"
-                      checked={tool.isAllowed}
-                      disabled={pending}
-                      onChange={(event) => toggleTool(tool.policy.name, { isAllowed: event.target.checked }, tool)}
-                      aria-label={'السماح بالأداة ' + tool.policy.name}
-                      className="h-4 w-4 accent-[var(--color-primary-dark)]"
-                    />
+                    <label className="inline-flex min-h-11 min-w-11 items-center justify-center">
+                      <input
+                        type="checkbox"
+                        checked={tool.isAllowed}
+                        disabled={pending}
+                        onChange={(event) => toggleTool(tool.policy.name, { isAllowed: event.target.checked }, tool)}
+                        aria-label={'السماح بالأداة ' + tool.policy.name}
+                        className="h-5 w-5 accent-[var(--color-primary-dark)]"
+                      />
+                    </label>
                   </td>
                   <td className="py-2 pe-3">
-                    <input
-                      type="checkbox"
-                      checked={tool.requiresConfirmation}
-                      disabled={pending || tool.policy.risk === 'read'}
-                      onChange={(event) =>
-                        toggleTool(tool.policy.name, { requiresConfirmation: event.target.checked }, tool)
-                      }
-                      aria-label={'طلب تأكيد للأداة ' + tool.policy.name}
-                      className="h-4 w-4 accent-[var(--color-primary-dark)]"
-                    />
+                    <label className="inline-flex min-h-11 min-w-11 items-center justify-center">
+                      <input
+                        type="checkbox"
+                        checked={tool.requiresConfirmation}
+                        disabled={pending || tool.policy.risk === 'read'}
+                        onChange={(event) =>
+                          toggleTool(tool.policy.name, { requiresConfirmation: event.target.checked }, tool)
+                        }
+                        aria-label={'طلب تأكيد للأداة ' + tool.policy.name}
+                        className="h-5 w-5 accent-[var(--color-primary-dark)]"
+                      />
+                    </label>
                   </td>
                 </tr>
               ))}

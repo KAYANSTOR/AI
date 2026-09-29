@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
-import { getCurrentOrg, type OrgContext } from '@/lib/org'
-import { getEnabledCapabilities } from '@/lib/ai/capabilities'
+import { getDashboardContext, type DashboardContext } from '@/lib/dashboard/context'
+import { capabilityLabel } from '@/lib/i18n/labels'
 
 /**
  * The server-side capability gate.
@@ -13,7 +13,7 @@ import { getEnabledCapabilities } from '@/lib/ai/capabilities'
  */
 export class CapabilityDisabledError extends Error {
   constructor(public readonly capability: string) {
-    super(`الميزة "${capability}" غير مُفعّلة لهذه الشركة.`)
+    super(`الميزة «${capabilityLabel(capability)}» غير مُفعّلة لهذه الشركة.`)
     this.name = 'CapabilityDisabledError'
   }
 }
@@ -25,28 +25,15 @@ export class NotAuthorizedError extends Error {
   }
 }
 
-export type AuthorizedContext = OrgContext & {
+export type AuthorizedContext = DashboardContext & {
   supabase: SupabaseClient
-  /** The active business for this organization; null until setup has run. */
-  businessId: string | null
-}
-
-async function buildContext(org: OrgContext): Promise<AuthorizedContext> {
-  const supabase = await createClient()
-  const { data: profile } = await supabase
-    .from('business_profiles')
-    .select('business_id')
-    .eq('organization_id', org.organizationId)
-    .maybeSingle()
-
-  return { ...org, supabase, businessId: profile?.business_id ?? null }
 }
 
 /** Requires an authenticated member. Throws when there is no session. */
 export async function requireMember(): Promise<AuthorizedContext> {
-  const org = await getCurrentOrg()
-  if (!org) throw new NotAuthorizedError('يجب تسجيل الدخول أولًا.')
-  return buildContext(org)
+  const context = await getDashboardContext()
+  if (!context) throw new NotAuthorizedError('يجب تسجيل الدخول أولًا.')
+  return { ...context, supabase: await createClient() }
 }
 
 /**
@@ -55,8 +42,7 @@ export async function requireMember(): Promise<AuthorizedContext> {
  */
 export async function requireCapability(capability: string): Promise<AuthorizedContext> {
   const ctx = await requireMember()
-  const enabled = await getEnabledCapabilities(ctx.supabase, ctx.organizationId)
-  if (!enabled.has(capability)) throw new CapabilityDisabledError(capability)
+  if (!ctx.enabledCapabilities.includes(capability)) throw new CapabilityDisabledError(capability)
   return ctx
 }
 

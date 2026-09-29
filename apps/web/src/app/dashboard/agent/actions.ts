@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { getCurrentOrg, type OrgContext } from '@/lib/org'
 import { getToolPolicy } from '@/lib/ai/registry'
+import { actionErrorMessage, supabaseActionError } from '@/lib/i18n/action-error'
 
 export type AgentActionResult = { ok: boolean; error?: string; message?: string; version?: number }
 
@@ -36,7 +37,10 @@ async function audit(
     p_business_id: businessId,
     p_metadata: metadata,
   })
-  if (error) throw new Error('تعذّر تسجيل العملية في سجل التدقيق: ' + error.message)
+  if (error) {
+    console.error('Unable to record agent audit event', error)
+    throw new Error('تعذّر تسجيل العملية في سجل التدقيق.')
+  }
 }
 
 /** Confirms the agent belongs to the caller's organization before any write. */
@@ -90,7 +94,7 @@ export async function saveAgentProfileAction(input: {
         updated_at: new Date().toISOString(),
       })
       .eq('id', agent.id)
-    if (error) return { ok: false, error: error.message }
+    if (error) return { ok: false, error: supabaseActionError(error) }
 
     await audit(org.organizationId, agent.business_id, 'agent.updated', agent.id, {
       name,
@@ -102,7 +106,7 @@ export async function saveAgentProfileAction(input: {
     revalidatePath('/dashboard/agent')
     return { ok: true, message: 'تم حفظ إعدادات الوكيل.' }
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : 'تعذّر حفظ الوكيل.' }
+    return { ok: false, error: actionErrorMessage(error, 'تعذّر حفظ الوكيل. حاول مرة أخرى.') }
   }
 }
 
@@ -119,7 +123,7 @@ export async function publishPromptAction(input: {
       p_agent_id: agent.id,
       p_system_prompt_addition: input.instructions,
     })
-    if (error) return { ok: false, error: error.message }
+    if (error) return { ok: false, error: supabaseActionError(error) }
 
     const version = typeof data === 'number' ? data : undefined
     await audit(org.organizationId, agent.business_id, 'agent.prompt_published', agent.id, {
@@ -130,7 +134,7 @@ export async function publishPromptAction(input: {
     revalidatePath('/dashboard/agent')
     return { ok: true, message: 'تم نشر النسخة ' + (version ?? ''), version }
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : 'تعذّر نشر التعليمات.' }
+    return { ok: false, error: actionErrorMessage(error, 'تعذّر نشر التعليمات. حاول مرة أخرى.') }
   }
 }
 
@@ -151,7 +155,7 @@ export async function rollbackPromptAction(input: {
       p_agent_id: agent.id,
       p_version: input.version,
     })
-    if (error) return { ok: false, error: error.message }
+    if (error) return { ok: false, error: supabaseActionError(error) }
 
     const version = typeof data === 'number' ? data : undefined
     await audit(org.organizationId, agent.business_id, 'agent.prompt_rolled_back', agent.id, {
@@ -162,7 +166,7 @@ export async function rollbackPromptAction(input: {
     revalidatePath('/dashboard/agent')
     return { ok: true, message: 'تمت استعادة النسخة ' + input.version + ' كنسخة جديدة.', version }
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : 'تعذّرت الاستعادة.' }
+    return { ok: false, error: actionErrorMessage(error, 'تعذّرت الاستعادة. حاول مرة أخرى.') }
   }
 }
 
@@ -191,7 +195,7 @@ export async function setToolPolicyAction(input: {
       p_is_allowed: input.isAllowed,
       p_requires_confirmation: requiresConfirmation,
     })
-    if (error) return { ok: false, error: error.message }
+    if (error) return { ok: false, error: supabaseActionError(error) }
 
     await audit(org.organizationId, agent.business_id, 'agent.tool_policy_changed', agent.id, {
       tool: input.toolName,
@@ -202,6 +206,6 @@ export async function setToolPolicyAction(input: {
     revalidatePath('/dashboard/agent')
     return { ok: true, message: 'تم تحديث صلاحية الأداة.' }
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : 'تعذّر تحديث الأداة.' }
+    return { ok: false, error: actionErrorMessage(error, 'تعذّر تحديث الأداة. حاول مرة أخرى.') }
   }
 }
