@@ -7,13 +7,13 @@ REVOKE ALL ON SCHEMA private FROM PUBLIC;
 
 CREATE OR REPLACE FUNCTION private.get_user_organizations()
 RETURNS SETOF UUID LANGUAGE sql STABLE SECURITY DEFINER SET search_path=public,pg_temp
-AS $ SELECT organization_id FROM organization_members WHERE user_id=auth.uid(); $;
+AS $$ SELECT organization_id FROM organization_members WHERE user_id=auth.uid(); $$;
 CREATE OR REPLACE FUNCTION private.is_org_member(org_id UUID)
 RETURNS BOOLEAN LANGUAGE sql STABLE SECURITY DEFINER SET search_path=public,pg_temp
-AS $ SELECT auth.uid() IS NOT NULL AND EXISTS(SELECT 1 FROM organization_members WHERE organization_id=org_id AND user_id=auth.uid()); $;
+AS $$ SELECT auth.uid() IS NOT NULL AND EXISTS(SELECT 1 FROM organization_members WHERE organization_id=org_id AND user_id=auth.uid()); $$;
 CREATE OR REPLACE FUNCTION private.is_org_admin(org_id UUID)
 RETURNS BOOLEAN LANGUAGE sql STABLE SECURITY DEFINER SET search_path=public,pg_temp
-AS $ SELECT auth.uid() IS NOT NULL AND EXISTS(SELECT 1 FROM organization_members WHERE organization_id=org_id AND user_id=auth.uid() AND role IN('owner','admin')); $;
+AS $$ SELECT auth.uid() IS NOT NULL AND EXISTS(SELECT 1 FROM organization_members WHERE organization_id=org_id AND user_id=auth.uid() AND role IN('owner','admin')); $$;
 REVOKE ALL ON FUNCTION private.get_user_organizations() FROM PUBLIC;
 REVOKE ALL ON FUNCTION private.is_org_member(UUID) FROM PUBLIC;
 REVOKE ALL ON FUNCTION private.is_org_admin(UUID) FROM PUBLIC;
@@ -24,13 +24,13 @@ GRANT EXECUTE ON FUNCTION private.is_org_admin(UUID) TO authenticated;
 
 CREATE OR REPLACE FUNCTION public.get_user_organizations()
 RETURNS SETOF UUID LANGUAGE sql STABLE SECURITY INVOKER SET search_path=public,pg_temp
-AS $ SELECT * FROM private.get_user_organizations(); $;
+AS $$ SELECT * FROM private.get_user_organizations(); $$;
 CREATE OR REPLACE FUNCTION public.is_org_member(org_id UUID)
 RETURNS BOOLEAN LANGUAGE sql STABLE SECURITY INVOKER SET search_path=public,pg_temp
-AS $ SELECT private.is_org_member(org_id); $;
+AS $$ SELECT private.is_org_member(org_id); $$;
 CREATE OR REPLACE FUNCTION public.is_org_admin(org_id UUID)
 RETURNS BOOLEAN LANGUAGE sql STABLE SECURITY INVOKER SET search_path=public,pg_temp
-AS $ SELECT private.is_org_admin(org_id); $;
+AS $$ SELECT private.is_org_admin(org_id); $$;
 
 CREATE TABLE IF NOT EXISTS businesses (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
