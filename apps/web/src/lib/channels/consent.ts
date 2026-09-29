@@ -59,3 +59,26 @@ export async function recordOptOut(
   })
   if (error) throw new Error(error.message)
 }
+
+export class ConsentBlockedError extends Error {
+  readonly code = 'consent_blocked' as const
+  constructor(message = 'contact_opted_out') {
+    super(message)
+    this.name = 'ConsentBlockedError'
+  }
+}
+
+/**
+ * Backend gate for marketing / follow-up / campaign traffic.
+ * Transactional replies that the customer just initiated may still be allowed
+ * by the inbound runtime; this guard is for proactive outbound only.
+ */
+export async function assertMarketingAllowed(
+  supabase: SupabaseClient,
+  input: { contactId: string; channel: string }
+): Promise<void> {
+  const status = await getConsentStatus(supabase, input.contactId, input.channel)
+  if (status === 'opted_out') {
+    throw new ConsentBlockedError('contact_opted_out')
+  }
+}
