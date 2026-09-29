@@ -32,6 +32,12 @@ declare module 'bun:test' {
     toBeDefined(): void
     toBeGreaterThan(expected: number): void
     toBeLessThan(expected: number): void
+    toBeInstanceOf(expected: abstract new (...args: never[]) => unknown): void
+    toThrow(expected?: unknown): void
+    /** For `expect(promise).rejects.toThrow(...)`. */
+    rejects: Matchers<unknown>
+    /** For `expect(promise).resolves.toBe(...)`. */
+    resolves: Matchers<unknown>
   }
 
   export interface Expectation<T> extends Matchers<T> {

@@ -2,7 +2,9 @@
 
 import { useState, useTransition } from 'react'
 import { CheckCircle2, CircleAlert, Loader2, Plug, Power, RadioTower, XCircle } from 'lucide-react'
-import type { BindingTestResult, ChannelSpec } from '@/lib/channels/management'
+import type { BindingTestResult, ChannelSpec, ChannelType } from '@/lib/channels/management'
+import type { CredentialMetadata } from '@/lib/credentials/catalog'
+import { ChannelCredentials } from './channel-credentials'
 import { saveChannelAction, setChannelActiveAction, testChannelAction } from './actions'
 
 export type ChannelCardData = {
@@ -12,6 +14,10 @@ export type ChannelCardData = {
   isActive: boolean
   connected: boolean
   verificationStatus: string | null
+  /** Metadata only — the dashboard never receives credential values. */
+  credentials: CredentialMetadata[]
+  credentialsStorageConfigured: boolean
+  canManage: boolean
 }
 
 function statusChip(data: ChannelCardData) {
@@ -20,7 +26,7 @@ function statusChip(data: ChannelCardData) {
   return { label: 'مُفعّلة', className: 'bg-success/15 text-success border-success/40' }
 }
 
-export function ChannelCard({ data }: { data: ChannelCardData }) {
+export function ChannelCard({ data, channelType }: { data: ChannelCardData; channelType: ChannelType }) {
   const [identifier, setIdentifier] = useState(data.identifier ?? '')
   const [publicNumber, setPublicNumber] = useState(data.publicNumber ?? '')
   const [feedback, setFeedback] = useState<{ ok: boolean; text: string } | null>(null)
@@ -193,6 +199,16 @@ export function ChannelCard({ data }: { data: ChannelCardData }) {
             {feedback.text}
           </p>
         )}
+
+        <ChannelCredentials
+          data={{
+            channelType,
+            connected: data.connected,
+            storageConfigured: data.credentialsStorageConfigured,
+            canManage: data.canManage,
+            entries: data.credentials,
+          }}
+        />
 
         {testResult && (
           <div className="rounded-lg border border-border bg-background/60 p-3">

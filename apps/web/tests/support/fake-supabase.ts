@@ -292,7 +292,9 @@ class Builder implements PromiseLike<PostgrestResult> {
   }
 }
 
-export function createFakeSupabase(tables: FakeDb) {
+export type RpcHandler = (args: Record<string, unknown>) => unknown
+
+export function createFakeSupabase(tables: FakeDb, rpcs: Record<string, RpcHandler> = {}) {
   const db: FakeDb = {}
   for (const [name, def] of Object.entries(tables)) {
     db[name] = { rows: (def.rows ?? []).map((row) => ({ ...row })), unique: def.unique }
@@ -302,6 +304,19 @@ export function createFakeSupabase(tables: FakeDb) {
     from(name: string) {
       if (!db[name]) db[name] = { rows: [] }
       return new Builder(db[name])
+    },
+    /**
+     * Postgres functions are stubbed by the test, not by this fake: each registered
+     * handler stands in for one SECURITY DEFINER function's authorisation + effect.
+     */
+    async rpc(name: string, args?: Record<string, unknown>) {
+      const handler = rpcs[name]
+      if (!handler) return { data: null, error: { message: `rpc ${name} is not registered in this test` } }
+      try {
+        return { data: handler(args ?? {}), error: null }
+      } catch (error) {
+        return { data: null, error: { message: error instanceof Error ? error.message : String(error) } }
+      }
     },
   }
 

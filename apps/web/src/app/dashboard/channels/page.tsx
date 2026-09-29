@@ -2,7 +2,9 @@ import { redirect } from 'next/navigation'
 import { Info } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { getCurrentOrg } from '@/lib/org'
-import { CHANNEL_SPECS } from '@/lib/channels/management'
+import { CHANNEL_SPECS, type ChannelType } from '@/lib/channels/management'
+import { credentialsStorageConfigured, listCredentialMetadata } from '@/lib/credentials/service'
+import { PROVIDER_FOR_CHANNEL, type CredentialMetadata } from '@/lib/credentials/catalog'
 import { ChannelCard, type ChannelCardData } from './channel-card'
 
 export const dynamic = 'force-dynamic'
@@ -37,6 +39,20 @@ export default async function ChannelsPage() {
 
   const byType = new Map((rows ?? []).map((row) => [row.channel_type as string, row as ChannelRow]))
   const canManage = org.role === 'owner' || org.role === 'admin'
+  const storageConfigured = credentialsStorageConfigured()
+
+  // Metadata only, and only for administrators: values are never readable from a client.
+  let credentialMetadata: CredentialMetadata[] = []
+  if (canManage) {
+    try {
+      credentialMetadata = await listCredentialMetadata(supabase, org.organizationId)
+    } catch {
+      credentialMetadata = []
+    }
+  }
+
+  const credentialsFor = (type: ChannelType) =>
+    credentialMetadata.filter((entry) => entry.provider === PROVIDER_FOR_CHANNEL[type])
 
   const cards: ChannelCardData[] = CHANNEL_SPECS.map((spec) => {
     const row = byType.get(spec.type)
@@ -47,6 +63,9 @@ export default async function ChannelsPage() {
       isActive: row?.is_active === true,
       connected: Boolean(row?.id),
       verificationStatus: row?.verification_status ?? null,
+      credentials: credentialsFor(spec.type),
+      credentialsStorageConfigured: storageConfigured,
+      canManage,
     }
   })
 
@@ -90,7 +109,7 @@ export default async function ChannelsPage() {
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
         {cards.map((card) => (
-          <ChannelCard key={card.spec.type} data={card} />
+          <ChannelCard key={card.spec.type} data={card} channelType={card.spec.type} />
         ))}
       </div>
     </div>
