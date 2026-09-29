@@ -109,6 +109,9 @@ describe('exact channel binding (ADR-0002)', () => {
 describe('business agent resolution', () => {
   test('returns the active agent for the business', async () => {
     const { supabase } = setup({
+      business_profiles: {
+        rows: [{ id: 'profile-a', organization_id: ORG_A, business_id: BIZ_A, activation_state: 'active' }],
+      },
       ai_agents: {
         rows: [
           { id: 'agent-b', organization_id: ORG_A, business_id: BIZ_A, name: 'B', status: 'active', created_at: '2026-01-02T00:00:00Z' },

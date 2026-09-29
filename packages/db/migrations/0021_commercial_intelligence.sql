@@ -15,20 +15,17 @@ CREATE TABLE plans (
 );
 
 -- 2. Subscriptions
-CREATE TABLE subscriptions (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE UNIQUE,
-    plan_id UUID NOT NULL REFERENCES plans(id),
-    status VARCHAR(50) NOT NULL CHECK (status IN ('trial', 'active', 'past_due', 'grace_period', 'suspended', 'cancelled')),
-    billing_cycle VARCHAR(50) NOT NULL DEFAULT 'monthly' CHECK (billing_cycle IN ('monthly', 'yearly')),
-    current_period_start TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-    current_period_end TIMESTAMP WITH TIME ZONE NOT NULL,
-    cancel_at_period_end BOOLEAN NOT NULL DEFAULT false,
-    trial_start TIMESTAMP WITH TIME ZONE,
-    trial_end TIMESTAMP WITH TIME ZONE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
+-- The base subscriptions table is created in 0000_initial.sql. Extend it here
+-- rather than attempting to recreate it with an incompatible schema.
+ALTER TABLE subscriptions
+    ADD COLUMN IF NOT EXISTS plan_id UUID REFERENCES plans(id),
+    ADD COLUMN IF NOT EXISTS billing_cycle VARCHAR(50) NOT NULL DEFAULT 'monthly'
+      CHECK (billing_cycle IN ('monthly', 'yearly')),
+    ADD COLUMN IF NOT EXISTS current_period_start TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    ADD COLUMN IF NOT EXISTS current_period_end TIMESTAMP WITH TIME ZONE,
+    ADD COLUMN IF NOT EXISTS cancel_at_period_end BOOLEAN NOT NULL DEFAULT false,
+    ADD COLUMN IF NOT EXISTS trial_start TIMESTAMP WITH TIME ZONE,
+    ADD COLUMN IF NOT EXISTS trial_end TIMESTAMP WITH TIME ZONE;
 
 -- 3. Meters / Usage Tracking (Monthly reset)
 CREATE TABLE usage_meters (
@@ -84,9 +81,9 @@ CREATE POLICY "Users can read their own usage" ON usage_meters FOR SELECT USING 
 CREATE POLICY "Users can read their own analytics" ON daily_analytics FOR SELECT USING (organization_id IN (SELECT get_user_organizations()));
 
 -- Triggers for updated_at
-CREATE TRIGGER set_updated_at_plans BEFORE UPDATE ON plans FOR EACH ROW EXECUTE FUNCTION update_modified_column();
-CREATE TRIGGER set_updated_at_subscriptions BEFORE UPDATE ON subscriptions FOR EACH ROW EXECUTE FUNCTION update_modified_column();
-CREATE TRIGGER set_updated_at_usage_meters BEFORE UPDATE ON usage_meters FOR EACH ROW EXECUTE FUNCTION update_modified_column();
+CREATE TRIGGER set_updated_at_plans BEFORE UPDATE ON plans FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+CREATE TRIGGER set_updated_at_subscriptions BEFORE UPDATE ON subscriptions FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+CREATE TRIGGER set_updated_at_usage_meters BEFORE UPDATE ON usage_meters FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
 -- Seed Default Plans
 INSERT INTO plans (code, name, description, monthly_price, currency, limits) VALUES 
