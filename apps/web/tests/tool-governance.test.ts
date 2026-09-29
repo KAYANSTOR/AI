@@ -282,11 +282,11 @@ describe('actor authorisation', () => {
       phone: '+15550001', service_id: 'svc-1', starts_at: '2026-03-02T09:00:00.000Z',
     }, context(supabase, { actor: 'system' }))
 
-    const executions = db.tool_executions.rows
-    expect(executions).toHaveLength(1)
-    expect(executions[0].status).toBe('blocked')
+    const executions = db.tool_executions.rows ?? []
+    expect(executions.length).toBe(1)
+    expect(executions[0]?.status).toBe('blocked')
     // A refused call must not have queued anything for confirmation.
-    expect(db.pending_actions.rows).toHaveLength(0)
+    expect(db.pending_actions.rows?.length ?? 0).toBe(0)
   })
 
   test('the agent is allowed to invoke its declared tools', () => {

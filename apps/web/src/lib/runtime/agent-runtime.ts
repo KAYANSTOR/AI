@@ -1,14 +1,15 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { buildBusinessSystemPrompt } from '@/lib/ai/prompt'
 import { executeTool,getToolDefinitionsForAgent } from '@/lib/ai/tools'
-import { callAnthropic } from '@/lib/providers/anthropic'
-import type { ModelMessage } from '@/lib/providers/anthropic'
+import { getProvider } from '@/lib/providers'
+import type { ModelMessage } from '@/lib/providers'
 
 export async function runAgentTurn(args:{
   supabase:SupabaseClient;organizationId:string;businessId:string;conversationId:string;contactId:string;channel:string;userText:string;
   agentId?:string|null;serverActionResult?:unknown;
 }){
-  const model=process.env.ANTHROPIC_MODEL ?? null
+  const providerName = process.env.AI_PROVIDER || 'gemini'
+  const model = providerName === 'anthropic' ? (process.env.ANTHROPIC_MODEL ?? null) : (process.env.GEMINI_MODEL ?? 'gemini-1.5-flash')
 
   const [{data:history,error:historyError},prompt,toolSet]=await Promise.all([
     args.supabase.from('messages').select('direction,content,created_at').eq('organization_id',args.organizationId).eq('conversation_id',args.conversationId).order('created_at',{ascending:false}).limit(20),
@@ -28,7 +29,7 @@ export async function runAgentTurn(args:{
 
   const run=await args.supabase.from('agent_runs').insert({
     organization_id:args.organizationId,business_id:args.businessId,agent_id:agent?.id ?? null,conversation_id:args.conversationId,
-    channel:args.channel,model_provider:'anthropic',model,prompt_version_id:promptVersion?.id ?? null,status:'running',
+    channel:args.channel,model_provider:providerName,model,prompt_version_id:promptVersion?.id ?? null,status:'running',
   }).select('id').single()
   if(run.error || !run.data) throw new Error(run.error?.message ?? 'Unable to start agent run')
 
@@ -37,7 +38,8 @@ export async function runAgentTurn(args:{
   let inputTokens=0,outputTokens=0
   try{
     for(let round=0;round<5;round+=1){
-      const result=await callAnthropic({system:prompt,messages,tools:toolSet})
+      const provider = getProvider(providerName)
+      const result=await provider.call({system:prompt,messages,tools:toolSet})
       inputTokens+=result.inputTokens;outputTokens+=result.outputTokens
 
       const textParts=result.content.filter((b):b is {type:'text';text:string}=>b.type==='text').map(b=>b.text)
@@ -59,7 +61,7 @@ export async function runAgentTurn(args:{
         const result=await executeTool(tool.name,tool.input,{
           organizationId:args.organizationId,businessId:args.businessId,conversationId:args.conversationId,contactId:args.contactId,supabase:args.supabase,agentId:agent?.id ?? null,actor:'agent',
         })
-        results.push({type:'tool_result',tool_use_id:tool.id,content:JSON.stringify(result.ok ? result.result : {error:result.error})})
+        results.push({type:'tool_result',tool_use_id:tool.id,name:tool.name,content:JSON.stringify(result.ok ? result.result : {error:result.error})})
       }
       messages.push({role:'user',content:results})
     }
