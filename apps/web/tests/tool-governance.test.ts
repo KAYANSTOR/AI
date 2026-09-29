@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { createFakeSupabase, holidayAwareHoursRpc, type FakeDb } from './support/fake-supabase'
-import { TOOL_POLICIES, type ToolActor } from '@/lib/ai/registry'
+import { TOOL_POLICIES, isActorAllowed, type ToolActor } from '@/lib/ai/registry'
 import { executeTool, getToolDefinitionsForAgent } from '@/lib/ai/tools'
 
 const ORG = 'aaaaaaaa-0000-4000-8000-000000000001'
@@ -255,6 +255,44 @@ describe('human handoff tool', () => {
     const result = await executeTool('request_human_handoff', {}, context(supabase, { conversationId: null }))
 
     expect(result.ok).toBe(false)
+  })
+})
+
+describe('actor authorisation', () => {
+  test('no shipped tool is reachable by an actor it does not list', async () => {
+    // 'system' is deliberately absent from every policy, so a plain system actor must not be
+    // able to reach any of them — including the write tools.
+    for (const name of Object.keys(TOOL_POLICIES)) {
+      expect(isActorAllowed(TOOL_POLICIES[name], 'system')).toBe(false)
+    }
+
+    const { supabase } = setup(baseTables())
+    const result = await executeTool('create_appointment', {
+      phone: '+15550001', service_id: 'svc-1', starts_at: '2026-03-02T09:00:00.000Z',
+    }, context(supabase, { actor: 'system' }))
+
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.error).toContain('not allowed')
+  })
+
+  test('an actor refusal is recorded before any capability or confirmation work', async () => {
+    const { supabase, db } = setup(baseTables())
+
+    await executeTool('create_appointment', {
+      phone: '+15550001', service_id: 'svc-1', starts_at: '2026-03-02T09:00:00.000Z',
+    }, context(supabase, { actor: 'system' }))
+
+    const executions = db.tool_executions.rows
+    expect(executions).toHaveLength(1)
+    expect(executions[0].status).toBe('blocked')
+    // A refused call must not have queued anything for confirmation.
+    expect(db.pending_actions.rows).toHaveLength(0)
+  })
+
+  test('the agent is allowed to invoke its declared tools', () => {
+    for (const policy of Object.values(TOOL_POLICIES)) {
+      expect(isActorAllowed(policy, 'agent')).toBe(true)
+    }
   })
 })
 
