@@ -48,6 +48,10 @@ jobs:
       # dependency: nothing is added to package.json, so `npm ci` stays authoritative.
       - name: Unit tests
         run: bun test
+      # Production build gate: Next.js compilation must succeed with CI placeholder env.
+      # Required by Phase 0 exit (BUILD = GREEN) and README canonical path.
+      - name: Build
+        run: npm run build
 
   database:
     runs-on: ubuntu-latest
