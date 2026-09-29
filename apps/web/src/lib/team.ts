@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
 
-export const TEAM_ROLES = ['owner', 'admin', 'manager', 'member'] as const
+export const TEAM_ROLES = ['owner', 'admin', 'manager', 'member', 'read_only'] as const
 export type TeamRole = (typeof TEAM_ROLES)[number]
 
 export type TeamMember = {
@@ -24,8 +24,18 @@ export function isTeamRole(value: unknown): value is TeamRole {
   return typeof value === 'string' && (TEAM_ROLES as readonly string[]).includes(value)
 }
 
+/** Roles that may mutate operational data (not read_only). */
+export function canWriteAsRole(role: string | null | undefined): boolean {
+  return role === 'owner' || role === 'admin' || role === 'manager' || role === 'member'
+}
+
+/** Roles that may manage team membership. */
+export function canManageTeam(role: string | null | undefined): boolean {
+  return role === 'owner' || role === 'admin'
+}
+
 function ensureAdminRole(actorRole: string | null | undefined) {
-  if (actorRole !== 'owner' && actorRole !== 'admin') {
+  if (!canManageTeam(actorRole)) {
     throw new TeamAccessError('not authorized: only owner or admin can manage team members')
   }
 }
@@ -129,6 +139,53 @@ export async function updateMemberRole(
   const { data, error } = await supabase
     .from('organization_members')
     .update({ role: args.nextRole })
+    .eq('organization_id', args.organizationId)
+    .eq('id', args.memberId)
+    .select('id, organization_id, user_id, role, is_active, created_at')
+    .single()
+
+  if (error) throw error
+  return data as TeamMember
+}
+
+export async function setMemberActive(
+  supabase: SupabaseClient | Awaited<ReturnType<typeof createClient>>,
+  args: {
+    organizationId: string
+    actorRole: string | null | undefined
+    memberId: string
+    isActive: boolean
+  }
+): Promise<TeamMember> {
+  ensureAdminRole(args.actorRole)
+
+  const { data: current, error: currentError } = await supabase
+    .from('organization_members')
+    .select('id, role')
+    .eq('organization_id', args.organizationId)
+    .eq('id', args.memberId)
+    .maybeSingle()
+
+  if (currentError) throw currentError
+  if (!current) throw new TeamAccessError('member not found')
+
+  if (!args.isActive && current.role === 'owner') {
+    const { data: owners, error: ownersError } = await supabase
+      .from('organization_members')
+      .select('id')
+      .eq('organization_id', args.organizationId)
+      .eq('role', 'owner')
+      .eq('is_active', true)
+
+    if (ownersError) throw ownersError
+    if ((owners ?? []).length <= 1) {
+      throw new TeamAccessError('cannot deactivate the last active owner')
+    }
+  }
+
+  const { data, error } = await supabase
+    .from('organization_members')
+    .update({ is_active: args.isActive })
     .eq('organization_id', args.organizationId)
     .eq('id', args.memberId)
     .select('id, organization_id, user_id, role, is_active, created_at')
