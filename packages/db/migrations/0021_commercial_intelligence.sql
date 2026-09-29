@@ -15,7 +15,7 @@ CREATE TABLE plans (
 );
 
 -- 2. Subscriptions
-CREATE TABLE subscriptions (
+CREATE TABLE IF NOT EXISTS subscriptions (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE UNIQUE,
     plan_id UUID NOT NULL REFERENCES plans(id),
@@ -29,6 +29,17 @@ CREATE TABLE subscriptions (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+-- Existing installations used the original subscriptions shape. Keep it intact and add the
+-- commercial-intelligence fields incrementally so the migration is safe to replay.
+ALTER TABLE subscriptions
+    ADD COLUMN IF NOT EXISTS plan_id UUID REFERENCES plans(id),
+    ADD COLUMN IF NOT EXISTS billing_cycle VARCHAR(50) DEFAULT 'monthly',
+    ADD COLUMN IF NOT EXISTS current_period_start TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    ADD COLUMN IF NOT EXISTS current_period_end TIMESTAMP WITH TIME ZONE,
+    ADD COLUMN IF NOT EXISTS cancel_at_period_end BOOLEAN DEFAULT false,
+    ADD COLUMN IF NOT EXISTS trial_start TIMESTAMP WITH TIME ZONE,
+    ADD COLUMN IF NOT EXISTS trial_end TIMESTAMP WITH TIME ZONE;
 
 -- 3. Meters / Usage Tracking (Monthly reset)
 CREATE TABLE usage_meters (
@@ -84,7 +95,18 @@ CREATE POLICY "Users can read their own usage" ON usage_meters FOR SELECT USING 
 CREATE POLICY "Users can read their own analytics" ON daily_analytics FOR SELECT USING (organization_id IN (SELECT get_user_organizations()));
 
 -- Triggers for updated_at
-CREATE TRIGGER set_updated_at_plans BEFORE UPDATE ON plans FOR EACH ROW EXECUTE FUNCTION update_modified_column();
+CREATE OR REPLACE FUNCTION public.update_modified_column()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SET search_path = public, pg_temp
+AS $
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$;
+
+CREATE TRIGGER set_updated_at_plans BEFORE UPDATE ON plans FOR EACH ROW EXECUTE FUNCTION public.update_modified_column();
 CREATE TRIGGER set_updated_at_subscriptions BEFORE UPDATE ON subscriptions FOR EACH ROW EXECUTE FUNCTION update_modified_column();
 CREATE TRIGGER set_updated_at_usage_meters BEFORE UPDATE ON usage_meters FOR EACH ROW EXECUTE FUNCTION update_modified_column();
 
@@ -92,4 +114,5 @@ CREATE TRIGGER set_updated_at_usage_meters BEFORE UPDATE ON usage_meters FOR EAC
 INSERT INTO plans (code, name, description, monthly_price, currency, limits) VALUES 
 ('trial', 'Trial', '14-day free trial', 0, 'SAR', '{"channels": 1, "voice_minutes": 30, "ai_messages": 100}'),
 ('starter', 'Starter', 'For small businesses', 199, 'SAR', '{"channels": 2, "voice_minutes": 100, "ai_messages": 1000}'),
-('pro', 'Pro', 'For growing teams', 499, 'SAR', '{"channels": 5, "voice_minutes": 500, "ai_messages": 5000}');
+('pro', 'Pro', 'For growing teams', 499, 'SAR', '{"channels": 5, "voice_minutes": 500, "ai_messages": 5000}')
+ON CONFLICT (code) DO NOTHING;
