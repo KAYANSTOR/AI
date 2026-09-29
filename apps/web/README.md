@@ -11,7 +11,7 @@ the tenant by exact channel binding (never "first organization"):
 - `/api/whatsapp/webhook` — resolved by `phone_number_id`
 - `/api/instagram/webhook` — resolved by Instagram account ID
 - `/api/sms/webhook` — resolved by the Twilio `To` number
-- `/api/cron/outbox` — outbox worker (requires `Authorization: Bearer $CRON_SECRET`)
+- `GET|POST /api/cron/outbox` — outbox worker (requires `Authorization: Bearer $CRON_SECRET`; scheduling and setup: [docs/OUTBOX_CRON.md](../../docs/OUTBOX_CRON.md))
 
 Every message channel terminates in the same pipeline:
 `identity → conversation → persist → consent/eligibility → agent → outbound/outbox → audit`.

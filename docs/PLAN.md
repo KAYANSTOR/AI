@@ -54,7 +54,7 @@ No webhook may auto-create a tenant or choose an arbitrary organization.
 
 ## Reliability
 Webhook idempotency + outbox events + bounded retries + dead-letter.
-Worker endpoint: /api/cron/outbox, protected by CRON_SECRET.
+Worker endpoint: `GET|POST /api/cron/outbox`, protected by `CRON_SECRET`. External scheduling and setup: [docs/OUTBOX_CRON.md](OUTBOX_CRON.md).
 
 ## Security
 Provider signatures are verified before processing. Secrets are server-only. RLS tenant predicates are mandatory. Public authorization helpers are invoker wrappers over private security-definer functions. handle_new_user is trigger-only.

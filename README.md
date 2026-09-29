@@ -15,10 +15,11 @@
 - /api/whatsapp/webhook
 - /api/instagram/webhook
 - /api/sms/webhook
-- /api/cron/outbox
+- /api/cron/outbox — authentication and external scheduling: docs/OUTBOX_CRON.md
 
 ## الوثائق
 - docs/PLAN.md
+- docs/OUTBOX_CRON.md
 - docs/AI_AGENT_RUNTIME_SPEC.md
 - docs/DB_CONTRACT.md
 - docs/CHANNELS.md

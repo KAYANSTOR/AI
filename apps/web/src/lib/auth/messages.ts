@@ -8,7 +8,7 @@ const KNOWN_MESSAGES: ReadonlyArray<{ match: RegExp; message: string }> = [
   { match: /email not confirmed/i, message: 'لم يتم تأكيد بريدك الإلكتروني بعد. راجع رسائل بريدك.' },
   { match: /user already registered/i, message: 'هذا البريد مسجّل بالفعل. جرّب تسجيل الدخول.' },
   { match: /password should be at least/i, message: 'كلمة المرور قصيرة: يجب أن تكون 6 أحرف على الأقل.' },
-  { match: /unable to validate email address|invalid email/i, message: 'صيغة البريد الإلكتروني غير صحيحة.' },
+  { match: /unable to validate email address|invalid email|email address .* is invalid/i, message: 'صيغة البريد الإلكتروني غير صحيحة.' },
   { match: /email rate limit exceeded|over_email_send_rate_limit/i, message: 'تم إرسال عدة رسائل. جرّب مرة أخرى بعد قليل.' },
 ]
 

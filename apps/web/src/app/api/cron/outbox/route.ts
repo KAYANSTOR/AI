@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { isAuthorizedCronRequest } from '@/lib/cron/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { deliverOutbound } from '@/lib/runtime/outbound'
 import {
@@ -10,9 +11,8 @@ import {
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-export async function GET(req: NextRequest) {
-  const secret = process.env.CRON_SECRET
-  if (!secret || req.headers.get('authorization') !== 'Bearer ' + secret) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+async function handle(req: NextRequest) {
+  if (!isAuthorizedCronRequest(req.headers.get('authorization'), process.env.CRON_SECRET)) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
 
   const supabase = createAdminClient()
   // Stale workers (crashed mid-send) leave rows in 'processing'; they become claimable
@@ -80,3 +80,6 @@ export async function GET(req: NextRequest) {
   }
   return NextResponse.json({ processed: events?.length ?? 0, sent })
 }
+
+export const GET = handle
+export const POST = handle
