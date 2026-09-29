@@ -4,6 +4,14 @@ import { OrderForm } from './order-form'
 import Link from 'next/link'
 import { ArrowRight } from 'lucide-react'
 
+type QuoteItemRecord = {
+  name: string
+  description: string | null
+  quantity: number
+  unit_price: number
+  discount: number
+}
+
 export default async function NewOrderPage(props: {
   searchParams: Promise<{ quote_id?: string }>
 }) {
@@ -36,11 +44,17 @@ export default async function NewOrderPage(props: {
       .single()
       
     if (quote) {
+      const quoteRecord = quote as unknown as {
+        id: string
+        contact_id: string
+        notes: string | null
+        quote_items: QuoteItemRecord[]
+      }
       defaultValues = {
-        contact_id: quote.contact_id,
-        quote_id: quote.id,
-        notes: quote.notes,
-        items: quote.quote_items.map((i) => ({
+        contact_id: quoteRecord.contact_id,
+        quote_id: quoteRecord.id,
+        notes: quoteRecord.notes,
+        items: quoteRecord.quote_items.map((i) => ({
           name: i.name,
           description: i.description,
           quantity: i.quantity,

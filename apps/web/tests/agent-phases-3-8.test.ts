@@ -39,6 +39,7 @@ describe('agent phase 3-8', () => {
       body: 'A team member has been assigned',
     })
 
+    if (!created) throw new Error('Expected notification to be created')
     expect(created.title).toBe('Assigned')
     const list = await listNotifications(supabase, ORG, MEMBER)
     expect(list.some((n) => n.id === created.id)).toBe(true)

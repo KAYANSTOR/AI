@@ -22,6 +22,19 @@ RETURNS SETOF UUID LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public
   SELECT organization_id FROM organization_members WHERE user_id = auth.uid();
 $$;
 
+-- Shared updated_at trigger used by later domain migrations (quotes, orders, reports).
+CREATE OR REPLACE FUNCTION public.update_updated_at_column()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = public
+AS $
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$;
+
 -- Drop incomplete example policies
 DROP POLICY IF EXISTS "Users can view contacts in their organization" ON contacts;
 DROP POLICY IF EXISTS "Users can insert contacts in their organization" ON contacts;

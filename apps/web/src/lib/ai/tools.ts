@@ -26,6 +26,15 @@ export type ToolContext = {
 }
 export type ExecuteOptions = { confirmed?:boolean }
 
+type StoredQuoteItem = {
+  name: string
+  description: string | null
+  quantity: number
+  unit_price: number
+  discount: number
+  line_total: number
+}
+
 export async function getToolDefinitionsForAgent(supabase:SupabaseClient,organizationId:string,agentId?:string|null,actor:ToolActor='agent'){
   const enabled=await getEnabledCapabilities(supabase,organizationId)
   const definitions:Array<{name:string,description:string,input_schema:Record<string,unknown>}>=[]
@@ -328,7 +337,8 @@ async function toolConvertQuoteToOrder(ctx: ToolContext, args: Record<string, un
 
     if (error || !order) throw new Error('Database error creating order from quote.')
 
-    const itemsToInsert = quote.quote_items.map((i) => ({
+    const quoteItems = quote.quote_items as unknown as StoredQuoteItem[]
+    const itemsToInsert = quoteItems.map((i) => ({
         order_id: order.id,
         name: i.name,
         description: i.description,
