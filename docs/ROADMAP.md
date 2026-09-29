@@ -1,24 +1,28 @@
 # FrontDesk AI — Execution Roadmap
 
-This document turns `docs/PLAN.md` into the implementation queue.
+This document turns `docs/PLAN.md` into the implementation order.
 
 ## Current priority
 
-**NOW**
-- Phase 0: baseline stabilization
-- Phase 1: activation + operational core
+**DONE ON MAIN (code; live DB migrations 0023–0028 still operator-applied)**
+- Phase 0: baseline stabilization (CI build gate, tenant resolution contracts)
+- Phase 1: activation + operational core surfaces
+- Phase 2: revenue operations (leads, quotes, orders, follow-up, SLA, segments, analytics)
+- Phase 3: automation engine, campaigns MVP, AI governance, integration health hub
+- Phase 4: usage meters + server-side entitlements + Stripe webhook/checkout scaffolding
 
-**NEXT**
-- Phase 2: core revenue operations
+**OPERATOR**
+- Apply packages/db/migrations 0023–0028 on production Supabase
+- Set CRON_SECRET, Stripe secrets if enabling paid plans
+- Channel provider smoke tests with production credentials
 
-**THEN**
-- Phase 3: automation + campaigns + growth
+**NEXT (Deferred / polish)**
+- Tier C1–C5 completion features
+- Visual workflow editor, Stripe Customer Portal UI
+- Deeper Business Agent write tools
 
 **AFTER COMMERCIAL CORE**
-- Phase 4: analytics/business agent/billing
-
-**OPTIONAL / LATER**
-- Tier C1–C5 completion features
+- Marketplace connectors, mobile, enterprise SSO
 
 ---
 
