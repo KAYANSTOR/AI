@@ -24,7 +24,7 @@ const geistMono = Geist_Mono({
  * Absolute base URL for canonical / Open Graph metadata.
  * Set NEXT_PUBLIC_SITE_URL in production; localhost is the dev default.
  */
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://frontdesk-ai-eosin.vercel.app'
 
 const title = 'FrontDesk AI — موظّف استقبال بالذكاء الاصطناعي لشركتك'
 export const metadata: Metadata = {
