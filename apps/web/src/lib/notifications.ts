@@ -16,6 +16,10 @@ export type NotificationRow = {
   created_at: string
 }
 
+/**
+ * Creates an in-app notification. When idempotencyKey is provided, a unique
+ * (organization_id, idempotency_key) constraint absorbs duplicates safely.
+ */
 export async function createNotification(
   supabase: SupabaseClient | Awaited<ReturnType<typeof createClient>>,
   args: {
@@ -26,8 +30,9 @@ export async function createNotification(
     notificationType: NotificationType
     title: string
     body: string
+    idempotencyKey?: string | null
   }
-): Promise<NotificationRow> {
+): Promise<NotificationRow | null> {
   const payload = {
     organization_id: args.organizationId,
     member_id: args.memberId ?? null,
@@ -37,16 +42,22 @@ export async function createNotification(
     title: args.title,
     body: args.body,
     is_read: false,
+    idempotency_key: args.idempotencyKey ?? null,
     created_at: new Date().toISOString(),
   }
 
   const { data, error } = await supabase
     .from('notifications')
     .insert(payload)
-    .select('id, organization_id, member_id, entity_type, entity_id, notification_type, title, body, is_read, created_at')
-    .single()
+    .select(
+      'id, organization_id, member_id, entity_type, entity_id, notification_type, title, body, is_read, created_at'
+    )
+    .maybeSingle()
 
-  if (error) throw error
+  if (error) {
+    if (error.code === '23505') return null
+    throw error
+  }
   return data as NotificationRow
 }
 
@@ -57,7 +68,9 @@ export async function listNotifications(
 ): Promise<NotificationRow[]> {
   let query = supabase
     .from('notifications')
-    .select('id, organization_id, member_id, entity_type, entity_id, notification_type, title, body, is_read, created_at')
+    .select(
+      'id, organization_id, member_id, entity_type, entity_id, notification_type, title, body, is_read, created_at'
+    )
     .eq('organization_id', organizationId)
     .order('created_at', { ascending: false })
 
@@ -78,7 +91,9 @@ export async function markNotificationRead(
     .update({ is_read: true })
     .eq('organization_id', organizationId)
     .eq('id', notificationId)
-    .select('id, organization_id, member_id, entity_type, entity_id, notification_type, title, body, is_read, created_at')
+    .select(
+      'id, organization_id, member_id, entity_type, entity_id, notification_type, title, body, is_read, created_at'
+    )
     .single()
 
   if (error) throw error
