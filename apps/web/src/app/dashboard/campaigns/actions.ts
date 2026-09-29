@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { requireAdminCapability, audit } from '@/lib/capabilities/guard'
 import { actionErrorMessage, supabaseActionError } from '@/lib/i18n/action-error'
 import { materializeCampaignAudience } from '@/lib/campaigns'
+import { assertWithinLimit, EntitlementExceededError } from '@/lib/billing/entitlements'
 
 export type CampaignResult = { ok: true; campaignId?: string } | { ok: false; error: string }
 
@@ -67,11 +68,28 @@ export async function startCampaignAction(campaignId: string): Promise<CampaignR
       return { ok: false, error: 'لا يمكن بدء الحملة من حالتها الحالية.' }
     }
 
-    await materializeCampaignAudience(ctx.supabase, {
+    const audienceSize = await materializeCampaignAudience(ctx.supabase, {
       organizationId: ctx.organizationId,
       campaignId,
       segmentId: campaign.segment_id,
     })
+
+    try {
+      await assertWithinLimit(
+        ctx.supabase,
+        ctx.organizationId,
+        'campaign_sends',
+        Math.max(1, audienceSize)
+      )
+    } catch (err) {
+      if (err instanceof EntitlementExceededError) {
+        return {
+          ok: false,
+          error: `تجاوزت حد إرسال الحملات (${err.used}/${err.limit}). رقِّ الباقة أو قلّل الجمهور.`,
+        }
+      }
+      throw err
+    }
 
     const { error } = await ctx.supabase
       .from('campaigns')
@@ -85,7 +103,7 @@ export async function startCampaignAction(campaignId: string): Promise<CampaignR
 
     if (error) return { ok: false, error: supabaseActionError(error) }
 
-    await audit(ctx, 'campaign.started', 'campaign', campaignId)
+    await audit(ctx, 'campaign.started', 'campaign', campaignId, { audienceSize })
     revalidatePath('/dashboard/campaigns')
     return { ok: true, campaignId }
   } catch (error) {
