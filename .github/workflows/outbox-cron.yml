@@ -10,7 +10,7 @@ permissions: {}
 jobs:
   trigger:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 14
     steps:
       - name: Trigger outbox worker
         env:
@@ -60,3 +60,11 @@ jobs:
         run: |
           curl --fail-with-body -sS -X POST --max-time 120 --retry 2 --retry-delay 10 \
             -H "Authorization: Bearer $CRON_SECRET" "$WORKFLOWS_URL"
+
+      - name: Trigger campaigns processor
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          CAMPAIGNS_URL: ${{ vars.CAMPAIGNS_URL || 'https://frontdesk-ai-eosin.vercel.app/api/cron/campaigns' }}
+        run: |
+          curl --fail-with-body -sS -X POST --max-time 120 --retry 2 --retry-delay 10 \
+            -H "Authorization: Bearer $CRON_SECRET" "$CAMPAIGNS_URL"
