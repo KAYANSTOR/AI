@@ -26,8 +26,14 @@ CREATE TABLE IF NOT EXISTS auth.users (
 );
 
 -- Mirrors Supabase's auth.uid(): the subject claim of the request JWT.
+-- Supabase accepts both the legacy single-claim setting and the JSON `request.jwt.claims`
+-- form, so the shim must too: a harness that only understood one of them would silently
+-- run RLS checks as an anonymous user and pass them for the wrong reason.
 CREATE OR REPLACE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$
-  SELECT NULLIF(current_setting('request.jwt.claim.sub', true), '')::uuid
+  SELECT COALESCE(
+    NULLIF(current_setting('request.jwt.claim.sub', true), ''),
+    NULLIF(current_setting('request.jwt.claims', true), '')::jsonb ->> 'sub'
+  )::uuid
 $$;
 
 -- 2. PostgREST roles --------------------------------------------------------------
