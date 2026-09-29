@@ -10,7 +10,7 @@ permissions: {}
 jobs:
   trigger:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 12
     steps:
       - name: Trigger outbox worker
         env:
@@ -44,3 +44,19 @@ jobs:
         run: |
           curl --fail-with-body -sS -X POST --max-time 120 --retry 2 --retry-delay 10 \
             -H "Authorization: Bearer $CRON_SECRET" "$QUOTES_EXPIRE_URL"
+
+      - name: Trigger appointment reminders
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          APPT_REMINDERS_URL: ${{ vars.APPT_REMINDERS_URL || 'https://frontdesk-ai-eosin.vercel.app/api/cron/appointment-reminders' }}
+        run: |
+          curl --fail-with-body -sS -X POST --max-time 120 --retry 2 --retry-delay 10 \
+            -H "Authorization: Bearer $CRON_SECRET" "$APPT_REMINDERS_URL"
+
+      - name: Trigger workflow runner
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          WORKFLOWS_URL: ${{ vars.WORKFLOWS_URL || 'https://frontdesk-ai-eosin.vercel.app/api/cron/workflows' }}
+        run: |
+          curl --fail-with-body -sS -X POST --max-time 120 --retry 2 --retry-delay 10 \
+            -H "Authorization: Bearer $CRON_SECRET" "$WORKFLOWS_URL"
