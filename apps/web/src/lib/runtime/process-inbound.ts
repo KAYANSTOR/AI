@@ -117,6 +117,9 @@ export async function processInboundMessage(
         contactId: contact.contactId,
         supabase,
         agentId: agent?.id ?? null,
+        // The stored action originated from the agent and is only executed here because the
+        // customer explicitly affirmed it, so the agent remains the responsible actor.
+        actor: 'agent',
       },
       { confirmed: true }
     )

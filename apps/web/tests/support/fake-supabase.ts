@@ -322,3 +322,52 @@ export function createFakeSupabase(tables: FakeDb, rpcs: Record<string, RpcHandl
 
   return { client, db }
 }
+
+/**
+ * Stands in for public.holiday_aware_hours by applying the same precedence the SQL
+ * function enforces against the in-memory rows: a date-scoped exception beats the weekly
+ * schedule, a location-specific exception beats an organisation-wide one, and a day with
+ * no configuration is closed. Availability tests therefore exercise the real rules instead
+ * of a canned answer.
+ */
+export function holidayAwareHoursRpc(db: FakeDb): RpcHandler {
+  return (args) => {
+    const organizationId = String(args.p_organization_id ?? '')
+    const locationId = args.p_location_id == null ? null : String(args.p_location_id)
+    const day = String(args.p_day ?? '')
+    const dayOfWeek = new Date(`${day}T00:00:00Z`).getUTCDay()
+
+    const exceptions = (db.business_hour_exceptions?.rows ?? []).filter(
+      (row) =>
+        row.organization_id === organizationId &&
+        String(row.exception_date) === day &&
+        (row.location_id == null || String(row.location_id) === locationId)
+    )
+    exceptions.sort((a, b) => Number(b.location_id != null) - Number(a.location_id != null))
+    const exception = exceptions[0]
+    if (exception) {
+      return [
+        {
+          is_closed: Boolean(exception.is_closed),
+          open_time: exception.open_time ?? null,
+          close_time: exception.close_time ?? null,
+        },
+      ]
+    }
+
+    const weekly = (db.business_hours?.rows ?? []).find(
+      (row) => row.organization_id === organizationId && Number(row.day_of_week) === dayOfWeek
+    )
+    if (weekly) {
+      return [
+        {
+          is_closed: Boolean(weekly.is_closed),
+          open_time: weekly.open_time ?? null,
+          close_time: weekly.close_time ?? null,
+        },
+      ]
+    }
+
+    return [{ is_closed: true, open_time: null, close_time: null }]
+  }
+}

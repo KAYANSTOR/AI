@@ -6,12 +6,60 @@ export type TimeSlot = {
   label: string
 }
 
+/** Postgres unique-violation, raised by ux_appointment_slot when a slot is taken. */
+const UNIQUE_VIOLATION = '23505'
+
+export class SlotUnavailableError extends Error {
+  constructor() {
+    super('This slot is no longer available.')
+    this.name = 'SlotUnavailableError'
+  }
+}
+
+type OpeningHours = { is_closed: boolean; open_time: string | null; close_time: string | null }
+
+/**
+ * Opening hours for one date.
+ *
+ * Reads through `holiday_aware_hours`, the same authority the database uses, so a holiday
+ * or a one-off opening change is respected instead of being silently ignored. When no hours
+ * are configured the function reports closed, and availability stays empty rather than
+ * inventing a default schedule.
+ */
+export async function getOpeningHours(
+  supabase: SupabaseClient,
+  organizationId: string,
+  dateYmd: string,
+  locationId?: string | null
+): Promise<OpeningHours> {
+  const { data, error } = await supabase.rpc('holiday_aware_hours', {
+    p_organization_id: organizationId,
+    p_location_id: locationId ?? null,
+    p_day: dateYmd,
+  })
+
+  if (error) throw new Error(error.message)
+
+  // A set-returning function comes back as an array. Anything else is treated as closed:
+  // availability must fail closed rather than assume the business is open.
+  const rows = Array.isArray(data) ? (data as OpeningHours[]) : []
+  const row = rows[0]
+  if (!row) return { is_closed: true, open_time: null, close_time: null }
+
+  return {
+    is_closed: row.is_closed ?? true,
+    open_time: row.open_time,
+    close_time: row.close_time,
+  }
+}
+
 export async function findAvailableSlots(
   supabase: SupabaseClient,
   organizationId: string,
   serviceId: string,
   dateYmd: string,
-  limit = 8
+  limit = 8,
+  locationId?: string | null
 ): Promise<TimeSlot[]> {
   const { data: service } = await supabase
     .from('services')
@@ -25,16 +73,9 @@ export async function findAvailableSlots(
   }
 
   const duration = service.duration_minutes ?? 60
-  const day = new Date(`${dateYmd}T12:00:00Z`).getUTCDay()
+  const hours = await getOpeningHours(supabase, organizationId, dateYmd, locationId)
 
-  const { data: hours } = await supabase
-    .from('business_hours')
-    .select('day_of_week, open_time, close_time, is_closed')
-    .eq('organization_id', organizationId)
-    .eq('day_of_week', day)
-    .maybeSingle()
-
-  if (!hours || hours.is_closed) {
+  if (hours.is_closed || !hours.open_time || !hours.close_time) {
     return []
   }
 
@@ -100,6 +141,7 @@ export async function createAppointmentRecord(
     serviceId: string
     startsAt: string
     endsAt: string
+    locationId?: string | null
     notes?: string
   }
 ) {
@@ -117,6 +159,10 @@ export async function createAppointmentRecord(
     .select('id, starts_at, ends_at, status')
     .single()
 
-  if (error) throw new Error(error.message)
+  if (error) {
+    // ux_appointment_slot is authoritative: a racing writer lost the slot.
+    if (error.code === UNIQUE_VIOLATION) throw new SlotUnavailableError()
+    throw new Error(error.message)
+  }
   return data
 }

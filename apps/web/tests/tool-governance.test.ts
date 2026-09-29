@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { createFakeSupabase, type FakeDb } from './support/fake-supabase'
-import { TOOL_POLICIES } from '@/lib/ai/registry'
+import { createFakeSupabase, holidayAwareHoursRpc, type FakeDb } from './support/fake-supabase'
+import { TOOL_POLICIES, type ToolActor } from '@/lib/ai/registry'
 import { executeTool, getToolDefinitionsForAgent } from '@/lib/ai/tools'
 
 const ORG = 'aaaaaaaa-0000-4000-8000-000000000001'
@@ -33,11 +33,14 @@ function baseTables(overrides: FakeDb = {}): FakeDb {
 }
 
 function setup(tables: FakeDb) {
-  const fake = createFakeSupabase(tables)
+  const fake = createFakeSupabase(tables, { holiday_aware_hours: (args) => holidayAwareHoursRpc(fake.db)(args) })
   return { db: fake.db, supabase: fake.client as unknown as SupabaseClient }
 }
 
-function context(supabase: SupabaseClient, extra: { conversationId?: string | null; agentId?: string | null } = {}) {
+function context(
+  supabase: SupabaseClient,
+  extra: { conversationId?: string | null; agentId?: string | null; actor?: ToolActor } = {}
+) {
   return {
     supabase,
     organizationId: ORG,
@@ -45,6 +48,7 @@ function context(supabase: SupabaseClient, extra: { conversationId?: string | nu
     conversationId: extra.conversationId === undefined ? CONVERSATION : extra.conversationId,
     contactId: CONTACT,
     agentId: extra.agentId === undefined ? AGENT : extra.agentId,
+    actor: extra.actor ?? 'agent',
   }
 }
 
@@ -54,9 +58,16 @@ describe('capability registry', () => {
       expect(policy.name).toBe(name)
       expect(['read', 'write']).toContain(policy.risk)
       expect(typeof policy.requiresConfirmation).toBe('boolean')
-      // A write tool must either require confirmation or be explicitly capability-free
-      // (the only such tool is the human handoff escape hatch).
-      if (policy.risk === 'write' && !policy.requiresConfirmation) expect(name).toBe('request_human_handoff')
+      // A write tool must declare who may invoke it and inside which tenant boundary.
+      expect(policy.allowedActors.length).toBeGreaterThan(0)
+      expect(['organization', 'conversation', 'channel']).toContain(policy.tenantScope)
+      expect(['read', 'sensitive_write']).toContain(policy.auditClass)
+      // A write tool either requires explicit confirmation, or is one of the two writes that
+      // are safe to run on the customer's own initiative: reaching a human, and recording the
+      // enquiry the customer just made. Anything else must ask first.
+      if (policy.risk === 'write' && !policy.requiresConfirmation) {
+        expect(['request_human_handoff', 'create_lead']).toContain(name)
+      }
       expect(policy.inputSchema).toHaveProperty('type', 'object')
     }
   })

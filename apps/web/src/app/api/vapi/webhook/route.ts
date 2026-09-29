@@ -244,6 +244,7 @@ async function handleToolCalls(
       contactId: context.contactId,
       agentId: context.agentId,
       supabase,
+      actor: 'agent',
     })
     results.push({ toolCallId: call.id, result: out.ok ? out.result : { error: out.error } })
   }

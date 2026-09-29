@@ -57,7 +57,7 @@ export async function runAgentTurn(args:{
       const results:Record<string,unknown>[]=[]
       for(const tool of toolBlocks){
         const result=await executeTool(tool.name,tool.input,{
-          organizationId:args.organizationId,businessId:args.businessId,conversationId:args.conversationId,contactId:args.contactId,supabase:args.supabase,agentId:agent?.id ?? null,
+          organizationId:args.organizationId,businessId:args.businessId,conversationId:args.conversationId,contactId:args.contactId,supabase:args.supabase,agentId:agent?.id ?? null,actor:'agent',
         })
         results.push({type:'tool_result',tool_use_id:tool.id,content:JSON.stringify(result.ok ? result.result : {error:result.error})})
       }

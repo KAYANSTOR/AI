@@ -1,12 +1,15 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { createAppointmentRecord, findAvailableSlots } from '@/lib/calendar/slots'
 import { resolveContactByPhone } from '@/lib/channels/contacts'
-import { getToolPolicy } from '@/lib/ai/registry'
+import { getToolPolicy, isActorAllowed, type ToolActor } from '@/lib/ai/registry'
 import { getEnabledCapabilities } from '@/lib/ai/capabilities'
 import { createPendingAction } from '@/lib/runtime/pending'
+import { searchKnowledge } from '@/lib/knowledge/retrieval'
+import { TOOL_POLICIES } from '@/lib/ai/registry'
 
-export const TOOL_NAMES = ['get_customer','find_available_slots','create_appointment','request_human_handoff'] as const
-export type ToolName = (typeof TOOL_NAMES)[number]
+// The registry is the only place tools are declared.
+export { TOOL_NAMES } from '@/lib/ai/registry'
+
 export type ToolContext = {
   organizationId:string
   businessId:string
@@ -15,16 +18,22 @@ export type ToolContext = {
   contactId?:string|null
   supabase:SupabaseClient
   agentId?:string|null
+  /**
+   * Who is invoking the tool. Every call site states this explicitly so a tool can
+   * never be reached by an actor the registry does not authorise.
+   */
+  actor:ToolActor
 }
 export type ExecuteOptions = { confirmed?:boolean }
 
-export async function getToolDefinitionsForAgent(supabase:SupabaseClient,organizationId:string,agentId?:string|null){
+export async function getToolDefinitionsForAgent(supabase:SupabaseClient,organizationId:string,agentId?:string|null,actor:ToolActor='agent'){
   const enabled=await getEnabledCapabilities(supabase,organizationId)
   const definitions:Array<{name:string,description:string,input_schema:Record<string,unknown>}>=[]
 
-  for(const name of TOOL_NAMES){
+  for(const name of Object.keys(TOOL_POLICIES)){
     const policy=getToolPolicy(name)
     if(!policy) continue
+    if(!isActorAllowed(policy,actor)) continue
     let allowed=policy.capability ? enabled.has(policy.capability) : true
     if(agentId){
       const {data}=await supabase.from('agent_tool_policies').select('is_allowed').eq('agent_id',agentId).eq('tool_name',name).maybeSingle()
@@ -41,6 +50,13 @@ export async function executeTool(name:string,rawArgs:Record<string,unknown>,ctx
   if(!policy) return {ok:false as const,error:'Unknown tool: '+name}
   const started=Date.now()
   try{
+    // Actor authorisation comes first: a tool the registry does not expose to this actor
+    // must not even be evaluated for capabilities or confirmation.
+    if(!isActorAllowed(policy,ctx.actor)){
+      await recordToolExecution(ctx,name,'blocked',rawArgs,{error:'actor_not_allowed'},policy.requiresConfirmation,started)
+      return {ok:false as const,error:'This actor is not allowed to invoke '+name+'.'}
+    }
+
     const enabled=await getEnabledCapabilities(ctx.supabase,ctx.organizationId)
     if(policy.capability && !enabled.has(policy.capability)){
       await recordToolExecution(ctx,name,'blocked',rawArgs,{error:'capability_disabled'},policy.requiresConfirmation,started)
@@ -74,8 +90,12 @@ export async function executeTool(name:string,rawArgs:Record<string,unknown>,ctx
       case 'get_customer': result=await toolGetCustomer(ctx,rawArgs); break
       case 'find_available_slots': result=await toolFindSlots(ctx,rawArgs); break
       case 'create_appointment': result=await toolCreateAppointment(ctx,rawArgs); break
+      case 'create_lead': result=await toolCreateLead(ctx,rawArgs); break
+      case 'search_knowledge': result=await toolSearchKnowledge(ctx,rawArgs); break
       case 'request_human_handoff': result=await toolHandoff(ctx,rawArgs); break
     }
+    if(result === undefined) return {ok:false as const,error:'Tool '+name+' has no implementation.'}
+    if(policy.auditClass==='sensitive_write') await writeToolAudit(ctx,name,policy.capability,result)
     await recordToolExecution(ctx,name,'succeeded',rawArgs,result,requiresConfirmation,started)
     return {ok:true as const,result}
   }catch(error){
@@ -129,6 +149,48 @@ async function toolCreateAppointment(ctx:ToolContext,args:Record<string,unknown>
   const {error:leadError}=await ctx.supabase.from('leads').insert({organization_id:ctx.organizationId,contact_id:contact.contactId,status:'booked',intent:service.name})
   if(leadError && leadError.code!=='23505') throw new Error(leadError.message)
   return {appointmentId:appointment.id,service:service.name,startsAt:appointment.starts_at,status:appointment.status,contactId:contact.contactId}
+}
+
+async function toolCreateLead(ctx:ToolContext,args:Record<string,unknown>){
+  const phone=String(args.phone ?? '').trim()
+  if(!phone) throw new Error('phone is required')
+  const name=args.name ? String(args.name).trim() : null
+  const intent=args.intent ? String(args.intent).trim() : null
+  const notes=args.notes ? String(args.notes).trim() : null
+  const estimated=args.estimated_value == null ? null : Number(args.estimated_value)
+  if(estimated != null && (!Number.isFinite(estimated) || estimated < 0)) throw new Error('estimated_value must be a positive number')
+
+  const contact=await resolveContactByPhone(ctx.supabase,ctx.organizationId,phone,name)
+  const {data,error}=await ctx.supabase.from('leads').insert({
+    organization_id:ctx.organizationId,contact_id:contact.contactId,status:'new',intent,notes,
+    estimated_value:estimated,source:ctx.agentId ? 'ai_agent' : 'staff',
+  }).select('id,status,intent').single()
+  if(error) throw new Error(error.message)
+  return {leadId:data.id,status:data.status,intent:data.intent,contactId:contact.contactId}
+}
+
+async function toolSearchKnowledge(ctx:ToolContext,args:Record<string,unknown>){
+  const query=String(args.query ?? '').trim()
+  if(query.length < 2) throw new Error('query is required')
+  const category=args.category ? String(args.category).trim() : null
+  const matches=await searchKnowledge(ctx.supabase,ctx.organizationId,query,{category})
+  if(matches.length===0){
+    // Never fabricate: an unmatched question must be reported as uncovered.
+    return {found:false,matches:[],message:'No knowledge base entry covers this question. Do not guess; offer a human handoff.'}
+  }
+  return {found:true,matches:matches.map(m=>({title:m.title,category:m.category,content:m.content}))}
+}
+
+/** Audit trail for tool writes, written through the membership-guarded path. */
+async function writeToolAudit(ctx:ToolContext,name:string,capability:string|null,result:unknown){
+  await ctx.supabase.rpc('log_audit_event',{
+    p_organization_id:ctx.organizationId,
+    p_action:'tool.'+name,
+    p_entity_type:'conversation',
+    p_entity_id:ctx.conversationId ?? null,
+    p_business_id:ctx.businessId,
+    p_metadata:{capability,result},
+  })
 }
 
 async function toolHandoff(ctx:ToolContext,args:Record<string,unknown>){
