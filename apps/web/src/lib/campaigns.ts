@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { getConsentStatus } from '@/lib/channels/consent'
 import { enqueueOutbound } from '@/lib/channels/outbox'
 import { resolveSegmentContactIds, type SegmentCriteria } from '@/lib/segments'
+import { recordMeterUsage } from '@/lib/billing/entitlements'
 
 export async function materializeCampaignAudience(
   supabase: SupabaseClient,
@@ -37,7 +38,6 @@ export async function materializeCampaignAudience(
     status: 'pending',
   }))
 
-  // Upsert-like: ignore duplicates on (campaign_id, contact_id)
   const { error } = await supabase.from('campaign_recipients').insert(rows)
   if (error && error.code !== '23505') throw error
 
@@ -160,6 +160,11 @@ export async function processCampaignBatch(
         .eq('status', 'pending')
 
       queued++
+      try {
+        await recordMeterUsage(supabase, input.organizationId, 'campaign_sends', 1)
+      } catch {
+        // meter optional until migration applied
+      }
     } catch (err) {
       await supabase
         .from('campaign_recipients')
