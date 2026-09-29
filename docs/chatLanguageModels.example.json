@@ -1,0 +1,60 @@
+[
+  {
+    "name": "CodeCraft",
+    "vendor": "customendpoint",
+    "apiKey": "${input:codecraftApiKey}",
+    "apiType": "chat-completions",
+    "url": "https://codecraftapi.com/v1",
+    "models": [
+      {
+        "id": "claude-opus-4.8",
+        "name": "CodeCraft - Claude Opus 4.8",
+        "url": "https://codecraftapi.com/v1/chat/completions",
+        "toolCalling": true,
+        "vision": true,
+        "thinking": true,
+        "streaming": true,
+        "contextWindow": 128000
+      }
+    ]
+  },
+  {
+    "name": "OpenRouter",
+    "vendor": "customendpoint",
+    "apiKey": "${input:openrouterApiKey}",
+    "apiType": "chat-completions",
+    "url": "https://openrouter.ai/api/v1",
+    "models": [
+      {
+        "id": "anthropic/claude-opus-4.8",
+        "name": "OpenRouter - Claude Opus 4.8",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "toolCalling": true,
+        "vision": true,
+        "thinking": true,
+        "streaming": true,
+        "contextWindow": 1000000
+      },
+      {
+        "id": "openai/gpt-5.5",
+        "name": "OpenRouter - GPT-5.5",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "toolCalling": true,
+        "vision": true,
+        "thinking": true,
+        "streaming": true,
+        "contextWindow": 1050000
+      },
+      {
+        "id": "anthropic/claude-sonnet-4.6",
+        "name": "OpenRouter - Claude Sonnet 4.6",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "toolCalling": true,
+        "vision": true,
+        "thinking": true,
+        "streaming": true,
+        "contextWindow": 1000000
+      }
+    ]
+  }
+]

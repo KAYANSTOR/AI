@@ -18,6 +18,10 @@ import {
   MapPin,
   BookOpen,
   ShoppingBag,
+  BarChart3,
+  CreditCard,
+  Sparkles,
+  FileSpreadsheet,
   X,
 } from 'lucide-react'
 import { useEffect, useRef } from 'react'
@@ -47,7 +51,11 @@ const navItems: NavItem[] = [
   { name: ar.nav.locations, href: '/dashboard/locations', icon: MapPin, capability: null },
   { name: ar.nav.channels, href: '/dashboard/channels', icon: RadioTower, capability: null },
   { name: ar.nav.agent, href: '/dashboard/agent', icon: Bot, capability: null },
+  { name: ar.nav.copilot, href: '/dashboard/copilot', icon: Sparkles, capability: null },
   { name: ar.nav.setup, href: '/dashboard/setup', icon: SlidersHorizontal, capability: null },
+  { name: ar.nav.analytics, href: '/dashboard/analytics', icon: BarChart3, capability: null },
+  { name: ar.nav.reports, href: '/dashboard/reports', icon: FileSpreadsheet, capability: null },
+  { name: ar.nav.billing, href: '/dashboard/billing', icon: CreditCard, capability: null },
   { name: ar.nav.settings, href: '/dashboard/settings', icon: Settings, capability: null },
 ]
 
