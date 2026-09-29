@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { requireCapability, audit, type AuthorizedContext } from '@/lib/capabilities/guard'
 import { actionErrorMessage, supabaseActionError } from '@/lib/i18n/action-error'
 import { createNotification } from '@/lib/notifications'
+import { dispatchWorkflowTrigger } from '@/lib/workflows/triggers'
 
 export type InboxResult = { ok: boolean; error?: string; message?: string }
 
@@ -70,6 +71,22 @@ export async function takeOverAction(conversationId: string, reason?: string): P
         body: 'أصبحت مسؤولاً عن هذه المحادثة بعد تسليم من الوكيل.',
         idempotencyKey: `handoff:${conversationId}:${memberId}`,
       })
+    }
+
+    try {
+      await dispatchWorkflowTrigger(ctx.supabase, {
+        organizationId: ctx.organizationId,
+        triggerType: 'conversation.handoff',
+        payload: {
+          conversationId,
+          contactId: conversation.contact_id,
+          memberId,
+          reason: reason ?? 'staff_takeover',
+        },
+        idempotencyPrefix: `conv-handoff:${conversationId}`,
+      })
+    } catch {
+      // non-blocking
     }
 
     await audit(ctx, 'conversation.takeover', 'conversation', conversationId, {
