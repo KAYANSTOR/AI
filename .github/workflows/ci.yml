@@ -35,6 +35,52 @@ jobs:
           node-version: 20
           cache: npm
           cache-dependency-path: apps/web/package-lock.json
-      - run: npm ci
-      - run: npm run lint
-      - run: npm run build
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.2"
+      - name: Install
+        run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Typecheck
+        run: npm run typecheck
+      # The runner and the tests are executed with Bun. Bun is a runtime here, not a
+      # dependency: nothing is added to package.json, so `npm ci` stays authoritative.
+      - name: Unit tests
+        run: bun test
+
+  database:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:14
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: frontdesk_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/frontdesk_ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.2"
+      - name: Install migration runner dependencies
+        working-directory: packages/db
+        run: bun install --frozen-lockfile
+      # The migrations depend on objects Supabase provisions (the `auth` schema,
+      # auth.uid() and the PostgREST roles). This shim reproduces them so the
+      # migrations are actually executed instead of only being parsed.
+      - name: Provision Supabase-compatible shim
+        working-directory: packages/db
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f scripts/supabase-shim.sql
+      - name: Apply migrations
+        run: DATABASE_URL="$DATABASE_URL" bun run scripts/db/migrate.ts up
+      - name: Verify migrations are all applied
+        run: DATABASE_URL="$DATABASE_URL" bun run scripts/db/migrate.ts status
