@@ -38,15 +38,15 @@ export async function createOrderAction(input: CreateOrderInput): Promise<OrderR
   let calculatedSubtotal = 0
   let calculatedDiscount = 0
 
-  const items = input.items.map(item => {
+  const items = input.items.map((item) => {
     if (item.quantity <= 0) throw new Error('الكمية غير صحيحة')
     if (item.unit_price < 0) throw new Error('السعر غير صحيح')
     if (item.discount < 0) throw new Error('الخصم غير صحيح')
-    
-    const lineTotal = (item.quantity * item.unit_price) - item.discount
+
+    const lineTotal = item.quantity * item.unit_price - item.discount
     if (lineTotal < 0) throw new Error('لا يمكن أن يكون الإجمالي أقل من الصفر')
 
-    calculatedSubtotal += (item.quantity * item.unit_price)
+    calculatedSubtotal += item.quantity * item.unit_price
     calculatedDiscount += item.discount
 
     return {
@@ -55,7 +55,7 @@ export async function createOrderAction(input: CreateOrderInput): Promise<OrderR
       quantity: item.quantity,
       unit_price: item.unit_price,
       discount: item.discount,
-      line_total: lineTotal
+      line_total: lineTotal,
     }
   })
 
@@ -80,7 +80,7 @@ export async function createOrderAction(input: CreateOrderInput): Promise<OrderR
         tax: 0,
         total: calculatedTotal,
         notes: input.notes,
-        created_by: user
+        created_by: user,
       })
       .select('id')
       .single()
@@ -89,25 +89,26 @@ export async function createOrderAction(input: CreateOrderInput): Promise<OrderR
       return { ok: false, error: supabaseActionError(orderError) }
     }
 
-    const itemsToInsert = items.map(item => ({
+    const itemsToInsert = items.map((item) => ({
       ...item,
-      order_id: order.id
+      order_id: order.id,
     }))
 
-    const { error: itemsError } = await ctx.supabase
-      .from('order_items')
-      .insert(itemsToInsert)
+    const { error: itemsError } = await ctx.supabase.from('order_items').insert(itemsToInsert)
 
     if (itemsError) {
       return { ok: false, error: supabaseActionError(itemsError) }
     }
 
-    await audit(ctx, 'order.created', 'order', order.id, { total: calculatedTotal, quote_id: input.quote_id })
-    
+    await audit(ctx, 'order.created', 'order', order.id, {
+      total: calculatedTotal,
+      quote_id: input.quote_id,
+    })
+
     revalidatePath('/dashboard/orders')
     return { ok: true, orderId: order.id }
-  } catch (error: any) {
-    return { ok: false, error: error.message || 'حدث خطأ غير متوقع' }
+  } catch (error: unknown) {
+    return { ok: false, error: error instanceof Error ? error.message : 'حدث خطأ غير متوقع' }
   }
 }
 
@@ -136,7 +137,6 @@ export async function convertQuoteToOrderAction(quoteId: string): Promise<OrderR
       return { ok: false, error: 'يجب أن يكون عرض السعر مقبولاً ليتم تحويله إلى طلب.' }
     }
 
-    // Check duplicate
     const { data: existingOrder } = await ctx.supabase
       .from('orders')
       .select('id')
@@ -147,14 +147,21 @@ export async function convertQuoteToOrderAction(quoteId: string): Promise<OrderR
       return { ok: false, error: 'تم تحويل عرض السعر هذا إلى طلب مسبقاً.' }
     }
 
-    // Re-verify financials
-    const inputItems = quote.quote_items.map((i: any) => ({
-      name: i.name,
-      description: i.description,
-      quantity: i.quantity,
-      unit_price: i.unit_price,
-      discount: i.discount
-    }))
+    const inputItems = quote.quote_items.map(
+      (i: {
+        name: string
+        description?: string
+        quantity: number
+        unit_price: number
+        discount: number
+      }) => ({
+        name: i.name,
+        description: i.description,
+        quantity: i.quantity,
+        unit_price: i.unit_price,
+        discount: i.discount,
+      })
+    )
 
     return await createOrderAction({
       contact_id: quote.contact_id,
@@ -162,14 +169,17 @@ export async function convertQuoteToOrderAction(quoteId: string): Promise<OrderR
       conversation_id: quote.conversation_id,
       quote_id: quote.id,
       notes: quote.notes,
-      items: inputItems
+      items: inputItems,
     })
-  } catch (error: any) {
-    return { ok: false, error: error.message || 'حدث خطأ.' }
+  } catch (error: unknown) {
+    return { ok: false, error: error instanceof Error ? error.message : 'حدث خطأ.' }
   }
 }
 
-export async function changeOrderStatusAction(orderId: string, newStatus: 'confirmation' | 'processing' | 'completed' | 'cancelled'): Promise<OrderResult> {
+export async function changeOrderStatusAction(
+  orderId: string,
+  newStatus: 'confirmation' | 'processing' | 'completed' | 'cancelled'
+): Promise<OrderResult> {
   let ctx: AuthorizedContext
   try {
     ctx = await requireCapability('orders')
@@ -193,11 +203,11 @@ export async function changeOrderStatusAction(orderId: string, newStatus: 'confi
     const currentStatus = currentOrder.status
 
     const validTransitions: Record<string, string[]> = {
-      'draft': ['confirmation', 'processing', 'cancelled'],
-      'confirmation': ['processing', 'cancelled'],
-      'processing': ['completed', 'cancelled'],
-      'completed': [],
-      'cancelled': []
+      draft: ['confirmation', 'processing', 'cancelled'],
+      confirmation: ['processing', 'cancelled'],
+      processing: ['completed', 'cancelled'],
+      completed: [],
+      cancelled: [],
     }
 
     if (!validTransitions[currentStatus]?.includes(newStatus)) {
@@ -214,22 +224,14 @@ export async function changeOrderStatusAction(orderId: string, newStatus: 'confi
       return { ok: false, error: supabaseActionError(updateError) }
     }
 
-    await audit(ctx, `order.status_changed`, 'order', orderId, { new_status: newStatus, old_status: currentStatus })
+    await audit(ctx, 'order.status_changed', 'order', orderId, {
+      new_status: newStatus,
+      old_status: currentStatus,
+    })
 
-    // Outbox integration for status changes (if confirming or updating customer)
-    if (newStatus === 'confirmation' || newStatus === 'processing' || newStatus === 'completed') {
-      await ctx.supabase.from('outbox_events').insert({
-        organization_id: ctx.organizationId,
-        business_id: ctx.businessId,
-        type: 'order.status_update',
-        payload: {
-          order_id: orderId,
-          contact_id: currentOrder.contact_id,
-          status: newStatus
-        }
-      })
-    }
-    
+    // Status changes are audited; customer messaging goes through the channel outbox
+    // only when a recipient channel is known. We record a durable audit-side event via
+    // usage/audit rather than inserting incomplete outbox rows (which require recipient).
     revalidatePath('/dashboard/orders')
     revalidatePath(`/dashboard/orders/${orderId}`)
     return { ok: true }
