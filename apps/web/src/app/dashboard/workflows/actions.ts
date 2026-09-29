@@ -5,6 +5,8 @@ import { requireAdminCapability, audit } from '@/lib/capabilities/guard'
 import { actionErrorMessage, supabaseActionError } from '@/lib/i18n/action-error'
 import type { WorkflowDefinition } from '@/lib/workflows/engine'
 import { startWorkflowRun } from '@/lib/workflows/engine'
+import { getWorkflowTemplate } from '@/lib/workflows/templates'
+import { assertWithinLimit, EntitlementExceededError } from '@/lib/billing/entitlements'
 
 export type WorkflowActionResult =
   | { ok: true; workflowId?: string; runId?: string }
@@ -61,6 +63,25 @@ export async function createWorkflowAction(input: {
     return { ok: true, workflowId: data.id }
   } catch (error) {
     return { ok: false, error: actionErrorMessage(error, 'تعذّر إنشاء السير.') }
+  }
+}
+
+export async function installWorkflowTemplateAction(
+  templateId: string
+): Promise<WorkflowActionResult> {
+  try {
+    const ctx = await requireAdminCapability(null)
+    const template = getWorkflowTemplate(templateId)
+    if (!template) return { ok: false, error: 'القالب غير موجود.' }
+
+    return await createWorkflowAction({
+      name: template.name,
+      description: template.description,
+      triggerType: template.triggerType,
+      definition: template.definition,
+    })
+  } catch (error) {
+    return { ok: false, error: actionErrorMessage(error, 'تعذّر تثبيت القالب.') }
   }
 }
 
@@ -209,6 +230,15 @@ export async function testRunWorkflowAction(
 ): Promise<WorkflowActionResult> {
   try {
     const ctx = await requireAdminCapability(null)
+    try {
+      await assertWithinLimit(ctx.supabase, ctx.organizationId, 'automation_runs', 1)
+    } catch (err) {
+      if (err instanceof EntitlementExceededError) {
+        return { ok: false, error: 'تجاوزت حد تشغيل الأتمتة في خطتك.' }
+      }
+      throw err
+    }
+
     const result = await startWorkflowRun(ctx.supabase, {
       organizationId: ctx.organizationId,
       workflowId,
