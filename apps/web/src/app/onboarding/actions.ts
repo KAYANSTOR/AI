@@ -66,7 +66,9 @@ export async function evaluateSmokeTest(
   checks.push({
     name: 'active_channel',
     ok: hasChannel,
-    message: hasChannel ? 'At least one active channel is configured.' : 'No active communication channel was found for this organization.',
+    message: hasChannel
+      ? 'At least one active channel is configured.'
+      : 'No active communication channel was found for this organization.',
   })
 
   const { data: activeAgents } = await supabase
@@ -80,7 +82,9 @@ export async function evaluateSmokeTest(
   checks.push({
     name: 'active_agent',
     ok: hasActiveAgent,
-    message: hasActiveAgent ? 'An active AI agent exists.' : 'An active AI agent is required before go-live.',
+    message: hasActiveAgent
+      ? 'An active AI agent exists.'
+      : 'An active AI agent is required before go-live.',
   })
 
   const failedChecks = checks.filter((check) => !check.ok)
@@ -103,17 +107,19 @@ export async function advanceStep(nextStep: number, nextState: string = 'configu
   if (!org) throw new Error('Unauthorized')
 
   const supabase = await createClient()
+  const step = Math.min(11, Math.max(1, Math.floor(nextStep)))
 
   const { error } = await supabase
     .from('business_profiles')
-    .update({ 
-      activation_step: nextStep,
-      activation_state: nextState
+    .update({
+      activation_step: step,
+      activation_state: nextState,
     })
     .eq('organization_id', org.organizationId)
 
   if (error) throw error
   revalidatePath('/onboarding')
+  revalidatePath('/dashboard')
 }
 
 export async function submitSmokeTest() {
@@ -129,6 +135,7 @@ export async function submitSmokeTest() {
       smoke_test_status: outcome.passed ? 'passed' : 'failed',
       smoke_test_result: outcome,
       activation_state: outcome.passed ? 'ready_to_activate' : 'configuring',
+      activation_step: 10,
     })
     .eq('organization_id', org.organizationId)
 
@@ -138,37 +145,59 @@ export async function submitSmokeTest() {
     throw new Error(outcome.summary)
   }
 
-  await audit({ supabase, ...org, businessId: null } as unknown as any, 'smoke_test.passed', 'organization', org.organizationId)
+  await audit(
+    { supabase, ...org, businessId: null } as unknown as Parameters<typeof audit>[0],
+    'smoke_test.passed',
+    'organization',
+    org.organizationId
+  )
   revalidatePath('/onboarding')
+  revalidatePath('/dashboard')
 }
 
+/**
+ * Go-live is server-gated: the stored smoke_test_status is not trusted alone.
+ * We re-evaluate the same production checks so a stale "passed" flag cannot activate
+ * a tenant that no longer has a channel or agent.
+ */
 export async function activateGoLive() {
   const org = await getCurrentOrg()
   if (!org) throw new Error('Unauthorized')
 
   const supabase = await createClient()
+  const outcome = await evaluateSmokeTest(supabase, org)
 
-  const { data: profile } = await supabase
-    .from('business_profiles')
-    .select('smoke_test_status')
-    .eq('organization_id', org.organizationId)
-    .single()
-
-  if (profile?.smoke_test_status !== 'passed') {
-    throw new Error('Smoke test not passed')
+  if (!outcome.passed) {
+    await supabase
+      .from('business_profiles')
+      .update({
+        smoke_test_status: 'failed',
+        smoke_test_result: outcome,
+        activation_state: 'configuring',
+      })
+      .eq('organization_id', org.organizationId)
+    throw new Error(outcome.summary)
   }
 
   const { error } = await supabase
     .from('business_profiles')
-    .update({ 
-      activation_state: 'active'
+    .update({
+      activation_state: 'active',
+      activation_step: 11,
+      smoke_test_status: 'passed',
+      smoke_test_result: outcome,
     })
     .eq('organization_id', org.organizationId)
 
   if (error) throw error
-  
-  await audit({ supabase, ...org, businessId: null } as unknown as any, 'tenant.activated', 'organization', org.organizationId)
-  
+
+  await audit(
+    { supabase, ...org, businessId: null } as unknown as Parameters<typeof audit>[0],
+    'tenant.activated',
+    'organization',
+    org.organizationId
+  )
+
   revalidatePath('/dashboard')
   revalidatePath('/onboarding')
 }
