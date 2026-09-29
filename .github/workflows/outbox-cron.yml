@@ -20,3 +20,12 @@ jobs:
           if [ -z "$CRON_SECRET" ]; then echo "::error::CRON_SECRET repository secret is not set"; exit 1; fi
           curl --fail-with-body -sS -X POST --max-time 120 --retry 2 --retry-delay 10 \
             -H "Authorization: Bearer $CRON_SECRET" "$OUTBOX_CRON_URL"
+
+      - name: Trigger follow-up worker
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          FOLLOWUP_CRON_URL: ${{ vars.FOLLOWUP_CRON_URL || 'https://frontdesk-ai-eosin.vercel.app/api/cron/followup' }}
+        run: |
+          if [ -z "$CRON_SECRET" ]; then echo "::error::CRON_SECRET repository secret is not set"; exit 1; fi
+          curl --fail-with-body -sS -X POST --max-time 120 --retry 2 --retry-delay 10 \
+            -H "Authorization: Bearer $CRON_SECRET" "$FOLLOWUP_CRON_URL"
