@@ -1,5 +1,10 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { startWorkflowRun } from '@/lib/workflows/engine'
+import {
+  assertWithinLimit,
+  EntitlementExceededError,
+  recordMeterUsage,
+} from '@/lib/billing/entitlements'
 
 export type DomainTrigger =
   | 'lead.created'
@@ -24,7 +29,16 @@ export async function dispatchWorkflowTrigger(
     payload: Record<string, unknown>
     idempotencyPrefix?: string
   }
-): Promise<{ started: number; failed: number }> {
+): Promise<{ started: number; failed: number; skippedForEntitlement: boolean }> {
+  try {
+    await assertWithinLimit(supabase, input.organizationId, 'automation_runs', 1)
+  } catch (err) {
+    if (err instanceof EntitlementExceededError) {
+      return { started: 0, failed: 0, skippedForEntitlement: true }
+    }
+    throw err
+  }
+
   const { data: workflows, error } = await supabase
     .from('workflows')
     .select('id')
@@ -50,10 +64,15 @@ export async function dispatchWorkflowTrigger(
         idempotencyKey: key,
       })
       started++
+      try {
+        await recordMeterUsage(supabase, input.organizationId, 'automation_runs', 1)
+      } catch {
+        // meter table optional until migrations applied
+      }
     } catch {
       failed++
     }
   }
 
-  return { started, failed }
+  return { started, failed, skippedForEntitlement: false }
 }
