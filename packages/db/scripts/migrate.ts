@@ -184,13 +184,10 @@ export async function runMigrations(argv: string[] = []) {
     const applied = await readApplied(sql);
     const { pending, drifted } = partition(migrations, applied);
 
-    if (drifted.length) {
-      throw new Error(
-        'Already-applied migrations were modified; refusing to continue.\n' +
-          drifted.map((d) => '  - ' + d).join('\n') +
-          '\nAdd a new migration instead of editing an applied one.'
-      );
-    }
+    const driftMessage =
+      'Already-applied migrations were modified; refusing to continue.\n' +
+      drifted.map((d) => '  - ' + d).join('\n') +
+      '\nAdd a new migration instead of editing an applied one.';
 
     if (command === 'status') {
       log(`Migrations on disk: ${migrations.length}`);
@@ -199,11 +196,15 @@ export async function runMigrations(argv: string[] = []) {
         const state = !row ? 'pending' : row.failed_at ? 'FAILED' : 'applied';
         log(`  ${migration.name} → ${state}${row?.error ? ' (' + row.error + ')' : ''}`);
       }
+      if (drifted.length) log('WARNING: ' + driftMessage);
       return;
     }
 
     if (command === 'down') {
+      // `down` is deliberately exempt from the drift check: it is the supported remedy
+      // for untracking a migration that was never actually released.
       if (target === null) throw new Error('down requires a target version, e.g. `down 4`.');
+      if (drifted.length) log('WARNING: untracking drifted migrations: ' + drifted.join('; '));
       const above = [...applied.values()].filter((row) => Number(row.version) > target);
       if (!above.length) {
         log(`Nothing tracked above version ${target}; no ledger rows removed.`);
@@ -218,6 +219,8 @@ export async function runMigrations(argv: string[] = []) {
       );
       return;
     }
+
+    if (drifted.length) throw new Error(driftMessage);
 
     if (!pending.length) {
       log(`No pending migrations (database is at version ${maxVersion(applied)}).`);
