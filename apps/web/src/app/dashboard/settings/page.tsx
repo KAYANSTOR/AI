@@ -83,6 +83,11 @@ export default async function SettingsPage() {
               </Link>
             </li>
             <li>
+              <Link href="/dashboard/settings/escalation" className="text-primary-dark hover:underline">
+                سياسات التصعيد (SLA)
+              </Link>
+            </li>
+            <li>
               <a href="/api/export/contacts" className="text-primary-dark hover:underline">
                 تصدير جهات الاتصال (CSV)
               </a>
