@@ -2,17 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { isAuthorizedCronRequest } from '@/lib/cron/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { assertMarketingAllowed, ConsentBlockedError } from '@/lib/channels/consent'
+import { DEFAULT_SEND_WINDOW, isInQuietHours, nextSendWindowOpen } from '@/lib/channels/quiet-hours'
 import { claimDueEnrollment, completeFollowUpStep, exitFollowUp } from '@/lib/followup'
 import { deliverOutbound } from '@/lib/runtime/outbound'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-/**
- * Follow-up worker: claim due enrollments → consent check → deliver → advance.
- * Shares CRON_SECRET with the outbox worker. Duplicate delivery is prevented by
- * the conditional claim on status='scheduled'.
- */
 async function handle(req: NextRequest) {
   if (!isAuthorizedCronRequest(req.headers.get('authorization'), process.env.CRON_SECRET)) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
@@ -34,10 +30,27 @@ async function handle(req: NextRequest) {
   let claimed = 0
   let sent = 0
   let blocked = 0
+  let deferredQuiet = 0
   let completed = 0
   let failed = 0
 
   for (const row of due ?? []) {
+    // Quiet hours: reschedule without claiming so another worker does not race.
+    if (isInQuietHours(DEFAULT_SEND_WINDOW)) {
+      const reopen = nextSendWindowOpen(DEFAULT_SEND_WINDOW)
+      await supabase
+        .from('followup_enrollments')
+        .update({
+          next_send_at: reopen.toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', row.id)
+        .eq('organization_id', row.organization_id)
+        .eq('status', 'scheduled')
+      deferredQuiet++
+      continue
+    }
+
     const advance = await claimDueEnrollment(supabase, row.id, row.organization_id)
     if (advance.status === 'skipped') continue
     if (advance.status === 'completed') {
@@ -65,7 +78,6 @@ async function handle(req: NextRequest) {
       throw err
     }
 
-    // Resolve an active channel of the requested type for this org.
     const { data: channel, error: channelError } = await supabase
       .from('channels')
       .select('id, organization_id, business_id, channel_type, provider_account_id, external_identifier')
@@ -102,10 +114,7 @@ async function handle(req: NextRequest) {
       .maybeSingle()
 
     const recipient =
-      identity?.external_user_id ||
-      identity?.external_phone ||
-      contact?.phone ||
-      ''
+      identity?.external_user_id || identity?.external_phone || contact?.phone || ''
 
     if (!recipient) {
       await exitFollowUp(supabase, {
@@ -171,7 +180,15 @@ async function handle(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ due: due?.length ?? 0, claimed, sent, blocked, completed, failed })
+  return NextResponse.json({
+    due: due?.length ?? 0,
+    claimed,
+    sent,
+    blocked,
+    deferredQuiet,
+    completed,
+    failed,
+  })
 }
 
 export const GET = handle
