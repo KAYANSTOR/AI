@@ -5,7 +5,18 @@ import { ar } from '@/lib/i18n/ar'
 import { formatDateTime } from '@/lib/i18n/format'
 import { channelLabel, conversationStatusLabel } from '@/lib/i18n/labels'
 
-export default async function ConversationsPage() {
+const FILTERS = [
+  { id: 'all', label: 'الكل', status: null as string | null },
+  { id: 'active', label: 'نشطة', status: 'active' },
+  { id: 'handed_off', label: 'مُسلَّمة', status: 'handed_off' },
+  { id: 'closed', label: 'مغلقة', status: 'closed' },
+] as const
+
+export default async function ConversationsPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ view?: string }>
+}) {
   let ctx
   try {
     ctx = await requireCapability('inbox')
@@ -27,18 +38,46 @@ export default async function ConversationsPage() {
     redirect('/login')
   }
 
-  const { data: conversations } = await ctx.supabase
+  const params = (await searchParams) ?? {}
+  const view = params.view ?? 'all'
+  const filter = FILTERS.find((f) => f.id === view) ?? FILTERS[0]
+
+  let query = ctx.supabase
     .from('conversations')
-    .select('id, status, ai_enabled, state, last_message_at, unread_count, contacts(full_name, phone), channels(channel_type)')
+    .select(
+      'id, status, ai_enabled, state, last_message_at, unread_count, contacts(full_name, phone), channels(channel_type)'
+    )
     .eq('organization_id', ctx.organizationId)
     .order('last_message_at', { ascending: false })
     .limit(100)
+
+  if (filter.status) {
+    query = query.eq('status', filter.status)
+  }
+
+  const { data: conversations } = await query
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold tracking-tight text-text">{ar.conversations.title}</h1>
-          <p className="mt-1 text-sm text-text-muted">{ar.conversations.description}</p>
+        <p className="mt-1 text-sm text-text-muted">{ar.conversations.description}</p>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        {FILTERS.map((f) => (
+          <Link
+            key={f.id}
+            href={f.id === 'all' ? '/dashboard/conversations' : `/dashboard/conversations?view=${f.id}`}
+            className={`rounded-full px-3 py-1.5 text-xs font-medium ${
+              filter.id === f.id
+                ? 'bg-primary text-primary-foreground'
+                : 'border border-border bg-surface text-text-muted hover:bg-background'
+            }`}
+          >
+            {f.label}
+          </Link>
+        ))}
       </div>
 
       {!conversations?.length ? (
@@ -62,18 +101,27 @@ export default async function ConversationsPage() {
                   href={`/dashboard/conversations/${conversation.id}`}
                   className="flex flex-wrap items-start justify-between gap-3 px-4 py-4 transition-colors hover:bg-background"
                 >
-                  <div className="min-w-0 flex items-center gap-2">
+                  <div className="flex min-w-0 items-center gap-2">
                     {hasUnread && (
-                      <span className="h-2 w-2 rounded-full bg-primary flex-shrink-0" aria-label="Unread messages" />
+                      <span
+                        className="h-2 w-2 flex-shrink-0 rounded-full bg-primary"
+                        aria-label="Unread messages"
+                      />
                     )}
                     <div>
                       <p className={`truncate text-text ${hasUnread ? 'font-bold' : 'font-medium'}`}>
                         {contact?.full_name || contact?.phone || 'عميل غير معروف'}
                       </p>
-                      <p className={`mt-0.5 text-xs ${hasUnread ? 'text-text font-medium' : 'text-text-muted'}`}>
+                      <p
+                        className={`mt-0.5 text-xs ${
+                          hasUnread ? 'font-medium text-text' : 'text-text-muted'
+                        }`}
+                      >
                         {channelLabel(channel?.channel_type ?? '')}
                         {' · '}
-                        {conversation.ai_enabled ? ar.conversations.agentResponding : ar.conversations.agentPaused}
+                        {conversation.ai_enabled
+                          ? ar.conversations.agentResponding
+                          : ar.conversations.agentPaused}
                         {hasUnread && ` · ${conversation.unread_count} رسالة جديدة`}
                       </p>
                     </div>
