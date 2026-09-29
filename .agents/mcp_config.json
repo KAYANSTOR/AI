@@ -2,10 +2,7 @@
   "mcpServers": {
     "codecraft-api": {
       "command": "node",
-      "args": ["c:/Users/Owner/Desktop/hashem/index.js"],
-      "env": {
-        "CODECRAFT_API_KEY": "cc_3g7CASdB2EkAsXv8iRRuIlO14gO3hZ5d4GtPjgVxJf2Yga0r"
-      }
+      "args": ["c:/Users/Owner/Desktop/hashem/index.js"]
     }
   }
 }

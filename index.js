@@ -9,7 +9,11 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 
-const API_KEY = process.env.CODECRAFT_API_KEY || "cc_3g7CASdB2EkAsXv8iRRuIlO14gO3hZ5d4GtPjgVxJf2Yga0r";
+const API_KEY = process.env.CODECRAFT_API_KEY;
+if (!API_KEY) {
+  console.error("CODECRAFT_API_KEY is not set. Export it in the environment; it is never stored in the repository.");
+  process.exit(1);
+}
 const BASE_URL = "https://codecraftapi.com/v1";
 
 // ─── Helper: Fetch from CodeCraft API ────────────────────────────────────────
