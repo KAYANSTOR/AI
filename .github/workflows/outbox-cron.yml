@@ -10,7 +10,7 @@ permissions: {}
 jobs:
   trigger:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 8
     steps:
       - name: Trigger outbox worker
         env:
@@ -26,6 +26,13 @@ jobs:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
           FOLLOWUP_CRON_URL: ${{ vars.FOLLOWUP_CRON_URL || 'https://frontdesk-ai-eosin.vercel.app/api/cron/followup' }}
         run: |
-          if [ -z "$CRON_SECRET" ]; then echo "::error::CRON_SECRET repository secret is not set"; exit 1; fi
           curl --fail-with-body -sS -X POST --max-time 120 --retry 2 --retry-delay 10 \
             -H "Authorization: Bearer $CRON_SECRET" "$FOLLOWUP_CRON_URL"
+
+      - name: Trigger SLA refresh worker
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          SLA_CRON_URL: ${{ vars.SLA_CRON_URL || 'https://frontdesk-ai-eosin.vercel.app/api/cron/sla' }}
+        run: |
+          curl --fail-with-body -sS -X POST --max-time 120 --retry 2 --retry-delay 10 \
+            -H "Authorization: Bearer $CRON_SECRET" "$SLA_CRON_URL"
