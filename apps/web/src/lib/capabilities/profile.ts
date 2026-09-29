@@ -28,6 +28,9 @@ export const NAV_CAPABILITY: Record<string, string | null> = {
   '/dashboard/leads': 'lead_capture',
   '/dashboard/contacts': 'lead_capture',
   '/dashboard/services': 'appointments',
+  // Channels and the agent are always available; they are not capability modules.
+  '/dashboard/channels': null,
+  '/dashboard/agent': null,
   '/dashboard/setup': null,
   '/dashboard/settings': null,
 }

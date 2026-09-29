@@ -12,6 +12,8 @@ import {
   Wrench,
   SlidersHorizontal,
   ShieldCheck,
+  Bot,
+  RadioTower,
 } from 'lucide-react'
 import { BrandMark } from '@/components/site/brand'
 
@@ -23,14 +25,17 @@ type NavItem = {
 }
 
 const navItems: NavItem[] = [
-  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, capability: null },
-  { name: 'Inbox', href: '/dashboard/conversations', icon: MessageSquare, capability: 'inbox' },
-  { name: 'Appointments', href: '/dashboard/appointments', icon: Calendar, capability: 'appointments' },
-  { name: 'Leads', href: '/dashboard/leads', icon: Users, capability: 'lead_capture' },
-  { name: 'Contacts', href: '/dashboard/contacts', icon: Contact, capability: 'lead_capture' },
-  { name: 'Services', href: '/dashboard/services', icon: Wrench, capability: 'appointments' },
-  { name: 'Business setup', href: '/dashboard/setup', icon: SlidersHorizontal, capability: null },
-  { name: 'Settings', href: '/dashboard/settings', icon: Settings, capability: null },
+  { name: 'لوحة التحكم', href: '/dashboard', icon: LayoutDashboard, capability: null },
+  { name: 'صندوق المحادثات', href: '/dashboard/conversations', icon: MessageSquare, capability: 'inbox' },
+  { name: 'المواعيد', href: '/dashboard/appointments', icon: Calendar, capability: 'appointments' },
+  { name: 'العملاء المحتملون', href: '/dashboard/leads', icon: Users, capability: 'lead_capture' },
+  { name: 'جهات الاتصال', href: '/dashboard/contacts', icon: Contact, capability: 'lead_capture' },
+  { name: 'الخدمات', href: '/dashboard/services', icon: Wrench, capability: 'appointments' },
+  // Channels and the agent are not capabilities: every business needs a way in and an agent.
+  { name: 'القنوات', href: '/dashboard/channels', icon: RadioTower, capability: null },
+  { name: 'الوكيل الذكي', href: '/dashboard/agent', icon: Bot, capability: null },
+  { name: 'إعداد النشاط', href: '/dashboard/setup', icon: SlidersHorizontal, capability: null },
+  { name: 'الإعدادات', href: '/dashboard/settings', icon: Settings, capability: null },
 ]
 
 export function Sidebar({
@@ -62,8 +67,8 @@ export function Sidebar({
       </div>
 
       <div className="flex-1 overflow-y-auto p-4">
-        <div className="mb-4 px-3 text-xs font-semibold tracking-wider text-white/50 uppercase">
-          Overview
+        <div className="mb-4 px-3 text-xs font-semibold tracking-wider text-white/50">
+          التنقّل
         </div>
         <nav className="flex flex-col gap-1">
           {visible.map((item) => {

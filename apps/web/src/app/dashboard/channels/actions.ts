@@ -1,0 +1,231 @@
+'use server'
+
+import { revalidatePath } from 'next/cache'
+import { createClient } from '@/lib/supabase/server'
+import { getCurrentOrg, type OrgContext } from '@/lib/org'
+import {
+  getChannelSpec,
+  normalizeChannelNumber,
+  verifyChannelBinding,
+  type BindingTestResult,
+  type ChannelRow,
+} from '@/lib/channels/management'
+
+export type ChannelActionResult = {
+  ok: boolean
+  error?: string
+  message?: string
+}
+
+/** Connecting or disconnecting a channel is an owner/admin operation (RLS: ch_* policies). */
+async function requireChannelAdmin(): Promise<OrgContext> {
+  const org = await getCurrentOrg()
+  if (!org) throw new Error('الجلسة منتهية. سجّل الدخول من جديد.')
+  if (org.role !== 'owner' && org.role !== 'admin') {
+    throw new Error('صلاحية إدارة القنوات متاحة للمالك أو المسؤول فقط.')
+  }
+  return org
+}
+
+/**
+ * Channels are business-specific at runtime, and every organization is provisioned
+ * exactly one business by handle_new_user.
+ */
+async function primaryBusinessId(organizationId: string): Promise<string | null> {
+  const supabase = await createClient()
+  const { data, error } = await supabase
+    .from('businesses')
+    .select('id')
+    .eq('organization_id', organizationId)
+    .order('created_at', { ascending: true })
+    .limit(1)
+    .maybeSingle()
+  if (error) throw new Error(error.message)
+  return data?.id ?? null
+}
+
+async function audit(
+  organizationId: string,
+  businessId: string | null,
+  action: string,
+  entityType: string,
+  entityId: string | null,
+  metadata: Record<string, unknown>
+) {
+  const supabase = await createClient()
+  // log_audit_event derives the tenant from membership and forces actor_id = auth.uid().
+  const { error } = await supabase.rpc('log_audit_event', {
+    p_organization_id: organizationId,
+    p_action: action,
+    p_entity_type: entityType,
+    p_entity_id: entityId,
+    p_business_id: businessId,
+    p_metadata: metadata,
+  })
+  // An audit failure must not silently pass: the operation is only complete with a trail.
+  if (error) throw new Error('تعذّر تسجيل العملية في سجل التدقيق: ' + error.message)
+}
+
+/** A provider identifier that is already active belongs to exactly one business. */
+function describeWriteError(code: string | undefined, message: string): string {
+  if (code === '23505') {
+    return 'هذا المعرّف مرتبط بشركة أخرى بالفعل. لا يمكن ربط الرقم أو الحساب نفسه لأكثر من شركة.'
+  }
+  if (code === '42501') return 'لا تملك صلاحية تعديل قنوات هذه الشركة.'
+  return message
+}
+
+export async function saveChannelAction(input: {
+  channelType: string
+  identifier: string
+  publicNumber?: string
+}): Promise<ChannelActionResult> {
+  try {
+    const org = await requireChannelAdmin()
+    const spec = getChannelSpec(input.channelType)
+    if (!spec) return { ok: false, error: 'نوع قناة غير معروف.' }
+
+    const raw = input.identifier.trim()
+    if (!raw) return { ok: false, error: 'أدخل ' + spec.bindingLabel + '.' }
+
+    const identifier = spec.type === 'whatsapp' || spec.type === 'instagram' ? raw : normalizeChannelNumber(raw)
+    const publicNumber = spec.publicNumberLabel
+      ? normalizeChannelNumber((input.publicNumber ?? '').trim())
+      : null
+    if (spec.type === 'phone' && !publicNumber) {
+      return { ok: false, error: 'أدخل رقم شركتك الحالي.' }
+    }
+
+    const supabase = await createClient()
+    const businessId = await primaryBusinessId(org.organizationId)
+    if (!businessId) {
+      return { ok: false, error: 'لا يوجد نشاط مُهيّأ لهذه الشركة. أكمل إعداد النشاط أولًا.' }
+    }
+
+    const binding =
+      spec.bindingColumn === 'provider_account_id'
+        ? { provider_account_id: identifier, external_identifier: publicNumber }
+        : { external_identifier: identifier, provider_account_id: null }
+
+    const { data: existing, error: readError } = await supabase
+      .from('channels')
+      .select('id, is_active')
+      .eq('organization_id', org.organizationId)
+      .eq('channel_type', spec.type)
+      .maybeSingle()
+    if (readError) throw new Error(readError.message)
+
+    const patch = {
+      ...binding,
+      business_id: businessId,
+      is_active: true,
+      verification_status: 'configured',
+      updated_at: new Date().toISOString(),
+    }
+
+    const written = existing
+      ? await supabase.from('channels').update(patch).eq('id', existing.id).select('id').single()
+      : await supabase
+          .from('channels')
+          .insert({ organization_id: org.organizationId, channel_type: spec.type, ...patch })
+          .select('id')
+          .single()
+
+    if (written.error || !written.data) {
+      return { ok: false, error: describeWriteError(written.error?.code, written.error?.message ?? 'تعذّر حفظ القناة.') }
+    }
+
+    await audit(org.organizationId, businessId, 'channel.connected', 'channel', written.data.id, {
+      channel_type: spec.type,
+      provider: spec.provider,
+      reconnected: Boolean(existing),
+    })
+
+    revalidatePath('/dashboard/channels')
+    return { ok: true, message: 'تم ربط ' + spec.label + '.' }
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : 'تعذّر حفظ القناة.' }
+  }
+}
+
+export async function setChannelActiveAction(input: {
+  channelType: string
+  active: boolean
+}): Promise<ChannelActionResult> {
+  try {
+    const org = await requireChannelAdmin()
+    const spec = getChannelSpec(input.channelType)
+    if (!spec) return { ok: false, error: 'نوع قناة غير معروف.' }
+
+    const supabase = await createClient()
+    const businessId = await primaryBusinessId(org.organizationId)
+
+    const { data, error } = await supabase
+      .from('channels')
+      .select('id, is_active')
+      .eq('organization_id', org.organizationId)
+      .eq('channel_type', spec.type)
+      .maybeSingle()
+    if (error) throw new Error(error.message)
+    if (!data) return { ok: false, error: 'القناة غير مربوطة بعد.' }
+
+    // Deactivating removes the binding from tenant resolution, so inbound events for it
+    // are rejected instead of routed to a business that turned the channel off.
+    const { error: updateError } = await supabase
+      .from('channels')
+      .update({
+        is_active: input.active,
+        verification_status: input.active ? 'configured' : 'disconnected',
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', data.id)
+    if (updateError) return { ok: false, error: describeWriteError(updateError.code, updateError.message) }
+
+    await audit(
+      org.organizationId,
+      businessId,
+      input.active ? 'channel.enabled' : 'channel.disabled',
+      'channel',
+      data.id,
+      { channel_type: spec.type }
+    )
+
+    revalidatePath('/dashboard/channels')
+    return { ok: true, message: input.active ? 'تم تفعيل ' + spec.label + '.' : 'تم إيقاف ' + spec.label + '.' }
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : 'تعذّر تحديث القناة.' }
+  }
+}
+
+export async function testChannelAction(input: {
+  channelType: string
+}): Promise<{ ok: boolean; error?: string; result?: BindingTestResult }> {
+  try {
+    const org = await getCurrentOrg()
+    if (!org) return { ok: false, error: 'الجلسة منتهية. سجّل الدخول من جديد.' }
+    const spec = getChannelSpec(input.channelType)
+    if (!spec) return { ok: false, error: 'نوع قناة غير معروف.' }
+
+    const supabase = await createClient()
+    const { data, error } = await supabase
+      .from('channels')
+      .select('id, channel_type, provider_account_id, external_identifier, verification_status, is_active, business_id, updated_at')
+      .eq('organization_id', org.organizationId)
+      .eq('channel_type', spec.type)
+      .maybeSingle()
+    if (error) throw new Error(error.message)
+    if (!data) return { ok: false, error: 'القناة غير مربوطة بعد.' }
+
+    const result = await verifyChannelBinding(supabase, data as ChannelRow)
+
+    // The test result is recorded so a failing test leaves a trail.
+    await audit(org.organizationId, data.business_id, 'channel.tested', 'channel', data.id, {
+      channel_type: spec.type,
+      passed: result.ok,
+    })
+
+    return { ok: result.ok, result }
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : 'تعذّر تنفيذ الفحص.' }
+  }
+}
