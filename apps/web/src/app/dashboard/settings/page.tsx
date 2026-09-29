@@ -25,6 +25,8 @@ export default async function SettingsPage() {
     enabled: enabledMap.get(capability.id as string) ?? false,
   }))
 
+  const isAdmin = context.role === 'owner' || context.role === 'admin'
+
   return (
     <div className="max-w-3xl space-y-8">
       <div>
@@ -53,7 +55,9 @@ export default async function SettingsPage() {
           </div>
           <div>
             <dt className="text-text-muted">{ar.settings.timezone}</dt>
-            <dd dir="ltr" className="text-start font-medium text-text">{context.timezone}</dd>
+            <dd dir="ltr" className="text-start font-medium text-text">
+              {context.timezone}
+            </dd>
           </div>
         </dl>
         <Link
@@ -63,6 +67,34 @@ export default async function SettingsPage() {
           {ar.settings.changeBusinessType}
         </Link>
       </section>
+
+      {isAdmin && (
+        <section className="space-y-2 rounded-xl border border-border bg-surface p-5">
+          <h2 className="text-sm font-semibold text-text">أدوات متقدمة</h2>
+          <ul className="space-y-2 text-sm">
+            <li>
+              <Link href="/dashboard/settings/canned-replies" className="text-primary-dark hover:underline">
+                الردود الجاهزة
+              </Link>
+            </li>
+            <li>
+              <Link href="/dashboard/settings/api-keys" className="text-primary-dark hover:underline">
+                مفاتيح API
+              </Link>
+            </li>
+            <li>
+              <a href="/api/export/contacts" className="text-primary-dark hover:underline">
+                تصدير جهات الاتصال (CSV)
+              </a>
+            </li>
+            <li>
+              <a href="/api/export/leads" className="text-primary-dark hover:underline">
+                تصدير العملاء المحتملين (CSV)
+              </a>
+            </li>
+          </ul>
+        </section>
+      )}
 
       <section className="space-y-3">
         <div>
