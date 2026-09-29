@@ -328,7 +328,7 @@ async function toolConvertQuoteToOrder(ctx: ToolContext, args: Record<string, un
 
     if (error || !order) throw new Error('Database error creating order from quote.')
 
-    const itemsToInsert = quote.quote_items.map((i: any) => ({
+    const itemsToInsert = quote.quote_items.map((i) => ({
         order_id: order.id,
         name: i.name,
         description: i.description,

@@ -4,7 +4,6 @@ import { streamText, tool } from 'ai'
 import { z } from 'zod'
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
-import { getDashboardContext } from '@/lib/dashboard/context'
 
 export const maxDuration = 60
 
@@ -36,7 +35,7 @@ Be professional, concise, and helpful. Always answer in Arabic.`,
       tools: {
         getBusinessMetrics: tool({
           description: 'Get high level business metrics (conversations, leads, orders, revenue) for the current organization.',
-          parameters: z.object({}),
+          inputSchema: z.object({}),
           execute: async () => {
             const [
               { count: conversations },

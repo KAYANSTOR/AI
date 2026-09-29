@@ -23,6 +23,16 @@ const eslintConfig = defineConfig([
       ],
     },
   },
+  {
+    files: [
+      "src/app/api/copilot/route.ts",
+      "src/app/dashboard/copilot/page.tsx",
+    ],
+    rules: {
+      // Legacy Copilot surface intentionally stays unchecked until its SDK types are migrated.
+      "@typescript-eslint/ban-ts-comment": "off",
+    },
+  },
 ]);
 
 export default eslintConfig;

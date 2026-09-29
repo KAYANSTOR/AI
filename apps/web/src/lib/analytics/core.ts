@@ -71,7 +71,8 @@ export async function loadCoreAnalytics(
   }
 }
 
-type FilterFn = (q: any) => any
+type FilterQuery = ReturnType<SupabaseClient["from"]>
+type FilterFn = (q: FilterQuery) => FilterQuery
 
 async function count(
   supabase: SupabaseClient,

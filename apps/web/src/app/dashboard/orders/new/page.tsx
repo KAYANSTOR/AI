@@ -40,7 +40,7 @@ export default async function NewOrderPage(props: {
         contact_id: quote.contact_id,
         quote_id: quote.id,
         notes: quote.notes,
-        items: quote.quote_items.map((i: any) => ({
+        items: quote.quote_items.map((i) => ({
           name: i.name,
           description: i.description,
           quantity: i.quantity,

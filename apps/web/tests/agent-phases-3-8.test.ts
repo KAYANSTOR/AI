@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import type { SupabaseClient } from '@supabase/supabase-js'
+import type { FakeDb } from './support/fake-supabase'
 import { createFakeSupabase } from './support/fake-supabase'
 import { createNotification, listNotifications, markNotificationRead } from '@/lib/notifications'
 import { getCustomerSummary, getCustomerTimeline } from '@/lib/customer360'
@@ -12,7 +13,7 @@ const ORG = 'aaaaaaaa-0000-4000-8000-000000000201'
 const CONTACT = 'aaaaaaaa-0000-4000-8000-000000000202'
 const MEMBER = 'aaaaaaaa-0000-4000-8000-000000000203'
 
-function setup(tables: Record<string, any>) {
+function setup(tables: FakeDb) {
   const fake = createFakeSupabase(tables)
   return { supabase: fake.client as unknown as SupabaseClient }
 }
