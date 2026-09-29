@@ -62,12 +62,12 @@ CREATE OR REPLACE FUNCTION public.update_updated_at_column()
 RETURNS TRIGGER
 LANGUAGE plpgsql
 SET search_path = public, pg_temp
-AS $
+AS $$
 BEGIN
   NEW.updated_at = NOW();
   RETURN NEW;
 END;
-$;
+$$;
 
 CREATE TRIGGER trigger_update_quotes_updated_at
   BEFORE UPDATE ON quotes
