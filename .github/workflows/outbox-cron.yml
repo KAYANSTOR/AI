@@ -10,7 +10,7 @@ permissions: {}
 jobs:
   trigger:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 10
     steps:
       - name: Trigger outbox worker
         env:
@@ -36,3 +36,11 @@ jobs:
         run: |
           curl --fail-with-body -sS -X POST --max-time 120 --retry 2 --retry-delay 10 \
             -H "Authorization: Bearer $CRON_SECRET" "$SLA_CRON_URL"
+
+      - name: Trigger quote expiry worker
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          QUOTES_EXPIRE_URL: ${{ vars.QUOTES_EXPIRE_URL || 'https://frontdesk-ai-eosin.vercel.app/api/cron/quotes-expire' }}
+        run: |
+          curl --fail-with-body -sS -X POST --max-time 120 --retry 2 --retry-delay 10 \
+            -H "Authorization: Bearer $CRON_SECRET" "$QUOTES_EXPIRE_URL"
