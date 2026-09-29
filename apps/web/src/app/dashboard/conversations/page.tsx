@@ -29,7 +29,7 @@ export default async function ConversationsPage() {
 
   const { data: conversations } = await ctx.supabase
     .from('conversations')
-    .select('id, status, ai_enabled, state, last_message_at, contacts(full_name, phone), channels(channel_type)')
+    .select('id, status, ai_enabled, state, last_message_at, unread_count, contacts(full_name, phone), channels(channel_type)')
     .eq('organization_id', ctx.organizationId)
     .order('last_message_at', { ascending: false })
     .limit(100)
@@ -54,6 +54,7 @@ export default async function ConversationsPage() {
             } | null
             const channel = conversation.channels as unknown as { channel_type: string } | null
             const status = String(conversation.status ?? 'active')
+            const hasUnread = conversation.unread_count > 0
 
             return (
               <li key={conversation.id}>
@@ -61,15 +62,21 @@ export default async function ConversationsPage() {
                   href={`/dashboard/conversations/${conversation.id}`}
                   className="flex flex-wrap items-start justify-between gap-3 px-4 py-4 transition-colors hover:bg-background"
                 >
-                  <div className="min-w-0">
-                    <p className="truncate font-medium text-text">
-                      {contact?.full_name || contact?.phone || 'عميل غير معروف'}
-                    </p>
-                    <p className="mt-0.5 text-xs text-text-muted">
-                      {channelLabel(channel?.channel_type ?? '')}
-                      {' · '}
-                      {conversation.ai_enabled ? ar.conversations.agentResponding : ar.conversations.agentPaused}
-                    </p>
+                  <div className="min-w-0 flex items-center gap-2">
+                    {hasUnread && (
+                      <span className="h-2 w-2 rounded-full bg-primary flex-shrink-0" aria-label="Unread messages" />
+                    )}
+                    <div>
+                      <p className={`truncate text-text ${hasUnread ? 'font-bold' : 'font-medium'}`}>
+                        {contact?.full_name || contact?.phone || 'عميل غير معروف'}
+                      </p>
+                      <p className={`mt-0.5 text-xs ${hasUnread ? 'text-text font-medium' : 'text-text-muted'}`}>
+                        {channelLabel(channel?.channel_type ?? '')}
+                        {' · '}
+                        {conversation.ai_enabled ? ar.conversations.agentResponding : ar.conversations.agentPaused}
+                        {hasUnread && ` · ${conversation.unread_count} رسالة جديدة`}
+                      </p>
+                    </div>
                   </div>
                   <div className="flex items-center gap-3">
                     <span
