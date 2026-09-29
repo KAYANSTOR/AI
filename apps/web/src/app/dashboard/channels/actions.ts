@@ -12,6 +12,7 @@ import {
   type BindingTestResult,
   type ChannelRow,
 } from '@/lib/channels/management'
+import { assertWithinLimit, EntitlementExceededError } from '@/lib/billing/entitlements'
 
 export type ChannelActionResult = {
   ok: boolean
@@ -19,7 +20,6 @@ export type ChannelActionResult = {
   message?: string
 }
 
-/** Connecting or disconnecting a channel is an owner/admin operation (RLS: ch_* policies). */
 async function requireChannelAdmin(): Promise<OrgContext> {
   const org = await getCurrentOrg()
   if (!org) throw new Error('الجلسة منتهية. سجّل الدخول من جديد.')
@@ -29,10 +29,6 @@ async function requireChannelAdmin(): Promise<OrgContext> {
   return org
 }
 
-/**
- * Channels are business-specific at runtime, and every organization is provisioned
- * exactly one business by handle_new_user.
- */
 async function primaryBusinessId(organizationId: string): Promise<string | null> {
   const supabase = await createClient()
   const { data, error } = await supabase
@@ -55,7 +51,6 @@ async function audit(
   metadata: Record<string, unknown>
 ) {
   const supabase = await createClient()
-  // log_audit_event derives the tenant from membership and forces actor_id = auth.uid().
   const { error } = await supabase.rpc('log_audit_event', {
     p_organization_id: organizationId,
     p_action: action,
@@ -64,14 +59,12 @@ async function audit(
     p_business_id: businessId,
     p_metadata: metadata,
   })
-  // An audit failure must not silently pass: the operation is only complete with a trail.
   if (error) {
     console.error('Unable to record channel audit event', error)
     throw new Error('تعذّر تسجيل العملية في سجل التدقيق.')
   }
 }
 
-/** A provider identifier that is already active belongs to exactly one business. */
 function describeWriteError(code: string | undefined, message: string): string {
   if (code === '23505') {
     return 'هذا المعرّف مرتبط بشركة أخرى بالفعل. لا يمكن ربط الرقم أو الحساب نفسه لأكثر من شركة.'
@@ -93,7 +86,8 @@ export async function saveChannelAction(input: {
     const raw = input.identifier.trim()
     if (!raw) return { ok: false, error: 'أدخل ' + spec.bindingLabel + '.' }
 
-    const identifier = spec.type === 'whatsapp' || spec.type === 'instagram' ? raw : normalizeChannelNumber(raw)
+    const identifier =
+      spec.type === 'whatsapp' || spec.type === 'instagram' ? raw : normalizeChannelNumber(raw)
     const publicNumber = spec.publicNumberLabel
       ? normalizeChannelNumber((input.publicNumber ?? '').trim())
       : null
@@ -107,11 +101,6 @@ export async function saveChannelAction(input: {
       return { ok: false, error: 'لا يوجد نشاط مُهيّأ لهذه الشركة. أكمل إعداد النشاط أولًا.' }
     }
 
-    const binding =
-      spec.bindingColumn === 'provider_account_id'
-        ? { provider_account_id: identifier, external_identifier: publicNumber }
-        : { external_identifier: identifier, provider_account_id: null }
-
     const { data: existing, error: readError } = await supabase
       .from('channels')
       .select('id, is_active')
@@ -119,6 +108,26 @@ export async function saveChannelAction(input: {
       .eq('channel_type', spec.type)
       .maybeSingle()
     if (readError) throw new Error(readError.message)
+
+    // New active channel counts against plan; re-save of existing does not.
+    if (!existing) {
+      try {
+        await assertWithinLimit(supabase, org.organizationId, 'channels', 1)
+      } catch (err) {
+        if (err instanceof EntitlementExceededError) {
+          return {
+            ok: false,
+            error: `وصلت لحد القنوات في خطتك (${err.used}/${err.limit}). رقِّ الباقة لإضافة قناة.`,
+          }
+        }
+        throw err
+      }
+    }
+
+    const binding =
+      spec.bindingColumn === 'provider_account_id'
+        ? { provider_account_id: identifier, external_identifier: publicNumber }
+        : { external_identifier: identifier, provider_account_id: null }
 
     const patch = {
       ...binding,
@@ -137,7 +146,10 @@ export async function saveChannelAction(input: {
           .single()
 
     if (written.error || !written.data) {
-      return { ok: false, error: describeWriteError(written.error?.code, written.error?.message ?? 'تعذّر حفظ القناة.') }
+      return {
+        ok: false,
+        error: describeWriteError(written.error?.code, written.error?.message ?? 'تعذّر حفظ القناة.'),
+      }
     }
 
     await audit(org.organizationId, businessId, 'channel.connected', 'channel', written.data.id, {
@@ -147,6 +159,7 @@ export async function saveChannelAction(input: {
     })
 
     revalidatePath('/dashboard/channels')
+    revalidatePath('/dashboard/integrations')
     return { ok: true, message: 'تم ربط ' + spec.label + '.' }
   } catch (error) {
     return { ok: false, error: actionErrorMessage(error, 'تعذّر حفظ القناة. حاول مرة أخرى.') }
@@ -174,8 +187,20 @@ export async function setChannelActiveAction(input: {
     if (error) throw new Error(error.message)
     if (!data) return { ok: false, error: 'القناة غير مربوطة بعد.' }
 
-    // Deactivating removes the binding from tenant resolution, so inbound events for it
-    // are rejected instead of routed to a business that turned the channel off.
+    if (input.active && !data.is_active) {
+      try {
+        await assertWithinLimit(supabase, org.organizationId, 'channels', 1)
+      } catch (err) {
+        if (err instanceof EntitlementExceededError) {
+          return {
+            ok: false,
+            error: `وصلت لحد القنوات في خطتك (${err.used}/${err.limit}).`,
+          }
+        }
+        throw err
+      }
+    }
+
     const { error: updateError } = await supabase
       .from('channels')
       .update({
@@ -196,7 +221,11 @@ export async function setChannelActiveAction(input: {
     )
 
     revalidatePath('/dashboard/channels')
-    return { ok: true, message: input.active ? 'تم تفعيل ' + spec.label + '.' : 'تم إيقاف ' + spec.label + '.' }
+    revalidatePath('/dashboard/integrations')
+    return {
+      ok: true,
+      message: input.active ? 'تم تفعيل ' + spec.label + '.' : 'تم إيقاف ' + spec.label + '.',
+    }
   } catch (error) {
     return { ok: false, error: actionErrorMessage(error, 'تعذّر تحديث القناة. حاول مرة أخرى.') }
   }
@@ -214,7 +243,9 @@ export async function testChannelAction(input: {
     const supabase = await createClient()
     const { data, error } = await supabase
       .from('channels')
-      .select('id, channel_type, provider_account_id, external_identifier, verification_status, is_active, business_id, updated_at')
+      .select(
+        'id, channel_type, provider_account_id, external_identifier, verification_status, is_active, business_id, updated_at'
+      )
       .eq('organization_id', org.organizationId)
       .eq('channel_type', spec.type)
       .maybeSingle()
@@ -223,7 +254,6 @@ export async function testChannelAction(input: {
 
     const result = await verifyChannelBinding(supabase, data as ChannelRow)
 
-    // The test result is recorded so a failing test leaves a trail.
     await audit(org.organizationId, data.business_id, 'channel.tested', 'channel', data.id, {
       channel_type: spec.type,
       passed: result.ok,
