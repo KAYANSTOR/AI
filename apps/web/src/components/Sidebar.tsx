@@ -22,6 +22,9 @@ import {
   CreditCard,
   Sparkles,
   FileSpreadsheet,
+  Workflow,
+  Megaphone,
+  Plug,
   X,
 } from 'lucide-react'
 import { useEffect, useRef } from 'react'
@@ -47,9 +50,12 @@ const navItems: NavItem[] = [
   { name: ar.nav.contacts, href: '/dashboard/contacts', icon: Contact, capability: 'lead_capture' },
   { name: ar.nav.services, href: '/dashboard/services', icon: Wrench, capability: 'appointments' },
   { name: ar.nav.knowledge, href: '/dashboard/knowledge', icon: BookOpen, capability: 'knowledge_base' },
+  { name: 'سير العمل', href: '/dashboard/workflows', icon: Workflow, capability: 'follow_up' },
+  { name: 'الحملات', href: '/dashboard/campaigns', icon: Megaphone, capability: 'follow_up' },
   { name: ar.nav.hours, href: '/dashboard/hours', icon: Clock, capability: null },
   { name: ar.nav.locations, href: '/dashboard/locations', icon: MapPin, capability: null },
   { name: ar.nav.channels, href: '/dashboard/channels', icon: RadioTower, capability: null },
+  { name: 'التكاملات', href: '/dashboard/integrations', icon: Plug, capability: null },
   { name: ar.nav.agent, href: '/dashboard/agent', icon: Bot, capability: null },
   { name: ar.nav.copilot, href: '/dashboard/copilot', icon: Sparkles, capability: null },
   { name: ar.nav.setup, href: '/dashboard/setup', icon: SlidersHorizontal, capability: null },
