@@ -111,7 +111,9 @@ export function Sidebar({
       id="dashboard-sidebar"
       ref={drawerRef}
       className={`invisible fixed inset-y-0 start-0 z-50 flex h-dvh w-72 max-w-[85vw] flex-col border-e border-white/10 bg-dark pt-[env(safe-area-inset-top)] text-white shadow-xl transition-transform duration-200 motion-reduce:transition-none lg:visible lg:static lg:z-auto lg:h-dvh lg:w-64 lg:max-w-none lg:shrink-0 lg:translate-x-0 lg:shadow-none ${
-        open ? 'visible translate-x-0' : 'invisible rtl:translate-x-full ltr:-translate-x-full'
+        open
+          ? 'visible translate-x-0'
+          : 'invisible max-lg:rtl:translate-x-full max-lg:ltr:-translate-x-full'
       }`}
       role={open ? 'dialog' : undefined}
       aria-modal={open ? true : undefined}

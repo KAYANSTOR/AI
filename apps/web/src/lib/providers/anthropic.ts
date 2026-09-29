@@ -1,4 +1,4 @@
-import { AIProvider, ModelResult, ModelMessage, ModelToolDefinition, ModelBlock } from './types'
+import type { AIProvider, ModelBlock } from './types'
 
 export const anthropicProvider: AIProvider = {
   async call(input) {

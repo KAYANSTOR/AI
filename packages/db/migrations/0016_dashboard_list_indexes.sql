@@ -1,5 +1,5 @@
 -- Supports the organization-scoped appointments list ordered by start time.
-CREATE INDEX IF NOT EXISTS idx_appointments_org_starts_at
+CREATE INDEX IF NOT EXISTS idx_appointments_org_starts
   ON appointments(organization_id, starts_at);
 
 -- Supports the organization-scoped leads list ordered newest first.
