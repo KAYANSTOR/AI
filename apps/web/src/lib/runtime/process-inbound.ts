@@ -140,7 +140,7 @@ export async function processInboundMessage(
   const eligibility = checkEligibility({
     channel: input.channelType,
     lastInboundAt: new Date().toISOString(),
-    optedOut: consent === 'opted_out',
+    optedOut: false,
   })
   if (!eligibility.allowed) return { reply: null, conversationId, contactId: contact.contactId }
   if (eligibility.mode === 'template_only' && input.channelType !== 'sms') {
