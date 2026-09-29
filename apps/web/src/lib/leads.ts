@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { dispatchWorkflowTrigger } from '@/lib/workflows/triggers'
 
 export const LEAD_STATUSES = [
   'new',
@@ -61,7 +62,7 @@ export async function transitionLead(
 
   const { data: current, error: readError } = await supabase
     .from('leads')
-    .select('id, status, owner_member_id')
+    .select('id, status, owner_member_id, contact_id')
     .eq('organization_id', args.organizationId)
     .eq('id', args.leadId)
     .maybeSingle()
@@ -90,7 +91,7 @@ export async function transitionLead(
     .update(patch)
     .eq('organization_id', args.organizationId)
     .eq('id', args.leadId)
-    .select('id, status, owner_member_id, next_action, next_action_at, source, source_channel')
+    .select('id, status, owner_member_id, next_action, next_action_at, source, source_channel, contact_id')
     .single()
 
   if (error) throw error
@@ -110,6 +111,24 @@ export async function transitionLead(
     entity_id: args.leadId,
     metadata: { from, to: args.nextStatus },
   })
+
+  if (args.nextStatus === 'won' || args.nextStatus === 'lost') {
+    try {
+      await dispatchWorkflowTrigger(supabase, {
+        organizationId: args.organizationId,
+        triggerType: args.nextStatus === 'won' ? 'lead.won' : 'lead.lost',
+        payload: {
+          leadId: args.leadId,
+          contactId: data.contact_id ?? current.contact_id,
+          from,
+          to: args.nextStatus,
+        },
+        idempotencyPrefix: `lead:${args.leadId}:${args.nextStatus}`,
+      })
+    } catch {
+      // Trigger failures must not roll back the lead transition itself.
+    }
+  }
 
   return data
 }
