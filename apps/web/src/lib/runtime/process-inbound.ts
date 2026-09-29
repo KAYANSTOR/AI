@@ -8,14 +8,14 @@ import { ensureOpenConversation, getConversationRef } from '@/lib/runtime/conver
 import { resolveBusinessAgent } from '@/lib/runtime/tenant'
 import { executeTool } from '@/lib/ai/tools'
 import { armConversationSla, markFirstResponse } from '@/lib/sla'
+import {
+  assertWithinLimit,
+  EntitlementExceededError,
+  recordMeterUsage,
+} from '@/lib/billing/entitlements'
 
-/** Provider channels that terminate in an agent conversation. */
 export type RuntimeChannel = 'sms' | 'whatsapp' | 'instagram' | 'phone'
 
-/**
- * The single inbound runtime for every message channel:
- * identity → conversation → persist → consent/eligibility → agent → outbound.
- */
 export async function processInboundMessage(
   supabase: SupabaseClient,
   input: {
@@ -62,7 +62,6 @@ export async function processInboundMessage(
     .update({ last_message_at: new Date().toISOString(), last_inbound_at: new Date().toISOString() })
     .eq('id', conversationId)
 
-  // First inbound arms SLA timers (idempotent if already set).
   await armConversationSla(supabase, {
     organizationId: input.organizationId,
     conversationId,
@@ -148,6 +147,28 @@ export async function processInboundMessage(
     return { reply: null, conversationId, contactId: contact.contactId }
   }
 
+  try {
+    await assertWithinLimit(supabase, input.organizationId, 'ai_messages', 1)
+  } catch (err) {
+    if (err instanceof EntitlementExceededError) {
+      await supabase.from('audit_events').insert({
+        organization_id: input.organizationId,
+        business_id: input.businessId,
+        actor_type: 'system',
+        action: 'billing.ai_limit_exceeded',
+        entity_type: 'conversation',
+        entity_id: conversationId,
+        metadata: { meter: err.meter, used: err.used, limit: err.limit },
+      })
+      return {
+        reply: 'نعتذر، تم استهلاك حصة الردود الذكية لهذه الفترة. سيتابع أحد أعضاء الفريق قريبًا.',
+        conversationId,
+        contactId: contact.contactId,
+      }
+    }
+    throw err
+  }
+
   const reply = await runAgentTurn({
     supabase,
     organizationId: input.organizationId,
@@ -160,6 +181,12 @@ export async function processInboundMessage(
     serverActionResult,
   })
   if (!reply) return { reply: null, conversationId, contactId: contact.contactId }
+
+  try {
+    await recordMeterUsage(supabase, input.organizationId, 'ai_messages', 1)
+  } catch {
+    // meter table may be absent until migration; ledger still records tokens
+  }
 
   const outbound = await supabase.from('messages').insert({
     organization_id: input.organizationId,
