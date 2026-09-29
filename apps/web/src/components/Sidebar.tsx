@@ -14,6 +14,9 @@ import {
   ShieldCheck,
   Bot,
   RadioTower,
+  Clock,
+  MapPin,
+  BookOpen,
 } from 'lucide-react'
 import { BrandMark } from '@/components/site/brand'
 
@@ -31,6 +34,9 @@ const navItems: NavItem[] = [
   { name: 'العملاء المحتملون', href: '/dashboard/leads', icon: Users, capability: 'lead_capture' },
   { name: 'جهات الاتصال', href: '/dashboard/contacts', icon: Contact, capability: 'lead_capture' },
   { name: 'الخدمات', href: '/dashboard/services', icon: Wrench, capability: 'appointments' },
+  { name: 'قاعدة المعرفة', href: '/dashboard/knowledge', icon: BookOpen, capability: 'knowledge_base' },
+  { name: 'ساعات العمل', href: '/dashboard/hours', icon: Clock, capability: null },
+  { name: 'الفروع', href: '/dashboard/locations', icon: MapPin, capability: null },
   // Channels and the agent are not capabilities: every business needs a way in and an agent.
   { name: 'القنوات', href: '/dashboard/channels', icon: RadioTower, capability: null },
   { name: 'الوكيل الذكي', href: '/dashboard/agent', icon: Bot, capability: null },

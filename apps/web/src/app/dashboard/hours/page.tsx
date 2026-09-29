@@ -1,0 +1,66 @@
+import { redirect } from 'next/navigation'
+import { requireMember, CapabilityDisabledError } from '@/lib/capabilities/guard'
+import { HoursEditor, type ExceptionRow } from './hours-editor'
+import type { DayInput } from './actions'
+
+export default async function BusinessHoursPage() {
+  let ctx
+  try {
+    ctx = await requireMember()
+  } catch (error) {
+    if (error instanceof CapabilityDisabledError) redirect('/dashboard/settings')
+    redirect('/login')
+  }
+
+  const [{ data: hours }, { data: exceptions }] = await Promise.all([
+    ctx.supabase
+      .from('business_hours')
+      .select('day_of_week, open_time, close_time, is_closed')
+      .eq('organization_id', ctx.organizationId)
+      .order('day_of_week'),
+    ctx.supabase
+      .from('business_hour_exceptions')
+      .select('id, exception_date, is_closed, open_time, close_time, reason')
+      .eq('organization_id', ctx.organizationId)
+      .is('location_id', null)
+      .order('exception_date'),
+  ])
+
+  const byDay = new Map((hours ?? []).map((row) => [row.day_of_week as number, row]))
+  const days: DayInput[] = Array.from({ length: 7 }, (_, dayOfWeek) => {
+    const row = byDay.get(dayOfWeek)
+    return {
+      dayOfWeek,
+      openTime: (row?.open_time ?? '09:00:00').slice(0, 5),
+      closeTime: (row?.close_time ?? '17:00:00').slice(0, 5),
+      isClosed: row ? Boolean(row.is_closed) : true,
+    }
+  })
+
+  const canManage = ctx.role === 'owner' || ctx.role === 'admin'
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight text-text">ساعات العمل</h1>
+        <p className="mt-1 text-sm text-muted">
+          تُستخدم هذه الساعات في حساب المواعيد المتاحة التي يقترحها الوكيل، وفي الإجازات
+          والاستثناءات.
+        </p>
+      </div>
+
+      {!hours?.length && (
+        <div className="rounded-xl border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-text">
+          لم تُضبط ساعات العمل بعد. الأيام غير المُعدّة تُعتبر مغلقة، ولن يقترح الوكيل أي موعد
+          فيها.
+        </div>
+      )}
+
+      <HoursEditor
+        initialDays={days}
+        exceptions={(exceptions ?? []) as ExceptionRow[]}
+        canManage={canManage}
+      />
+    </div>
+  )
+}
