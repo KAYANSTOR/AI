@@ -1,7 +1,12 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { createClient } from '@/lib/supabase/server'
 
-export type NotificationType = 'assignment' | 'handoff' | 'high_priority' | 'provider_error'
+export type NotificationType =
+  | 'assignment'
+  | 'handoff'
+  | 'high_priority'
+  | 'provider_error'
+  | 'workflow'
 
 export type NotificationRow = {
   id: string
@@ -16,10 +21,6 @@ export type NotificationRow = {
   created_at: string
 }
 
-/**
- * Creates an in-app notification. When idempotencyKey is provided, a unique
- * (organization_id, idempotency_key) constraint absorbs duplicates safely.
- */
 export async function createNotification(
   supabase: SupabaseClient | Awaited<ReturnType<typeof createClient>>,
   args: {
@@ -27,7 +28,7 @@ export async function createNotification(
     memberId?: string | null
     entityType: string
     entityId: string
-    notificationType: NotificationType
+    notificationType: NotificationType | string
     title: string
     body: string
     idempotencyKey?: string | null
