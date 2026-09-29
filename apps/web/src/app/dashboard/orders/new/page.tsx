@@ -53,10 +53,9 @@ export default async function NewOrderPage(props: {
       defaultValues = {
         contact_id: quoteRecord.contact_id,
         quote_id: quoteRecord.id,
-        notes: quoteRecord.notes,
+        notes: quoteRecord.notes ?? undefined,
         items: quoteRecord.quote_items.map((i) => ({
           name: i.name,
-          description: i.description,
           quantity: i.quantity,
           unit_price: i.unit_price,
           discount: i.discount

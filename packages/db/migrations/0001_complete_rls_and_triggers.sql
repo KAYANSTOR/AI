@@ -28,12 +28,10 @@ RETURNS TRIGGER
 LANGUAGE plpgsql
 SECURITY INVOKER
 SET search_path = public
-AS $
-BEGIN
+AS 'BEGIN
   NEW.updated_at = NOW();
   RETURN NEW;
-END;
-$;
+END;';
 
 -- Drop incomplete example policies
 DROP POLICY IF EXISTS "Users can view contacts in their organization" ON contacts;
