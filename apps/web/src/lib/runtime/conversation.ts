@@ -14,12 +14,17 @@ export type ConversationRef = {
 /**
  * One conversation model for every channel.
  *
- * An active conversation is unique per (organization, contact, channel) and this is
- * enforced in the database by ux_conversation_active. Every runtime entry point
+ * A conversation is "open" when it is not closed, so `handed_off` stays open and keeps
+ * the human in control. Openness is unique per (organization, contact, channel) and is
+ * enforced in the database by ux_conversation_open. Every runtime entry point
  * (WhatsApp, Instagram, SMS, Phone) resolves or creates conversations through this
  * function instead of keeping its own copy of the rule.
+ *
+ * This deliberately does NOT look for status='active': doing so treated a
+ * human-taken-over conversation as absent and opened a fresh, AI-enabled one, which
+ * silently undid the handoff.
  */
-export async function ensureActiveConversation(
+export async function ensureOpenConversation(
   supabase: SupabaseClient,
   input: {
     organizationId: string
@@ -34,7 +39,7 @@ export async function ensureActiveConversation(
     .eq('organization_id', input.organizationId)
     .eq('contact_id', input.contactId)
     .eq('channel_id', input.channelId)
-    .eq('status', 'active')
+    .neq('status', 'closed')
     .maybeSingle()
 
   if (existing.error) throw new Error(existing.error.message)
@@ -66,7 +71,7 @@ export async function ensureActiveConversation(
       .eq('organization_id', input.organizationId)
       .eq('contact_id', input.contactId)
       .eq('channel_id', input.channelId)
-      .eq('status', 'active')
+      .neq('status', 'closed')
       .maybeSingle()
     if (retry.data?.id) return retry.data.id
     throw new Error(retry.error?.message ?? 'conversation_create_race')

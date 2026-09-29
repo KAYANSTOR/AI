@@ -18,11 +18,14 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const supabase = createAdminClient()
   let eventRowId: string | null = null
+  let supabase: ReturnType<typeof createAdminClient> | null = null
   try {
     const rawBody = await req.text()
+    // Signature first: nothing privileged is constructed for an unsigned request.
     if (!verifyMetaSignature(rawBody, req.headers)) return NextResponse.json({ error: 'invalid_webhook_signature' }, { status: 401 })
+
+    supabase = createAdminClient()
     const body = JSON.parse(rawBody) as Record<string, unknown>
 
     for (const entry of (body.entry as Array<Record<string, unknown>> | undefined) ?? []) {
@@ -93,7 +96,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'instagram webhook error'
-    if (eventRowId) await markWebhookProcessed(supabase, eventRowId, 'failed', message)
+    if (supabase && eventRowId) await markWebhookProcessed(supabase, eventRowId, 'failed', message)
     return NextResponse.json({ error: message }, { status: 500 })
   }
 }

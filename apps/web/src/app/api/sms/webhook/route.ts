@@ -10,12 +10,15 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 export async function POST(req: NextRequest) {
-  const supabase = createAdminClient()
   let eventRowId: string | null = null
+  let supabase: ReturnType<typeof createAdminClient> | null = null
   try {
     const raw = await req.text()
     const params = Object.fromEntries(new URLSearchParams(raw).entries())
+    // Signature first: nothing privileged is constructed for an unsigned request.
     if (!verifyTwilioSignature(req.url, params, req.headers.get('x-twilio-signature'))) return new NextResponse('Forbidden', { status: 403 })
+
+    supabase = createAdminClient()
 
     const from = String(params.From ?? '').trim()
     const to = String(params.To ?? '').trim()
@@ -73,7 +76,7 @@ export async function POST(req: NextRequest) {
     return new NextResponse('OK')
   } catch (error) {
     const message = error instanceof Error ? error.message : 'sms webhook error'
-    if (eventRowId) await markWebhookProcessed(supabase, eventRowId, 'failed', message)
+    if (supabase && eventRowId) await markWebhookProcessed(supabase, eventRowId, 'failed', message)
     return new NextResponse('Server error', { status: 500 })
   }
 }

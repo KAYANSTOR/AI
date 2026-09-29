@@ -4,7 +4,7 @@ import { acquireWebhookEvent, markWebhookProcessed } from '@/lib/channels/idempo
 import { resolveContactIdentity, normalizeE164 } from '@/lib/channels/contacts'
 import { executeTool, getToolDefinitionsForAgent } from '@/lib/ai/tools'
 import { buildBusinessSystemPrompt } from '@/lib/ai/prompt'
-import { ensureActiveConversation } from '@/lib/runtime/conversation'
+import { ensureOpenConversation } from '@/lib/runtime/conversation'
 import { resolveBusinessAgent, resolveChannelExact } from '@/lib/runtime/tenant'
 import { verifyVapiRequest } from '@/lib/runtime/security'
 
@@ -81,7 +81,7 @@ export async function POST(req: NextRequest) {
       : null
 
     const conversationId = contact
-      ? await ensureActiveConversation(supabase, {
+      ? await ensureOpenConversation(supabase, {
           organizationId: channel.organizationId,
           businessId: channel.businessId,
           contactId: contact.contactId,

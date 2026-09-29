@@ -4,7 +4,7 @@ import { getConsentStatus, isOptOutMessage, recordOptOut } from '@/lib/channels/
 import { checkEligibility } from '@/lib/channels/eligibility'
 import { runAgentTurn } from '@/lib/runtime/agent-runtime'
 import { getPendingAction, isAffirmative, isNegative, markPendingAction } from '@/lib/runtime/pending'
-import { ensureActiveConversation, getConversationRef } from '@/lib/runtime/conversation'
+import { ensureOpenConversation, getConversationRef } from '@/lib/runtime/conversation'
 import { resolveBusinessAgent } from '@/lib/runtime/tenant'
 import { executeTool } from '@/lib/ai/tools'
 
@@ -39,7 +39,7 @@ export async function processInboundMessage(
     displayName: input.displayName,
   })
 
-  const conversationId = await ensureActiveConversation(supabase, {
+  const conversationId = await ensureOpenConversation(supabase, {
     organizationId: input.organizationId,
     businessId: input.businessId,
     contactId: contact.contactId,
