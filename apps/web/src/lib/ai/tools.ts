@@ -93,6 +93,7 @@ export async function executeTool(name:string,rawArgs:Record<string,unknown>,ctx
       case 'create_lead': result=await toolCreateLead(ctx,rawArgs); break
       case 'search_knowledge': result=await toolSearchKnowledge(ctx,rawArgs); break
       case 'request_human_handoff': result=await toolHandoff(ctx,rawArgs); break
+      case 'create_quote': result=await toolCreateQuote(ctx,rawArgs); break
     }
     if(result === undefined) return {ok:false as const,error:'Tool '+name+' has no implementation.'}
     if(policy.auditClass==='sensitive_write') await writeToolAudit(ctx,name,policy.capability,result)
@@ -213,3 +214,47 @@ async function recordToolExecution(ctx:ToolContext,name:string,status:'succeeded
     requires_confirmation:requiresConfirmation,latency_ms:Date.now()-started,
   })
 }
+
+ a s y n c   f u n c t i o n   t o o l C r e a t e Q u o t e ( c t x :   T o o l C o n t e x t ,   a r g s :   R e c o r d < s t r i n g ,   u n k n o w n > )   { 
+     i f   ( ! c t x . c o n t a c t I d )   { 
+         t h r o w   n e w   E r r o r ( ' C u s t o m e r   c o n t e x t   i s   r e q u i r e d   t o   c r e a t e   a   q u o t e . ' ) 
+     } 
+     c o n s t   i t e m s   =   a r g s . i t e m s   a s   A r r a y < { n a m e :   s t r i n g ,   d e s c r i p t i o n ? :   s t r i n g ,   q u a n t i t y :   n u m b e r ,   u n i t _ p r i c e :   n u m b e r ,   d i s c o u n t ? :   n u m b e r } > 
+     i f   ( ! i t e m s   | |   ! i t e m s . l e n g t h )   { 
+         t h r o w   n e w   E r r o r ( ' A t   l e a s t   o n e   i t e m   i s   r e q u i r e d . ' ) 
+     } 
+ 
+     l e t   s u b t o t a l   =   0 
+     l e t   d i s c o u n t   =   0 
+     c o n s t   p r o c e s s e d I t e m s   =   i t e m s . m a p ( i t e m   = >   { 
+         c o n s t   q   =   N u m b e r ( i t e m . q u a n t i t y ) 
+         c o n s t   p   =   N u m b e r ( i t e m . u n i t _ p r i c e ) 
+         c o n s t   d   =   N u m b e r ( i t e m . d i s c o u n t   | |   0 ) 
+         c o n s t   l i n e T o t a l   =   ( q   *   p )   -   d 
+         s u b t o t a l   + =   ( q   *   p ) 
+         d i s c o u n t   + =   d 
+         r e t u r n   {   n a m e :   S t r i n g ( i t e m . n a m e ) ,   d e s c r i p t i o n :   i t e m . d e s c r i p t i o n   ?   S t r i n g ( i t e m . d e s c r i p t i o n )   :   n u l l ,   q u a n t i t y :   q ,   u n i t _ p r i c e :   p ,   d i s c o u n t :   d ,   l i n e _ t o t a l :   l i n e T o t a l   } 
+     } ) 
+     c o n s t   t o t a l   =   s u b t o t a l   -   d i s c o u n t 
+ 
+     c o n s t   {   d a t a :   q u o t e ,   e r r o r   }   =   a w a i t   c t x . s u p a b a s e . f r o m ( ' q u o t e s ' ) . i n s e r t ( { 
+         o r g a n i z a t i o n _ i d :   c t x . o r g a n i z a t i o n I d , 
+         b u s i n e s s _ i d :   c t x . b u s i n e s s I d , 
+         c o n t a c t _ i d :   c t x . c o n t a c t I d , 
+         c o n v e r s a t i o n _ i d :   c t x . c o n v e r s a t i o n I d   | |   n u l l , 
+         s t a t u s :   ' d r a f t ' , 
+         c u r r e n c y :   ' S A R ' , 
+         s u b t o t a l ,   d i s c o u n t ,   t a x :   0 ,   t o t a l , 
+         n o t e s :   a r g s . n o t e s   ?   S t r i n g ( a r g s . n o t e s )   :   n u l l 
+     } ) . s e l e c t ( ' i d ,   q u o t e _ n u m b e r ' ) . s i n g l e ( ) 
+ 
+     i f   ( e r r o r   | |   ! q u o t e )   t h r o w   n e w   E r r o r ( ' D a t a b a s e   e r r o r   c r e a t i n g   q u o t e . ' ) 
+ 
+     c o n s t   i t e m s T o I n s e r t   =   p r o c e s s e d I t e m s . m a p ( i t e m   = >   ( {   . . . i t e m ,   q u o t e _ i d :   q u o t e . i d   } ) ) 
+     a w a i t   c t x . s u p a b a s e . f r o m ( ' q u o t e _ i t e m s ' ) . i n s e r t ( i t e m s T o I n s e r t ) 
+ 
+     r e t u r n   {   q u o t e I d :   q u o t e . i d ,   q u o t e N u m b e r :   q u o t e . q u o t e _ n u m b e r ,   t o t a l ,   s t a t u s :   ' d r a f t '   } 
+ } 
+ 
+ 
+ 

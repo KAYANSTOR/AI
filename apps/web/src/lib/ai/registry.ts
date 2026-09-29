@@ -145,7 +145,40 @@ export const TOOL_POLICIES: Record<string, ToolPolicy> = {
       additionalProperties: false,
     },
   },
+  create_quote: {
+    name: 'create_quote',
+    description: 'Create a new draft quote for a customer. Requires items with quantities and unit prices. Never use for dummy quotes.',
+    capability: 'quotes',
+    risk: 'write',
+    requiresConfirmation: true,
+    allowedActors: ['agent', 'staff'],
+    tenantScope: 'organization',
+    auditClass: 'sensitive_write',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        notes: { type: 'string', description: 'Additional terms or notes for the quote.' },
+        items: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              name: { type: 'string' },
+              description: { type: 'string' },
+              quantity: { type: 'number' },
+              unit_price: { type: 'number' },
+              discount: { type: 'number' }
+            },
+            required: ['name', 'quantity', 'unit_price']
+          }
+        }
+      },
+      required: ['items'],
+      additionalProperties: false
+    }
+  },
 }
+
 
 export function getToolPolicy(name: string): ToolPolicy | null {
   return TOOL_POLICIES[name] ?? null

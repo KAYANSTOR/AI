@@ -36,6 +36,7 @@ const navItems: NavItem[] = [
   { name: ar.nav.dashboard, href: '/dashboard', icon: LayoutDashboard, capability: null },
   { name: ar.nav.conversations, href: '/dashboard/conversations', icon: MessageSquare, capability: 'inbox' },
   { name: ar.nav.appointments, href: '/dashboard/appointments', icon: Calendar, capability: 'appointments' },
+  { name: ar.nav.quotes, href: '/dashboard/quotes', icon: BookOpen, capability: 'quotes' },
   { name: ar.nav.leads, href: '/dashboard/leads', icon: Users, capability: 'lead_capture' },
   { name: ar.nav.contacts, href: '/dashboard/contacts', icon: Contact, capability: 'lead_capture' },
   { name: ar.nav.services, href: '/dashboard/services', icon: Wrench, capability: 'appointments' },

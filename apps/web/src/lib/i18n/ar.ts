@@ -28,6 +28,7 @@ export const ar = {
     dashboard: 'لوحة التحكم',
     conversations: 'صندوق المحادثات',
     appointments: 'المواعيد',
+    quotes: 'عروض الأسعار',
     leads: 'العملاء المحتملون',
     contacts: 'جهات الاتصال',
     services: 'الخدمات',
