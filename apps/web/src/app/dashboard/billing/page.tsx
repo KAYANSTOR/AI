@@ -1,148 +1,139 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { getDashboardContext } from '@/lib/dashboard/context'
-import { CreditCard, Zap, Server, Shield } from 'lucide-react'
+import { CreditCard, Zap, Phone, Radio, Workflow, Megaphone } from 'lucide-react'
 import { formatNumber } from '@/lib/i18n/format'
-import { ar } from '@/lib/i18n/ar'
+import { loadBillingSnapshot } from '@/lib/billing/entitlements'
 
 export default async function BillingPage() {
   const context = await getDashboardContext()
   if (!context) redirect('/login')
   const supabase = await createClient()
 
-  // Fetch subscription
-  const { data: subscription } = await supabase
-    .from('subscriptions')
-    .select('*, plans(*)')
-    .eq('organization_id', context.organizationId)
-    .single()
+  const snapshot = await loadBillingSnapshot(supabase, context.organizationId)
 
-  // Fetch usage meters
-  const { data: usageMeters } = await supabase
-    .from('usage_meters')
-    .select('*')
-    .eq('organization_id', context.organizationId)
+  const meters = [
+    {
+      key: 'ai_messages',
+      title: 'رسائل الذكاء الاصطناعي',
+      hint: 'كل رد وكيل يُحسب رسالة',
+      icon: Zap,
+      color: 'bg-purple-500',
+      used: snapshot.usage.ai_messages ?? 0,
+      limit: snapshot.limits.ai_messages ?? 100,
+    },
+    {
+      key: 'voice_minutes',
+      title: 'دقائق الصوت',
+      hint: 'مكالمات الوكيل الصوتي',
+      icon: Phone,
+      color: 'bg-blue-500',
+      used: snapshot.usage.voice_minutes ?? 0,
+      limit: snapshot.limits.voice_minutes ?? 30,
+    },
+    {
+      key: 'channels',
+      title: 'القنوات النشطة',
+      hint: 'WhatsApp / SMS / هاتف / إنستغرام',
+      icon: Radio,
+      color: 'bg-emerald-500',
+      used: snapshot.usage.channels ?? 0,
+      limit: snapshot.limits.channels ?? 1,
+    },
+    {
+      key: 'automation_runs',
+      title: 'تشغيل الأتمتة',
+      hint: 'سير العمل المنشور',
+      icon: Workflow,
+      color: 'bg-amber-500',
+      used: snapshot.usage.automation_runs ?? 0,
+      limit: snapshot.limits.automation_runs ?? 50,
+    },
+    {
+      key: 'campaign_sends',
+      title: 'إرسال الحملات',
+      hint: 'رسائل الحملات التسويقية',
+      icon: Megaphone,
+      color: 'bg-rose-500',
+      used: snapshot.usage.campaign_sends ?? 0,
+      limit: snapshot.limits.campaign_sends ?? 50,
+    },
+  ]
 
-  const activePlan = subscription?.plans || {
-    name: 'Trial',
-    code: 'trial',
-    limits: { ai_messages: 100, voice_minutes: 30, channels: 1 },
-    monthly_price: 0
-  }
-
-  const aiMessagesUsed = usageMeters?.find(m => m.meter_key === 'ai_messages')?.consumed_value || 0
-  const aiMessagesLimit = activePlan.limits.ai_messages || 100
-  
-  const voiceMinutesUsed = usageMeters?.find(m => m.meter_key === 'voice_minutes')?.consumed_value || 0
-  const voiceMinutesLimit = activePlan.limits.voice_minutes || 30
-
-  const aiPercent = Math.min(100, Math.round((aiMessagesUsed / aiMessagesLimit) * 100))
-  const voicePercent = Math.min(100, Math.round((voiceMinutesUsed / voiceMinutesLimit) * 100))
+  const statusLabel =
+    snapshot.status === 'active'
+      ? 'نشط'
+      : snapshot.status === 'trial'
+        ? 'تجريبي'
+        : snapshot.status === 'past_due' || snapshot.status === 'grace_period'
+          ? 'متأخر'
+          : snapshot.status === 'suspended'
+            ? 'موقوف'
+            : snapshot.status
 
   return (
-    <div className="space-y-8 max-w-5xl">
+    <div className="mx-auto max-w-5xl space-y-8">
       <div>
         <h1 className="text-2xl font-bold tracking-tight text-text">الباقات والاستهلاك</h1>
         <p className="mt-1 text-sm text-text-muted">
-          إدارة اشتراكك ومراقبة استهلاك الموارد وحصص الاستخدام.
+          حدود الخطة تُفرض على الخادم — الواجهة تعرض الاستهلاك الفعلي فقط.
         </p>
       </div>
 
-      {/* Subscription Card */}
       <div className="rounded-xl border border-border bg-surface p-6 shadow-sm">
-        <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
+        <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
           <div className="flex items-center gap-4">
             <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary-light/40">
               <CreditCard className="text-primary-dark" size={24} />
             </div>
             <div>
               <p className="text-sm font-medium text-text-muted">الباقة الحالية</p>
-              <h2 className="text-xl font-bold text-text flex items-center gap-2">
-                {activePlan.name}
-                <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400">
-                  {subscription?.status === 'active' ? 'نشط' : (subscription?.status === 'trial' ? 'فترة تجريبية' : 'تجريبي')}
+              <h2 className="flex items-center gap-2 text-xl font-bold text-text">
+                {snapshot.planCode}
+                <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700 dark:bg-green-900/40 dark:text-green-400">
+                  {statusLabel}
                 </span>
               </h2>
             </div>
           </div>
-          <div className="text-right">
-            <p className="text-sm font-medium text-text-muted">التكلفة الشهرية</p>
-            <p className="text-2xl font-bold text-text">{activePlan.monthly_price} <span className="text-sm font-normal">ر.س</span></p>
-          </div>
-        </div>
-        
-        <div className="mt-6 flex flex-wrap gap-3">
-          <button className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors">
-            ترقية الباقة
-          </button>
-          <button className="rounded-lg border border-border bg-transparent px-4 py-2 text-sm font-medium text-text hover:bg-surface-hover transition-colors">
-            تحديث طريقة الدفع
-          </button>
         </div>
       </div>
 
-      {/* Usage Meters */}
       <div>
-        <h3 className="text-lg font-bold text-text mb-4">الاستهلاك الشهري (Meters)</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          
-          {/* AI Messages Meter */}
-          <div className="rounded-xl border border-border bg-surface p-5 shadow-sm">
-            <div className="flex justify-between items-start mb-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400">
-                  <Zap size={20} />
+        <h3 className="mb-4 text-lg font-bold text-text">الاستهلاك الشهري</h3>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          {meters.map((m) => {
+            const percent = m.limit > 0 ? Math.min(100, Math.round((m.used / m.limit) * 100)) : 0
+            const Icon = m.icon
+            return (
+              <div key={m.key} className="rounded-xl border border-border bg-surface p-5 shadow-sm">
+                <div className="mb-4 flex items-start justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="rounded-lg bg-background p-2 text-text">
+                      <Icon size={20} />
+                    </div>
+                    <div>
+                      <h4 className="font-semibold text-text">{m.title}</h4>
+                      <p className="text-xs text-text-muted">{m.hint}</p>
+                    </div>
+                  </div>
+                  <span className="text-sm font-bold text-text">{percent}%</span>
                 </div>
-                <div>
-                  <h4 className="font-semibold text-text">رسائل الذكاء الاصطناعي</h4>
-                  <p className="text-xs text-text-muted">تُستهلك عند رد الوكيل الذكي</p>
+                <div className="h-2 w-full overflow-hidden rounded-full bg-border">
+                  <div
+                    className={`h-full rounded-full ${percent > 90 ? 'bg-red-500' : m.color}`}
+                    style={{ width: `${percent}%` }}
+                  />
                 </div>
-              </div>
-              <span className="text-sm font-bold text-text">{aiPercent}%</span>
-            </div>
-            
-            <div className="h-2 w-full bg-border rounded-full overflow-hidden">
-              <div 
-                className={`h-full rounded-full ${aiPercent > 90 ? 'bg-red-500' : 'bg-purple-500'}`} 
-                style={{ width: `${aiPercent}%` }}
-              ></div>
-            </div>
-            <div className="mt-2 flex justify-between text-xs text-text-muted font-medium">
-              <span>{formatNumber(aiMessagesUsed)} مستخدم</span>
-              <span>{formatNumber(aiMessagesLimit)} كحد أقصى</span>
-            </div>
-          </div>
-
-          {/* Voice Minutes Meter */}
-          <div className="rounded-xl border border-border bg-surface p-5 shadow-sm">
-            <div className="flex justify-between items-start mb-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">
-                  <Server size={20} />
-                </div>
-                <div>
-                  <h4 className="font-semibold text-text">دقائق المكالمات الصوتية</h4>
-                  <p className="text-xs text-text-muted">للوكلاء الصوتيين والرد الآلي</p>
+                <div className="mt-2 flex justify-between text-xs font-medium text-text-muted">
+                  <span>{formatNumber(m.used)} مستخدم</span>
+                  <span>{formatNumber(m.limit)} كحد أقصى</span>
                 </div>
               </div>
-              <span className="text-sm font-bold text-text">{voicePercent}%</span>
-            </div>
-            
-            <div className="h-2 w-full bg-border rounded-full overflow-hidden">
-              <div 
-                className={`h-full rounded-full ${voicePercent > 90 ? 'bg-red-500' : 'bg-blue-500'}`} 
-                style={{ width: `${voicePercent}%` }}
-              ></div>
-            </div>
-            <div className="mt-2 flex justify-between text-xs text-text-muted font-medium">
-              <span>{formatNumber(voiceMinutesUsed)} مستخدم</span>
-              <span>{formatNumber(voiceMinutesLimit)} كحد أقصى</span>
-            </div>
-          </div>
-
+            )
+          })}
         </div>
       </div>
-
     </div>
   )
 }
