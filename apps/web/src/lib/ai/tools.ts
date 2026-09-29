@@ -1,4 +1,4 @@
-import type { SupabaseClient } from '@supabase/supabase-js'
+﻿import type { SupabaseClient } from '@supabase/supabase-js'
 import { createAppointmentRecord, findAvailableSlots } from '@/lib/calendar/slots'
 import { resolveContactByPhone } from '@/lib/channels/contacts'
 import { getToolPolicy, isActorAllowed, type ToolActor } from '@/lib/ai/registry'
@@ -93,7 +93,6 @@ export async function executeTool(name:string,rawArgs:Record<string,unknown>,ctx
       case 'create_lead': result=await toolCreateLead(ctx,rawArgs); break
       case 'search_knowledge': result=await toolSearchKnowledge(ctx,rawArgs); break
       case 'request_human_handoff': result=await toolHandoff(ctx,rawArgs); break
-      case 'create_quote': result=await toolCreateQuote(ctx,rawArgs); break
     }
     if(result === undefined) return {ok:false as const,error:'Tool '+name+' has no implementation.'}
     if(policy.auditClass==='sensitive_write') await writeToolAudit(ctx,name,policy.capability,result)
@@ -215,46 +214,130 @@ async function recordToolExecution(ctx:ToolContext,name:string,status:'succeeded
   })
 }
 
- a s y n c   f u n c t i o n   t o o l C r e a t e Q u o t e ( c t x :   T o o l C o n t e x t ,   a r g s :   R e c o r d < s t r i n g ,   u n k n o w n > )   { 
-     i f   ( ! c t x . c o n t a c t I d )   { 
-         t h r o w   n e w   E r r o r ( ' C u s t o m e r   c o n t e x t   i s   r e q u i r e d   t o   c r e a t e   a   q u o t e . ' ) 
-     } 
-     c o n s t   i t e m s   =   a r g s . i t e m s   a s   A r r a y < { n a m e :   s t r i n g ,   d e s c r i p t i o n ? :   s t r i n g ,   q u a n t i t y :   n u m b e r ,   u n i t _ p r i c e :   n u m b e r ,   d i s c o u n t ? :   n u m b e r } > 
-     i f   ( ! i t e m s   | |   ! i t e m s . l e n g t h )   { 
-         t h r o w   n e w   E r r o r ( ' A t   l e a s t   o n e   i t e m   i s   r e q u i r e d . ' ) 
-     } 
- 
-     l e t   s u b t o t a l   =   0 
-     l e t   d i s c o u n t   =   0 
-     c o n s t   p r o c e s s e d I t e m s   =   i t e m s . m a p ( i t e m   = >   { 
-         c o n s t   q   =   N u m b e r ( i t e m . q u a n t i t y ) 
-         c o n s t   p   =   N u m b e r ( i t e m . u n i t _ p r i c e ) 
-         c o n s t   d   =   N u m b e r ( i t e m . d i s c o u n t   | |   0 ) 
-         c o n s t   l i n e T o t a l   =   ( q   *   p )   -   d 
-         s u b t o t a l   + =   ( q   *   p ) 
-         d i s c o u n t   + =   d 
-         r e t u r n   {   n a m e :   S t r i n g ( i t e m . n a m e ) ,   d e s c r i p t i o n :   i t e m . d e s c r i p t i o n   ?   S t r i n g ( i t e m . d e s c r i p t i o n )   :   n u l l ,   q u a n t i t y :   q ,   u n i t _ p r i c e :   p ,   d i s c o u n t :   d ,   l i n e _ t o t a l :   l i n e T o t a l   } 
-     } ) 
-     c o n s t   t o t a l   =   s u b t o t a l   -   d i s c o u n t 
- 
-     c o n s t   {   d a t a :   q u o t e ,   e r r o r   }   =   a w a i t   c t x . s u p a b a s e . f r o m ( ' q u o t e s ' ) . i n s e r t ( { 
-         o r g a n i z a t i o n _ i d :   c t x . o r g a n i z a t i o n I d , 
-         b u s i n e s s _ i d :   c t x . b u s i n e s s I d , 
-         c o n t a c t _ i d :   c t x . c o n t a c t I d , 
-         c o n v e r s a t i o n _ i d :   c t x . c o n v e r s a t i o n I d   | |   n u l l , 
-         s t a t u s :   ' d r a f t ' , 
-         c u r r e n c y :   ' S A R ' , 
-         s u b t o t a l ,   d i s c o u n t ,   t a x :   0 ,   t o t a l , 
-         n o t e s :   a r g s . n o t e s   ?   S t r i n g ( a r g s . n o t e s )   :   n u l l 
-     } ) . s e l e c t ( ' i d ,   q u o t e _ n u m b e r ' ) . s i n g l e ( ) 
- 
-     i f   ( e r r o r   | |   ! q u o t e )   t h r o w   n e w   E r r o r ( ' D a t a b a s e   e r r o r   c r e a t i n g   q u o t e . ' ) 
- 
-     c o n s t   i t e m s T o I n s e r t   =   p r o c e s s e d I t e m s . m a p ( i t e m   = >   ( {   . . . i t e m ,   q u o t e _ i d :   q u o t e . i d   } ) ) 
-     a w a i t   c t x . s u p a b a s e . f r o m ( ' q u o t e _ i t e m s ' ) . i n s e r t ( i t e m s T o I n s e r t ) 
- 
-     r e t u r n   {   q u o t e I d :   q u o t e . i d ,   q u o t e N u m b e r :   q u o t e . q u o t e _ n u m b e r ,   t o t a l ,   s t a t u s :   ' d r a f t '   } 
- } 
- 
- 
- 
+
+async function toolCreateQuote(ctx: ToolContext, args: Record<string, unknown>) {
+    if (!ctx.contactId) {
+        throw new Error('Customer context is required to create a quote.')
+    }
+    const items = args.items as Array<{name: string, description?: string, quantity: number, unit_price: number, discount?: number}>
+    if (!items || !items.length) {
+        throw new Error('At least one item is required.')
+    }
+
+    let subtotal = 0
+    let discount = 0
+    const processedItems = items.map(item => {
+        const q = Number(item.quantity)
+        const p = Number(item.unit_price)
+        const d = Number(item.discount || 0)
+        const lineTotal = (q * p) - d
+        subtotal += (q * p)
+        discount += d
+        return { name: String(item.name), description: item.description ? String(item.description) : null, quantity: q, unit_price: p, discount: d, line_total: lineTotal }
+    })
+    const total = subtotal - discount
+
+    const { data: quote, error } = await ctx.supabase.from('quotes').insert({
+        organization_id: ctx.organizationId,
+        business_id: ctx.businessId,
+        contact_id: ctx.contactId,
+        conversation_id: ctx.conversationId || null,
+        status: 'draft',
+        currency: 'SAR',
+        subtotal, discount, tax: 0, total,
+        notes: args.notes ? String(args.notes) : null
+    }).select('id, quote_number').single()
+
+    if (error || !quote) throw new Error('Database error creating quote.')
+
+    const itemsToInsert = processedItems.map(item => ({ ...item, quote_id: quote.id }))
+    await ctx.supabase.from('quote_items').insert(itemsToInsert)
+
+    return { quoteId: quote.id, quoteNumber: quote.quote_number, total, status: 'draft' }
+}
+
+async function toolCreateOrder(ctx: ToolContext, args: Record<string, unknown>) {
+    if (!ctx.contactId) {
+        throw new Error('Customer context is required to create an order.')
+    }
+    const items = args.items as Array<{name: string, description?: string, quantity: number, unit_price: number, discount?: number}>
+    if (!items || !items.length) {
+        throw new Error('At least one item is required.')
+    }
+
+    let subtotal = 0
+    let discount = 0
+    const processedItems = items.map(item => {
+        const q = Number(item.quantity)
+        const p = Number(item.unit_price)
+        const d = Number(item.discount || 0)
+        const lineTotal = (q * p) - d
+        subtotal += (q * p)
+        discount += d
+        return { name: String(item.name), description: item.description ? String(item.description) : null, quantity: q, unit_price: p, discount: d, line_total: lineTotal }
+    })
+    const total = subtotal - discount
+
+    const { data: order, error } = await ctx.supabase.from('orders').insert({
+        organization_id: ctx.organizationId,
+        business_id: ctx.businessId,
+        contact_id: ctx.contactId,
+        conversation_id: ctx.conversationId || null,
+        status: 'draft',
+        currency: 'SAR',
+        subtotal, discount, tax: 0, total,
+        notes: args.notes ? String(args.notes) : null
+    }).select('id, order_number').single()
+
+    if (error || !order) throw new Error('Database error creating order.')
+
+    const itemsToInsert = processedItems.map(item => ({ ...item, order_id: order.id }))
+    await ctx.supabase.from('order_items').insert(itemsToInsert)
+
+    return { orderId: order.id, orderNumber: order.order_number, total, status: 'draft' }
+}
+
+async function toolConvertQuoteToOrder(ctx: ToolContext, args: Record<string, unknown>) {
+    if (!ctx.contactId) {
+        throw new Error('Customer context is required to create an order.')
+    }
+    const quoteId = String(args.quote_id).trim()
+    if (!quoteId) throw new Error('quote_id is required.')
+
+    const { data: quote, error: quoteError } = await ctx.supabase.from('quotes')
+        .select('*, quote_items(*)')
+        .eq('id', quoteId).eq('organization_id', ctx.organizationId).eq('business_id', ctx.businessId).single()
+    if (quoteError || !quote) throw new Error('Quote not found.')
+    if (quote.status !== 'accepted') throw new Error('Quote must be accepted before converting to order.')
+
+    const { data: existingOrder } = await ctx.supabase.from('orders')
+        .select('id').eq('quote_id', quoteId).maybeSingle()
+    if (existingOrder) throw new Error('An order has already been created from this quote.')
+
+    const { data: order, error } = await ctx.supabase.from('orders').insert({
+        organization_id: ctx.organizationId,
+        business_id: ctx.businessId,
+        contact_id: quote.contact_id,
+        conversation_id: ctx.conversationId || null,
+        quote_id: quote.id,
+        status: 'draft',
+        currency: 'SAR',
+        subtotal: quote.subtotal, discount: quote.discount, tax: quote.tax, total: quote.total,
+        notes: quote.notes
+    }).select('id, order_number').single()
+
+    if (error || !order) throw new Error('Database error creating order from quote.')
+
+    const itemsToInsert = quote.quote_items.map((i: any) => ({
+        order_id: order.id,
+        name: i.name,
+        description: i.description,
+        quantity: i.quantity,
+        unit_price: i.unit_price,
+        discount: i.discount,
+        line_total: i.line_total
+    }))
+    await ctx.supabase.from('order_items').insert(itemsToInsert)
+
+    return { orderId: order.id, orderNumber: order.order_number, quoteId: quote.id, total: quote.total, status: 'draft' }
+}

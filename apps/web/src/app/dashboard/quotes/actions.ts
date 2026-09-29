@@ -103,7 +103,7 @@ export async function createQuoteAction(input: CreateQuoteInput): Promise<QuoteR
       return { ok: false, error: supabaseActionError(itemsError) }
     }
 
-    await audit(ctx, 'quote.created', { quote_id: quote.id, total: calculatedTotal })
+    await audit(ctx, 'quote.created', 'quote', quote.id, { total: calculatedTotal })
     
     revalidatePath('/dashboard/quotes')
     return { ok: true, quoteId: quote.id }
@@ -160,7 +160,7 @@ export async function changeQuoteStatusAction(quoteId: string, newStatus: 'sent'
       return { ok: false, error: supabaseActionError(updateError) }
     }
 
-    await audit(ctx, `quote.status_changed`, { quote_id: quoteId, new_status: newStatus, old_status: currentStatus })
+    await audit(ctx, `quote.status_changed`, 'quote', quoteId, { new_status: newStatus, old_status: currentStatus })
     
     revalidatePath('/dashboard/quotes')
     revalidatePath(`/dashboard/quotes/${quoteId}`)

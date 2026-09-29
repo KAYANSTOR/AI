@@ -26,7 +26,7 @@ export function DashboardShell({
 }: {
   children: React.ReactNode
   sidebar: React.ReactNode
-  setupBanner: React.ReactNode
+  setupBanner?: React.ReactNode
 }) {
   const [open, setOpen] = useState(false)
   const triggerRef = useRef<HTMLButtonElement>(null)

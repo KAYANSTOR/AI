@@ -8,6 +8,9 @@ export type DashboardContext = OrgContext & {
   timezone: string
   enabledCapabilities: string[]
   setupComplete: boolean
+  activationState: string
+  activationStep: number
+  smokeTestStatus: string
 }
 
 export const getDashboardContext = cache(
@@ -20,7 +23,7 @@ export const getDashboardContext = cache(
       await Promise.all([
         supabase
           .from('business_profiles')
-          .select('business_id, business_type_id, timezone')
+          .select('business_id, business_type_id, timezone, activation_state, activation_step, smoke_test_status')
           .eq('organization_id', org.organizationId)
           .maybeSingle(),
         supabase
@@ -35,13 +38,21 @@ export const getDashboardContext = cache(
     const enabledCapabilities = (capabilities ?? []).map((row) => row.capability_id as string)
     const businessTypeId = (profile?.business_type_id as string | null) ?? null
 
+    const activationState = profile?.activation_state || 'workspace_ready'
+    const activationStep = profile?.activation_step || 1
+    const smokeTestStatus = profile?.smoke_test_status || 'none'
+
     return {
       ...org,
       businessId: (profile?.business_id as string | null) ?? null,
       businessTypeId,
       timezone: (profile?.timezone as string | null) || 'UTC',
       enabledCapabilities,
-      setupComplete: Boolean(businessTypeId && enabledCapabilities.length > 0),
+      activationState,
+      activationStep,
+      smokeTestStatus,
+      setupComplete: activationState === 'active',
     }
   }
 )
+

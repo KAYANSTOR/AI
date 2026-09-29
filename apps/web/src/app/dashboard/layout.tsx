@@ -2,21 +2,22 @@ import { Suspense } from 'react'
 import { Sidebar } from '@/components/Sidebar'
 import { DashboardShell } from '@/components/dashboard/dashboard-shell'
 import { getDashboardContext } from '@/lib/dashboard/context'
-import { ar } from '@/lib/i18n/ar'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 
-export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
+  const context = await getDashboardContext()
+  if (!context) redirect('/login')
+  
+  if (!context.setupComplete) {
+    redirect('/onboarding')
+  }
+
   return (
     <DashboardShell
       sidebar={
         <Suspense fallback={<SidebarFallback />}>
           <DashboardSidebar />
-        </Suspense>
-      }
-      setupBanner={
-        <Suspense fallback={<SetupBannerFallback />}>
-          <SetupBanner />
         </Suspense>
       }
     >
@@ -34,20 +35,6 @@ async function DashboardSidebar() {
       role={context.role}
       enabledCapabilities={context.enabledCapabilities}
     />
-  )
-}
-
-async function SetupBanner() {
-  const context = await getDashboardContext()
-  if (!context) redirect('/login')
-  if (context.setupComplete) return null
-  return (
-    <div className="rounded-xl border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-text">
-      {ar.dashboard.setupBanner}{' '}
-      <Link href="/dashboard/setup" className="font-semibold underline">
-        {ar.dashboard.setupLink}
-      </Link>
-    </div>
   )
 }
 

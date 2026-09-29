@@ -18,6 +18,17 @@ export async function resolveChannelExact(supabase:SupabaseClient,input:{channel
 }
 
 export async function resolveBusinessAgent(supabase:SupabaseClient,businessId:string){
+  // Check if business profile is active (Go-live gate)
+  const {data: profile} = await supabase.from('business_profiles')
+    .select('activation_state')
+    .eq('business_id', businessId)
+    .single()
+    
+  if (profile?.activation_state !== 'active') {
+    console.warn(`Business ${businessId} is not active. Agent execution blocked.`)
+    return null
+  }
+
   const {data,error}=await supabase.from('ai_agents')
     .select('id,organization_id,business_id,name,model_provider,temperature,locale,status')
     .eq('business_id',businessId).eq('status','active').order('created_at').limit(1).maybeSingle()

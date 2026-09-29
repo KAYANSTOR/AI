@@ -29,6 +29,7 @@ export const ar = {
     conversations: 'صندوق المحادثات',
     appointments: 'المواعيد',
     quotes: 'عروض الأسعار',
+    orders: 'الطلبات',
     leads: 'العملاء المحتملون',
     contacts: 'جهات الاتصال',
     services: 'الخدمات',

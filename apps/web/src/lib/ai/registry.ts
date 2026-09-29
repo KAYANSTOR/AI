@@ -177,6 +177,56 @@ export const TOOL_POLICIES: Record<string, ToolPolicy> = {
       additionalProperties: false
     }
   },
+  create_order: {
+    name: 'create_order',
+    description: 'Create a new draft order for a customer. Requires items with quantities and unit prices.',
+    capability: 'orders',
+    risk: 'write',
+    requiresConfirmation: true,
+    allowedActors: ['agent', 'staff'],
+    tenantScope: 'organization',
+    auditClass: 'sensitive_write',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        notes: { type: 'string', description: 'Additional terms or notes for the order.' },
+        items: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              name: { type: 'string' },
+              description: { type: 'string' },
+              quantity: { type: 'number' },
+              unit_price: { type: 'number' },
+              discount: { type: 'number' }
+            },
+            required: ['name', 'quantity', 'unit_price']
+          }
+        }
+      },
+      required: ['items'],
+      additionalProperties: false
+    }
+  },
+  convert_quote_to_order: {
+    name: 'convert_quote_to_order',
+    description: 'Convert an accepted quote into a draft order.',
+    capability: 'orders',
+    risk: 'write',
+    requiresConfirmation: true,
+    allowedActors: ['agent', 'staff'],
+    tenantScope: 'organization',
+    auditClass: 'sensitive_write',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        quote_id: { type: 'string', description: 'The ID of the quote to convert.' }
+      },
+      required: ['quote_id'],
+      additionalProperties: false
+    }
+  },
 }
 
 

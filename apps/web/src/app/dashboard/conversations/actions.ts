@@ -1,4 +1,4 @@
-'use server'
+﻿'use server'
 
 import { revalidatePath } from 'next/cache'
 import { requireCapability, audit, type AuthorizedContext } from '@/lib/capabilities/guard'
@@ -15,7 +15,7 @@ async function loadConversation(ctx: AuthorizedContext, conversationId: string) 
     .eq('organization_id', ctx.organizationId)
     .maybeSingle()
   if (error) throw new Error(error.message)
-  if (!data) throw new Error('لم يتم العثور على المحادثة.')
+  if (!data) throw new Error('┘┘à ┘è╪ز┘à ╪د┘╪╣╪س┘ê╪▒ ╪╣┘┘ë ╪د┘┘à╪ص╪د╪»╪س╪ر.')
   return data
 }
 
@@ -42,13 +42,13 @@ export async function takeOverAction(conversationId: string, reason?: string): P
   try {
     ctx = await requireCapability('inbox')
   } catch (error) {
-    return { ok: false, error: actionErrorMessage(error, 'غير مصرح.') }
+    return { ok: false, error: actionErrorMessage(error, '╪║┘è╪▒ ┘à╪╡╪▒╪ص.') }
   }
 
   try {
     const conversation = await loadConversation(ctx, conversationId)
     if (conversation.status === 'closed') {
-      return { ok: false, error: 'المحادثة مغلقة، أعد فتحها قبل الاستلام.' }
+      return { ok: false, error: '╪د┘┘à╪ص╪د╪»╪س╪ر ┘à╪║┘┘é╪ر╪î ╪ث╪╣╪» ┘╪ز╪ص┘ç╪د ┘é╪ذ┘ ╪د┘╪د╪│╪ز┘╪د┘à.' }
     }
 
     const memberId = await currentMemberId(ctx)
@@ -70,9 +70,9 @@ export async function takeOverAction(conversationId: string, reason?: string): P
     await audit(ctx, 'conversation.takeover', 'conversation', conversationId, { assigned: Boolean(memberId) })
     revalidatePath('/dashboard/conversations')
     revalidatePath(`/dashboard/conversations/${conversationId}`)
-    return { ok: true, message: 'تم استلام المحادثة. الوكيل متوقف ولن يرد حتى تستأنفه.' }
+    return { ok: true, message: '╪ز┘à ╪د╪│╪ز┘╪د┘à ╪د┘┘à╪ص╪د╪»╪س╪ر. ╪د┘┘ê┘â┘è┘ ┘à╪ز┘ê┘é┘ ┘ê┘┘ ┘è╪▒╪» ╪ص╪ز┘ë ╪ز╪│╪ز╪ث┘┘┘ç.' }
   } catch (error) {
-    return { ok: false, error: actionErrorMessage(error, 'تعذّر استلام المحادثة. حاول مرة أخرى.') }
+    return { ok: false, error: actionErrorMessage(error, '╪ز╪╣╪░┘ّ╪▒ ╪د╪│╪ز┘╪د┘à ╪د┘┘à╪ص╪د╪»╪س╪ر. ╪ص╪د┘ê┘ ┘à╪▒╪ر ╪ث╪«╪▒┘ë.') }
   }
 }
 
@@ -85,13 +85,13 @@ export async function resumeAiAction(conversationId: string): Promise<InboxResul
   try {
     ctx = await requireCapability('inbox')
   } catch (error) {
-    return { ok: false, error: actionErrorMessage(error, 'غير مصرح.') }
+    return { ok: false, error: actionErrorMessage(error, '╪║┘è╪▒ ┘à╪╡╪▒╪ص.') }
   }
 
   try {
     const conversation = await loadConversation(ctx, conversationId)
     if (conversation.status === 'closed') {
-      return { ok: false, error: 'المحادثة مغلقة.' }
+      return { ok: false, error: '╪د┘┘à╪ص╪د╪»╪س╪ر ┘à╪║┘┘é╪ر.' }
     }
 
     const { error } = await ctx.supabase
@@ -112,9 +112,9 @@ export async function resumeAiAction(conversationId: string): Promise<InboxResul
     await audit(ctx, 'conversation.ai_resumed', 'conversation', conversationId)
     revalidatePath('/dashboard/conversations')
     revalidatePath(`/dashboard/conversations/${conversationId}`)
-    return { ok: true, message: 'تمت إعادة الوكيل إلى المحادثة.' }
+    return { ok: true, message: '╪ز┘à╪ز ╪ح╪╣╪د╪»╪ر ╪د┘┘ê┘â┘è┘ ╪ح┘┘ë ╪د┘┘à╪ص╪د╪»╪س╪ر.' }
   } catch (error) {
-    return { ok: false, error: actionErrorMessage(error, 'تعذّر استئناف الوكيل. حاول مرة أخرى.') }
+    return { ok: false, error: actionErrorMessage(error, '╪ز╪╣╪░┘ّ╪▒ ╪د╪│╪ز╪خ┘╪د┘ ╪د┘┘ê┘â┘è┘. ╪ص╪د┘ê┘ ┘à╪▒╪ر ╪ث╪«╪▒┘ë.') }
   }
 }
 
@@ -123,7 +123,7 @@ export async function closeConversationAction(conversationId: string): Promise<I
   try {
     ctx = await requireCapability('inbox')
   } catch (error) {
-    return { ok: false, error: actionErrorMessage(error, 'غير مصرح.') }
+    return { ok: false, error: actionErrorMessage(error, '╪║┘è╪▒ ┘à╪╡╪▒╪ص.') }
   }
 
   try {
@@ -144,9 +144,9 @@ export async function closeConversationAction(conversationId: string): Promise<I
     await audit(ctx, 'conversation.closed', 'conversation', conversationId)
     revalidatePath('/dashboard/conversations')
     revalidatePath(`/dashboard/conversations/${conversationId}`)
-    return { ok: true, message: 'تم إغلاق المحادثة. لن يبدأ الوكيل محادثة جديدة من تلقاء نفسه.' }
+    return { ok: true, message: '╪ز┘à ╪ح╪║┘╪د┘é ╪د┘┘à╪ص╪د╪»╪س╪ر. ┘┘ ┘è╪ذ╪»╪ث ╪د┘┘ê┘â┘è┘ ┘à╪ص╪د╪»╪س╪ر ╪ش╪»┘è╪»╪ر ┘à┘ ╪ز┘┘é╪د╪ة ┘┘╪│┘ç.' }
   } catch (error) {
-    return { ok: false, error: actionErrorMessage(error, 'تعذّر إغلاق المحادثة. حاول مرة أخرى.') }
+    return { ok: false, error: actionErrorMessage(error, '╪ز╪╣╪░┘ّ╪▒ ╪ح╪║┘╪د┘é ╪د┘┘à╪ص╪د╪»╪س╪ر. ╪ص╪د┘ê┘ ┘à╪▒╪ر ╪ث╪«╪▒┘ë.') }
   }
 }
 
@@ -155,7 +155,7 @@ export async function reopenConversationAction(conversationId: string): Promise<
   try {
     ctx = await requireCapability('inbox')
   } catch (error) {
-    return { ok: false, error: actionErrorMessage(error, 'غير مصرح.') }
+    return { ok: false, error: actionErrorMessage(error, '╪║┘è╪▒ ┘à╪╡╪▒╪ص.') }
   }
 
   try {
@@ -171,9 +171,9 @@ export async function reopenConversationAction(conversationId: string): Promise<
     await audit(ctx, 'conversation.reopened', 'conversation', conversationId)
     revalidatePath('/dashboard/conversations')
     revalidatePath(`/dashboard/conversations/${conversationId}`)
-    return { ok: true, message: 'تمت إعادة فتح المحادثة، والوكيل ما زال متوقفًا.' }
+    return { ok: true, message: '╪ز┘à╪ز ╪ح╪╣╪د╪»╪ر ┘╪ز╪ص ╪د┘┘à╪ص╪د╪»╪س╪ر╪î ┘ê╪د┘┘ê┘â┘è┘ ┘à╪د ╪▓╪د┘ ┘à╪ز┘ê┘é┘┘ï╪د.' }
   } catch (error) {
-    return { ok: false, error: actionErrorMessage(error, 'تعذّرت إعادة الفتح. حاول مرة أخرى.') }
+    return { ok: false, error: actionErrorMessage(error, '╪ز╪╣╪░┘ّ╪▒╪ز ╪ح╪╣╪د╪»╪ر ╪د┘┘╪ز╪ص. ╪ص╪د┘ê┘ ┘à╪▒╪ر ╪ث╪«╪▒┘ë.') }
   }
 }
 
@@ -182,16 +182,16 @@ export async function addNoteAction(conversationId: string, body: string): Promi
   try {
     ctx = await requireCapability('inbox')
   } catch (error) {
-    return { ok: false, error: actionErrorMessage(error, 'غير مصرح.') }
+    return { ok: false, error: actionErrorMessage(error, '╪║┘è╪▒ ┘à╪╡╪▒╪ص.') }
   }
 
   const note = body.trim()
-  if (!note) return { ok: false, error: 'الملاحظة فارغة.' }
+  if (!note) return { ok: false, error: '╪د┘┘à┘╪د╪ص╪╕╪ر ┘╪د╪▒╪║╪ر.' }
 
   try {
     const conversation = await loadConversation(ctx, conversationId)
     const memberId = await currentMemberId(ctx)
-    if (!memberId) return { ok: false, error: 'تعذّر تحديد عضو الفريق الحالي.' }
+    if (!memberId) return { ok: false, error: '╪ز╪╣╪░┘ّ╪▒ ╪ز╪ص╪»┘è╪» ╪╣╪╢┘ê ╪د┘┘╪▒┘è┘é ╪د┘╪ص╪د┘┘è.' }
 
     // Notes live in their own table: they are staff context and must never reach the customer.
     const { error } = await ctx.supabase.from('conversation_notes').insert({
@@ -204,40 +204,38 @@ export async function addNoteAction(conversationId: string, body: string): Promi
 
     await audit(ctx, 'conversation.note_added', 'conversation', conversationId)
     revalidatePath(`/dashboard/conversations/${conversationId}`)
-    return { ok: true, message: 'تمت إضافة الملاحظة.' }
+    return { ok: true, message: '╪ز┘à╪ز ╪ح╪╢╪د┘╪ر ╪د┘┘à┘╪د╪ص╪╕╪ر.' }
   } catch (error) {
-    return { ok: false, error: actionErrorMessage(error, 'تعذّر إضافة الملاحظة. حاول مرة أخرى.') }
+    return { ok: false, error: actionErrorMessage(error, '╪ز╪╣╪░┘ّ╪▒ ╪ح╪╢╪د┘╪ر ╪د┘┘à┘╪د╪ص╪╕╪ر. ╪ص╪د┘ê┘ ┘à╪▒╪ر ╪ث╪«╪▒┘ë.') }
   }
 }
 
- e x p o r t   a s y n c   f u n c t i o n   m a r k A s R e a d A c t i o n ( c o n v e r s a t i o n I d :   s t r i n g ) :   P r o m i s e < I n b o x R e s u l t >   { 
-     l e t   c t x :   A u t h o r i z e d C o n t e x t 
-     t r y   { 
-         c t x   =   a w a i t   r e q u i r e C a p a b i l i t y ( ' i n b o x ' ) 
-     }   c a t c h   ( e r r o r )   { 
-         r e t u r n   {   o k :   f a l s e ,   e r r o r :   a c t i o n E r r o r M e s s a g e ( e r r o r ,   ' :J1  E51-. ' )   } 
-     } 
- 
-     t r y   { 
-         a w a i t   l o a d C o n v e r s a t i o n ( c t x ,   c o n v e r s a t i o n I d ) 
- 
-         c o n s t   {   e r r o r :   m s g E r r o r   }   =   a w a i t   c t x . s u p a b a s e 
-             . f r o m ( ' m e s s a g e s ' ) 
-             . u p d a t e ( {   i s _ r e a d :   t r u e   } ) 
-             . e q ( ' c o n v e r s a t i o n _ i d ' ,   c o n v e r s a t i o n I d ) 
-             . e q ( ' o r g a n i z a t i o n _ i d ' ,   c t x . o r g a n i z a t i o n I d ) 
-             . e q ( ' d i r e c t i o n ' ,   ' i n b o u n d ' ) 
-             . e q ( ' i s _ r e a d ' ,   f a l s e ) 
- 
-         i f   ( m s g E r r o r )   r e t u r n   {   o k :   f a l s e ,   e r r o r :   s u p a b a s e A c t i o n E r r o r ( m s g E r r o r )   } 
-         
-         / /   T h e   t r i g g e r   w i l l   a u t o m a t i c a l l y   d e c r e m e n t   t h e   u n r e a d _ c o u n t   o n   c o n v e r s a t i o n s 
-         
-         r e v a l i d a t e P a t h ( ' / d a s h b o a r d / c o n v e r s a t i o n s ' ) 
-         r e v a l i d a t e P a t h ( \ / d a s h b o a r d / c o n v e r s a t i o n s / \ \ ) 
-         r e t u r n   {   o k :   t r u e   } 
-     }   c a t c h   ( e r r o r )   { 
-         r e t u r n   {   o k :   f a l s e ,   e r r o r :   a c t i o n E r r o r M e s s a g e ( e r r o r ,   ' *90Q1  *-/J+  -'D)  'DB1'!). ' )   } 
-     } 
- }  
- 
+
+export async function markAsReadAction(conversationId: string): Promise<InboxResult> {
+    let ctx: AuthorizedContext
+    try {
+        ctx = await requireCapability('inbox')
+    } catch (error) {
+        return { ok: false, error: actionErrorMessage(error, 'Unauthorized') }
+    }
+
+    try {
+        const { error: msgError } = await ctx.supabase
+            .from('messages')
+            .update({ is_read: true })
+            .eq('conversation_id', conversationId)
+            .eq('organization_id', ctx.organizationId)
+            .eq('direction', 'inbound')
+            .eq('is_read', false)
+
+        if (msgError) return { ok: false, error: supabaseActionError(msgError) }
+        
+        // The trigger will automatically decrement the unread_count on conversations
+        
+        revalidatePath('/dashboard/conversations')
+        revalidatePath(`/dashboard/conversations/${conversationId}`)
+        return { ok: true }
+    } catch (error) {
+        return { ok: false, error: actionErrorMessage(error, 'تعذّر تحديث حالة القراءة.') }
+    }
+}
