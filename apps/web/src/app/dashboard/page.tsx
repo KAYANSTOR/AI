@@ -1,4 +1,4 @@
-import { Users, Calendar, MessageCircle, TrendingUp } from 'lucide-react'
+import { Users, Calendar, MessageCircle, TrendingUp, FileText, ShoppingCart, Clock } from 'lucide-react'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
@@ -6,23 +6,15 @@ import { getDashboardContext } from '@/lib/dashboard/context'
 import { formatDateTime, formatNumber } from '@/lib/i18n/format'
 import { ar } from '@/lib/i18n/ar'
 import { capabilityLabel } from '@/lib/i18n/labels'
+import { loadCoreAnalytics } from '@/lib/analytics/core'
 
 export default async function DashboardPage() {
   const context = await getDashboardContext()
   if (!context) redirect('/login')
   const supabase = await createClient()
 
-  const [
-    { count: leadsCount },
-    { count: contactsCount },
-    { count: appointmentsCount },
-    { count: conversationsCount },
-    { data: upcoming },
-  ] = await Promise.all([
-    supabase.from('leads').select('id', { count: 'exact', head: true }).eq('organization_id', context.organizationId),
-    supabase.from('contacts').select('id', { count: 'exact', head: true }).eq('organization_id', context.organizationId),
-    supabase.from('appointments').select('id', { count: 'exact', head: true }).eq('organization_id', context.organizationId).gte('starts_at', new Date().toISOString()),
-    supabase.from('conversations').select('id', { count: 'exact', head: true }).eq('organization_id', context.organizationId),
+  const [metrics, { data: upcoming }] = await Promise.all([
+    loadCoreAnalytics(supabase, context.organizationId),
     supabase
       .from('appointments')
       .select('id, starts_at, status, contacts(full_name), services(name)')
@@ -42,10 +34,16 @@ export default async function DashboardPage() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard title={ar.dashboard.stats.leads} value={leadsCount ?? 0} icon={Users} />
-        <StatCard title={ar.dashboard.stats.contacts} value={contactsCount ?? 0} icon={MessageCircle} />
-        <StatCard title={ar.dashboard.stats.upcoming} value={appointmentsCount ?? 0} icon={Calendar} />
-        <StatCard title={ar.dashboard.stats.conversations} value={conversationsCount ?? 0} icon={TrendingUp} />
+        <StatCard title={ar.dashboard.stats.leads} value={metrics.leadsTotal} icon={Users} hint={`مفتوح ${metrics.leadsOpen} · فوز ${metrics.leadsWon}`} />
+        <StatCard title={ar.dashboard.stats.conversations} value={metrics.conversationsOpen} icon={MessageCircle} hint={metrics.conversationsBreachedSla ? `SLA متجاوز ${metrics.conversationsBreachedSla}` : undefined} />
+        <StatCard title={ar.dashboard.stats.upcoming} value={metrics.appointmentsUpcoming} icon={Calendar} />
+        <StatCard title="متابعة نشطة" value={metrics.followupsActive} icon={Clock} hint={`مكتمل ${metrics.followupsCompleted}`} />
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <StatCard title="عروض مفتوحة" value={metrics.quotesOpen} icon={FileText} hint={`مقبولة ${metrics.quotesAccepted}`} />
+        <StatCard title="طلبات مفتوحة" value={metrics.ordersOpen} icon={ShoppingCart} hint={`مكتملة ${metrics.ordersCompleted}`} />
+        <StatCard title={ar.dashboard.stats.contacts} value={metrics.leadsTotal} icon={TrendingUp} />
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
@@ -117,10 +115,12 @@ function StatCard({
   title,
   value,
   icon: Icon,
+  hint,
 }: {
   title: string
   value: number
   icon: React.ElementType
+  hint?: string
 }) {
   return (
     <div className="rounded-xl border border-border bg-surface p-5 shadow-sm">
@@ -131,6 +131,7 @@ function StatCard({
         </div>
       </div>
       <h4 className="text-3xl font-bold tracking-tight text-text">{formatNumber(value)}</h4>
+      {hint ? <p className="mt-1 text-xs text-text-muted">{hint}</p> : null}
     </div>
   )
 }
