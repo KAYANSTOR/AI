@@ -10,6 +10,7 @@ import {
   takeOverAction,
   type InboxResult,
 } from './actions'
+import { ScheduleMessageForm } from './schedule-form'
 
 export function InboxControls({
   conversationId,
@@ -29,9 +30,7 @@ export function InboxControls({
     startTransition(async () => {
       const outcome = await work()
       setResult(outcome)
-      if (outcome.ok) {
-        if (clearNote) setNote('')
-      }
+      if (outcome.ok && clearNote) setNote('')
     })
   }
 
@@ -122,9 +121,11 @@ export function InboxControls({
         </button>
       </div>
 
+      {!closed && <ScheduleMessageForm conversationId={conversationId} />}
+
       <p className="flex items-start gap-2 text-xs text-text-muted">
         <CheckCircle2 size={13} className="mt-0.5 shrink-0 text-success" />
-        عند الاستلام يتوقف الوكيل فورًا، وتستمر رسائل العميل في نفس المحادثة بدل فتح محادثة جديدة.
+        عند الاستلام يتوقف الوكيل فورًا، وتستمر رسائل العميل في نفس المحادثة.
       </p>
     </div>
   )
