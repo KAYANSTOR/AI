@@ -5,13 +5,15 @@ import { getDashboardContext } from '@/lib/dashboard/context'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 
+/**
+ * During activation the wizard deep-links into operational surfaces
+ * (channels, agent, hours, …). Those routes live under /dashboard, so a hard
+ * redirect back to /onboarding would trap the user. Incomplete tenants can
+ * use setup pages; the home page surfaces a resume banner instead.
+ */
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const context = await getDashboardContext()
   if (!context) redirect('/login')
-  
-  if (!context.setupComplete) {
-    redirect('/onboarding')
-  }
 
   return (
     <DashboardShell
@@ -21,6 +23,15 @@ export default async function DashboardLayout({ children }: { children: React.Re
         </Suspense>
       }
     >
+      {!context.setupComplete && (
+        <div className="mb-4 rounded-xl border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-text">
+          <span className="font-medium">الإعداد غير مكتمل.</span>{' '}
+          أكمل معالج التفعيل قبل استقبال العملاء.
+          <Link href="/onboarding" className="ms-2 font-semibold text-primary-dark underline">
+            العودة للمعالج
+          </Link>
+        </div>
+      )}
       {children}
     </DashboardShell>
   )
@@ -48,11 +59,5 @@ function SidebarFallback() {
         ))}
       </div>
     </aside>
-  )
-}
-
-function SetupBannerFallback() {
-  return (
-    <div className="motion-safe:animate-pulse h-12 rounded-xl border border-border bg-surface" aria-hidden="true" />
   )
 }
