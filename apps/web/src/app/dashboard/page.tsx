@@ -1,4 +1,4 @@
-import { Users, Calendar, MessageCircle, TrendingUp, FileText, ShoppingCart, Clock } from 'lucide-react'
+import { Users, Calendar, MessageCircle, FileText, ShoppingCart, Clock } from 'lucide-react'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
@@ -13,8 +13,12 @@ export default async function DashboardPage() {
   if (!context) redirect('/login')
   const supabase = await createClient()
 
-  const [metrics, { data: upcoming }] = await Promise.all([
+  const [metrics, contactsCountResult, { data: upcoming }] = await Promise.all([
     loadCoreAnalytics(supabase, context.organizationId),
+    supabase
+      .from('contacts')
+      .select('id', { count: 'exact', head: true })
+      .eq('organization_id', context.organizationId),
     supabase
       .from('appointments')
       .select('id, starts_at, status, contacts(full_name), services(name)')
@@ -23,6 +27,8 @@ export default async function DashboardPage() {
       .order('starts_at', { ascending: true })
       .limit(5),
   ])
+
+  const contactsCount = contactsCountResult.count ?? 0
 
   return (
     <div className="space-y-6">
@@ -34,16 +40,45 @@ export default async function DashboardPage() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard title={ar.dashboard.stats.leads} value={metrics.leadsTotal} icon={Users} hint={`مفتوح ${metrics.leadsOpen} · فوز ${metrics.leadsWon}`} />
-        <StatCard title={ar.dashboard.stats.conversations} value={metrics.conversationsOpen} icon={MessageCircle} hint={metrics.conversationsBreachedSla ? `SLA متجاوز ${metrics.conversationsBreachedSla}` : undefined} />
+        <StatCard
+          title={ar.dashboard.stats.leads}
+          value={metrics.leadsTotal}
+          icon={Users}
+          hint={`مفتوح ${metrics.leadsOpen} · فوز ${metrics.leadsWon}`}
+        />
+        <StatCard
+          title={ar.dashboard.stats.conversations}
+          value={metrics.conversationsOpen}
+          icon={MessageCircle}
+          hint={
+            metrics.conversationsBreachedSla
+              ? `SLA متجاوز ${metrics.conversationsBreachedSla}`
+              : undefined
+          }
+        />
         <StatCard title={ar.dashboard.stats.upcoming} value={metrics.appointmentsUpcoming} icon={Calendar} />
-        <StatCard title="متابعة نشطة" value={metrics.followupsActive} icon={Clock} hint={`مكتمل ${metrics.followupsCompleted}`} />
+        <StatCard
+          title="متابعة نشطة"
+          value={metrics.followupsActive}
+          icon={Clock}
+          hint={`مكتمل ${metrics.followupsCompleted}`}
+        />
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <StatCard title="عروض مفتوحة" value={metrics.quotesOpen} icon={FileText} hint={`مقبولة ${metrics.quotesAccepted}`} />
-        <StatCard title="طلبات مفتوحة" value={metrics.ordersOpen} icon={ShoppingCart} hint={`مكتملة ${metrics.ordersCompleted}`} />
-        <StatCard title={ar.dashboard.stats.contacts} value={metrics.leadsTotal} icon={TrendingUp} />
+        <StatCard
+          title="عروض مفتوحة"
+          value={metrics.quotesOpen}
+          icon={FileText}
+          hint={`مقبولة ${metrics.quotesAccepted}`}
+        />
+        <StatCard
+          title="طلبات مفتوحة"
+          value={metrics.ordersOpen}
+          icon={ShoppingCart}
+          hint={`مكتملة ${metrics.ordersCompleted}`}
+        />
+        <StatCard title={ar.dashboard.stats.contacts} value={contactsCount} icon={Users} />
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
@@ -55,7 +90,11 @@ export default async function DashboardPage() {
                 {context.setupComplete ? ar.dashboard.setupComplete : ar.dashboard.setupIncomplete}
               </p>
             </div>
-            <span className={`rounded-full px-3 py-1 text-xs font-medium ${context.setupComplete ? 'bg-success/15 text-text' : 'bg-warning/15 text-text'}`}>
+            <span
+              className={`rounded-full px-3 py-1 text-xs font-medium ${
+                context.setupComplete ? 'bg-success/15 text-text' : 'bg-warning/15 text-text'
+              }`}
+            >
               {context.setupComplete ? ar.common.complete : ar.common.notSet}
             </span>
           </div>
@@ -85,7 +124,10 @@ export default async function DashboardPage() {
                 const contact = appointment.contacts as unknown as { full_name: string | null } | null
                 const service = appointment.services as unknown as { name: string } | null
                 return (
-                  <div key={appointment.id} className="flex min-w-0 items-start gap-3 rounded-lg p-3 hover:bg-background">
+                  <div
+                    key={appointment.id}
+                    className="flex min-w-0 items-start gap-3 rounded-lg p-3 hover:bg-background"
+                  >
                     <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary-light/40 text-sm font-medium text-primary-dark">
                       {(contact?.full_name?.[0] ?? '?').toUpperCase()}
                     </div>
@@ -94,7 +136,8 @@ export default async function DashboardPage() {
                         {contact?.full_name || ar.contacts.empty}
                       </p>
                       <p className="text-xs text-text-muted">
-                        {service?.name || ar.services.title} · {formatDateTime(appointment.starts_at, context.timezone)}
+                        {service?.name || ar.services.title} ·{' '}
+                        {formatDateTime(appointment.starts_at, context.timezone)}
                       </p>
                     </div>
                   </div>
@@ -102,8 +145,14 @@ export default async function DashboardPage() {
               })
             )}
           </div>
-          <Link href="/dashboard/appointments" className="mt-4 inline-flex min-h-11 items-center text-sm font-medium text-primary-dark hover:underline">
-            {ar.appointments.title} <span aria-hidden="true" className="rtl:rotate-180">→</span>
+          <Link
+            href="/dashboard/appointments"
+            className="mt-4 inline-flex min-h-11 items-center text-sm font-medium text-primary-dark hover:underline"
+          >
+            {ar.appointments.title}{' '}
+            <span aria-hidden="true" className="rtl:rotate-180">
+              →
+            </span>
           </Link>
         </section>
       </div>
