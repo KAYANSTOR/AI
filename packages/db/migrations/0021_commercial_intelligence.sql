@@ -99,15 +99,15 @@ CREATE OR REPLACE FUNCTION public.update_modified_column()
 RETURNS TRIGGER
 LANGUAGE plpgsql
 SET search_path = public, pg_temp
-AS $
+AS $$
 BEGIN
   NEW.updated_at = NOW();
   RETURN NEW;
 END;
-$;
+$$;
 
 CREATE TRIGGER set_updated_at_plans BEFORE UPDATE ON plans FOR EACH ROW EXECUTE FUNCTION public.update_modified_column();
-CREATE TRIGGER set_updated_at_subscriptions BEFORE UPDATE ON subscriptions FOR EACH ROW EXECUTE FUNCTION update_modified_column();
+CREATE TRIGGER set_updated_at_subscriptions BEFORE UPDATE ON subscriptions FOR EACH ROW EXECUTE FUNCTION public.update_modified_column();
 CREATE TRIGGER set_updated_at_usage_meters BEFORE UPDATE ON usage_meters FOR EACH ROW EXECUTE FUNCTION update_modified_column();
 
 -- Seed Default Plans
