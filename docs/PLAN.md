@@ -343,6 +343,32 @@ Activation is allowed only when:
 
 The channel page remains the management surface, but onboarding orchestrates it.
 
+### 8.0 Connect-first / one-number onboarding
+The customer-facing experience must be optimized around **Connect your business**, not technical channel configuration.
+
+Requirements:
+- Collect the business's existing public phone number once during onboarding.
+- Create/provision the workspace, business, location, agent and inbox foundations automatically.
+- Present one unified **Kayan Connect** journey instead of separate technical setup pages.
+- Start with WhatsApp as the primary connection when applicable.
+- Offer Voice as a simple optional next step using the same existing public number and carrier call forwarding to Vapi.
+- Keep Instagram/SMS and future channels optional and progressively connectable.
+- Hide provider terminology, API keys, webhooks and internal IDs from the customer-facing flow.
+- A failed optional channel must never block already-connected channels.
+- Connection state must be resumable after logout, provider errors or partial completion.
+- Use customer-facing states such as **Connected / Needs attention / Optional** while retaining detailed provider state internally.
+
+Target journey:
+Signup → business details + existing number → Connect your business → WhatsApp → optional Voice → ready
+
+The backend must retain all existing provider verification, exact tenant/channel binding, signature verification, idempotency, outbox, audit, capability and entitlement controls. Simplifying the UX must never simplify or bypass runtime safeguards.
+
+### 8.0.1 Existing number remains the identity
+The customer keeps the existing public business number. No telecom-company custom integration and no requirement to obtain a new public business number. Voice continues through carrier call forwarding to the Vapi destination, so the cloud call path does not depend on the owner's phone/app being online.
+
+### 8.0.2 Progressive activation
+A business can become operational with one verified intended channel. Other supported channels are added later without rebuilding the business, agent, inbox, customer identities or conversation history. Go-live requires at least one intended verified channel, not every supported channel.
+
 Each channel must expose:
 - not connected
 - credentials required
@@ -357,12 +383,14 @@ A provider connection must be tested before activation.
 
 ## 8.1 Phone activation
 
+The phone flow is launched from the unified Connect experience, not as a separate technical setup page.
+
 Flow:
-1. enter existing public number
-2. receive/provision Vapi destination
-3. choose forwarding mode
+1. reuse the existing public number already collected during onboarding
+2. receive/provision the Vapi destination
+3. choose the simplest supported forwarding mode
 4. configure carrier forwarding externally
-5. save
+5. save and resume without losing onboarding state
 6. verify
 7. test call
 8. mark active
@@ -372,12 +400,11 @@ Do not require the user to create a new public business number.
 ## 8.2 WhatsApp / Instagram
 
 Flow:
-`Connect → authenticate provider → exact account binding → verify webhook → send/receive test → activate`
+Connect → authenticate provider → exact account binding → verify webhook → send/receive test → activate
+
+For onboarding, WhatsApp is the primary connection path when applicable. Instagram remains optional and can be connected later from Kayan Connect.
 
 No webhook may auto-create a tenant.
-
----
-
 # 9. AI Agent product layer
 
 The existing governed Agent Runtime remains the execution core.
