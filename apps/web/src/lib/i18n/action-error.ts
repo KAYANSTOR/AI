@@ -1,3 +1,4 @@
+import { databaseErrorCode, databaseErrorMessage, logDatabaseError } from '@/lib/db/errors'
 import { ar } from './ar'
 
 function messageFrom(error: unknown) {
@@ -19,31 +20,21 @@ export function actionErrorMessage(error: unknown, fallback: string = ar.errors.
   return fallback
 }
 
-/** Prefer Arabic operator messages; keep short code hints for debugging. */
+/**
+ * Maps a database failure onto customer-facing Arabic.
+ *
+ * The codes, constraint names and schema-cache wording behind the failure stay in the log:
+ * they give a business owner no way to act and they expose internals (docs/PLAN.md §8.3.10).
+ */
 export function supabaseActionError(error: unknown, fallback: string = ar.errors.generic) {
-  console.error('Supabase server action failed', error)
-  const code =
-    error && typeof error === 'object' && 'code' in error && typeof error.code === 'string'
-      ? error.code
-      : ''
+  logDatabaseError('server action', error)
+  const code = databaseErrorCode(error)
   const message = messageFrom(error)
 
-  if (code === '23503') {
-    return 'مرجع مرتبط غير موجود (تحقق من إعداد النشاط/القناة).'
-  }
-  if (code === '23505') {
-    return 'هذا المعرّف مستخدم بالفعل لشركة أخرى.'
-  }
-  if (code === '42501') {
-    return 'لا تملك صلاحية تنفيذ هذه العملية على قاعدة البيانات.'
-  }
-  if (code === '42P01') {
-    return 'جدول مطلوب غير موجود. تأكد من تطبيق migrations.'
-  }
-  if (code === 'PGRST202' || /function .* does not exist/i.test(message)) {
-    return 'دالة قاعدة البيانات غير موجودة. طبّق migrations الناقصة.'
-  }
+  const mapped = databaseErrorMessage(error, '')
+  if (mapped) return mapped
+
+  if (code) return fallback
   if (/[\u0600-\u06ff]/i.test(message)) return message
-  if (code) return `${fallback} (${code})`
   return fallback
 }

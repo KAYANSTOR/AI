@@ -9,6 +9,7 @@ import { ChannelCard, type ChannelCardData } from './channel-card'
 import { PhonePanel } from './phone-panel'
 import { ar } from '@/lib/i18n/ar'
 import { formatNumber } from '@/lib/i18n/format'
+import { databaseErrorMessage, logDatabaseError } from '@/lib/db/errors'
 
 export const dynamic = 'force-dynamic'
 
@@ -38,14 +39,14 @@ export default async function ChannelsPage() {
       .select('id, channel_type, provider_account_id, external_identifier, verification_status, is_active')
       .eq('organization_id', context.organizationId)
     if (result.error) {
-      channelsError = result.error.message
-      console.error('Unable to load channels', result.error)
+      logDatabaseError('channels page: load channels', result.error)
+      channelsError = databaseErrorMessage(result.error, ar.errors.load)
     } else {
       rows = (result.data ?? []) as ChannelRow[]
     }
   } catch (error) {
-    channelsError = error instanceof Error ? error.message : 'channels_load_failed'
-    console.error('Unable to load channels', error)
+    logDatabaseError('channels page: load channels', error)
+    channelsError = databaseErrorMessage(error, ar.errors.load)
   }
 
   let businessName: string | null = context.organizationName
@@ -81,11 +82,15 @@ export default async function ChannelsPage() {
   }
 
   let credentialMetadata: CredentialMetadata[] = []
+  // Swallowing this used to make the credential list look simply empty, which reads as
+  // "nothing is configured" instead of "this could not be loaded".
+  let credentialsError: string | null = null
   if (canManage) {
     try {
       credentialMetadata = await listCredentialMetadata(supabase, context.organizationId)
     } catch (credentialError) {
-      console.error('Unable to load channel credential metadata', credentialError)
+      logDatabaseError('channels page: load credential metadata', credentialError)
+      credentialsError = databaseErrorMessage(credentialError, ar.errors.load)
       credentialMetadata = []
     }
   }
@@ -128,11 +133,10 @@ export default async function ChannelsPage() {
       )}
 
       {channelsError && (
-        <p className="rounded-xl border border-error/40 bg-error/10 px-4 py-3 text-sm text-text">
-          {ar.errors.load}
-          <span className="mt-1 block text-xs text-text-muted">{channelsError}</span>
-        </p>
+        <Notice tone="error" message={channelsError} />
       )}
+
+      {credentialsError && <Notice tone="warning" message={credentialsError} />}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <SummaryTile label={ar.channels.enabled} value={formatNumber(activeCount)} />
@@ -174,6 +178,18 @@ export default async function ChannelsPage() {
         }
       />
     </div>
+  )
+}
+
+function Notice({ tone, message }: { tone: 'error' | 'warning'; message: string }) {
+  const className =
+    tone === 'error'
+      ? 'border-error/40 bg-error/10'
+      : 'border-warning/40 bg-warning/10'
+  return (
+    <p role="status" className={`rounded-xl border px-4 py-3 text-sm text-text ${className}`}>
+      {message}
+    </p>
   )
 }
 

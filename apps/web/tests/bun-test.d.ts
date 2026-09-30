@@ -33,6 +33,7 @@ declare module 'bun:test' {
     toBeGreaterThan(expected: number): void
     toBeLessThan(expected: number): void
     toBeInstanceOf(expected: abstract new (...args: never[]) => unknown): void
+    toHaveLength(expected: number): void
     toThrow(expected?: unknown): void
     /** For `expect(promise).rejects.toThrow(...)`. */
     rejects: Matchers<unknown>

@@ -28,6 +28,55 @@ export type WorkflowDefinition = {
 
 const DEFAULT_MAX_ITERATIONS = 50
 
+const NODE_TYPES = new Set<WorkflowNodeType>([
+  'trigger',
+  'action',
+  'condition',
+  'wait',
+  'assign',
+  'notify',
+  'handoff',
+  'stop',
+  'loop',
+])
+
+function isWorkflowNode(value: unknown): value is WorkflowNode {
+  if (!value || typeof value !== 'object') return false
+  const node = value as { id?: unknown; type?: unknown }
+  return (
+    typeof node.id === 'string' &&
+    typeof node.type === 'string' &&
+    NODE_TYPES.has(node.type as WorkflowNodeType)
+  )
+}
+
+/**
+ * Reads a workflow definition out of its jsonb column.
+ *
+ * `definition` is only nominally a WorkflowDefinition: a row written by an earlier build, by a
+ * template, or by hand-edited SQL can hold any JSON at all. The engine used to cast and then
+ * call `.map`/`.find` on `nodes`, so a row without an array there produced a raw TypeError
+ * (`p.map is not a function` once minified) instead of a domain error — and a differently
+ * shaped `nodes` produced an empty node map that could silently change what a run does.
+ *
+ * Throws `workflow_definition_invalid` when nothing usable can be read.
+ */
+export function parseWorkflowDefinition(value: unknown): WorkflowDefinition {
+  const raw = (value ?? {}) as { nodes?: unknown; edges?: unknown }
+  const nodes = Array.isArray(raw.nodes) ? raw.nodes.filter(isWorkflowNode) : []
+  if (nodes.length === 0) throw new Error('workflow_definition_invalid')
+
+  const edges = Array.isArray(raw.edges)
+    ? raw.edges.filter((edge): edge is { from: string; to: string } => {
+        if (!edge || typeof edge !== 'object') return false
+        const candidate = edge as { from?: unknown; to?: unknown }
+        return typeof candidate.from === 'string' && typeof candidate.to === 'string'
+      })
+    : undefined
+
+  return { nodes, edges }
+}
+
 function nodeMap(def: WorkflowDefinition): Map<string, WorkflowNode> {
   return new Map(def.nodes.map((n) => [n.id, n]))
 }
@@ -87,9 +136,8 @@ export async function startWorkflowRun(
     throw new Error('workflow_not_runnable')
   }
 
-  const definition = workflow.definition as WorkflowDefinition
-  const start =
-    definition.nodes.find((n) => n.type === 'trigger') ?? definition.nodes[0] ?? null
+  const definition = parseWorkflowDefinition(workflow.definition)
+  const start = definition.nodes.find((n) => n.type === 'trigger') ?? definition.nodes[0] ?? null
   if (!start) throw new Error('workflow_has_no_nodes')
 
   const { data: run, error: runError } = await supabase
@@ -166,7 +214,23 @@ export async function advanceWorkflowRun(
     .eq('id', run.workflow_id)
     .maybeSingle()
 
-  const definition = (workflow?.definition ?? { nodes: [] }) as WorkflowDefinition
+  // A run whose definition can no longer be read is failed and recorded, so the cron keeps
+  // moving through the remaining runs instead of throwing part-way down the page.
+  let definition: WorkflowDefinition
+  try {
+    definition = parseWorkflowDefinition(workflow?.definition)
+  } catch {
+    await failRun(
+      supabase,
+      input,
+      'workflow_definition_invalid',
+      (run.current_node_id as string | null) ?? null,
+      { ...(run.context as Record<string, unknown>) },
+      Number(run.iteration_count ?? 0)
+    )
+    return { status: 'failed' }
+  }
+
   const nodes = nodeMap(definition)
   let currentId = run.current_node_id as string | null
   let context = { ...(run.context as Record<string, unknown>) }
