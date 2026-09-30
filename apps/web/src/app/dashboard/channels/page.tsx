@@ -26,38 +26,60 @@ export default async function ChannelsPage() {
   if (!context) redirect('/login')
 
   const supabase = await createClient()
-  const [
-    { data: rows, error: channelsError },
-    { data: business, error: businessError },
-    { data: phoneConnection, error: phoneConnectionError },
-  ] = await Promise.all([
-    supabase
+  const canManage = context.role === 'owner' || context.role === 'admin'
+  const storageConfigured = credentialsStorageConfigured()
+
+  // Isolate each query so a missing table/RLS error never blanks the whole screen.
+  let rows: ChannelRow[] = []
+  let channelsError: string | null = null
+  try {
+    const result = await supabase
       .from('channels')
       .select('id, channel_type, provider_account_id, external_identifier, verification_status, is_active')
-      .eq('organization_id', context.organizationId),
-    supabase
+      .eq('organization_id', context.organizationId)
+    if (result.error) {
+      channelsError = result.error.message
+      console.error('Unable to load channels', result.error)
+    } else {
+      rows = (result.data ?? []) as ChannelRow[]
+    }
+  } catch (error) {
+    channelsError = error instanceof Error ? error.message : 'channels_load_failed'
+    console.error('Unable to load channels', error)
+  }
+
+  let businessName: string | null = context.organizationName
+  try {
+    const { data: business } = await supabase
       .from('businesses')
       .select('id, name')
       .eq('organization_id', context.organizationId)
       .order('created_at', { ascending: true })
       .limit(1)
-      .maybeSingle(),
-    // The phone connection carries the forwarding state that a channels row cannot express.
-    supabase
+      .maybeSingle()
+    if (business?.name) businessName = business.name as string
+  } catch (error) {
+    console.error('Unable to load business summary', error)
+  }
+
+  let phoneConnection: {
+    existing_phone_number: string | null
+    internal_vapi_number: string | null
+    forward_type: string | null
+    forwarding_status: string | null
+    last_verified_at: string | null
+  } | null = null
+  try {
+    const { data } = await supabase
       .from('phone_connections')
       .select('existing_phone_number, internal_vapi_number, forward_type, forwarding_status, last_verified_at')
       .eq('organization_id', context.organizationId)
-      .maybeSingle(),
-  ])
-  if (channelsError) console.error('Unable to load channels', channelsError)
-  if (businessError) console.error('Unable to load business summary', businessError)
-  if (phoneConnectionError) console.error('Unable to load phone connection', phoneConnectionError)
+      .maybeSingle()
+    phoneConnection = data
+  } catch (error) {
+    console.error('Unable to load phone connection', error)
+  }
 
-  const byType = new Map((rows ?? []).map((row) => [row.channel_type as string, row as ChannelRow]))
-  const canManage = context.role === 'owner' || context.role === 'admin'
-  const storageConfigured = credentialsStorageConfigured()
-
-  // Metadata only, and only for administrators: values are never readable from a client.
   let credentialMetadata: CredentialMetadata[] = []
   if (canManage) {
     try {
@@ -70,6 +92,8 @@ export default async function ChannelsPage() {
 
   const credentialsFor = (type: ChannelType) =>
     credentialMetadata.filter((entry) => entry.provider === PROVIDER_FOR_CHANNEL[type])
+
+  const byType = new Map(rows.map((row) => [row.channel_type, row]))
 
   const cards: ChannelCardData[] = CHANNEL_SPECS.map((spec) => {
     const row = byType.get(spec.type)
@@ -88,6 +112,7 @@ export default async function ChannelsPage() {
   })
 
   const activeCount = cards.filter((card) => card.connected && card.isActive).length
+  const phoneSpec = getChannelSpec('phone')
 
   return (
     <div className="space-y-6">
@@ -105,17 +130,21 @@ export default async function ChannelsPage() {
       {channelsError && (
         <p className="rounded-xl border border-error/40 bg-error/10 px-4 py-3 text-sm text-text">
           {ar.errors.load}
+          <span className="mt-1 block text-xs text-text-muted">{channelsError}</span>
         </p>
       )}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <SummaryTile label={ar.channels.enabled} value={formatNumber(activeCount)} />
-        <SummaryTile label={ar.channels.connected} value={formatNumber(cards.filter((card) => card.connected).length)} />
-        <SummaryTile label={ar.channels.activity} value={business?.name ?? ar.common.notSet} />
+        <SummaryTile
+          label={ar.channels.connected}
+          value={formatNumber(cards.filter((card) => card.connected).length)}
+        />
+        <SummaryTile label={ar.channels.activity} value={businessName ?? ar.common.notSet} />
       </div>
 
-      <p className="flex items-start gap-2 rounded-xl border border-info/40 bg-info/5 px-4 py-3 text-xs leading-relaxed text-text">
-        <Info size={16} className="mt-0.5 shrink-0 text-info" aria-hidden="true" />
+      <p className="flex items-start gap-2 rounded-xl border border-border bg-surface px-4 py-3 text-xs leading-relaxed text-text">
+        <Info size={16} className="mt-0.5 shrink-0 text-primary-dark" aria-hidden="true" />
         <span>
           {ar.channelPage.secretNoticeBefore}{' '}
           <strong>{ar.channelPage.secretNoticeStrong}</strong> {ar.channelPage.secretNoticeAfter}
@@ -131,7 +160,7 @@ export default async function ChannelsPage() {
       <PhonePanel
         canManage={canManage}
         timezone={context.timezone}
-        instructions={getChannelSpec('phone')?.setup ?? []}
+        instructions={phoneSpec?.setup ?? []}
         initial={
           phoneConnection
             ? {
