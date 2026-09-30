@@ -405,6 +405,88 @@ Connect → authenticate provider → exact account binding → verify webhook �
 For onboarding, WhatsApp is the primary connection path when applicable. Instagram remains optional and can be connected later from Kayan Connect.
 
 No webhook may auto-create a tenant.
+# 8.3 UX FastPath — zero-confusion activation
+
+The product must optimize for time-to-value and remove unnecessary decisions from the first-run experience.
+
+### 8.3.1 Golden path
+Target the first successful customer-facing AI interaction through this path:
+
+Signup → business basics → existing number → Connect WhatsApp → AI ready → test → Go Live
+
+The normal path should require only the information that is truly necessary to start operating. Details such as advanced business profile fields, full knowledge setup, branch configuration, advanced hours, templates, routing and billing remain editable later.
+
+### 8.3.2 Replace the 11-step technical wizard
+The current multi-step wizard must evolve into four user-centered stages:
+1. ابدأ — company name, business type, existing public number.
+2. وصّل نشاطك — primary WhatsApp connection; optional Voice activation.
+3. جهّز الوكيل — one simple business description / services / common questions input; the system creates a safe initial agent configuration from approved templates.
+4. جرّب ثم شغّل — guided test, clear readiness result, Go Live.
+
+Email confirmation remains an authentication concern and must return the customer to the exact resumable stage without restarting setup.
+
+### 8.3.3 One primary action
+Every setup screen has one dominant next action. Secondary actions are skip for later, go back, and view advanced details. Do not place several equally prominent technical buttons on the same onboarding screen.
+
+### 8.3.4 No deep-link setup hopping
+The setup experience must not require the customer to leave onboarding to complete ordinary setup tasks in unrelated dashboard pages. Setup inputs should be embedded in the onboarding flow or opened as focused modal/sheet steps that return to the same place automatically.
+
+/dashboard/setup must not compete with /onboarding as a second setup system. Keep it only as a compatibility/redirect surface after the unified flow becomes canonical.
+
+### 8.3.5 Safe defaults and progressive disclosure
+Use sensible defaults wherever the backend can determine a safe value: timezone, locale/currency, starter AI identity/personality, starter reply/hand-off policy, and an initial operating-hours template where safe.
+
+Do not block activation on optional data. When a capability genuinely needs missing data, explain exactly what will be unavailable rather than presenting a generic configuration error.
+
+### 8.3.6 AI-assisted setup
+The customer may describe the business in ordinary language instead of manually filling many structured forms.
+
+Example: نحن شركة تنظيم أعراس، نقدم التصوير والديكور والتنسيق، ونستقبل الحجوزات عبر واتساب.
+
+The backend converts this into draft business configuration using controlled templates. AI-generated structured records remain reviewable and must never invent prices, availability or business policies. Consequential values remain backend-controlled.
+
+### 8.3.7 Channel simplicity
+The public setup must never ask customers to copy provider IDs. For supported provider flows, use provider authentication/connection. Keep technical identifiers only in an advanced diagnostics area for administrators.
+
+For Voice, the customer should see only their existing public number, the forwarding action, a simple verification state, and a test call action.
+
+Do not expose Vapi phone-number IDs or similar provider identifiers in the normal path.
+
+### 8.3.8 First-run dashboard
+An incomplete/new workspace must not open on a metrics-heavy dashboard with many empty modules.
+
+Instead, the first-run home should prioritize one readiness/status card, one next action, connected-channel status, a direct path to the first customer interaction, and minimal supporting metrics. After the workspace has real activity, progressively reveal richer analytics.
+
+### 8.3.9 Navigation simplicity
+The default dashboard navigation must be reduced to a small set of high-frequency destinations: الرئيسية, المحادثات, العملاء, المواعيد/الطلبات حسب نشاط الشركة, الذكاء الاصطناعي, المزيد.
+
+Advanced/low-frequency areas move under المزيد or contextual settings. Capability-aware navigation remains mandatory.
+
+### 8.3.10 Error experience
+Customer-facing errors must never expose raw SQL/PostgREST/provider internals.
+
+Every actionable error should use: ماذا حدث → لماذا يهم → الإجراء التالي.
+
+Example: لم يتم ربط واتساب بعد. اضغط «إعادة المحاولة» لإكمال الربط.
+
+Technical error details belong in server logs/diagnostics, not normal user-facing surfaces.
+
+### 8.3.11 Fast UI behavior
+Non-critical data must not block the primary interaction. Use streaming/skeleton loading for secondary sections, optimistic state only where rollback is safe, autosave for setup fields, idempotent retry for connection actions, preserved form state after transient failures, and direct return to the exact setup step after provider authentication.
+
+### 8.3.12 Mobile-first
+The main onboarding and first-run operations must be comfortable on a phone: one-column setup, large touch targets, sticky next action when useful, no horizontal tables in activation, short text, and collapsible advanced details.
+
+### 8.3.13 Simplicity gate
+A UX change does not pass unless:
+- a new user can identify the next action without explanation
+- no setup step asks for an internal/provider identifier
+- optional configuration can be deferred
+- an error provides a concrete recovery action
+- setup resumes after refresh/logout/provider failure
+- the primary path can be completed without navigating across unrelated dashboard modules
+- the same concept is not represented by multiple competing setup surfaces
+
 # 9. AI Agent product layer
 
 The existing governed Agent Runtime remains the execution core.
