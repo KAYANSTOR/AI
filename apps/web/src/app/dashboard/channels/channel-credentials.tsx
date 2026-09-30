@@ -2,8 +2,6 @@
 
 import { useState, useTransition } from 'react'
 import { CheckCircle2, CircleAlert, KeyRound, Loader2, Power, Save, Trash2 } from 'lucide-react'
-// Client-safe catalogue: importing the crypto-bearing service module here would pull
-// Node builtins into the browser bundle.
 import { CHANNEL_CREDENTIAL_FIELDS, type CredentialMetadata } from '@/lib/credentials/catalog'
 import type { ChannelType } from '@/lib/channels/management'
 import {
@@ -18,7 +16,6 @@ export type CredentialPanelData = {
   channelType: ChannelType
   timezone: string
   connected: boolean
-  /** False when CREDENTIAL_ENCRYPTION_KEY is absent: nothing can be stored yet. */
   storageConfigured: boolean
   canManage: boolean
   entries: CredentialMetadata[]
@@ -37,7 +34,11 @@ export function ChannelCredentials({ data }: { data: CredentialPanelData }) {
   function save(credentialType: string) {
     const value = drafts[credentialType] ?? ''
     startTransition(async () => {
-      const result = await saveChannelCredentialAction({ channelType: data.channelType, credentialType, value })
+      const result = await saveChannelCredentialAction({
+        channelType: data.channelType,
+        credentialType,
+        value,
+      })
       setFeedback({
         ok: result.ok,
         text: result.ok ? (result.message ?? 'تم الحفظ.') : (result.error ?? 'تعذّر الحفظ.'),
@@ -48,7 +49,10 @@ export function ChannelCredentials({ data }: { data: CredentialPanelData }) {
 
   function toggleStatus(status: 'active' | 'disabled') {
     startTransition(async () => {
-      const result = await setChannelCredentialStatusAction({ channelType: data.channelType, status })
+      const result = await setChannelCredentialStatusAction({
+        channelType: data.channelType,
+        status,
+      })
       setFeedback({
         ok: result.ok,
         text: result.ok ? (result.message ?? 'تم التحديث.') : (result.error ?? 'تعذّر التحديث.'),
@@ -58,7 +62,10 @@ export function ChannelCredentials({ data }: { data: CredentialPanelData }) {
 
   function remove(credentialType?: string) {
     startTransition(async () => {
-      const result = await deleteChannelCredentialAction({ channelType: data.channelType, credentialType })
+      const result = await deleteChannelCredentialAction({
+        channelType: data.channelType,
+        credentialType,
+      })
       setFeedback({
         ok: result.ok,
         text: result.ok ? (result.message ?? 'تم الحذف.') : (result.error ?? 'تعذّر الحذف.'),
@@ -79,14 +86,20 @@ export function ChannelCredentials({ data }: { data: CredentialPanelData }) {
       </div>
 
       {!data.storageConfigured && (
-        <p className="mt-2 flex items-start gap-2 rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-[11px] leading-relaxed text-text">
+        <div className="mt-2 flex items-start gap-2 rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-[11px] leading-relaxed text-text">
           <CircleAlert size={13} className="mt-0.5 shrink-0 text-warning" aria-hidden="true" />
-          تخزين بيانات الاعتماد غير مُهيّأ على الخادم. أضف
-          <code className="mx-1 rounded bg-surface px-1" dir="ltr">
-            CREDENTIAL_ENCRYPTION_KEY
-          </code>
-          (32 بايت بصيغة base64 أو 64 حرفًا hex) في إعدادات البيئة. لن تُحفظ أي قيمة قبل ذلك.
-        </p>
+          <div className="min-w-0 space-y-1">
+            <p>تخزين بيانات الاعتماد غير مُهيّأ على الخادم.</p>
+            <p>
+              أضف المتغير{' '}
+              <code className="inline-block rounded bg-surface px-1.5 py-0.5 font-mono text-[10px]" dir="ltr">
+                CREDENTIAL_ENCRYPTION_KEY
+              </code>{' '}
+              في إعدادات Vercel (32 بايت = 64 حرف hex).
+            </p>
+            <p className="text-text-muted">لن تُحفظ أي قيمة قبل تهيئة هذا المفتاح وإعادة النشر.</p>
+          </div>
+        </div>
       )}
 
       {!data.connected && (
@@ -122,8 +135,9 @@ export function ChannelCredentials({ data }: { data: CredentialPanelData }) {
 
               {entry && (
                 <p className="mt-1.5 text-[10px] text-text-muted">
-          آخر تحديث: {entry.updated_at ? formatDateTime(entry.updated_at, data.timezone) : ar.common.unknown}
-          {entry.last_verified_at
+                  آخر تحديث:{' '}
+                  {entry.updated_at ? formatDateTime(entry.updated_at, data.timezone) : ar.common.unknown}
+                  {entry.last_verified_at
                     ? ` · آخر تحقق: ${formatDateTime(entry.last_verified_at, data.timezone)}`
                     : ''}
                 </p>
@@ -133,7 +147,9 @@ export function ChannelCredentials({ data }: { data: CredentialPanelData }) {
                 <input
                   type={field.secret ? 'password' : 'text'}
                   value={drafts[field.type] ?? ''}
-                  onChange={(event) => setDrafts((current) => ({ ...current, [field.type]: event.target.value }))}
+                  onChange={(event) =>
+                    setDrafts((current) => ({ ...current, [field.type]: event.target.value }))
+                  }
                   placeholder={entry ? 'استبدال القيمة المحفوظة' : 'أدخل القيمة'}
                   disabled={isDisabled || pending}
                   autoComplete="off"
@@ -167,8 +183,7 @@ export function ChannelCredentials({ data }: { data: CredentialPanelData }) {
       </ul>
 
       <p className="mt-2 text-[10px] leading-relaxed text-text-muted">
-        القيم تُخزَّن مشفّرة على الخادم فقط ولا تُعاد إلى المتصفح أبدًا بعد الحفظ. تُستخدم بيانات كل شركة
-        في قنواتها وحدها.
+        القيم تُخزَّن مشفّرة على الخادم فقط ولا تُعاد إلى المتصفح أبدًا بعد الحفظ.
       </p>
 
       {stored > 0 && data.canManage && (
@@ -198,7 +213,9 @@ export function ChannelCredentials({ data }: { data: CredentialPanelData }) {
         <p
           role="status"
           className={`mt-2 flex items-start gap-2 rounded-lg border px-3 py-2 text-[11px] ${
-            feedback.ok ? 'border-success/40 bg-success/10 text-text' : 'border-error/40 bg-error/10 text-text'
+            feedback.ok
+              ? 'border-success/40 bg-success/10 text-text'
+              : 'border-error/40 bg-error/10 text-text'
           }`}
         >
           {feedback.ok ? (
