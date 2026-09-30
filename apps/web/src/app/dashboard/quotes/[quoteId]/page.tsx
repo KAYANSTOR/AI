@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
-import { ArrowRight, FileText, Calendar, Building, User } from 'lucide-react'
+import { ArrowRight, Calendar, User } from 'lucide-react'
 import { requireCapability, CapabilityDisabledError } from '@/lib/capabilities/guard'
 import { QuoteActions } from './quote-actions'
 import { formatDateTime } from '@/lib/i18n/format'

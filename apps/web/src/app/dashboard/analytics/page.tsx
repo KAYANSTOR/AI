@@ -1,13 +1,10 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { getDashboardContext } from '@/lib/dashboard/context'
-import { ar } from '@/lib/i18n/ar'
 import { formatNumber } from '@/lib/i18n/format'
 import {
-  BarChart3,
   MessageCircle,
   Clock,
-  CheckCircle2,
   Users,
   Briefcase,
   TrendingUp,

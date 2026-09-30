@@ -70,7 +70,9 @@ export async function installWorkflowTemplateAction(
   templateId: string
 ): Promise<WorkflowActionResult> {
   try {
-    const ctx = await requireAdminCapability(null)
+    // Authorisation only: the template is installed through createWorkflowAction, which
+    // resolves and re-checks the admin context itself.
+    await requireAdminCapability(null)
     const template = getWorkflowTemplate(templateId)
     if (!template) return { ok: false, error: 'القالب غير موجود.' }
 

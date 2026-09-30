@@ -1,7 +1,6 @@
 import { getDashboardContext } from '@/lib/dashboard/context'
 import { redirect } from 'next/navigation'
 import { Wizard } from './wizard'
-import { ar } from '@/lib/i18n/ar'
 
 /** The activation wizard reads the tenant's own activation state: never prerender it. */
 export const dynamic = 'force-dynamic'

@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
-import { ArrowRight, ShoppingBag, Calendar, User, FileText } from 'lucide-react'
+import { ArrowRight, Calendar, User, FileText } from 'lucide-react'
 import { requireCapability, CapabilityDisabledError } from '@/lib/capabilities/guard'
 import { OrderActions } from './order-actions'
 import { formatDateTime } from '@/lib/i18n/format'
