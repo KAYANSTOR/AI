@@ -137,9 +137,9 @@ export function Wizard({
     startTransition(async () => {
       try {
         const next = currentStep + 1
-        const nextState =
-          next >= 10 ? (localSmoke === 'passed' ? 'ready_to_activate' : 'ready_for_test') : 'configuring'
-        await advanceStep(next, nextState)
+        // The server derives the activation state from the stored smoke-test status; the
+        // wizard only chooses the step.
+        await advanceStep(next)
         setCurrentStep(next)
         router.refresh()
       } catch (err: unknown) {
@@ -156,7 +156,7 @@ export function Wizard({
     setError(null)
     startTransition(async () => {
       try {
-        await advanceStep(10, 'ready_for_test')
+        await advanceStep(10)
         await submitSmokeTest()
         setLocalSmoke('passed')
         router.refresh()

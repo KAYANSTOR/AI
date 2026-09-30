@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { createFakeSupabase, type FakeDb } from './support/fake-supabase'
-import { evaluateSmokeTest } from '@/app/onboarding/actions'
+import { evaluateSmokeTest } from '@/lib/onboarding/smoke-test'
 
 const ORG = 'aaaaaaaa-0000-4000-8000-000000000001'
 const BIZ = 'aaaaaaaa-0000-4000-8000-0000000000b1'
