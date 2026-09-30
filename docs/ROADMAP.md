@@ -337,6 +337,75 @@ Enforce limits server-side.
 ### 4.7 Exit
 Paid plan behavior is reliable and observable.
 
+# UX FastPath — critical post-core pass
+
+This is a product-critical simplification pass. It does not add another provider architecture or another setup system. It removes friction from the existing product.
+
+## U.1 Fix production blockers that damage UX
+- Resolve the current production channel verification constraint error before redesigning channel UX.
+- Resolve missing channel credential metadata RPC/schema mismatch.
+- Resolve the knowledge page runtime type error.
+- Resolve the missing audit RPC/schema mismatch.
+- Verify the latest production deployment has no new runtime errors on the primary customer path.
+
+## U.2 Replace the 11-step onboarding
+Target four user-centered stages:
+1. ابدأ — company name, business type, existing number.
+2. وصّل نشاطك — WhatsApp primary connection; Voice optional.
+3. جهّز الوكيل — one ordinary-language business description; generate safe starter configuration.
+4. جرّب ثم شغّل — test and Go Live.
+
+Rules:
+- Do not deep-link the user into unrelated dashboard pages during normal setup.
+- Autosave setup state.
+- Resume exactly after logout, refresh, email confirmation or provider failure.
+- Optional setup never blocks the primary path.
+- One dominant CTA per stage.
+
+## U.3 Simplify channel connection
+- Make Kayan Connect the only customer-facing connection surface.
+- WhatsApp uses provider authentication/connection instead of manual IDs.
+- Voice uses the existing public number with a guided call-forwarding flow to Vapi.
+- Hide provider/account IDs from the normal customer path.
+- Put advanced provider diagnostics behind an explicit advanced section.
+- Verify connection automatically and give one actionable recovery action when verification fails.
+
+## U.4 Make AI setup one-screen simple
+- Start with a safe business-type template.
+- Accept ordinary-language business description and service information.
+- Generate only controlled draft configuration.
+- Never invent prices, hours, availability or policies.
+- Let the customer edit the generated summary in one place.
+
+## U.5 Redesign first-run dashboard
+- New/incomplete workspaces open on readiness + next action, not empty analytics.
+- Show channel connection state and the shortest path to first customer interaction.
+- Reveal advanced metrics only after real activity exists.
+
+## U.6 Reduce navigation
+Collapse the visible navigation to: الرئيسية, المحادثات, العملاء, المواعيد/الطلبات, الذكاء الاصطناعي, المزيد.
+Move low-frequency areas such as reports, billing, integrations, workflow administration and detailed settings under contextual or More navigation.
+
+## U.7 Error and support UX
+- Never show raw SQL/PostgREST/provider messages to customers.
+- Every error has a plain-language explanation plus one next action.
+- Keep technical diagnostics in logs/admin surfaces.
+
+## U.8 Speed and mobile
+- Do not block the main screen on non-critical data.
+- Use skeleton/loading states for secondary sections.
+- Preserve entered data across transient failures.
+- Keep activation one-column, touch-friendly and short on mobile.
+
+## U.9 Exit criteria
+- First-time user can identify the next step without external explanation.
+- No normal setup step asks for provider IDs.
+- Setup can be completed without hopping between dashboard modules.
+- One verified intended channel is enough to start.
+- Provider failures are recoverable from the same screen.
+- New workspaces have a clear next action rather than empty-state exploration.
+- Production runtime errors on the golden path are zero before release.
+
 ---
 
 # Deferred completion backlog
