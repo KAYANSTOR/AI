@@ -259,6 +259,23 @@ export async function runMigrations(argv: string[] = []) {
       }
     }
 
+    // PostgREST caches the schema, so a function created a moment ago is still reported by
+    // the API as "Could not find the function ... in the schema cache" until it reloads.
+    // Migrations regularly change functions (log_audit_event, the channel credential RPCs),
+    // so the reload belongs to applying them rather than to a separate manual step.
+    try {
+      await sql.unsafe(`NOTIFY pgrst, 'reload schema'`)
+      log('Asked PostgREST to reload its schema cache.')
+    } catch (error) {
+      // A provider that forbids NOTIFY, or a plain Postgres with no PostgREST listening,
+      // must not turn an otherwise successful migration run into a failure.
+      log(
+        `WARNING: could not signal PostgREST to reload its schema cache (${
+          error instanceof Error ? error.message : String(error)
+        }). Reload it manually if newly created functions are not visible to the API.`
+      )
+    }
+
     const refreshed = await readApplied(sql);
     log(`Database is at version ${maxVersion(refreshed)}.`);
   } finally {
