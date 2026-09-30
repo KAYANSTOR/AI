@@ -29,24 +29,66 @@ async function requireChannelAdmin(): Promise<OrgContext> {
   return org
 }
 
-/** Prefer businesses row; fall back to business_profiles.business_id used at signup. */
-async function primaryBusinessId(organizationId: string): Promise<string | null> {
+/**
+ * Channels.business_id FK points at businesses(id).
+ * Signup may only seed business_profiles — ensure a businesses row exists.
+ */
+async function ensurePrimaryBusinessId(
+  organizationId: string,
+  organizationName?: string
+): Promise<string | null> {
   const supabase = await createClient()
-  const { data, error } = await supabase
+
+  const { data: existing } = await supabase
     .from('businesses')
     .select('id')
     .eq('organization_id', organizationId)
     .order('created_at', { ascending: true })
     .limit(1)
     .maybeSingle()
-  if (!error && data?.id) return data.id as string
+  if (existing?.id) return existing.id as string
 
   const { data: profile } = await supabase
     .from('business_profiles')
-    .select('business_id')
+    .select('business_id, display_name, name')
     .eq('organization_id', organizationId)
     .maybeSingle()
-  return (profile?.business_id as string | null) ?? null
+
+  // If profile already points at a valid businesses row, use it.
+  if (profile?.business_id) {
+    const { data: byId } = await supabase
+      .from('businesses')
+      .select('id')
+      .eq('id', profile.business_id)
+      .maybeSingle()
+    if (byId?.id) return byId.id as string
+  }
+
+  const name =
+    (profile?.display_name as string | undefined) ||
+    (profile?.name as string | undefined) ||
+    organizationName ||
+    'Business'
+
+  const { data: created, error: createError } = await supabase
+    .from('businesses')
+    .insert({ organization_id: organizationId, name })
+    .select('id')
+    .single()
+
+  if (createError || !created?.id) {
+    console.error('Unable to ensure businesses row for channel bind', createError)
+    // business_id is nullable on channels — allow bind without it
+    return null
+  }
+
+  // Best-effort link profile → business
+  await supabase
+    .from('business_profiles')
+    .update({ business_id: created.id })
+    .eq('organization_id', organizationId)
+
+  return created.id as string
 }
 
 async function audit(
@@ -68,13 +110,15 @@ async function audit(
   })
   if (error) {
     console.error('Unable to record channel audit event', error)
-    // Do not block the operator action on audit failure.
   }
 }
 
 function describeWriteError(code: string | undefined, message: string): string {
   if (code === '23505') {
     return 'هذا المعرّف مرتبط بشركة أخرى بالفعل. لا يمكن ربط الرقم أو الحساب نفسه لأكثر من شركة.'
+  }
+  if (code === '23503') {
+    return 'مرجع النشاط غير صالح. أكمل إعداد النشاط من /dashboard/setup ثم أعد المحاولة.'
   }
   if (code === '42501') return 'لا تملك صلاحية تعديل قنوات هذه الشركة.'
   return supabaseActionError({ code, message }, ar.errors.save)
@@ -103,10 +147,7 @@ export async function saveChannelAction(input: {
     }
 
     const supabase = await createClient()
-    const businessId = await primaryBusinessId(org.organizationId)
-    if (!businessId) {
-      return { ok: false, error: 'لا يوجد نشاط مُهيّأ لهذه الشركة. أكمل إعداد النشاط أولًا.' }
-    }
+    const businessId = await ensurePrimaryBusinessId(org.organizationId, org.organizationName)
 
     const { data: existing, error: readError } = await supabase
       .from('channels')
@@ -137,7 +178,7 @@ export async function saveChannelAction(input: {
 
     const patch = {
       ...binding,
-      business_id: businessId,
+      ...(businessId ? { business_id: businessId } : {}),
       is_active: true,
       verification_status: 'configured',
       updated_at: new Date().toISOString(),
@@ -182,7 +223,7 @@ export async function setChannelActiveAction(input: {
     if (!spec) return { ok: false, error: 'نوع قناة غير معروف.' }
 
     const supabase = await createClient()
-    const businessId = await primaryBusinessId(org.organizationId)
+    const businessId = await ensurePrimaryBusinessId(org.organizationId, org.organizationName)
 
     const { data, error } = await supabase
       .from('channels')
