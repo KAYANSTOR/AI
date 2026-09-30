@@ -10,7 +10,8 @@ import { TextField } from '@/components/auth/field'
 import { BUSINESS_TYPES, DEFAULT_BUSINESS_TYPE } from '@/lib/capabilities/business-types'
 import { AuthProviderNotice } from '@/components/auth/provider-notice'
 
-const ONBOARDING_DESTINATION = '/dashboard/setup'
+// The FastPath lives at /onboarding; /dashboard/setup is only a compatibility redirect.
+const ONBOARDING_DESTINATION = '/onboarding'
 
 export function SignupForm({ authConfigured }: { authConfigured: boolean }) {
   const router = useRouter()
@@ -73,9 +74,7 @@ export function SignupForm({ authConfigured }: { authConfigured: boolean }) {
           <MailCheck size={20} aria-hidden="true" className="mt-0.5 shrink-0 text-success" />
           <div className="text-sm leading-7 text-text">
             <p className="font-semibold">أرسلنا رابط تأكيد إلى {email}</p>
-            <p className="mt-1">
-              بعد تأكيد البريد ستنتقل مباشرة إلى خطوة إعداد شركتك (الخدمات والوحدات المفعّلة).
-            </p>
+            <p className="mt-1">بعد تأكيد البريد ستنتقل مباشرة إلى تجهيز نشاطك، وتكمل من حيث توقفت.</p>
           </div>
         </div>
 

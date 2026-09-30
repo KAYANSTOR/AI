@@ -61,7 +61,7 @@ export default async function SettingsPage() {
           </div>
         </dl>
         <Link
-          href="/dashboard/setup"
+          href="/onboarding"
           className="inline-flex min-h-11 items-center text-sm font-medium text-primary-dark hover:underline"
         >
           {ar.settings.changeBusinessType}

@@ -29,7 +29,7 @@ export default async function AgentPage() {
         <h1 className="text-2xl font-bold tracking-tight text-text">الوكيل الذكي</h1>
         <p className="rounded-xl border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-text">
           لا يوجد نشاط مُهيّأ لهذه الشركة بعد.{' '}
-          <Link href="/dashboard/setup" className="font-semibold underline">
+          <Link href="/onboarding" className="font-semibold underline">
             أكمل إعداد النشاط
           </Link>{' '}
           ليتم إنشاء الوكيل تلقائيًا.
@@ -59,7 +59,7 @@ export default async function AgentPage() {
     )
   }
 
-  if (!agent) redirect('/dashboard/setup')
+  if (!agent) redirect('/onboarding')
 
   const [{ data: versions }, { data: policies }] = await Promise.all([
     supabase

@@ -24,7 +24,16 @@ describe('onboarding smoke test', () => {
         }],
       },
       channels: {
-        rows: [{ id: 'chan-1', organization_id: ORG, business_id: BIZ, channel_type: 'whatsapp', is_active: true }],
+        rows: [
+          {
+            id: 'chan-1',
+            organization_id: ORG,
+            business_id: BIZ,
+            channel_type: 'whatsapp',
+            is_active: true,
+            verification_status: 'verified',
+          },
+        ],
       },
       ai_agents: {
         rows: [{ id: 'agent-1', organization_id: ORG, business_id: BIZ, status: 'active' }],
@@ -50,7 +59,16 @@ describe('onboarding smoke test', () => {
         }],
       },
       channels: {
-        rows: [{ id: 'chan-1', organization_id: ORG, business_id: BIZ, channel_type: 'whatsapp', is_active: false }],
+        rows: [
+          {
+            id: 'chan-1',
+            organization_id: ORG,
+            business_id: BIZ,
+            channel_type: 'whatsapp',
+            is_active: false,
+            verification_status: 'verified',
+          },
+        ],
       },
       ai_agents: {
         rows: [{ id: 'agent-1', organization_id: ORG, business_id: BIZ, status: 'draft' }],
@@ -62,5 +80,42 @@ describe('onboarding smoke test', () => {
     expect(outcome.passed).toBe(false)
     expect(outcome.status).toBe('failed')
     expect(outcome.checks.some((check) => !check.ok)).toBe(true)
+  })
+
+  test('an enabled but unverified channel is not enough to go live', async () => {
+    // FastPath: one intended channel is enough to start, but it must have completed
+    // provider verification. Otherwise activation would promise a channel that cannot
+    // deliver a customer message.
+    const { supabase } = setup({
+      business_profiles: {
+        rows: [{
+          organization_id: ORG,
+          business_id: BIZ,
+          business_type_id: 'salon',
+          timezone: 'UTC',
+          activation_state: 'configuring',
+        }],
+      },
+      channels: {
+        rows: [
+          {
+            id: 'chan-1',
+            organization_id: ORG,
+            business_id: BIZ,
+            channel_type: 'whatsapp',
+            is_active: true,
+            verification_status: 'pending',
+          },
+        ],
+      },
+      ai_agents: {
+        rows: [{ id: 'agent-1', organization_id: ORG, business_id: BIZ, status: 'active' }],
+      },
+    })
+
+    const outcome = await evaluateSmokeTest(supabase, { organizationId: ORG })
+
+    expect(outcome.passed).toBe(false)
+    expect(outcome.checks.find((check) => check.name === 'verified_channel')?.ok).toBe(false)
   })
 })

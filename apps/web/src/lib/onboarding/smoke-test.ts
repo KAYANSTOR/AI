@@ -20,6 +20,10 @@ export type SmokeTestOutcome = {
  * This lives outside `'use server'` on purpose: every exported async function in a server-action
  * module becomes a callable endpoint, and this one takes a Supabase client and an organisation
  * id as arguments, which is not something a client may supply.
+ *
+ * The channel rule follows the FastPath plan: a business may start with one intended channel,
+ * but that channel must be verified. An enabled channel that never completed provider
+ * verification is reported as its own missing step instead of being treated as ready.
  */
 export async function evaluateSmokeTest(
   supabase: Awaited<ReturnType<typeof createClient>>,
@@ -57,20 +61,30 @@ export async function evaluateSmokeTest(
     message: hasTimezone ? 'Timezone is configured.' : 'Timezone must be configured before activation.',
   })
 
-  const { data: activeChannels } = await supabase
+  const { data: channels } = await supabase
     .from('channels')
-    .select('id')
+    .select('id, is_active, verification_status')
     .eq('organization_id', org.organizationId)
-    .eq('is_active', true)
-    .limit(1)
 
-  const hasChannel = (activeChannels ?? []).length > 0
+  const rows = (channels ?? []) as { id: string; is_active: boolean | null; verification_status: string | null }[]
+  const hasChannel = rows.some((row) => row.is_active === true)
   checks.push({
     name: 'active_channel',
     ok: hasChannel,
     message: hasChannel
       ? 'At least one active channel is configured.'
       : 'No active communication channel was found for this organization.',
+  })
+
+  const hasVerifiedChannel = rows.some(
+    (row) => row.is_active === true && row.verification_status === 'verified'
+  )
+  checks.push({
+    name: 'verified_channel',
+    ok: hasVerifiedChannel,
+    message: hasVerifiedChannel
+      ? 'The active channel passed provider verification.'
+      : 'No active channel has completed verification yet; finish the connection or retry it.',
   })
 
   const { data: activeAgents } = await supabase
@@ -97,7 +111,7 @@ export async function evaluateSmokeTest(
     passed,
     status: passed ? 'passed' : 'failed',
     summary: passed
-      ? 'Smoke test passed: organization setup, channel configuration, and active agent are all valid.'
+      ? 'Smoke test passed: organization setup, a verified channel, and an active agent are all valid.'
       : `Smoke test failed: ${failedChecks.map((check) => check.name).join(', ')}.`,
     testedAt,
     checks,
