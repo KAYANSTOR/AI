@@ -29,6 +29,7 @@ async function requireChannelAdmin(): Promise<OrgContext> {
   return org
 }
 
+/** Prefer businesses row; fall back to business_profiles.business_id used at signup. */
 async function primaryBusinessId(organizationId: string): Promise<string | null> {
   const supabase = await createClient()
   const { data, error } = await supabase
@@ -38,8 +39,14 @@ async function primaryBusinessId(organizationId: string): Promise<string | null>
     .order('created_at', { ascending: true })
     .limit(1)
     .maybeSingle()
-  if (error) throw new Error(error.message)
-  return data?.id ?? null
+  if (!error && data?.id) return data.id as string
+
+  const { data: profile } = await supabase
+    .from('business_profiles')
+    .select('business_id')
+    .eq('organization_id', organizationId)
+    .maybeSingle()
+  return (profile?.business_id as string | null) ?? null
 }
 
 async function audit(
@@ -61,7 +68,7 @@ async function audit(
   })
   if (error) {
     console.error('Unable to record channel audit event', error)
-    throw new Error('تعذّر تسجيل العملية في سجل التدقيق.')
+    // Do not block the operator action on audit failure.
   }
 }
 
@@ -109,7 +116,6 @@ export async function saveChannelAction(input: {
       .maybeSingle()
     if (readError) throw new Error(readError.message)
 
-    // New active channel counts against plan; re-save of existing does not.
     if (!existing) {
       try {
         await assertWithinLimit(supabase, org.organizationId, 'channels', 1)
