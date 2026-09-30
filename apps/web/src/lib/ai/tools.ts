@@ -1,4 +1,4 @@
-﻿import type { SupabaseClient } from '@supabase/supabase-js'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { createAppointmentRecord, findAvailableSlots } from '@/lib/calendar/slots'
 import { resolveContactByPhone } from '@/lib/channels/contacts'
 import { getToolPolicy, isActorAllowed, type ToolActor } from '@/lib/ai/registry'
@@ -102,6 +102,9 @@ export async function executeTool(name:string,rawArgs:Record<string,unknown>,ctx
       case 'create_lead': result=await toolCreateLead(ctx,rawArgs); break
       case 'search_knowledge': result=await toolSearchKnowledge(ctx,rawArgs); break
       case 'request_human_handoff': result=await toolHandoff(ctx,rawArgs); break
+      case 'create_quote': result=await toolCreateQuote(ctx,rawArgs); break
+      case 'create_order': result=await toolCreateOrder(ctx,rawArgs); break
+      case 'convert_quote_to_order': result=await toolConvertQuoteToOrder(ctx,rawArgs); break
     }
     if(result === undefined) return {ok:false as const,error:'Tool '+name+' has no implementation.'}
     if(policy.auditClass==='sensitive_write') await writeToolAudit(ctx,name,policy.capability,result)
@@ -310,7 +313,9 @@ async function toolConvertQuoteToOrder(ctx: ToolContext, args: Record<string, un
     if (!ctx.contactId) {
         throw new Error('Customer context is required to create an order.')
     }
-    const quoteId = String(args.quote_id).trim()
+    // String(undefined) is the literal "undefined", which would sail past a truthiness check
+    // and turn a missing argument into a confusing "Quote not found." error instead.
+    const quoteId = typeof args.quote_id === 'string' ? args.quote_id.trim() : ''
     if (!quoteId) throw new Error('quote_id is required.')
 
     const { data: quote, error: quoteError } = await ctx.supabase.from('quotes')

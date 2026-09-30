@@ -3,17 +3,28 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { getSupabaseEnv } from './env'
 
 /** Routes that require a signed-in user. */
-const PROTECTED_PREFIXES = ['/dashboard', '/settings']
+const PROTECTED_PREFIXES = ['/dashboard', '/onboarding', '/settings']
 
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
     request,
   })
 
-  // لا يوجد مزوّد مصادقة مُهيّأ (متغيرات البيئة غير مضبوطة): لا شيء لتحديثه،
-  // والسماح بمرور الطلبات حتى تظهر الصفحة العامة بدل أن يفشل الطلب بالكامل.
+  const { pathname } = request.nextUrl
+  const isProtectedRoute = PROTECTED_PREFIXES.some((prefix) => pathname.startsWith(prefix))
+
+  // لا يوجد مزوّد مصادقة مُهيّأ (متغيرات البيئة غير مضبوطة): لا يمكن التحقق من أي جلسة،
+  // لذلك لا تُعرض المسارات المحمية إطلاقًا — الفشل هنا يجب أن يكون مغلقًا لا مفتوحًا.
+  // الصفحات العامة تمر كما هي حتى تعرض سبب عدم التهيئة بدل أن تفشل بالكامل.
   const env = getSupabaseEnv()
   if (!env) {
+    if (isProtectedRoute) {
+      const url = request.nextUrl.clone()
+      url.pathname = '/login'
+      url.search = ''
+      url.searchParams.set('returnTo', pathname)
+      return NextResponse.redirect(url)
+    }
     return supabaseResponse
   }
 
@@ -44,9 +55,6 @@ export async function updateSession(request: NextRequest) {
 
   const { data } = await supabase.auth.getClaims()
   const claims = data?.claims
-
-  const { pathname } = request.nextUrl
-  const isProtectedRoute = PROTECTED_PREFIXES.some((prefix) => pathname.startsWith(prefix))
 
   if (isProtectedRoute && !claims?.sub) {
     // Send the visitor to /login and keep the page they wanted, so the app
