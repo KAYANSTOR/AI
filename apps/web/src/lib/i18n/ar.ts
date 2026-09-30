@@ -302,10 +302,10 @@ export const ar = {
       pending_test: 'بانتظار التأكيد',
     },
     verificationStatuses: {
-      configured: 'مُهيّأة',
       verified: 'تم التحقق',
       pending: 'بانتظار التحقق',
-      disconnected: 'غير مربوطة',
+      failed: 'فشل التحقق',
+      disabled: 'معطّلة',
     },
   },
   agent: {
