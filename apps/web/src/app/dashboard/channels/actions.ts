@@ -137,6 +137,16 @@ export async function saveChannelAction(input: {
     const raw = input.identifier.trim()
     if (!raw) return { ok: false, error: 'أدخل ' + spec.bindingLabel + '.' }
 
+    if (spec.type === 'whatsapp' && !/^\\d+$/.test(raw)) {
+      return {
+        ok: false,
+        error: 'أدخل phone_number_id الرقمي من لوحة Meta، وليس رقم الهاتف مثل +967....',
+      }
+    }
+    if (spec.type === 'instagram' && !/^\\d+$/.test(raw)) {
+      return { ok: false, error: 'أدخل معرّف حساب إنستغرام الرقمي من لوحة Meta.' }
+    }
+
     const identifier =
       spec.type === 'whatsapp' || spec.type === 'instagram' ? raw : normalizeChannelNumber(raw)
     const publicNumber = spec.publicNumberLabel
@@ -180,7 +190,7 @@ export async function saveChannelAction(input: {
       ...binding,
       ...(businessId ? { business_id: businessId } : {}),
       is_active: true,
-      verification_status: 'configured',
+      verification_status: 'pending',
       updated_at: new Date().toISOString(),
     }
 
@@ -252,7 +262,7 @@ export async function setChannelActiveAction(input: {
       .from('channels')
       .update({
         is_active: input.active,
-        verification_status: input.active ? 'configured' : 'disconnected',
+        verification_status: input.active ? 'pending' : 'disabled',
         updated_at: new Date().toISOString(),
       })
       .eq('id', data.id)
