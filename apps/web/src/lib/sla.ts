@@ -18,46 +18,66 @@ export function computeDueAt(from: Date, minutes: number): string {
   return new Date(from.getTime() + minutes * 60_000).toISOString()
 }
 
+/**
+ * Classify a conversation against its armed deadlines.
+ *
+ * The at-risk band is the last (1 - warningRatio) of the deadline's *own* window, which is
+ * why the window lengths are inputs: a 24-hour resolution deadline must warn for hours, while
+ * a 15-minute first-response deadline must warn for minutes. Sizing that band from a fixed
+ * default window made the warning — and the escalation it triggers — nearly unreachable for
+ * every policy that was not the default.
+ */
 export function evaluateSlaState(input: {
   now?: Date
   firstResponseDueAt?: string | null
   resolutionDueAt?: string | null
   firstRespondedAt?: string | null
   resolvedAt?: string | null
+  /** Length of the first-response window this deadline was armed with. */
+  firstResponseMinutes?: number
+  /** Length of the resolution window this deadline was armed with. */
+  resolutionMinutes?: number
   warningRatio?: number
 }): SlaState {
   if (input.resolvedAt) return 'resolved'
 
   const now = (input.now ?? new Date()).getTime()
-  const warningRatio = input.warningRatio ?? DEFAULT_SLA_POLICY.warningRatio
+  const warningRatio = clampWarningRatio(input.warningRatio)
 
-  const dueCandidates: number[] = []
+  const deadlines: Array<{ dueAt: number; windowMinutes: number }> = []
+
   if (!input.firstRespondedAt && input.firstResponseDueAt) {
-    const t = new Date(input.firstResponseDueAt).getTime()
-    if (!Number.isNaN(t)) dueCandidates.push(t)
+    const dueAt = new Date(input.firstResponseDueAt).getTime()
+    if (!Number.isNaN(dueAt)) {
+      deadlines.push({
+        dueAt,
+        windowMinutes: input.firstResponseMinutes ?? DEFAULT_SLA_POLICY.firstResponseMinutes,
+      })
+    }
   }
   if (input.resolutionDueAt) {
-    const t = new Date(input.resolutionDueAt).getTime()
-    if (!Number.isNaN(t)) dueCandidates.push(t)
+    const dueAt = new Date(input.resolutionDueAt).getTime()
+    if (!Number.isNaN(dueAt)) {
+      deadlines.push({
+        dueAt,
+        windowMinutes: input.resolutionMinutes ?? DEFAULT_SLA_POLICY.resolutionMinutes,
+      })
+    }
   }
 
-  if (dueCandidates.length === 0) return 'normal'
+  if (deadlines.length === 0) return 'normal'
 
-  const nearest = Math.min(...dueCandidates)
-  if (now >= nearest) return 'breached'
+  const nearest = deadlines.reduce((a, b) => (b.dueAt < a.dueAt ? b : a))
+  if (now >= nearest.dueAt) return 'breached'
 
-  // at_risk when remaining time is under (1 - warningRatio) of the original window is
-  // approximated: if we are past warningRatio of the way to the due timestamp from "now-ish".
-  // Practical rule: within the last 25% of time before due → at_risk.
-  const windowMs = nearest - (now - (nearest - now))
-  // Simpler: mark at_risk when less than 25% of policy first-response window remains,
-  // using absolute proximity of 0.25 * nearest-due gap from creation is unavailable here,
-  // so use: if due within 25% of firstResponse default minutes.
-  const proximityMs = nearest - now
-  const riskWindowMs = DEFAULT_SLA_POLICY.firstResponseMinutes * 60_000 * (1 - warningRatio)
-  if (proximityMs <= riskWindowMs) return 'at_risk'
+  const riskBandMs = nearest.windowMinutes * 60_000 * (1 - warningRatio)
+  return nearest.dueAt - now <= riskBandMs ? 'at_risk' : 'normal'
+}
 
-  return 'normal'
+function clampWarningRatio(value: number | undefined): number {
+  const ratio = value ?? DEFAULT_SLA_POLICY.warningRatio
+  if (!Number.isFinite(ratio) || ratio < 0) return DEFAULT_SLA_POLICY.warningRatio
+  return ratio > 1 ? 1 : ratio
 }
 
 export async function loadDefaultSlaPolicy(
@@ -121,11 +141,15 @@ export async function markFirstResponse(
 
   if (!data || data.first_responded_at) return
 
+  const policy = await loadDefaultSlaPolicy(supabase, input.organizationId)
   const sla_state = evaluateSlaState({
     firstResponseDueAt: data.first_response_due_at,
     resolutionDueAt: data.resolution_due_at,
     firstRespondedAt: at,
     resolvedAt: data.resolved_at,
+    firstResponseMinutes: policy.firstResponseMinutes,
+    resolutionMinutes: policy.resolutionMinutes,
+    warningRatio: policy.warningRatio,
   })
 
   await supabase
@@ -148,11 +172,15 @@ export async function refreshConversationSla(
 
   if (!data) return 'normal'
 
+  const policy = await loadDefaultSlaPolicy(supabase, input.organizationId)
   const next = evaluateSlaState({
     firstResponseDueAt: data.first_response_due_at,
     resolutionDueAt: data.resolution_due_at,
     firstRespondedAt: data.first_responded_at,
     resolvedAt: data.resolved_at,
+    firstResponseMinutes: policy.firstResponseMinutes,
+    resolutionMinutes: policy.resolutionMinutes,
+    warningRatio: policy.warningRatio,
   })
 
   if (next !== data.sla_state) {

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { isAuthorizedCronRequest } from '@/lib/cron/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { evaluateSlaState } from '@/lib/sla'
+import { DEFAULT_SLA_POLICY, evaluateSlaState, loadDefaultSlaPolicy, type SlaPolicy } from '@/lib/sla'
 import { runEscalationPolicies } from '@/lib/escalation'
 
 export const runtime = 'nodejs'
@@ -24,17 +24,31 @@ async function handle(req: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
+  // One lookup per organization on this page so the at-risk band is sized from each tenant's
+  // own policy rather than from the product defaults.
+  const policyByOrg = new Map<string, SlaPolicy>()
+  const organizationIds = [...new Set((rows ?? []).map((row) => row.organization_id as string))]
+  await Promise.all(
+    organizationIds.map(async (organizationId) => {
+      policyByOrg.set(organizationId, await loadDefaultSlaPolicy(supabase, organizationId))
+    })
+  )
+
   let updated = 0
   let breached = 0
   let warned = 0
   let escalations = 0
 
   for (const row of rows ?? []) {
+    const policy = policyByOrg.get(row.organization_id as string) ?? DEFAULT_SLA_POLICY
     const next = evaluateSlaState({
       firstResponseDueAt: row.first_response_due_at,
       resolutionDueAt: row.resolution_due_at,
       firstRespondedAt: row.first_responded_at,
       resolvedAt: row.resolved_at,
+      firstResponseMinutes: policy.firstResponseMinutes,
+      resolutionMinutes: policy.resolutionMinutes,
+      warningRatio: policy.warningRatio,
     })
 
     if (next === row.sla_state) continue
