@@ -74,6 +74,19 @@ Implement a persistent setup state:
 
 The wizard must resume after logout, provider error or partial completion.
 
+**Connect-first UX requirement:**
+- Collect the existing public business number once.
+- Use one customer-facing **Connect your business / Kayan Connect** journey instead of separate technical channel setup flows.
+- Hide provider terminology, API keys, webhook configuration and internal IDs from the customer.
+- Make WhatsApp the primary connection step when applicable.
+- Offer Voice activation as an optional next step using the same existing public number and carrier call forwarding to Vapi.
+- Keep Instagram/SMS optional and progressively connectable.
+- A failed optional channel must never block an already connected channel.
+- Connection state must be resumable and expressed as Connected / Needs attention / Optional.
+
+Target journey:
+`Signup → business details + existing number → Connect your business → WhatsApp → optional Voice → ready`
+
 ### 1.2 Business profile
 - name
 - logo
@@ -93,6 +106,16 @@ The wizard must resume after logout, provider error or partial completion.
 Implement connection state machine:
 `draft → verifying → connected → active`
 and failure states with retry.
+
+The channel implementation must expose a unified **Kayan Connect** surface while retaining provider-specific adapters internally. Exact tenant/channel binding, signature verification, idempotency, outbox, audit and capability/entitlement checks remain mandatory.
+
+Connection order:
+1. existing business number / business identity
+2. WhatsApp primary connection
+3. optional Voice activation via carrier forwarding to Vapi
+4. optional Instagram/SMS and future channels
+
+Go-live requires at least one intended verified channel; it does not require every supported channel.
 
 ### 1.5 AI activation
 - agent identity
