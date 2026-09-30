@@ -2,12 +2,13 @@
 
 import { useState, useTransition } from 'react'
 import { CheckCircle2, CircleAlert, Loader2, Plug, Power, RadioTower, XCircle } from 'lucide-react'
-import type { BindingTestResult, ChannelSpec, ChannelType } from '@/lib/channels/management'
+import type { BindingTestResult, ChannelType } from '@/lib/channels/management'
 import type { CredentialMetadata } from '@/lib/credentials/catalog'
 import { ChannelCredentials } from './channel-credentials'
 import { saveChannelAction, setChannelActiveAction, testChannelAction } from './actions'
 import { ar } from '@/lib/i18n/ar'
 import { channelVerificationStatusLabel } from '@/lib/i18n/labels'
+import type { ChannelSpec } from '@/lib/channels/management'
 
 export type ChannelCardData = {
   spec: ChannelSpec
@@ -17,15 +18,16 @@ export type ChannelCardData = {
   isActive: boolean
   connected: boolean
   verificationStatus: string | null
-  /** Metadata only — the dashboard never receives credential values. */
   credentials: CredentialMetadata[]
   credentialsStorageConfigured: boolean
   canManage: boolean
 }
 
 function statusChip(data: ChannelCardData) {
-  if (!data.connected) return { label: ar.channels.notConnected, className: 'bg-background text-text-muted border-border' }
-  if (!data.isActive) return { label: ar.channels.channelInactive, className: 'bg-warning/15 text-warning border-warning/40' }
+  if (!data.connected)
+    return { label: ar.channels.notConnected, className: 'bg-background text-text-muted border-border' }
+  if (!data.isActive)
+    return { label: ar.channels.channelInactive, className: 'bg-warning/15 text-warning border-warning/40' }
   return { label: ar.channels.channelActive, className: 'bg-success/15 text-success border-success/40' }
 }
 
@@ -37,8 +39,10 @@ export function ChannelCard({ data, channelType }: { data: ChannelCardData; chan
   const [pending, startTransition] = useTransition()
 
   const chip = statusChip(data)
+  const locked = !data.canManage
 
   function runSave() {
+    if (locked) return
     startTransition(async () => {
       setTestResult(null)
       const result = await saveChannelAction({
@@ -54,6 +58,7 @@ export function ChannelCard({ data, channelType }: { data: ChannelCardData; chan
   }
 
   function runToggle() {
+    if (locked) return
     startTransition(async () => {
       setTestResult(null)
       const result = await setChannelActiveAction({ channelType: data.spec.type, active: !data.isActive })
@@ -84,12 +89,12 @@ export function ChannelCard({ data, channelType }: { data: ChannelCardData; chan
           </span>
           <div>
             <h2 className="text-base font-semibold text-text">{data.spec.label}</h2>
-            <p className="text-xs text-text-muted">{ar.channels.provider}: {data.spec.provider}</p>
+            <p className="text-xs text-text-muted">
+              {ar.channels.provider}: {data.spec.provider}
+            </p>
           </div>
         </div>
-        <span className={`rounded-full border px-3 py-1 text-xs font-medium ${chip.className}`}>
-          {chip.label}
-        </span>
+        <span className={`rounded-full border px-3 py-1 text-xs font-medium ${chip.className}`}>{chip.label}</span>
       </header>
 
       <div className="space-y-4 px-5 py-4">
@@ -98,15 +103,15 @@ export function ChannelCard({ data, channelType }: { data: ChannelCardData; chan
             <div>
               <dt className="text-xs text-text-muted">{data.spec.bindingLabel}</dt>
               <dd dir="ltr" className="mt-0.5 break-all text-start font-medium text-text">
-                {data.spec.bindingColumn === 'provider_account_id'
-                  ? (data.identifier ?? '—')
-                  : (data.identifier ?? '—')}
+                {data.identifier ?? '—'}
               </dd>
             </div>
             {data.spec.publicNumberLabel && (
               <div>
                 <dt className="text-xs text-text-muted">{data.spec.publicNumberLabel}</dt>
-                <dd dir="ltr" className="mt-0.5 text-start font-medium text-text">{data.publicNumber ?? ar.common.unknown}</dd>
+                <dd dir="ltr" className="mt-0.5 text-start font-medium text-text">
+                  {data.publicNumber ?? ar.common.unknown}
+                </dd>
               </div>
             )}
             <div>
@@ -128,7 +133,8 @@ export function ChannelCard({ data, channelType }: { data: ChannelCardData; chan
               onChange={(event) => setIdentifier(event.target.value)}
               placeholder={data.spec.bindingPlaceholder}
               dir="ltr"
-              className="min-h-11 w-full rounded-lg border border-border bg-background px-3 py-2 text-base text-text transition-colors focus:border-primary-dark focus:outline-none focus:ring-2 focus:ring-primary/20 md:text-sm"
+              disabled={locked}
+              className="min-h-11 w-full rounded-lg border border-border bg-background px-3 py-2 text-base text-text transition-colors focus:border-primary-dark focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-60 md:text-sm"
             />
           </label>
 
@@ -140,7 +146,8 @@ export function ChannelCard({ data, channelType }: { data: ChannelCardData; chan
                 onChange={(event) => setPublicNumber(event.target.value)}
                 placeholder="+966…"
                 dir="ltr"
-                className="min-h-11 w-full rounded-lg border border-border bg-background px-3 py-2 text-base text-text transition-colors focus:border-primary-dark focus:outline-none focus:ring-2 focus:ring-primary/20 md:text-sm"
+                disabled={locked}
+                className="min-h-11 w-full rounded-lg border border-border bg-background px-3 py-2 text-base text-text transition-colors focus:border-primary-dark focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-60 md:text-sm"
               />
             </label>
           )}
@@ -163,7 +170,7 @@ export function ChannelCard({ data, channelType }: { data: ChannelCardData; chan
           <button
             type="button"
             onClick={runSave}
-            disabled={pending}
+            disabled={pending || locked}
             className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary-dark px-4 py-2 text-base font-medium text-surface transition-colors hover:bg-primary disabled:opacity-60 sm:w-auto md:text-sm"
           >
             {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plug size={16} aria-hidden="true" />}
@@ -173,7 +180,7 @@ export function ChannelCard({ data, channelType }: { data: ChannelCardData; chan
           <button
             type="button"
             onClick={runToggle}
-            disabled={pending || !data.connected}
+            disabled={pending || locked || !data.connected}
             className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg border border-border px-4 py-2 text-base font-medium text-text transition-colors hover:bg-background disabled:opacity-50 sm:w-auto md:text-sm"
           >
             <Power size={16} aria-hidden="true" />
