@@ -22,8 +22,7 @@ export const geminiProvider: AIProvider = {
     const apiKey = process.env.GEMINI_API_KEY
     if (!apiKey) throw new Error('GEMINI_API_KEY is required')
 
-    // 1.5-flash / 2.0-flash were retired for many keys; flash-latest is current.
-    const model = process.env.GEMINI_MODEL || 'gemini-flash-latest'
+    const model = process.env.GEMINI_MODEL || 'gemini-3.8-flash'
 
     const contents: GeminiContent[] = []
     for (const msg of input.messages) {

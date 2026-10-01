@@ -10,7 +10,7 @@
  * When the model is unavailable the draft falls back to the customer's own words. That is
  * not invented data: it is exactly the text the person typed, plus system defaults.
  */
-import { anthropicProvider } from '@/lib/providers/anthropic'
+import { geminiProvider } from '@/lib/providers/gemini'
 import type { AIProvider, ModelBlock } from '@/lib/providers/types'
 
 export type ReplyStyleId = 'warm' | 'formal' | 'brief'
@@ -216,13 +216,13 @@ export async function generateAgentSetupDraft(input: {
     businessName: input.businessName,
   })
 
-  if (!description || !process.env.ANTHROPIC_API_KEY || !process.env.ANTHROPIC_MODEL) {
+  if (!description || !process.env.GEMINI_API_KEY) {
     return fallback
   }
 
   let text = ''
   try {
-    const provider = input.provider ?? anthropicProvider
+    const provider = input.provider ?? geminiProvider
     const result = await provider.call({
       system: SETUP_SYSTEM_PROMPT,
       messages: [

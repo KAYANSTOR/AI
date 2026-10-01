@@ -26,7 +26,6 @@ import {
 
 export type WhatsAppBindingReason =
   | 'already_bound'
-  | 'stored_credential'
   | 'provider_lookup'
   | 'no_credentials'
   | 'not_found'
@@ -78,6 +77,7 @@ export async function resolveWhatsAppBinding(input: {
   //    of downgrading a working connection just because a lookup was not possible now.
   if (
     input.channel?.provider_account_id &&
+    input.channel.verification_status === 'verified' &&
     phoneDigits(input.channel.external_identifier ?? '') === digits
   ) {
     return {
@@ -95,19 +95,7 @@ export async function resolveWhatsAppBinding(input: {
     required(stored.business_account_id) ?? required(process.env[WHATSAPP_WABA_ENV])
   const graphBase = required(process.env.META_GRAPH_BASE_URL)
 
-  // A stored credential that already names the phone_number_id is an operator-provided
-  // binding. It is trusted only for the number it was stored for, which is why the
-  // "same number" shortcut above runs first and this path stays pending otherwise.
   if (!accessToken || !businessAccountId || !graphBase) {
-    const storedId = required(stored.phone_number_id)
-    if (storedId) {
-      return {
-        status: 'verified',
-        reason: 'stored_credential',
-        phoneNumberId: storedId,
-        message: 'تم ربط رقم واتساب بنشاطك.',
-      }
-    }
     return {
       status: 'pending',
       reason: 'no_credentials',
@@ -131,6 +119,13 @@ export async function resolveWhatsAppBinding(input: {
       phoneNumberId: lookup.phoneNumberId,
       message: 'تم ربط رقم واتساب بنشاطك.',
     }
+  }
+
+  if (lookup.reason === 'provider_error') {
+    console.error('Connect: WhatsApp provider lookup failed', {
+      reason: lookup.reason,
+      detail: lookup.detail,
+    })
   }
 
   return {
@@ -164,45 +159,51 @@ export async function connectWhatsAppChannel(input: {
     return { ok: false, error: 'أدخل رقم واتساب بصيغة دولية، مثال +967777123456.' }
   }
 
-  const { data: existing, error: readError } = await input.supabase
-    .from('channels')
-    .select('id, provider_account_id, external_identifier, verification_status, is_active')
-    .eq('organization_id', input.organizationId)
-    .eq('channel_type', 'whatsapp')
-    .maybeSingle()
+  try {
+    const { data: existing, error: readError } = await input.supabase
+      .from('channels')
+      .select('id, provider_account_id, external_identifier, verification_status, is_active')
+      .eq('organization_id', input.organizationId)
+      .eq('channel_type', 'whatsapp')
+      .maybeSingle()
 
-  if (readError) return { ok: false, error: readError.message }
-
-  const channel = (existing as WhatsAppChannelRow | null) ?? null
-  const outcome = await resolveWhatsAppBinding({
-    supabase: input.supabase,
-    channel,
-    number,
-  })
-
-  const patch = {
-    ...(input.businessId ? { business_id: input.businessId } : {}),
-    provider_account_id: outcome.phoneNumberId,
-    external_identifier: number,
-    verification_status: outcome.status === 'verified' ? 'verified' : 'pending',
-    is_active: true,
-    updated_at: new Date().toISOString(),
-  }
-
-  const written = channel
-    ? await input.supabase.from('channels').update(patch).eq('id', channel.id).select('id').single()
-    : await input.supabase
-        .from('channels')
-        .insert({ organization_id: input.organizationId, channel_type: 'whatsapp', ...patch })
-        .select('id')
-        .single()
-
-  if (written.error || !written.data) {
-    return {
-      ok: false,
-      error: written.error?.message ?? 'تعذّر حفظ رقم واتساب. حاول مرة أخرى.',
+    if (readError) {
+      console.error('Connect: unable to load WhatsApp channel', readError)
+      return { ok: false, error: 'تعذّر التحقق من إعدادات واتساب. حاول مرة أخرى.' }
     }
-  }
 
-  return { ok: true, outcome }
+    const channel = (existing as WhatsAppChannelRow | null) ?? null
+    const outcome = await resolveWhatsAppBinding({
+      supabase: input.supabase,
+      channel,
+      number,
+    })
+
+    const patch = {
+      ...(input.businessId ? { business_id: input.businessId } : {}),
+      provider_account_id: outcome.phoneNumberId,
+      external_identifier: number,
+      verification_status: outcome.status === 'verified' ? 'verified' : 'pending',
+      is_active: true,
+      updated_at: new Date().toISOString(),
+    }
+
+    const written = channel
+      ? await input.supabase.from('channels').update(patch).eq('id', channel.id).select('id').single()
+      : await input.supabase
+          .from('channels')
+          .insert({ organization_id: input.organizationId, channel_type: 'whatsapp', ...patch })
+          .select('id')
+          .single()
+
+    if (written.error || !written.data) {
+      console.error('Connect: unable to save WhatsApp channel', written.error)
+      return { ok: false, error: 'تعذّر حفظ رقم واتساب. حاول مرة أخرى.' }
+    }
+
+    return { ok: true, outcome }
+  } catch (error) {
+    console.error('Connect: unexpected WhatsApp connection failure', error)
+    return { ok: false, error: 'تعذّر ربط واتساب الآن. حاول مرة أخرى.' }
+  }
 }

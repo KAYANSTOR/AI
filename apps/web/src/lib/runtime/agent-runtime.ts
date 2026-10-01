@@ -17,11 +17,8 @@ export async function runAgentTurn(args: {
   agentId?: string | null
   serverActionResult?: unknown
 }) {
-  const providerName = process.env.AI_PROVIDER || 'gemini'
-  const model =
-    providerName === 'anthropic'
-      ? (process.env.ANTHROPIC_MODEL ?? null)
-      : (process.env.GEMINI_MODEL ?? 'gemini-1.5-flash')
+  const providerName = 'gemini'
+  const model = process.env.GEMINI_MODEL ?? 'gemini-3.8-flash'
 
   const [{ data: history, error: historyError }, prompt, toolSet] = await Promise.all([
     args.supabase
@@ -97,7 +94,7 @@ export async function runAgentTurn(args: {
   let outputTokens = 0
   try {
     for (let round = 0; round < 5; round += 1) {
-      const provider = getProvider(providerName)
+      const provider = getProvider()
       const result = await provider.call({ system: prompt, messages, tools: toolSet })
       inputTokens += result.inputTokens
       outputTokens += result.outputTokens

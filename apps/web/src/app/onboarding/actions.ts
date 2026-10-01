@@ -2,13 +2,18 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentOrg, type OrgContext } from '@/lib/org'
 import { actionErrorMessage, supabaseActionError } from '@/lib/i18n/action-error'
 import { isBusinessTypeId } from '@/lib/capabilities/business-types'
 import { applyBusinessType } from '@/lib/capabilities/profile'
-import { activationStateForStep } from '@/lib/onboarding/activation'
+import {
+  activationStateForStep,
+  stateAfterActivationTest,
+  stepAfterActivationTest,
+} from '@/lib/onboarding/activation'
 import { isOnboardingStage, stepForStage, type OnboardingStage } from '@/lib/onboarding/stages'
-import { evaluateSmokeTest, type SmokeTestOutcome } from '@/lib/onboarding/smoke-test'
+import { evaluateSmokeTest, withReplyTestCheck, type SmokeTestOutcome } from '@/lib/onboarding/smoke-test'
 import { connectWhatsAppChannel } from '@/lib/channels/connect-service'
 import { isPlausiblePhoneNumber } from '@/lib/channels/connect'
 import { tryAgentReply, type ReplyTestResult } from '@/lib/onboarding/reply-test'
@@ -29,6 +34,47 @@ async function requireOnboardingAdmin(): Promise<OrgContext> {
     throw new Error('إعداد النشاط متاح لمالك النشاط أو المسؤول فقط.')
   }
   return org
+}
+
+async function runActivationChecks(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  org: OrgContext,
+  message: string
+) {
+  const structuralOutcome = await evaluateSmokeTest(supabase, org)
+  const { data: profile, error: profileError } = await supabase
+    .from('business_profiles')
+    .select('business_id, activation_state')
+    .eq('organization_id', org.organizationId)
+    .maybeSingle()
+  if (profileError) throw profileError
+
+  const businessId = (profile?.business_id as string | null) ?? null
+  const { data: agent, error: agentError } = businessId
+    ? await supabase
+        .from('ai_agents')
+        .select('id')
+        .eq('organization_id', org.organizationId)
+        .eq('business_id', businessId)
+        .eq('status', 'active')
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .maybeSingle()
+    : { data: null, error: null }
+  if (agentError) throw agentError
+
+  const reply = await tryAgentReply({
+    supabase,
+    organizationId: org.organizationId,
+    agentId: (agent?.id as string | undefined) ?? null,
+    message,
+  })
+
+  return {
+    outcome: withReplyTestCheck(structuralOutcome, reply.status),
+    reply,
+    activationState: String(profile?.activation_state ?? 'workspace_ready'),
+  }
 }
 
 /** The audit trail must record setup decisions, but it must never break the setup itself. */
@@ -185,7 +231,7 @@ export async function advanceStageAction(stage: number): Promise<OnboardingResul
       smokeStatus: (profile?.smoke_test_status as string | null) ?? null,
     })
 
-    const { error } = await supabase
+    const { error } = await createAdminClient()
       .from('business_profiles')
       .update({ activation_step: step, activation_state: nextState })
       .eq('organization_id', org.organizationId)
@@ -267,7 +313,7 @@ export async function connectWhatsAppAction(input: { phoneNumber: string }): Pro
 
     revalidatePath('/onboarding')
     revalidatePath('/dashboard/channels')
-    return { ok: result.outcome.status === 'verified', message: result.outcome.message }
+    return { ok: true, message: result.outcome.message }
   } catch (error) {
     return { ok: false, error: actionErrorMessage(error, 'لم يكتمل ربط واتساب. حاول مرة أخرى.') }
   }
@@ -299,6 +345,43 @@ export async function generateAgentSetupAction(input: {
     return { ok: true, result }
   } catch (error) {
     return { ok: false, error: actionErrorMessage(error, 'تعذّر تجهيز الوكيل. حاول مرة أخرى.') }
+  }
+}
+
+/** Saves the owner's raw description draft without publishing it to the agent prompt. */
+export async function saveAgentSetupDescriptionAction(input: {
+  description: string
+}): Promise<OnboardingResult> {
+  try {
+    const org = await requireOnboardingAdmin()
+    const description = input?.description
+    if (typeof description !== 'string') {
+      return { ok: false, error: 'اكتب وصف النشاط بصيغة صحيحة.' }
+    }
+    if (description.length > 1400) {
+      return { ok: false, error: 'الوصف طويل جدًا. اختصره في بضع جمل.' }
+    }
+
+    const supabase = await createClient()
+    const { error } = await supabase
+      .from('business_profiles')
+      .update({ setup_description: description })
+      .eq('organization_id', org.organizationId)
+    if (error) return { ok: false, error: supabaseActionError(error) }
+
+    await auditSetup(
+      org.organizationId,
+      null,
+      'agent.setup_description_saved',
+      'business_profile',
+      null,
+      { description_length: description.length }
+    )
+
+    revalidatePath('/onboarding')
+    return { ok: true, message: 'تم حفظ الوصف.' }
+  } catch (error) {
+    return { ok: false, error: actionErrorMessage(error, 'تعذّر حفظ الوصف. حاول مرة أخرى.') }
   }
 }
 
@@ -341,7 +424,7 @@ export async function saveAgentSetupAction(input: {
           business_id: (profile?.business_id as string | null) ?? null,
           name: draft.agentName,
           slug: 'frontdesk',
-          model_provider: 'anthropic',
+          model_provider: 'gemini',
           temperature: 0.2,
           status: 'active',
           locale: 'ar',
@@ -410,33 +493,22 @@ export async function runActivationTestAction(input?: {
   try {
     const org = await requireOnboardingAdmin()
     const supabase = await createClient()
-    const outcome = await evaluateSmokeTest(supabase, org)
-
-    // The reply test is a real model call against the business prompt. It is reported
-    // alongside the required checks but never decides activation on its own.
-    const { data: agent } = await supabase
-      .from('ai_agents')
-      .select('id')
-      .eq('organization_id', org.organizationId)
-      .eq('status', 'active')
-      .order('created_at', { ascending: true })
-      .limit(1)
-      .maybeSingle()
-
-    const reply = await tryAgentReply({
+    const { outcome, reply, activationState } = await runActivationChecks(
       supabase,
-      organizationId: org.organizationId,
-      agentId: (agent?.id as string | undefined) ?? null,
-      message: input?.message ?? 'السلام عليكم، أريد حجز موعد.',
-    })
+      org,
+      input?.message ?? 'السلام عليكم، أريد حجز موعد.'
+    )
 
-    const { error } = await supabase
+    const { error } = await createAdminClient()
       .from('business_profiles')
       .update({
         smoke_test_status: outcome.passed ? 'passed' : 'failed',
         smoke_test_result: outcome,
-        activation_state: outcome.passed ? 'ready_to_activate' : 'ready_for_test',
-        activation_step: stepForStage(4),
+        activation_state: stateAfterActivationTest({
+          currentState: activationState,
+          passed: outcome.passed,
+        }),
+        activation_step: stepAfterActivationTest({ currentState: activationState }),
       })
       .eq('organization_id', org.organizationId)
     if (error) return { ok: false, error: supabaseActionError(error) }
@@ -465,17 +537,26 @@ export async function activateAccountAction(): Promise<
   try {
     const org = await requireOnboardingAdmin()
     const supabase = await createClient()
-    const outcome = await evaluateSmokeTest(supabase, org)
+    const { outcome, activationState } = await runActivationChecks(
+      supabase,
+      org,
+      'السلام عليكم، أريد حجز موعد.'
+    )
+    const admin = createAdminClient()
 
     if (!outcome.passed) {
-      await supabase
+      const { error: saveError } = await admin
         .from('business_profiles')
         .update({
           smoke_test_status: 'failed',
           smoke_test_result: outcome,
-          activation_state: 'ready_for_test',
+          activation_state: stateAfterActivationTest({
+            currentState: activationState,
+            passed: false,
+          }),
         })
         .eq('organization_id', org.organizationId)
+      if (saveError) return { ok: false, error: supabaseActionError(saveError), outcome }
       return {
         ok: false,
         error: 'لم يكتمل الإعداد بعد. راجع الخطوات الناقصة ثم أعد الاختبار.',
@@ -489,7 +570,7 @@ export async function activateAccountAction(): Promise<
       .eq('organization_id', org.organizationId)
       .maybeSingle()
 
-    const { error } = await supabase
+    const { error } = await admin
       .from('business_profiles')
       .update({
         activation_state: 'active',

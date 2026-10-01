@@ -134,6 +134,7 @@ export async function setChannelCredentialStatusAction(input: {
 
     // Delegates to the guarded function so the status change stays inside RLS policy.
     await setChannelCredentialStatus(supabase, {
+      organizationId: org.organizationId,
       channelId: channel.id,
       provider,
       status: input.status,
@@ -174,6 +175,7 @@ export async function deleteChannelCredentialAction(input: {
     const provider = PROVIDER_FOR_CHANNEL[channelType]
     const supabase = await createClient()
     await deleteChannelCredential(supabase, {
+      organizationId: org.organizationId,
       channelId: channel.id,
       provider,
       credentialType: input.credentialType,

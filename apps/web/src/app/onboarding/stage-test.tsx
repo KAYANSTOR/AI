@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { CheckCircle2, Loader2, Send, ShieldCheck, XCircle } from 'lucide-react'
+import { CheckCircle2, CircleAlert, Loader2, Send, ShieldCheck, XCircle } from 'lucide-react'
 import { runActivationTestAction, activateAccountAction } from './actions'
 import type { SmokeTestOutcome } from '@/lib/onboarding/smoke-test'
 import type { ReplyTestResult } from '@/lib/onboarding/reply-test'
@@ -51,7 +51,7 @@ export function StageTest({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const passed = outcome?.passed === true
+  const passed = outcome?.passed === true && reply?.status === 'answered'
 
   async function handleTest() {
     setBusy(true)
@@ -92,7 +92,10 @@ export function StageTest({
           <span className="text-xs font-semibold text-text">رسالتك التجريبية</span>
           <textarea
             value={message}
-            onChange={(event) => setMessage(event.target.value)}
+            onChange={(event) => {
+              setMessage(event.target.value)
+              setReply(null)
+            }}
             rows={3}
             disabled={!canManage}
             className="mt-1.5 w-full rounded-xl border border-border bg-surface p-3 text-base leading-7 text-text outline-none focus:border-primary-dark focus:ring-2 focus:ring-primary-light disabled:opacity-60"
@@ -142,11 +145,11 @@ export function StageTest({
         </button>
       </div>
 
-      {outcome ? (
+      {outcome || reply ? (
         <div className="rounded-2xl border border-border bg-background p-5">
           <h2 className="text-sm font-bold text-text">نتيجة الفحص</h2>
           <ul className="mt-3 space-y-3">
-            {outcome.checks.map((check) => (
+            {(outcome?.checks ?? []).map((check) => (
               <li key={check.name} className="flex items-start gap-3">
                 {check.ok ? (
                   <CheckCircle2 size={18} className="mt-0.5 shrink-0 text-success" aria-hidden="true" />
@@ -165,6 +168,21 @@ export function StageTest({
                 </div>
               </li>
             ))}
+            <li className="flex items-start gap-3">
+              {reply?.status === 'answered' ? (
+                <CheckCircle2 size={18} className="mt-0.5 shrink-0 text-success" aria-hidden="true" />
+              ) : reply?.status === 'failed' ? (
+                <XCircle size={18} className="mt-0.5 shrink-0 text-error" aria-hidden="true" />
+              ) : (
+                <CircleAlert size={18} className="mt-0.5 shrink-0 text-warning" aria-hidden="true" />
+              )}
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-text">اختبار الرد الحقيقي</p>
+                <p className="mt-0.5 text-xs leading-5 text-text-muted">
+                  {reply?.message ?? 'لم يُجرَ اختبار الرد بعد. أرسل رسالة تجريبية وانتظر إجابة الوكيل.'}
+                </p>
+              </div>
+            </li>
           </ul>
         </div>
       ) : null}
@@ -178,8 +196,8 @@ export function StageTest({
       <div className="flex flex-col gap-3 border-t border-border pt-5 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-xs leading-5 text-text-muted">
           {passed
-            ? 'كل الفحوص ناجحة. يمكنك تشغيل نشاطك الآن.'
-            : 'لن يتم التشغيل قبل نجاح الفحوص المطلوبة.'}
+            ? 'نجحت الفحوص ووصل رد حقيقي من الوكيل. يمكنك تشغيل نشاطك الآن.'
+            : 'لن يتم التشغيل قبل نجاح الفحوص ووصول رد حقيقي من الوكيل.'}
         </p>
         <button
           type="button"

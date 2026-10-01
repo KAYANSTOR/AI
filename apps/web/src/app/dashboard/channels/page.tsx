@@ -105,7 +105,7 @@ export default async function ChannelsPage() {
     return {
       spec,
       timezone: context.timezone,
-      identifier: row?.provider_account_id ?? row?.external_identifier ?? null,
+      identifier: canManage ? (row?.provider_account_id ?? row?.external_identifier ?? null) : null,
       publicNumber: spec.publicNumberLabel ? (row?.external_identifier ?? null) : null,
       isActive: row?.is_active === true,
       connected: Boolean(row?.id),
@@ -169,7 +169,7 @@ export default async function ChannelsPage() {
           phoneConnection
             ? {
                 existingPhoneNumber: phoneConnection.existing_phone_number ?? null,
-                vapiNumber: phoneConnection.internal_vapi_number ?? null,
+                vapiNumber: canManage ? (phoneConnection.internal_vapi_number ?? null) : null,
                 forwardType: phoneConnection.forward_type ?? 'no_answer',
                 forwardingStatus: phoneConnection.forwarding_status ?? 'pending_test',
                 lastVerifiedAt: phoneConnection.last_verified_at ?? null,

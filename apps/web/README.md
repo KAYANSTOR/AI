@@ -35,7 +35,7 @@ Every message channel terminates in the same pipeline:
 | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Session-scoped Supabase access |
 | `SUPABASE_SERVICE_ROLE_KEY` | Server-only client used by webhooks (never exposed to the browser) |
 | `NEXT_PUBLIC_SITE_URL` | Canonical/Open Graph base URL |
-| `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL` | Agent Runtime model access |
+| `GEMINI_API_KEY`, `GEMINI_MODEL` | Agent Runtime and Copilot access via Google AI Studio |
 | `VAPI_WEBHOOK_SECRET` | Vapi webhook authentication |
 | `META_APP_SECRET`, `META_GRAPH_BASE_URL`, `WHATSAPP_VERIFY_TOKEN`, `WHATSAPP_ACCESS_TOKEN`, `INSTAGRAM_VERIFY_TOKEN`, `INSTAGRAM_ACCESS_TOKEN` | Meta channels |
 | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` | SMS channel |

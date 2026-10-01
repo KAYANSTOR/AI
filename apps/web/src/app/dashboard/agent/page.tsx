@@ -40,7 +40,7 @@ export default async function AgentPage() {
 
   const { data: agent, error: agentError } = await supabase
     .from('ai_agents')
-    .select('id, name, locale, temperature, status, model_provider, business_id')
+    .select('id, name, locale, temperature, status, business_id')
     .eq('business_id', business.id)
     .neq('status', 'archived')
     .order('created_at', { ascending: true })
@@ -84,7 +84,7 @@ export default async function AgentPage() {
     locale: agent.locale ?? 'ar',
     temperature: Number(agent.temperature ?? 0.2),
     status: agent.status ?? 'active',
-    modelProvider: agent.model_provider ?? 'anthropic',
+    modelProvider: 'Gemini API (Google AI Studio)',
     publishedVersion: published?.version ?? null,
     publishedInstructions: published?.system_prompt_addition ?? '',
     versions: (versions ?? []).map((row) => ({

@@ -8,7 +8,7 @@
  */
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { buildBusinessSystemPrompt } from '@/lib/ai/prompt'
-import { anthropicProvider } from '@/lib/providers/anthropic'
+import { geminiProvider } from '@/lib/providers/gemini'
 
 export type ReplyTestResult = {
   status: 'answered' | 'skipped' | 'failed'
@@ -22,7 +22,7 @@ export async function tryAgentReply(input: {
   agentId: string | null
   message: string
 }): Promise<ReplyTestResult> {
-  if (!process.env.ANTHROPIC_API_KEY || !process.env.ANTHROPIC_MODEL) {
+  if (!process.env.GEMINI_API_KEY) {
     return {
       status: 'skipped',
       message: 'تجربة الرد غير متاحة الآن: مزوّد الذكاء الاصطناعي غير مُهيّأ على الخادم.',
@@ -40,7 +40,7 @@ export async function tryAgentReply(input: {
       input.organizationId,
       input.agentId
     )
-    const result = await anthropicProvider.call({
+    const result = await geminiProvider.call({
       system,
       messages: [{ role: 'user', content: message }],
       tools: [],

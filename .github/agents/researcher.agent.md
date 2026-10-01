@@ -1,6 +1,6 @@
 ---
 name: Researcher
-description: وكيل استكشاف وبحث سريع للعثور على الأنماط والملفات والاعتماديات داخل المشروع بدون تعديل.
+description: "Choose for read-only repository exploration: find relevant files, trace call paths, identify existing patterns and dependencies, inspect docs/history, and report evidence without editing. Research and codebase search."
 model: ["OpenRouter - Claude Sonnet 4.6", "CodeCraft - Claude Opus 4.8"]
 tools: ['read', 'search']
 user-invocable: false

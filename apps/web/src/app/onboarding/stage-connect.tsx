@@ -48,16 +48,21 @@ export function StageConnect({
     setBusy(true)
     setError(null)
     setNotice(null)
-    const result = await connectWhatsAppAction({ phoneNumber })
-    setBusy(false)
-    if (!result.ok) {
-      setError(result.error ?? 'لم يكتمل ربط واتساب. اضغط «إعادة المحاولة» لإكمال الربط.')
-      return
+    try {
+      const result = await connectWhatsAppAction({ phoneNumber })
+      if (!result.ok) {
+        setError(result.error ?? 'لم يكتمل ربط واتساب. اضغط «إعادة المحاولة» لإكمال الربط.')
+        return
+      }
+      setNotice(result.message ?? 'تم ربط واتساب.')
+      // The server re-reads the channel row; refreshing the shell shows the new state in
+      // the same place, so a failed verification is retryable without leaving the stage.
+      onRefresh()
+    } catch {
+      setError('تعذّر ربط واتساب الآن. حاول مرة أخرى.')
+    } finally {
+      setBusy(false)
     }
-    setNotice(result.message ?? 'تم ربط واتساب.')
-    // The server re-reads the channel row; refreshing the shell shows the new state in
-    // the same place, so a failed verification is retryable without leaving the stage.
-    onRefresh()
   }
 
   return (

@@ -1,5 +1,9 @@
 import { describe, expect, test } from 'bun:test'
-import { activationStateForStep } from '@/lib/onboarding/activation'
+import {
+  activationStateForStep,
+  stateAfterActivationTest,
+  stepAfterActivationTest,
+} from '@/lib/onboarding/activation'
 
 describe('activation state derivation', () => {
   test('no wizard step can ever reach the active state', () => {
@@ -46,5 +50,14 @@ describe('activation state derivation', () => {
     expect(activationStateForStep({ step: 11, storedState: 'configuring', smokeStatus: 'passed' })).toBe(
       'ready_to_activate'
     )
+  })
+
+  test('a failed re-test never deactivates a live workspace', () => {
+    expect(stateAfterActivationTest({ currentState: 'active', passed: false })).toBe('active')
+    expect(stateAfterActivationTest({ currentState: 'active', passed: true })).toBe('active')
+    expect(stateAfterActivationTest({ currentState: 'configuring', passed: false })).toBe('ready_for_test')
+    expect(stateAfterActivationTest({ currentState: 'configuring', passed: true })).toBe('ready_to_activate')
+    expect(stepAfterActivationTest({ currentState: 'active' })).toBe(11)
+    expect(stepAfterActivationTest({ currentState: 'configuring' })).toBe(10)
   })
 })

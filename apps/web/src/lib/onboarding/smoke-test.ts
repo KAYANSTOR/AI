@@ -14,6 +14,35 @@ export type SmokeTestOutcome = {
   checks: SmokeTestCheck[]
 }
 
+export function withReplyTestCheck(
+  outcome: SmokeTestOutcome,
+  replyStatus: 'answered' | 'skipped' | 'failed'
+): SmokeTestOutcome {
+  const check: SmokeTestCheck = {
+    name: 'reply_test',
+    ok: replyStatus === 'answered',
+    message:
+      replyStatus === 'answered'
+        ? 'تم اختبار رد المساعد بنجاح.'
+        : replyStatus === 'skipped'
+          ? 'تعذر التحقق من رد المساعد الآن. تحقق من إعداد مزود الذكاء الاصطناعي ثم أعد الاختبار.'
+          : 'لم يكتمل رد المساعد التجريبي. راجع إعداد الوكيل ثم أعد الاختبار.',
+  }
+  const checks = [...outcome.checks, check]
+  const failedChecks = checks.filter((item) => !item.ok)
+  const passed = failedChecks.length === 0
+
+  return {
+    ...outcome,
+    passed,
+    status: passed ? 'passed' : 'failed',
+    summary: passed
+      ? 'Smoke test passed: organization setup, a verified channel, an active agent, and a real agent reply are all valid.'
+      : `Smoke test failed: ${failedChecks.map((item) => item.name).join(', ')}.`,
+    checks,
+  }
+}
+
 /**
  * The production readiness checks behind Go Live.
  *
@@ -40,13 +69,17 @@ export async function evaluateSmokeTest(
   if (profileError) throw profileError
 
   const hasProfile = Boolean(profile)
+  const businessId = (profile?.business_id as string | null) ?? null
   const hasBusinessType = Boolean(profile?.business_type_id)
   const hasTimezone = Boolean(profile?.timezone)
 
   checks.push({
     name: 'business_profile',
-    ok: hasProfile,
-    message: hasProfile ? 'Business profile exists for this organization.' : 'Business profile is missing.',
+    ok: hasProfile && Boolean(businessId),
+    message:
+      hasProfile && businessId
+        ? 'Business profile exists for this organization.'
+        : 'A business profile linked to a business is required.',
   })
 
   checks.push({
@@ -61,10 +94,14 @@ export async function evaluateSmokeTest(
     message: hasTimezone ? 'Timezone is configured.' : 'Timezone must be configured before activation.',
   })
 
-  const { data: channels } = await supabase
-    .from('channels')
-    .select('id, is_active, verification_status')
-    .eq('organization_id', org.organizationId)
+  const { data: channels, error: channelsError } = businessId
+    ? await supabase
+        .from('channels')
+        .select('id, is_active, verification_status')
+        .eq('organization_id', org.organizationId)
+        .eq('business_id', businessId)
+    : { data: [], error: null }
+  if (channelsError) throw channelsError
 
   const rows = (channels ?? []) as { id: string; is_active: boolean | null; verification_status: string | null }[]
   const hasChannel = rows.some((row) => row.is_active === true)
@@ -87,12 +124,16 @@ export async function evaluateSmokeTest(
       : 'No active channel has completed verification yet; finish the connection or retry it.',
   })
 
-  const { data: activeAgents } = await supabase
-    .from('ai_agents')
-    .select('id')
-    .eq('organization_id', org.organizationId)
-    .eq('status', 'active')
-    .limit(1)
+  const { data: activeAgents, error: agentsError } = businessId
+    ? await supabase
+        .from('ai_agents')
+        .select('id')
+        .eq('organization_id', org.organizationId)
+        .eq('business_id', businessId)
+        .eq('status', 'active')
+        .limit(1)
+    : { data: [], error: null }
+  if (agentsError) throw agentsError
 
   const hasActiveAgent = (activeAgents ?? []).length > 0
   checks.push({

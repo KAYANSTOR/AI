@@ -1,4 +1,4 @@
-import { openai } from '@ai-sdk/openai'
+import { createGoogle, type GoogleLanguageModelInteractionsOptions } from '@ai-sdk/google'
 import { convertToModelMessages, streamText, tool, type UIMessage } from 'ai'
 import { z } from 'zod'
 import { NextResponse } from 'next/server'
@@ -9,8 +9,7 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
-/** Operators can point the copilot at another OpenAI-compatible model. */
-const MODEL = process.env.COPILOT_MODEL || 'gpt-4o'
+const MODEL = process.env.GEMINI_MODEL || 'gemini-3.8-flash'
 
 /**
  * The internal business copilot.
@@ -52,9 +51,10 @@ export async function POST(req: Request) {
 
   // Provider configuration is reported only to an authorised caller: an anonymous request
   // must be told it is unauthorized, not which secrets the deployment is missing.
-  if (!process.env.OPENAI_API_KEY) {
+  const apiKey = process.env.GEMINI_API_KEY
+  if (!apiKey) {
     return NextResponse.json(
-      { error: 'ai_provider_not_configured', required_env: ['OPENAI_API_KEY'] },
+      { error: 'ai_provider_not_configured', required_env: ['GEMINI_API_KEY'] },
       { status: 503 }
     )
   }
@@ -77,12 +77,16 @@ export async function POST(req: Request) {
   }
 
   try {
+    const google = createGoogle({ apiKey })
     const result = streamText({
-      model: openai(MODEL),
+      model: google.interactions(MODEL),
       system: `You are FrontDesk AI's internal Business Agent (Copilot).
 You help the business owner or staff manage their operations.
 You can answer questions about their data using tools.
 Be professional, concise, and helpful. Always answer in Arabic.`,
+      providerOptions: {
+        google: { store: false } satisfies GoogleLanguageModelInteractionsOptions,
+      },
       messages: await convertToModelMessages(messages),
       tools: {
         getBusinessMetrics: tool({

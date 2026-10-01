@@ -167,23 +167,27 @@ export async function saveChannelCredential(
 
 export async function setChannelCredentialStatus(
   supabase: SupabaseClient,
-  input: { channelId: string; provider: string; status: 'active' | 'disabled' }
+  input: { organizationId: string; channelId: string; provider: string; status: 'active' | 'disabled' }
 ): Promise<void> {
-  const { error } = await supabase
-    .from('provider_credentials')
-    .update({ status: input.status, updated_at: new Date().toISOString() })
-    .eq('channel_id', input.channelId)
-    .eq('provider', input.provider)
+  const { error } = await supabase.rpc('set_channel_credential_status', {
+    p_organization_id: input.organizationId,
+    p_channel_id: input.channelId,
+    p_provider: input.provider,
+    p_status: input.status,
+  })
   if (error) throw new Error(error.message)
 }
 
 export async function deleteChannelCredential(
   supabase: SupabaseClient,
-  input: { channelId: string; provider: string; credentialType?: string }
+  input: { organizationId: string; channelId: string; provider: string; credentialType?: string }
 ): Promise<void> {
-  let query = supabase.from('provider_credentials').delete().eq('channel_id', input.channelId).eq('provider', input.provider)
-  if (input.credentialType) query = query.eq('credential_type', input.credentialType)
-  const { error } = await query
+  const { error } = await supabase.rpc('delete_channel_credential', {
+    p_organization_id: input.organizationId,
+    p_channel_id: input.channelId,
+    p_provider: input.provider,
+    p_credential_type: input.credentialType ?? null,
+  })
   if (error) throw new Error(error.message)
 }
 

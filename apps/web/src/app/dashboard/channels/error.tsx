@@ -20,11 +20,6 @@ export default function ChannelsError({
       <p className="text-sm text-text-muted">
         حدث خطأ أثناء تحميل القنوات. يمكنك إعادة المحاولة أو العودة للوحة التحكم.
       </p>
-      {error.message && (
-        <p className="rounded-lg border border-border bg-surface px-3 py-2 font-mono text-xs text-text-muted">
-          {error.message}
-        </p>
-      )}
       <div className="flex flex-wrap gap-2">
         <button
           type="button"

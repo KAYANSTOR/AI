@@ -9,14 +9,11 @@ import {
 } from '@/lib/ai/setup-draft'
 import type { AIProvider } from '@/lib/providers/types'
 
-const ORIGINAL_KEY = process.env.ANTHROPIC_API_KEY
-const ORIGINAL_MODEL = process.env.ANTHROPIC_MODEL
+const ORIGINAL_KEY = process.env.GEMINI_API_KEY
 
 afterEach(() => {
-  if (ORIGINAL_KEY === undefined) delete process.env.ANTHROPIC_API_KEY
-  else process.env.ANTHROPIC_API_KEY = ORIGINAL_KEY
-  if (ORIGINAL_MODEL === undefined) delete process.env.ANTHROPIC_MODEL
-  else process.env.ANTHROPIC_MODEL = ORIGINAL_MODEL
+  if (ORIGINAL_KEY === undefined) delete process.env.GEMINI_API_KEY
+  else process.env.GEMINI_API_KEY = ORIGINAL_KEY
 })
 
 describe('AI setup draft', () => {
@@ -79,8 +76,7 @@ describe('AI setup draft', () => {
   })
 
   test('without a model credential the draft is the owner’s own words and says so', async () => {
-    delete process.env.ANTHROPIC_API_KEY
-    delete process.env.ANTHROPIC_MODEL
+    delete process.env.GEMINI_API_KEY
 
     const result = await generateAgentSetupDraft({
       description: 'نحن شركة تنظيم أعراس ونستقبل الحجوزات عبر واتساب.',
@@ -94,8 +90,7 @@ describe('AI setup draft', () => {
   })
 
   test('model output is validated before it can be shown as configuration', async () => {
-    process.env.ANTHROPIC_API_KEY = 'test-key'
-    process.env.ANTHROPIC_MODEL = 'test-model'
+    process.env.GEMINI_API_KEY = 'test-key'
 
     const provider: AIProvider = {
       async call() {
@@ -133,8 +128,7 @@ describe('AI setup draft', () => {
   })
 
   test('a model failure falls back to the description rather than breaking setup', async () => {
-    process.env.ANTHROPIC_API_KEY = 'test-key'
-    process.env.ANTHROPIC_MODEL = 'test-model'
+    process.env.GEMINI_API_KEY = 'test-key'
 
     const provider: AIProvider = {
       async call() {

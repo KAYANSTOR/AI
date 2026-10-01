@@ -22,6 +22,7 @@ function channel(overrides: Record<string, unknown>) {
     provider_account_id: null,
     external_identifier: null,
     is_active: true,
+    verification_status: 'verified',
     ...overrides,
   }
 }
@@ -57,6 +58,14 @@ describe('exact channel binding (ADR-0002)', () => {
     })
 
     expect(await resolveChannelExact(supabase, { channelType: 'whatsapp', providerAccountId: 'pn_off' })).toBeNull()
+  })
+
+  test('a pending channel cannot route to a tenant', async () => {
+    const { supabase } = setup({
+      channels: { rows: [channel({ provider_account_id: 'pn_pending', verification_status: 'pending' })] },
+    })
+
+    expect(await resolveChannelExact(supabase, { channelType: 'whatsapp', providerAccountId: 'pn_pending' })).toBeNull()
   })
 
   test('a channel without a business is rejected: runtime is business-specific', async () => {
@@ -137,6 +146,19 @@ describe('business agent resolution', () => {
     const { supabase } = setup({
       ai_agents: {
         rows: [{ id: 'agent-b', business_id: BIZ_B, status: 'active', created_at: '2026-01-01T00:00:00Z' }],
+      },
+    })
+
+    expect(await resolveBusinessAgent(supabase, BIZ_A)).toBeNull()
+  })
+
+  test('an active agent is unavailable until the business profile is active', async () => {
+    const { supabase } = setup({
+      business_profiles: {
+        rows: [{ id: 'profile-a', organization_id: ORG_A, business_id: BIZ_A, activation_state: 'ready_to_activate' }],
+      },
+      ai_agents: {
+        rows: [{ id: 'agent-a', organization_id: ORG_A, business_id: BIZ_A, status: 'active' }],
       },
     })
 

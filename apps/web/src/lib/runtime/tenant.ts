@@ -6,7 +6,7 @@ export async function resolveChannelExact(supabase:SupabaseClient,input:{channel
   if(!providerAccountId && !externalIdentifier) return null
   let query=supabase.from('channels')
     .select('id,organization_id,business_id,channel_type,provider_account_id,external_identifier')
-    .eq('channel_type',input.channelType).eq('is_active',true)
+    .eq('channel_type',input.channelType).eq('is_active',true).eq('verification_status','verified')
   query=providerAccountId ? query.eq('provider_account_id',providerAccountId) : query.eq('external_identifier',externalIdentifier)
   const {data,error}=await query.maybeSingle()
   if(error) throw new Error(error.message)

@@ -1,6 +1,6 @@
 ---
 name: Reviewer
-description: مراجع مستقل يفحص التنفيذ مقابل الخطة والـarchitecture والأمان والانحدارات بدون تعديل.
+description: "Choose after implementation for an independent code review: identify bugs, regressions, security/authorization and tenant-isolation risks, migration issues, and missing tests. Review only; never edit."
 model: ["OpenRouter - GPT-5.5", "OpenRouter - Claude Opus 4.8", "CodeCraft - Claude Opus 4.8"]
 tools: ['read', 'search', 'execute']
 user-invocable: false

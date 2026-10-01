@@ -26,6 +26,7 @@ import {
   Megaphone,
   Plug,
   X,
+  Ellipsis,
 } from 'lucide-react'
 import { useEffect, useRef } from 'react'
 import { BrandMark } from '@/components/site/brand'
@@ -65,6 +66,15 @@ const navItems: NavItem[] = [
   { name: ar.nav.settings, href: '/dashboard/settings', icon: Settings, capability: null },
 ]
 
+const primaryHrefs = new Set([
+  '/dashboard',
+  '/dashboard/conversations',
+  '/dashboard/appointments',
+  '/dashboard/orders',
+  '/dashboard/contacts',
+  '/dashboard/agent',
+])
+
 export function Sidebar({
   orgName,
   role,
@@ -77,11 +87,23 @@ export function Sidebar({
   const pathname = usePathname()
   const { open, close } = useDashboardShell()
   const drawerRef = useRef<HTMLElement>(null)
+  const moreRef = useRef<HTMLDetailsElement>(null)
   const enabled = new Set(enabledCapabilities)
 
   const visible = navItems.filter(
     (item) => item.capability === null || enabled.has(item.capability)
   )
+  const primary = visible.filter((item) => primaryHrefs.has(item.href))
+  const more = visible.filter((item) => !primaryHrefs.has(item.href))
+  const activeMoreItem = more.find(
+    (item) => pathname === item.href || pathname.startsWith(`${item.href}/`)
+  )
+
+  useEffect(() => {
+    if (moreRef.current) {
+      moreRef.current.open = Boolean(activeMoreItem)
+    }
+  }, [activeMoreItem, pathname])
 
   useEffect(() => {
     if (!open) return
@@ -89,7 +111,7 @@ export function Sidebar({
     const previousOverflow = document.body.style.overflow
     document.body.style.overflow = 'hidden'
     const first = drawer?.querySelector<HTMLElement>(
-      'button, a[href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+      'summary, button, a[href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
     )
     first?.focus()
 
@@ -101,9 +123,9 @@ export function Sidebar({
       if (event.key !== 'Tab' || !drawer) return
       const items = Array.from(
         drawer.querySelectorAll<HTMLElement>(
-          'button, a[href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+          'summary, button, a[href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
         )
-      ).filter((item) => !item.hasAttribute('disabled'))
+      ).filter((item) => !item.hasAttribute('disabled') && item.getClientRects().length > 0)
       const firstItem = items[0]
       const lastItem = items[items.length - 1]
       if (!firstItem || !lastItem) return
@@ -160,26 +182,18 @@ export function Sidebar({
           {ar.nav.section}
         </div>
         <nav aria-label={ar.nav.sidebarLabel} className="flex flex-col gap-1">
-          {visible.map((item) => {
-            const Icon = item.icon
-            const active =
-              pathname === item.href ||
-              (item.href !== '/dashboard' && pathname.startsWith(item.href))
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={close}
-                className={`flex min-h-11 items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
-                  active ? 'bg-primary/25 text-white' : 'text-white/70 hover:bg-white/5 hover:text-white'
-                }`}
-                aria-current={active ? 'page' : undefined}
-              >
-                <Icon size={18} className={active ? 'text-primary-light' : 'text-white/60'} />
-                {item.name}
-              </Link>
-            )
-          })}
+          {primary.map((item) => <NavLink key={item.href} item={item} pathname={pathname} onClick={close} />)}
+          {more.length ? (
+            <details ref={moreRef} className="group">
+              <summary className="flex min-h-11 cursor-pointer list-none items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-white/70 transition-colors hover:bg-white/5 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary-light">
+                <Ellipsis size={18} className="text-white/60" aria-hidden="true" />
+                المزيد
+              </summary>
+              <div className="mt-1 flex flex-col gap-1 border-s border-white/15 ms-5 ps-2">
+                {more.map((item) => <NavLink key={item.href} item={item} pathname={pathname} onClick={close} />)}
+              </div>
+            </details>
+          ) : null}
         </nav>
       </div>
 
@@ -193,5 +207,31 @@ export function Sidebar({
         </div>
       </div>
     </aside>
+  )
+}
+
+function NavLink({
+  item,
+  pathname,
+  onClick,
+}: {
+  item: NavItem
+  pathname: string
+  onClick: () => void
+}) {
+  const Icon = item.icon
+  const active = pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(`${item.href}/`))
+  return (
+    <Link
+      href={item.href}
+      onClick={onClick}
+      className={`flex min-h-11 items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+        active ? 'bg-primary/25 text-white' : 'text-white/70 hover:bg-white/5 hover:text-white'
+      }`}
+      aria-current={active ? 'page' : undefined}
+    >
+      <Icon size={18} className={active ? 'text-primary-light' : 'text-white/60'} aria-hidden="true" />
+      {item.name}
+    </Link>
   )
 }

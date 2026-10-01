@@ -1,8 +1,12 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ArrowLeft, Loader2, Sparkles } from 'lucide-react'
-import { generateAgentSetupAction, saveAgentSetupAction } from './actions'
+import {
+  generateAgentSetupAction,
+  saveAgentSetupAction,
+  saveAgentSetupDescriptionAction,
+} from './actions'
 import {
   HANDOFF_LABELS,
   REPLY_STYLE_LABELS,
@@ -51,6 +55,55 @@ export function StageAgent({
   const [dropped, setDropped] = useState<string[]>([])
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [descriptionSaveState, setDescriptionSaveState] = useState<'idle' | 'unsaved' | 'saving' | 'saved' | 'error'>('idle')
+  const [saveAttempt, setSaveAttempt] = useState(0)
+  const savedDescriptionRef = useRef(savedDescription)
+  const currentDescriptionRef = useRef(description)
+  const descriptionSaveInFlightRef = useRef(false)
+  const savePendingRef = useRef(false)
+
+  useEffect(() => {
+    if (!canManage || description === savedDescriptionRef.current) return
+
+    const timeout = window.setTimeout(async () => {
+      if (descriptionSaveInFlightRef.current) {
+        savePendingRef.current = true
+        return
+      }
+
+      descriptionSaveInFlightRef.current = true
+      setDescriptionSaveState('saving')
+      try {
+        const result = await saveAgentSetupDescriptionAction({ description })
+        if (!result.ok) {
+          setDescriptionSaveState('error')
+          return
+        }
+
+        savedDescriptionRef.current = description
+        setDescriptionSaveState('saved')
+      } catch {
+        setDescriptionSaveState('error')
+      } finally {
+        descriptionSaveInFlightRef.current = false
+        if (savePendingRef.current) {
+          savePendingRef.current = false
+          if (currentDescriptionRef.current !== savedDescriptionRef.current) {
+            setDescriptionSaveState('unsaved')
+            setSaveAttempt((attempt) => attempt + 1)
+          }
+        }
+      }
+    }, 600)
+
+    return () => window.clearTimeout(timeout)
+  }, [canManage, description, saveAttempt])
+
+  function handleDescriptionChange(value: string) {
+    currentDescriptionRef.current = value
+    setDescription(value)
+    setDescriptionSaveState(value === savedDescriptionRef.current ? 'saved' : 'unsaved')
+  }
 
   async function handleGenerate() {
     setBusy(true)
@@ -96,13 +149,29 @@ export function StageAgent({
             <span className="text-sm font-semibold text-text">عرّفنا بنشاطك بكلماتك</span>
             <textarea
               value={description}
-              onChange={(event) => setDescription(event.target.value)}
+              onChange={(event) => handleDescriptionChange(event.target.value)}
               rows={5}
               disabled={!canManage}
               placeholder={EXAMPLE}
               className="mt-1.5 w-full rounded-xl border border-border bg-background p-3 text-base leading-7 text-text outline-none transition-colors focus:border-primary-dark focus:ring-2 focus:ring-primary-light disabled:opacity-60"
             />
           </label>
+
+          {descriptionSaveState !== 'idle' ? (
+            <p
+              role="status"
+              aria-live="polite"
+              className={`text-sm ${descriptionSaveState === 'error' ? 'text-error' : 'text-text-muted'}`}
+            >
+              {descriptionSaveState === 'saving'
+                ? 'جارٍ حفظ الوصف...'
+                : descriptionSaveState === 'saved'
+                  ? 'تم حفظ الوصف.'
+                  : descriptionSaveState === 'error'
+                    ? 'تعذّر حفظ الوصف. سيبقى النص هنا؛ حاول التعديل مجددًا.'
+                    : 'هناك تغييرات لم تُحفظ بعد.'}
+            </p>
+          ) : null}
 
           {error ? (
             <p role="alert" className="rounded-xl border border-error/40 bg-error/10 px-4 py-3 text-sm text-text">

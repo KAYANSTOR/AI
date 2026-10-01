@@ -92,9 +92,14 @@ export async function POST(req: NextRequest) {
     const agent = await resolveBusinessAgent(supabase, channel.businessId)
 
     if (type === 'assistant-request') {
+      if (!agent) {
+        await markWebhookProcessed(supabase, eventRowId, 'failed', 'business_inactive_or_agent_unavailable')
+        return NextResponse.json({ error: 'assistant_unavailable' }, { status: 409 })
+      }
+
       const [prompt, tools] = await Promise.all([
-        buildBusinessSystemPrompt(supabase, channel.organizationId, agent?.id ?? null),
-        getToolDefinitionsForAgent(supabase, channel.organizationId, agent?.id ?? null),
+        buildBusinessSystemPrompt(supabase, channel.organizationId, agent.id),
+        getToolDefinitionsForAgent(supabase, channel.organizationId, agent.id),
       ])
       await markWebhookProcessed(supabase, eventRowId, 'processed')
       return NextResponse.json(
@@ -118,12 +123,17 @@ export async function POST(req: NextRequest) {
     }
 
     if (isToolCallEvent(type, message)) {
+      if (!agent) {
+        await markWebhookProcessed(supabase, eventRowId, 'failed', 'business_inactive_or_agent_unavailable')
+        return NextResponse.json({ error: 'assistant_unavailable' }, { status: 409 })
+      }
+
       const results = await handleToolCalls(supabase, {
         organizationId: channel.organizationId,
         businessId: channel.businessId,
         conversationId,
         contactId: contact?.contactId ?? null,
-        agentId: agent?.id ?? null,
+        agentId: agent.id,
         message,
       })
       await markWebhookProcessed(supabase, eventRowId, 'processed')
@@ -205,7 +215,7 @@ async function handleToolCalls(
     businessId: string
     conversationId: string | null
     contactId: string | null
-    agentId: string | null
+    agentId: string
     message: Record<string, unknown>
   }
 ) {

@@ -8,6 +8,18 @@ export type ActivationState =
   | 'ready_to_activate'
   | 'active'
 
+export function stateAfterActivationTest(input: {
+  currentState: string
+  passed: boolean
+}): ActivationState {
+  if (input.currentState === 'active') return 'active'
+  return input.passed ? 'ready_to_activate' : 'ready_for_test'
+}
+
+export function stepAfterActivationTest(input: { currentState: string }): number {
+  return input.currentState === 'active' ? 11 : 10
+}
+
 /**
  * The activation state a wizard step may move a tenant to.
  *

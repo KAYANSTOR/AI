@@ -10,7 +10,9 @@ import {
   loadChannelCredentials,
   redactSecret,
   requireCredential,
+  deleteChannelCredential,
   saveChannelCredential,
+  setChannelCredentialStatus,
   secretEquals,
 } from '@/lib/credentials/service'
 import { resolveChannelProviderCredentials } from '@/lib/credentials/resolve'
@@ -175,6 +177,52 @@ describe('per-channel storage', () => {
     process.env.CREDENTIAL_ENCRYPTION_KEY = OTHER_KEY
 
     expect(loadChannelCredentials(supabase, 'chan-1')).rejects.toThrow(CredentialConfigError)
+  })
+
+  test('status changes use the tenant-guarded RPC with the organization id', async () => {
+    let received: Record<string, unknown> | undefined
+    const fake = createFakeSupabase({}, {
+      set_channel_credential_status: (args) => {
+        received = args
+      },
+    })
+
+    await setChannelCredentialStatus(fake.client as unknown as SupabaseClient, {
+      organizationId: 'org-1',
+      channelId: 'chan-1',
+      provider: 'meta',
+      status: 'disabled',
+    })
+
+    expect(received).toEqual({
+      p_organization_id: 'org-1',
+      p_channel_id: 'chan-1',
+      p_provider: 'meta',
+      p_status: 'disabled',
+    })
+  })
+
+  test('deletion uses the tenant-guarded RPC with an optional credential type', async () => {
+    let received: Record<string, unknown> | undefined
+    const fake = createFakeSupabase({}, {
+      delete_channel_credential: (args) => {
+        received = args
+      },
+    })
+
+    await deleteChannelCredential(fake.client as unknown as SupabaseClient, {
+      organizationId: 'org-1',
+      channelId: 'chan-1',
+      provider: 'meta',
+      credentialType: 'access_token',
+    })
+
+    expect(received).toEqual({
+      p_organization_id: 'org-1',
+      p_channel_id: 'chan-1',
+      p_provider: 'meta',
+      p_credential_type: 'access_token',
+    })
   })
 })
 

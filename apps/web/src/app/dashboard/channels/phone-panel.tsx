@@ -79,15 +79,6 @@ export function PhonePanel({
         <p className="mt-1 text-xs leading-relaxed text-text-muted">{ar.channels.phoneSetupDescription}</p>
       </header>
 
-      <ol className="mb-4 space-y-2 rounded-lg bg-background p-3 text-xs leading-relaxed text-text">
-        {instructions.map((step, index) => (
-          <li key={step} className="flex gap-2">
-            <span className="font-semibold text-primary-dark">{index + 1}.</span>
-            {step}
-          </li>
-        ))}
-      </ol>
-
       <p className="mb-4 text-xs text-text-muted">
         {ar.channels.phoneStatus}: <span className="font-medium text-text">{statusLabel}</span>
         {initial?.lastVerifiedAt
@@ -105,7 +96,7 @@ export function PhonePanel({
         </div>
       )}
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2">
         <label className="text-xs text-text-muted">
           {ar.channels.phoneNumber}
           <input
@@ -113,17 +104,6 @@ export function PhonePanel({
             disabled={!canManage}
             onChange={(event) => setForm({ ...form, existingPhoneNumber: event.target.value })}
             placeholder="+966512345678"
-            dir="ltr"
-            className="mt-1 min-h-11 w-full rounded-lg border border-border px-2 py-1.5 text-base text-text disabled:bg-background md:text-sm"
-          />
-        </label>
-        <label className="text-xs text-text-muted">
-          {ar.channels.vapiNumber}
-          <input
-            value={form.vapiNumber}
-            disabled={!canManage}
-            onChange={(event) => setForm({ ...form, vapiNumber: event.target.value })}
-            placeholder="3a1b2c3d-…"
             dir="ltr"
             className="mt-1 min-h-11 w-full rounded-lg border border-border px-2 py-1.5 text-base text-text disabled:bg-background md:text-sm"
           />
@@ -146,6 +126,35 @@ export function PhonePanel({
           </select>
         </label>
       </div>
+
+      {canManage ? (
+        <details className="mt-4 rounded-lg border border-border bg-background/60 px-3 py-2">
+          <summary className="flex min-h-11 cursor-pointer items-center text-xs font-semibold text-text">
+            إعدادات فنية متقدمة
+          </summary>
+          <div className="space-y-4 py-2">
+          <label className="block text-xs text-text-muted">
+            {ar.channels.vapiNumber}
+            <input
+              value={form.vapiNumber}
+              disabled={!canManage}
+              onChange={(event) => setForm({ ...form, vapiNumber: event.target.value })}
+              placeholder="3a1b2c3d-…"
+              dir="ltr"
+              className="mt-1 min-h-11 w-full rounded-lg border border-border px-2 py-1.5 text-base text-text disabled:bg-background md:text-sm"
+            />
+          </label>
+          <ol className="space-y-2 rounded-lg bg-background p-3 text-xs leading-relaxed text-text">
+            {instructions.map((step, index) => (
+              <li key={step} className="flex gap-2">
+                <span className="font-semibold text-primary-dark">{index + 1}.</span>
+                {step}
+              </li>
+            ))}
+          </ol>
+          </div>
+        </details>
+      ) : null}
 
       {canManage && (
         <div className="mt-4 flex flex-wrap gap-2">
@@ -179,8 +188,12 @@ export function PhonePanel({
         </div>
       )}
 
-      {checks && (
-        <div className="mt-4 rounded-lg border border-border bg-background p-3">
+      {canManage && checks && (
+        <details className="mt-4 rounded-lg border border-border bg-background p-3">
+          <summary className="flex min-h-11 cursor-pointer items-center text-xs font-semibold text-text">
+            تفاصيل التحقق المتقدمة
+          </summary>
+          <div className="pt-2">
           <ul className="space-y-1.5">
             {checks.checks.map((check) => (
               <li key={check.label} className="flex items-start gap-2 text-xs text-text">
@@ -199,7 +212,8 @@ export function PhonePanel({
           <p className="mt-2 text-[11px] text-text-muted">
             {ar.channels.checkScope}: {checks.scope}
           </p>
-        </div>
+          </div>
+        </details>
       )}
     </section>
   )

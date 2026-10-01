@@ -91,7 +91,7 @@ For async work:
 
 - Hosting: Vercel
 - DB/Auth: Supabase PostgreSQL + RLS
-- Message AI: internal Agent Runtime + Anthropic Messages API
+- Message AI: internal tenant-specific Agent Runtime + Gemini API (server-side Google AI Studio key)
 - Voice: Vapi only
 - WhatsApp: Meta adapter
 - Instagram: Meta adapter

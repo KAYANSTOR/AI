@@ -1,11 +1,12 @@
 'use client'
 
-import { useTransition } from 'react'
+import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Check } from 'lucide-react'
+import { AlertCircle, Check, Loader2 } from 'lucide-react'
 import { ONBOARDING_STAGES, STAGE_DEFINITIONS, type OnboardingStage } from '@/lib/onboarding/stages'
 import type { SmokeTestOutcome } from '@/lib/onboarding/smoke-test'
 import type { ReplyTestResult } from '@/lib/onboarding/reply-test'
+import { ar } from '@/lib/i18n/ar'
 import { advanceStageAction } from './actions'
 import { StageBasics } from './stage-basics'
 import { StageConnect, type ConnectStageData } from './stage-connect'
@@ -43,13 +44,27 @@ export function FastPath({
 }) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
+  const [transitionError, setTransitionError] = useState<string | null>(null)
+  const [failedStage, setFailedStage] = useState<OnboardingStage | null>(null)
 
   function go(next: OnboardingStage) {
     // The move is written server-side; the UI follows the server state on refresh rather
     // than keeping a second copy of where the customer is.
+    setTransitionError(null)
     startTransition(async () => {
-      await advanceStageAction(next)
-      router.refresh()
+      try {
+        const result = await advanceStageAction(next)
+        if (!result.ok) {
+          setTransitionError(result.error ?? ar.errors.save)
+          setFailedStage(next)
+          return
+        }
+        setFailedStage(null)
+        router.refresh()
+      } catch {
+        setTransitionError(ar.errors.generic)
+        setFailedStage(next)
+      }
     })
   }
 
@@ -104,6 +119,26 @@ export function FastPath({
         <p className="rounded-xl border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-text">
           إعداد النشاط متاح لمالك النشاط أو المسؤول. يمكنك مشاهدة الحالة، وسيُكمل المالك الخطوات.
         </p>
+      ) : null}
+
+      {transitionError ? (
+        <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-error/40 bg-error/10 px-4 py-3">
+          <p className="flex min-w-0 items-start gap-2 text-sm text-text">
+            <AlertCircle size={18} className="mt-0.5 shrink-0 text-error" aria-hidden="true" />
+            <span>{transitionError}</span>
+          </p>
+          {failedStage ? (
+            <button
+              type="button"
+              onClick={() => go(failedStage)}
+              disabled={pending}
+              className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-lg border border-error/40 px-4 py-2 text-sm font-semibold text-text hover:bg-error/10 disabled:opacity-60"
+            >
+              {pending ? <Loader2 size={16} className="animate-spin" aria-hidden="true" /> : null}
+              {ar.common.retry}
+            </button>
+          ) : null}
+        </div>
       ) : null}
 
       <div className="border-t border-border pt-6">

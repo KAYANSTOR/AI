@@ -292,8 +292,7 @@ export async function testChannelAction(input: {
   channelType: string
 }): Promise<{ ok: boolean; error?: string; result?: BindingTestResult }> {
   try {
-    const org = await getCurrentOrg()
-    if (!org) return { ok: false, error: 'الجلسة منتهية. سجّل الدخول من جديد.' }
+    const org = await requireChannelAdmin()
     const spec = getChannelSpec(input.channelType)
     if (!spec) return { ok: false, error: 'نوع قناة غير معروف.' }
 
