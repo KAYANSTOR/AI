@@ -37,15 +37,17 @@ const DEFAULT_MESSAGE = 'السلام عليكم، أريد حجز موعد'
 export function StageTest({
   initialOutcome,
   initialReply,
+  initialTestMessage,
   canManage,
   onActivated,
 }: {
   initialOutcome: SmokeTestOutcome | null
   initialReply: ReplyTestResult | null
+  initialTestMessage: string | null
   canManage: boolean
   onActivated: () => void
 }) {
-  const [message, setMessage] = useState(DEFAULT_MESSAGE)
+  const [message, setMessage] = useState(initialTestMessage?.trim() || DEFAULT_MESSAGE)
   const [outcome, setOutcome] = useState<SmokeTestOutcome | null>(initialOutcome)
   const [reply, setReply] = useState<ReplyTestResult | null>(initialReply)
   const [busy, setBusy] = useState(false)

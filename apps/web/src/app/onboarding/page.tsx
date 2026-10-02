@@ -4,6 +4,7 @@ import { getDashboardContext } from '@/lib/dashboard/context'
 import { stageForStoredStep } from '@/lib/onboarding/stages'
 import { describeChannelState, type ChannelConnectionState } from '@/lib/channels/connect'
 import type { SmokeTestOutcome } from '@/lib/onboarding/smoke-test'
+import type { ReplyTestResult } from '@/lib/onboarding/reply-test'
 import { FastPath, type FastPathData } from './fastpath'
 
 /** The FastPath reads the tenant's own activation state: never prerender it. */
@@ -17,10 +18,40 @@ type ChannelRow = {
   is_active: boolean | null
 }
 
-function asSmokeOutcome(value: unknown): SmokeTestOutcome | null {
-  const candidate = value as SmokeTestOutcome | null
+type PersistedSmokeOutcome = SmokeTestOutcome & {
+  reply?: ReplyTestResult
+  testMessage?: string
+}
+
+function asReplyTestResult(value: unknown): ReplyTestResult | null {
+  if (!value || typeof value !== 'object') return null
+  const candidate = value as Partial<ReplyTestResult>
+  if (
+    candidate.status !== 'answered' &&
+    candidate.status !== 'skipped' &&
+    candidate.status !== 'failed'
+  ) {
+    return null
+  }
+  if (typeof candidate.message !== 'string') return null
+  if (candidate.reply !== undefined && typeof candidate.reply !== 'string') return null
+  return {
+    status: candidate.status,
+    message: candidate.message,
+    ...(candidate.reply !== undefined ? { reply: candidate.reply } : {}),
+  }
+}
+
+function asSmokeOutcome(value: unknown): PersistedSmokeOutcome | null {
+  const candidate = value as (SmokeTestOutcome & { reply?: unknown; testMessage?: unknown }) | null
   if (!candidate || typeof candidate !== 'object' || !Array.isArray(candidate.checks)) return null
-  return candidate
+  const reply = asReplyTestResult(candidate.reply)
+  const base = candidate as SmokeTestOutcome
+  return {
+    ...base,
+    ...(reply ? { reply } : {}),
+    ...(typeof candidate.testMessage === 'string' ? { testMessage: candidate.testMessage } : {}),
+  }
 }
 
 export default async function OnboardingPage() {
@@ -96,6 +127,7 @@ export default async function OnboardingPage() {
   const hasSavedAgentSetup = Boolean(
     (profile?.system_prompt_addition as string | null) || savedDescription
   )
+  const smokeTestResult = asSmokeOutcome(profile?.smoke_test_result)
 
   const data: FastPathData = {
     organizationName: context.organizationName,
@@ -103,8 +135,9 @@ export default async function OnboardingPage() {
     businessTypeId: context.businessTypeId ?? 'appointments',
     publicPhone: (profile?.public_phone_number as string | null) ?? '',
     timezone: context.timezone,
-    smokeTestResult: asSmokeOutcome(profile?.smoke_test_result),
-    initialReply: null,
+    smokeTestResult,
+    initialReply: smokeTestResult?.reply ?? null,
+    initialTestMessage: smokeTestResult?.testMessage ?? null,
     connect: {
       whatsapp: whatsappRow
         ? { state: whatsappState, number: whatsappRow.external_identifier ?? null }

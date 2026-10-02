@@ -3,6 +3,7 @@ import { isAuthorizedCronRequest } from '@/lib/cron/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { processCampaignBatch } from '@/lib/campaigns'
 import { DEFAULT_SEND_WINDOW, isInQuietHours } from '@/lib/channels/quiet-hours'
+import { publicWebhookError } from '@/lib/runtime/security'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -32,7 +33,7 @@ async function handle(req: NextRequest) {
     .eq('status', 'running')
     .limit(20)
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return NextResponse.json({ error: publicWebhookError() }, { status: 500 })
 
   let queued = 0
   let skipped = 0

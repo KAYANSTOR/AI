@@ -90,7 +90,7 @@ export async function getMeterUsage(
 ): Promise<number> {
   const { start } = periodBounds()
 
-  const { data } = await supabase
+  const { data, error: meterError } = await supabase
     .from('usage_meters')
     .select('consumed_value')
     .eq('organization_id', organizationId)
@@ -98,7 +98,12 @@ export async function getMeterUsage(
     .eq('period_start', start.toISOString())
     .maybeSingle()
 
-  if (data) return Number(data.consumed_value) || 0
+  if (meterError) throw new Error('billing_meter_unavailable')
+  if (data) {
+    const consumed = Number(data.consumed_value)
+    if (!Number.isFinite(consumed) || consumed < 0) throw new Error('billing_meter_invalid')
+    return consumed
+  }
 
   const ledgerType =
     meterKey === 'ai_messages'
@@ -107,14 +112,21 @@ export async function getMeterUsage(
         ? 'message_outbound'
         : meterKey
 
-  const { data: ledger } = await supabase
+  const { data: ledger, error: ledgerError } = await supabase
     .from('usage_ledger')
     .select('units')
     .eq('organization_id', organizationId)
     .eq('event_type', ledgerType)
-    .gte('created_at', start.toISOString())
+    .gte('occurred_at', start.toISOString())
 
-  return (ledger ?? []).reduce((s, r) => s + Number(r.units || 0), 0)
+  if (ledgerError) throw new Error('billing_ledger_unavailable')
+  const usage = (ledger ?? []).reduce((s, r) => {
+    const units = Number(r.units || 0)
+    if (!Number.isFinite(units) || units < 0) throw new Error('billing_ledger_invalid')
+    return s + units
+  }, 0)
+  if (!Number.isFinite(usage)) throw new Error('billing_ledger_invalid')
+  return usage
 }
 
 /** Upsert monthly meter row (best-effort; ledger remains source of truth fallback). */

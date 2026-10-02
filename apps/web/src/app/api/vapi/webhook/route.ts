@@ -6,7 +6,7 @@ import { executeTool, getToolDefinitionsForAgent } from '@/lib/ai/tools'
 import { buildBusinessSystemPrompt } from '@/lib/ai/prompt'
 import { ensureOpenConversation } from '@/lib/runtime/conversation'
 import { resolveBusinessAgent, resolveChannelExact } from '@/lib/runtime/tenant'
-import { verifyVapiRequest } from '@/lib/runtime/security'
+import { publicWebhookError, stablePayloadEventId, verifyVapiRequest } from '@/lib/runtime/security'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -34,15 +34,17 @@ export async function POST(req: NextRequest) {
     const message = (body.message ?? body) as Record<string, unknown>
     const type = String(message.type ?? body.type ?? 'unknown')
     const call = (message.call ?? body.call ?? {}) as Record<string, unknown>
-    const callId = String(call.id ?? message.callId ?? body.callId ?? crypto.randomUUID())
-    const externalEventId = `${type}:${callId}:${String(message.timestamp ?? Date.now())}`
+    const callId = String(call.id ?? message.callId ?? body.callId ?? '').trim()
+    if (!callId) return NextResponse.json({ error: 'missing_vapi_call_id' }, { status: 400 })
+    const explicitEventId = String(message.id ?? body.eventId ?? '').trim()
+    const externalEventId = explicitEventId || stablePayloadEventId('vapi', { type, callId, message })
 
     const acquired = await acquireWebhookEvent(supabase, 'vapi', externalEventId, body)
     if (acquired.status === 'duplicate') {
       return NextResponse.json({ status: 'duplicate' })
     }
     if (acquired.status === 'error') {
-      return NextResponse.json({ error: acquired.message }, { status: 500 })
+      return NextResponse.json({ error: publicWebhookError() }, { status: 500 })
     }
     eventRowId = acquired.eventRowId
 
@@ -155,7 +157,7 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     const message = error instanceof Error ? error.message : 'vapi webhook error'
     if (eventRowId) await markWebhookProcessed(supabase, eventRowId, 'failed', message)
-    return NextResponse.json({ error: message }, { status: 500 })
+    return NextResponse.json({ error: publicWebhookError() }, { status: 500 })
   }
 }
 

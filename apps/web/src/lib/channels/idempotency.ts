@@ -15,11 +15,13 @@ export async function acquireWebhookEvent(
   externalEventId: string,
   payload: unknown
 ): Promise<IdempotencyResult> {
+  const normalizedEventId = externalEventId.trim()
+  if (!normalizedEventId) return { status: 'error', message: 'missing_provider_event_id' }
   const { data, error } = await supabase
     .from('webhook_events')
     .insert({
       provider,
-      external_event_id: externalEventId,
+      external_event_id: normalizedEventId,
       payload: payload as Record<string, unknown>,
       processing_status: 'pending',
     })
@@ -30,7 +32,7 @@ export async function acquireWebhookEvent(
     if (error.code === '23505') {
       return { status: 'duplicate' }
     }
-    return { status: 'error', message: error.message }
+    return { status: 'error', message: sanitizeStoredError(error.message) }
   }
 
   if (!data?.id) {
@@ -50,8 +52,13 @@ export async function markWebhookProcessed(
     .from('webhook_events')
     .update({
       processing_status: status,
-      error_message: errorMessage ?? null,
+      error_message: errorMessage ? sanitizeStoredError(errorMessage) : null,
       processed_at: new Date().toISOString(),
     })
     .eq('id', eventRowId)
+}
+
+function sanitizeStoredError(message: string) {
+  if (/^[a-z0-9][a-z0-9_.:-]{0,119}$/i.test(message)) return message
+  return 'webhook_processing_failed'
 }

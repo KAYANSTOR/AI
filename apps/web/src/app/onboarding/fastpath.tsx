@@ -21,6 +21,7 @@ export type FastPathData = {
   timezone: string
   smokeTestResult: SmokeTestOutcome | null
   initialReply: ReplyTestResult | null
+  initialTestMessage: string | null
   connect: ConnectStageData
   agent: { name: string; status: string } | null
   savedDescription: string
@@ -174,6 +175,7 @@ export function FastPath({
           <StageTest
             initialOutcome={data.smokeTestResult}
             initialReply={data.initialReply}
+            initialTestMessage={data.initialTestMessage}
             canManage={data.canManage}
             onActivated={() => router.push('/dashboard')}
           />

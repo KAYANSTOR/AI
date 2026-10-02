@@ -4,6 +4,7 @@ import { CredentialConfigError, CredentialMissingError, requireCredential } from
 import { resolveChannelProviderCredentials } from '@/lib/credentials/resolve'
 import { sendInstagramText, sendWhatsAppText } from '@/lib/providers/meta'
 import { sendTwilioSms } from '@/lib/providers/twilio'
+import { markFirstResponse } from '@/lib/sla'
 
 export type OutboundChannel = {
   id: string
@@ -33,6 +34,7 @@ export async function deliverOutbound(
     recipient: string
     body: string
     idempotencyKey: string
+    conversationId?: string | null
     queueOnFailure?: boolean
   }
 ): Promise<'sent' | 'queued'> {
@@ -66,7 +68,7 @@ export async function deliverOutbound(
       eventType: 'message.send',
       idempotencyKey: input.idempotencyKey,
       recipient: input.recipient,
-      payload: { body: input.body },
+      payload: { body: input.body, conversation_id: input.conversationId ?? null },
     })
     return 'queued'
   }
@@ -79,6 +81,45 @@ export async function deliverOutbound(
     reference_type: 'channel',
     reference_id: input.channel.id,
     metadata: { channel_type: input.channel.channelType },
+  })
+
+  return 'sent'
+}
+
+/** Persist a customer-visible outbound message only after the provider accepted it. */
+export async function recordDeliveredOutboundMessage(
+  supabase: SupabaseClient,
+  input: { organizationId: string; conversationId: string; body: string; idempotencyKey: string; state?: string }
+) {
+  const { error } = await supabase.from('messages').insert({
+    organization_id: input.organizationId,
+    conversation_id: input.conversationId,
+    direction: 'outbound',
+    message_type: 'text',
+    content: input.body,
+    external_message_id: input.idempotencyKey,
+  })
+  if (error && error.code !== '23505') throw new Error('outbound_message_record_failed')
+
+  const now = new Date().toISOString()
+  const { error: conversationError } = await supabase
+    .from('conversations')
+    .update({ last_message_at: now, last_outbound_at: now, state: input.state ?? 'waiting_customer' })
+    .eq('id', input.conversationId)
+    .eq('organization_id', input.organizationId)
+  if (conversationError) throw new Error('outbound_conversation_update_failed')
+
+  await supabase.from('audit_events').insert({
+    organization_id: input.organizationId,
+    action: 'message.outbound_delivered',
+    entity_type: 'conversation',
+    entity_id: input.conversationId,
+    actor_type: 'system',
+    metadata: { idempotency_key: input.idempotencyKey },
+  })
+  await markFirstResponse(supabase, {
+    organizationId: input.organizationId,
+    conversationId: input.conversationId,
   })
 
   return 'sent'

@@ -18,13 +18,14 @@ export async function createPendingAction(args:{supabase:SupabaseClient;organiza
   if(error || !data) throw new Error(error?.message ?? 'Failed to create pending action')
   return data.id as string
 }
-export async function markPendingAction(supabase:SupabaseClient,actionId:string,status:'confirmed'|'cancelled'|'expired'|'executed'|'failed',result?:unknown){
+export async function markPendingAction(supabase:SupabaseClient,actionId:string,status:'confirmed'|'cancelled'|'expired'|'executed'|'failed',result?:unknown,expectedStatus:'pending'|'confirmed'='pending'){
   const patch:Record<string,unknown>={status}
   if(status==='confirmed') patch.confirmed_at=new Date().toISOString()
   if(status==='executed') patch.executed_at=new Date().toISOString()
   if(result!==undefined) patch.result=result
-  const {error}=await supabase.from('pending_actions').update(patch).eq('id',actionId)
+  const {data,error}=await supabase.from('pending_actions').update(patch).eq('id',actionId).eq('status',expectedStatus).select('id').maybeSingle()
   if(error) throw new Error(error.message)
+  return Boolean(data?.id)
 }
 export function isAffirmative(text:string){
   const v=normalizeConfirmationText(text)

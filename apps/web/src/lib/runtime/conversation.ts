@@ -82,13 +82,15 @@ export async function ensureOpenConversation(
 
 export async function getConversationRef(
   supabase: SupabaseClient,
-  conversationId: string
+  conversationId: string,
+  organizationId?: string
 ): Promise<ConversationRef | null> {
-  const { data, error } = await supabase
+  let query = supabase
     .from('conversations')
     .select('id, organization_id, business_id, contact_id, channel_id, state, status, ai_enabled')
     .eq('id', conversationId)
-    .maybeSingle()
+  if (organizationId) query = query.eq('organization_id', organizationId)
+  const { data, error } = await query.maybeSingle()
 
   if (error) throw new Error(error.message)
   if (!data) return null

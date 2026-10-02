@@ -3,8 +3,8 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { acquireWebhookEvent, markWebhookProcessed } from '@/lib/channels/idempotency'
 import { processInboundMessage } from '@/lib/runtime/process-inbound'
 import { resolveChannelExact } from '@/lib/runtime/tenant'
-import { verifyMetaSignature } from '@/lib/runtime/security'
-import { deliverOutbound } from '@/lib/runtime/outbound'
+import { publicWebhookError, stablePayloadEventId, verifyMetaSignature } from '@/lib/runtime/security'
+import { deliverOutbound, recordDeliveredOutboundMessage } from '@/lib/runtime/outbound'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
         const text = String(message?.text ?? '').trim()
         if (!senderId || !text) continue
 
-        const externalEventId = String(event.message_id ?? event.id ?? crypto.randomUUID())
+        const externalEventId = String(event.message_id ?? event.id ?? '').trim() || stablePayloadEventId('instagram', event)
         const acquired = await acquireWebhookEvent(supabase, 'instagram', externalEventId, event)
         if (acquired.status === 'duplicate') continue
         if (acquired.status === 'error') throw new Error(acquired.message)
@@ -74,7 +74,7 @@ export async function POST(req: NextRequest) {
         })
 
         if (result.reply) {
-          await deliverOutbound(supabase, {
+          const delivery = await deliverOutbound(supabase, {
             channel: {
               id: channel.id,
               organizationId: channel.organizationId,
@@ -84,6 +84,13 @@ export async function POST(req: NextRequest) {
               externalIdentifier: channel.externalIdentifier,
             },
             recipient: senderId,
+            body: result.reply,
+            idempotencyKey: 'instagram:' + externalEventId + ':reply',
+            conversationId: result.conversationId,
+          })
+          if (delivery === 'sent') await recordDeliveredOutboundMessage(supabase, {
+            organizationId: channel.organizationId,
+            conversationId: result.conversationId,
             body: result.reply,
             idempotencyKey: 'instagram:' + externalEventId + ':reply',
           })
@@ -97,6 +104,6 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     const message = error instanceof Error ? error.message : 'instagram webhook error'
     if (supabase && eventRowId) await markWebhookProcessed(supabase, eventRowId, 'failed', message)
-    return NextResponse.json({ error: message }, { status: 500 })
+    return NextResponse.json({ error: publicWebhookError() }, { status: 500 })
   }
 }

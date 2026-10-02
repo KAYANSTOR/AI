@@ -3,6 +3,7 @@ import { isAuthorizedCronRequest } from '@/lib/cron/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { assertMarketingAllowed, ConsentBlockedError } from '@/lib/channels/consent'
 import { enqueueOutbound } from '@/lib/channels/outbox'
+import { publicWebhookError } from '@/lib/runtime/security'
 import { DEFAULT_SEND_WINDOW, isInQuietHours } from '@/lib/channels/quiet-hours'
 
 export const runtime = 'nodejs'
@@ -32,7 +33,7 @@ async function handle(req: NextRequest) {
     .lte('starts_at', new Date(now + WINDOW_24H_MS + SKEW_MS).toISOString())
     .limit(80)
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return NextResponse.json({ error: publicWebhookError() }, { status: 500 })
 
   let sent24 = 0
   let sent1 = 0

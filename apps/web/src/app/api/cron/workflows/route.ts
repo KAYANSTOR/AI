@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { isAuthorizedCronRequest } from '@/lib/cron/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { advanceWorkflowRun } from '@/lib/workflows/engine'
+import { publicWebhookError } from '@/lib/runtime/security'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -22,7 +23,7 @@ async function handle(req: NextRequest) {
     .order('updated_at', { ascending: true })
     .limit(40)
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return NextResponse.json({ error: publicWebhookError() }, { status: 500 })
 
   let advanced = 0
   let failed = 0

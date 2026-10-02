@@ -3,6 +3,7 @@ import { isAuthorizedCronRequest } from '@/lib/cron/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { DEFAULT_SLA_POLICY, evaluateSlaState, loadDefaultSlaPolicy, type SlaPolicy } from '@/lib/sla'
 import { runEscalationPolicies } from '@/lib/escalation'
+import { publicWebhookError } from '@/lib/runtime/security'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -22,7 +23,7 @@ async function handle(req: NextRequest) {
     .neq('status', 'closed')
     .limit(200)
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return NextResponse.json({ error: publicWebhookError() }, { status: 500 })
 
   // One lookup per organization on this page so the at-risk band is sized from each tenant's
   // own policy rather than from the product defaults.

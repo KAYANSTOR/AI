@@ -5,6 +5,7 @@ import { assertMarketingAllowed, ConsentBlockedError } from '@/lib/channels/cons
 import { DEFAULT_SEND_WINDOW, isInQuietHours, nextSendWindowOpen } from '@/lib/channels/quiet-hours'
 import { claimDueEnrollment, completeFollowUpStep, exitFollowUp } from '@/lib/followup'
 import { deliverOutbound } from '@/lib/runtime/outbound'
+import { publicWebhookError } from '@/lib/runtime/security'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -25,7 +26,7 @@ async function handle(req: NextRequest) {
     .order('next_send_at', { ascending: true })
     .limit(40)
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return NextResponse.json({ error: publicWebhookError() }, { status: 500 })
 
   let claimed = 0
   let sent = 0
@@ -164,8 +165,8 @@ async function handle(req: NextRequest) {
           next: result.status,
         },
       })
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'followup_send_failed'
+    } catch {
+      const message = 'followup_send_failed'
       await supabase
         .from('followup_enrollments')
         .update({

@@ -77,6 +77,18 @@ async function runActivationChecks(
   }
 }
 
+function persistedSmokeResult(
+  outcome: SmokeTestOutcome,
+  reply: ReplyTestResult,
+  message: string
+) {
+  return {
+    ...outcome,
+    reply,
+    testMessage: message.trim(),
+  }
+}
+
 /** The audit trail must record setup decisions, but it must never break the setup itself. */
 async function auditSetup(
   organizationId: string,
@@ -493,17 +505,19 @@ export async function runActivationTestAction(input?: {
   try {
     const org = await requireOnboardingAdmin()
     const supabase = await createClient()
+    const message = input?.message ?? 'السلام عليكم، أريد حجز موعد.'
     const { outcome, reply, activationState } = await runActivationChecks(
       supabase,
       org,
-      input?.message ?? 'السلام عليكم، أريد حجز موعد.'
+      message
     )
+    const storedOutcome = persistedSmokeResult(outcome, reply, message)
 
     const { error } = await createAdminClient()
       .from('business_profiles')
       .update({
         smoke_test_status: outcome.passed ? 'passed' : 'failed',
-        smoke_test_result: outcome,
+        smoke_test_result: storedOutcome,
         activation_state: stateAfterActivationTest({
           currentState: activationState,
           passed: outcome.passed,
@@ -516,7 +530,7 @@ export async function runActivationTestAction(input?: {
     revalidatePath('/onboarding')
     return {
       ok: outcome.passed,
-      outcome,
+      outcome: storedOutcome,
       reply,
       message: outcome.passed ? 'كل شيء جاهز ✅' : 'بعض الخطوات ما زالت ناقصة.',
     }
@@ -537,19 +551,21 @@ export async function activateAccountAction(): Promise<
   try {
     const org = await requireOnboardingAdmin()
     const supabase = await createClient()
-    const { outcome, activationState } = await runActivationChecks(
+    const message = 'السلام عليكم، أريد حجز موعد.'
+    const { outcome, reply, activationState } = await runActivationChecks(
       supabase,
       org,
-      'السلام عليكم، أريد حجز موعد.'
+      message
     )
     const admin = createAdminClient()
+    const storedOutcome = persistedSmokeResult(outcome, reply, message)
 
     if (!outcome.passed) {
       const { error: saveError } = await admin
         .from('business_profiles')
         .update({
           smoke_test_status: 'failed',
-          smoke_test_result: outcome,
+          smoke_test_result: storedOutcome,
           activation_state: stateAfterActivationTest({
             currentState: activationState,
             passed: false,
@@ -560,7 +576,7 @@ export async function activateAccountAction(): Promise<
       return {
         ok: false,
         error: 'لم يكتمل الإعداد بعد. راجع الخطوات الناقصة ثم أعد الاختبار.',
-        outcome,
+        outcome: storedOutcome,
       }
     }
 
@@ -576,7 +592,7 @@ export async function activateAccountAction(): Promise<
         activation_state: 'active',
         activation_step: 11,
         smoke_test_status: 'passed',
-        smoke_test_result: outcome,
+        smoke_test_result: storedOutcome,
       })
       .eq('organization_id', org.organizationId)
     if (error) return { ok: false, error: supabaseActionError(error) }

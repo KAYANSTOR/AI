@@ -7,7 +7,7 @@ import { getPendingAction, isAffirmative, isNegative, markPendingAction } from '
 import { ensureOpenConversation, getConversationRef } from '@/lib/runtime/conversation'
 import { resolveBusinessAgent } from '@/lib/runtime/tenant'
 import { executeTool } from '@/lib/ai/tools'
-import { armConversationSla, markFirstResponse } from '@/lib/sla'
+import { armConversationSla } from '@/lib/sla'
 import {
   assertWithinLimit,
   EntitlementExceededError,
@@ -67,7 +67,7 @@ export async function processInboundMessage(
     conversationId,
   })
 
-  const conversation = await getConversationRef(supabase, conversationId)
+  const conversation = await getConversationRef(supabase, conversationId, input.organizationId)
   if (!conversation || !conversation.aiEnabled || conversation.status === 'handed_off') {
     return { reply: null, conversationId, contactId: contact.contactId }
   }
@@ -100,7 +100,8 @@ export async function processInboundMessage(
   const pending = await getPendingAction(supabase, conversationId)
 
   if (pending && isNegative(input.text)) {
-    await markPendingAction(supabase, pending.id, 'cancelled')
+    const cancelled = await markPendingAction(supabase, pending.id, 'cancelled')
+    if (!cancelled) return { reply: 'تمت معالجة العملية مسبقًا.', conversationId, contactId: contact.contactId }
     await supabase.from('conversations').update({ state: 'waiting_customer' }).eq('id', conversationId)
     return {
       reply: 'تم إلغاء العملية. أخبرني عندما تريد المتابعة.',
@@ -110,7 +111,8 @@ export async function processInboundMessage(
   }
 
   if (pending && isAffirmative(input.text)) {
-    await markPendingAction(supabase, pending.id, 'confirmed')
+    const confirmed = await markPendingAction(supabase, pending.id, 'confirmed')
+    if (!confirmed) return { reply: 'هذه العملية قيد المعالجة بالفعل.', conversationId, contactId: contact.contactId }
     const agent = await resolveBusinessAgent(supabase, input.businessId)
     const actionResult = await executeTool(
       pending.tool_name,
@@ -127,7 +129,7 @@ export async function processInboundMessage(
       { confirmed: true }
     )
     serverActionResult = actionResult.ok ? actionResult.result : { error: actionResult.error }
-    await markPendingAction(supabase, pending.id, actionResult.ok ? 'executed' : 'failed', serverActionResult)
+    await markPendingAction(supabase, pending.id, actionResult.ok ? 'executed' : 'failed', serverActionResult, 'confirmed')
     await supabase
       .from('conversations')
       .update({ state: actionResult.ok ? 'completed' : 'action_pending' })
@@ -188,29 +190,6 @@ export async function processInboundMessage(
   } catch {
     // meter table may be absent until migration; ledger still records tokens
   }
-
-  const outbound = await supabase.from('messages').insert({
-    organization_id: input.organizationId,
-    conversation_id: conversationId,
-    direction: 'outbound',
-    message_type: 'text',
-    content: reply,
-  })
-  if (outbound.error) throw new Error(outbound.error.message)
-
-  await markFirstResponse(supabase, {
-    organizationId: input.organizationId,
-    conversationId,
-  })
-
-  await supabase
-    .from('conversations')
-    .update({
-      last_message_at: new Date().toISOString(),
-      last_outbound_at: new Date().toISOString(),
-      state: serverActionResult ? 'completed' : 'waiting_customer',
-    })
-    .eq('id', conversationId)
 
   return { reply, conversationId, contactId: contact.contactId }
 }

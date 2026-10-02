@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { isAuthorizedCronRequest } from '@/lib/cron/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { deliverOutbound } from '@/lib/runtime/outbound'
+import { deliverOutbound, recordDeliveredOutboundMessage } from '@/lib/runtime/outbound'
+import { publicWebhookError } from '@/lib/runtime/security'
 import {
   OUTBOX_MAX_ATTEMPTS,
   OUTBOX_STALE_LOCK_MS,
@@ -20,13 +21,13 @@ async function handle(req: NextRequest) {
   const staleBefore = new Date(Date.now() - OUTBOX_STALE_LOCK_MS).toISOString()
   const claimable = `status.in.(pending,failed),and(status.eq.processing,locked_at.lt.${staleBefore})`
   const { data: events, error } = await supabase.from('outbox_events')
-    .select('id, organization_id, channel_id, recipient, payload, attempts')
+    .select('id, organization_id, channel_id, recipient, payload, attempts, idempotency_key')
     .or(claimable)
     .lte('scheduled_at', new Date().toISOString())
     .lt('attempts', OUTBOX_MAX_ATTEMPTS)
     .order('scheduled_at')
     .limit(50)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return NextResponse.json({ error: publicWebhookError() }, { status: 500 })
 
   let sent = 0
   for (const event of events ?? []) {
@@ -62,8 +63,18 @@ async function handle(req: NextRequest) {
         recipient: event.recipient,
         body,
         idempotencyKey: 'outbox:' + event.id,
+        conversationId: typeof payload.conversation_id === 'string' ? payload.conversation_id : null,
         queueOnFailure: false,
       })
+
+      if (typeof payload.conversation_id === 'string' && payload.conversation_id) {
+        await recordDeliveredOutboundMessage(supabase, {
+          organizationId: event.organization_id,
+          conversationId: payload.conversation_id,
+          body,
+          idempotencyKey: 'outbox:' + event.id,
+        })
+      }
 
       await supabase.from('outbox_events').update({ status: 'sent', sent_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('id', event.id)
       sent++

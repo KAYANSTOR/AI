@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from 'node:crypto'
+import { createHash, createHmac, timingSafeEqual } from 'node:crypto'
 
 function safeEqual(a:string,b:string){
   const aa=Buffer.from(a);const bb=Buffer.from(b)
@@ -26,4 +26,15 @@ export function verifyTwilioSignature(rawUrl:string,params:Record<string,string>
   const data=rawUrl+Object.keys(params).sort().map(key=>key+params[key]).join('')
   const expected=createHmac('sha1',authToken).update(data,'utf8').digest('base64')
   return safeEqual(signature,expected)
+}
+
+/** Never expose provider, SQL, or credential errors to webhook callers. */
+export function publicWebhookError(fallback = 'webhook_processing_failed') {
+  return fallback
+}
+
+/** Stable fallback for payloads that do not contain a provider event identifier. */
+export function stablePayloadEventId(provider: string, payload: unknown) {
+  const serialized = JSON.stringify(payload)
+  return `${provider}:${createHash('sha256').update(serialized, 'utf8').digest('hex')}`
 }

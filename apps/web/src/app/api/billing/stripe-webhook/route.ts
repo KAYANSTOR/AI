@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { applySubscriptionEvent, type SubscriptionStatus } from '@/lib/billing/stripe'
 import { createHmac, timingSafeEqual } from 'crypto'
+import { acquireWebhookEvent, markWebhookProcessed } from '@/lib/channels/idempotency'
+import { publicWebhookError } from '@/lib/runtime/security'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -37,7 +39,7 @@ function verifyStripeSignature(
   }
 }
 
-function mapStripeStatus(status: string): SubscriptionStatus {
+function mapStripeStatus(status: string): SubscriptionStatus | null {
   switch (status) {
     case 'active':
     case 'trialing':
@@ -52,7 +54,7 @@ function mapStripeStatus(status: string): SubscriptionStatus {
     case 'incomplete_expired':
       return 'suspended'
     default:
-      return 'active'
+      return null
   }
 }
 
@@ -69,6 +71,7 @@ export async function POST(req: NextRequest) {
   }
 
   let event: {
+    id?: string
     type: string
     data: { object: Record<string, unknown> }
   }
@@ -77,6 +80,9 @@ export async function POST(req: NextRequest) {
   } catch {
     return NextResponse.json({ error: 'invalid_json' }, { status: 400 })
   }
+
+  const eventId = typeof event.id === 'string' ? event.id.trim() : ''
+  if (!eventId) return NextResponse.json({ error: 'missing_event_id' }, { status: 400 })
 
   const obj = event.data.object
   const organizationId =
@@ -89,14 +95,27 @@ export async function POST(req: NextRequest) {
   }
 
   const supabase = createAdminClient()
+  const acquired = await acquireWebhookEvent(supabase, 'stripe', eventId, event)
+  if (acquired.status === 'duplicate') return NextResponse.json({ ok: true, duplicate: true })
+  if (acquired.status === 'error') return NextResponse.json({ error: publicWebhookError() }, { status: 500 })
+  const eventRowId = acquired.eventRowId
 
   try {
+    await supabase.from('webhook_events').update({
+      organization_id: organizationId,
+      event_type: event.type,
+      signature_verified: true,
+    }).eq('id', eventRowId)
     if (
       event.type === 'customer.subscription.updated' ||
       event.type === 'customer.subscription.created' ||
       event.type === 'customer.subscription.deleted'
     ) {
-      const status = mapStripeStatus(String(obj.status ?? 'active'))
+      const status = mapStripeStatus(String(obj.status ?? ''))
+      if (!status) {
+        await markWebhookProcessed(supabase, eventRowId, 'failed', 'unknown_stripe_subscription_status')
+        return NextResponse.json({ error: 'unsupported_subscription_status' }, { status: 400 })
+      }
       const periodEnd = obj.current_period_end
         ? new Date(Number(obj.current_period_end) * 1000).toISOString()
         : null
@@ -118,11 +137,10 @@ export async function POST(req: NextRequest) {
         stripeSubscriptionId: (obj.subscription as string) ?? null,
       })
     }
+    await markWebhookProcessed(supabase, eventRowId, 'processed')
   } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'handler_failed' },
-      { status: 500 }
-    )
+    await markWebhookProcessed(supabase, eventRowId, 'failed', err instanceof Error ? err.message : 'handler_failed')
+    return NextResponse.json({ error: publicWebhookError() }, { status: 500 })
   }
 
   return NextResponse.json({ ok: true })

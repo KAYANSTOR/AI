@@ -231,23 +231,7 @@ async function toolCreateQuote(ctx: ToolContext, args: Record<string, unknown>) 
     if (!ctx.contactId) {
         throw new Error('Customer context is required to create a quote.')
     }
-    const items = args.items as Array<{name: string, description?: string, quantity: number, unit_price: number, discount?: number}>
-    if (!items || !items.length) {
-        throw new Error('At least one item is required.')
-    }
-
-    let subtotal = 0
-    let discount = 0
-    const processedItems = items.map(item => {
-        const q = Number(item.quantity)
-        const p = Number(item.unit_price)
-        const d = Number(item.discount || 0)
-        const lineTotal = (q * p) - d
-        subtotal += (q * p)
-        discount += d
-        return { name: String(item.name), description: item.description ? String(item.description) : null, quantity: q, unit_price: p, discount: d, line_total: lineTotal }
-    })
-    const total = subtotal - discount
+    const { processedItems, subtotal, discount, total } = parseCommerceItems(args.items)
 
     const { data: quote, error } = await ctx.supabase.from('quotes').insert({
         organization_id: ctx.organizationId,
@@ -262,8 +246,13 @@ async function toolCreateQuote(ctx: ToolContext, args: Record<string, unknown>) 
 
     if (error || !quote) throw new Error('Database error creating quote.')
 
-    const itemsToInsert = processedItems.map(item => ({ ...item, quote_id: quote.id }))
-    await ctx.supabase.from('quote_items').insert(itemsToInsert)
+    const { error: itemError } = await ctx.supabase.from('quote_items').insert(
+      processedItems.map(item => ({ ...item, quote_id: quote.id }))
+    )
+    if (itemError) {
+      await ctx.supabase.from('quotes').delete().eq('id', quote.id).eq('organization_id', ctx.organizationId)
+      throw new Error('Database error creating quote items.')
+    }
 
     return { quoteId: quote.id, quoteNumber: quote.quote_number, total, status: 'draft' }
 }
@@ -272,23 +261,7 @@ async function toolCreateOrder(ctx: ToolContext, args: Record<string, unknown>) 
     if (!ctx.contactId) {
         throw new Error('Customer context is required to create an order.')
     }
-    const items = args.items as Array<{name: string, description?: string, quantity: number, unit_price: number, discount?: number}>
-    if (!items || !items.length) {
-        throw new Error('At least one item is required.')
-    }
-
-    let subtotal = 0
-    let discount = 0
-    const processedItems = items.map(item => {
-        const q = Number(item.quantity)
-        const p = Number(item.unit_price)
-        const d = Number(item.discount || 0)
-        const lineTotal = (q * p) - d
-        subtotal += (q * p)
-        discount += d
-        return { name: String(item.name), description: item.description ? String(item.description) : null, quantity: q, unit_price: p, discount: d, line_total: lineTotal }
-    })
-    const total = subtotal - discount
+    const { processedItems, subtotal, discount, total } = parseCommerceItems(args.items)
 
     const { data: order, error } = await ctx.supabase.from('orders').insert({
         organization_id: ctx.organizationId,
@@ -303,8 +276,13 @@ async function toolCreateOrder(ctx: ToolContext, args: Record<string, unknown>) 
 
     if (error || !order) throw new Error('Database error creating order.')
 
-    const itemsToInsert = processedItems.map(item => ({ ...item, order_id: order.id }))
-    await ctx.supabase.from('order_items').insert(itemsToInsert)
+    const { error: itemError } = await ctx.supabase.from('order_items').insert(
+      processedItems.map(item => ({ ...item, order_id: order.id }))
+    )
+    if (itemError) {
+      await ctx.supabase.from('orders').delete().eq('id', order.id).eq('organization_id', ctx.organizationId)
+      throw new Error('Database error creating order items.')
+    }
 
     return { orderId: order.id, orderNumber: order.order_number, total, status: 'draft' }
 }
@@ -343,6 +321,7 @@ async function toolConvertQuoteToOrder(ctx: ToolContext, args: Record<string, un
     if (error || !order) throw new Error('Database error creating order from quote.')
 
     const quoteItems = quote.quote_items as unknown as StoredQuoteItem[]
+    if (!Array.isArray(quoteItems) || quoteItems.length === 0) throw new Error('Quote has no valid items.')
     const itemsToInsert = quoteItems.map((i) => ({
         order_id: order.id,
         name: i.name,
@@ -352,7 +331,57 @@ async function toolConvertQuoteToOrder(ctx: ToolContext, args: Record<string, un
         discount: i.discount,
         line_total: i.line_total
     }))
-    await ctx.supabase.from('order_items').insert(itemsToInsert)
+    const { error: itemError } = await ctx.supabase.from('order_items').insert(itemsToInsert)
+    if (itemError) {
+      await ctx.supabase.from('orders').delete().eq('id', order.id).eq('organization_id', ctx.organizationId)
+      throw new Error('Database error creating order items.')
+    }
 
     return { orderId: order.id, orderNumber: order.order_number, quoteId: quote.id, total: quote.total, status: 'draft' }
+}
+
+type CommerceInputItem = {
+  name?: unknown
+  description?: unknown
+  quantity?: unknown
+  unit_price?: unknown
+  discount?: unknown
+}
+
+function parseCommerceItems(raw: unknown) {
+  if (!Array.isArray(raw) || raw.length === 0) throw new Error('At least one item is required.')
+  if (raw.length > 100) throw new Error('Too many items.')
+
+  let subtotal = 0
+  let discount = 0
+  const processedItems = raw.map((rawItem) => {
+    if (!rawItem || typeof rawItem !== 'object') throw new Error('Each item must be an object.')
+    const item = rawItem as CommerceInputItem
+    const name = typeof item.name === 'string' ? item.name.trim() : ''
+    const quantity = Number(item.quantity)
+    const unitPrice = Number(item.unit_price)
+    const itemDiscount = Number(item.discount ?? 0)
+    if (!name) throw new Error('Each item requires a name.')
+    if (!Number.isFinite(quantity) || quantity <= 0) throw new Error('quantity must be a finite positive number.')
+    if (!Number.isFinite(unitPrice) || unitPrice < 0) throw new Error('unit_price must be a finite non-negative number.')
+    if (!Number.isFinite(itemDiscount) || itemDiscount < 0) throw new Error('discount must be a finite non-negative number.')
+    const lineSubtotal = quantity * unitPrice
+    const lineTotal = lineSubtotal - itemDiscount
+    if (!Number.isFinite(lineSubtotal) || !Number.isFinite(lineTotal) || lineTotal < 0) throw new Error('Item totals are invalid.')
+    subtotal += lineSubtotal
+    discount += itemDiscount
+    return {
+      name,
+      description: typeof item.description === 'string' && item.description.trim() ? item.description.trim() : null,
+      quantity,
+      unit_price: unitPrice,
+      discount: itemDiscount,
+      line_total: lineTotal,
+    }
+  })
+  const total = subtotal - discount
+  if (!Number.isFinite(subtotal) || !Number.isFinite(discount) || !Number.isFinite(total) || total < 0) {
+    throw new Error('Quote or order totals are invalid.')
+  }
+  return { processedItems, subtotal, discount, total }
 }

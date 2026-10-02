@@ -3,8 +3,8 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { acquireWebhookEvent, markWebhookProcessed } from '@/lib/channels/idempotency'
 import { processInboundMessage } from '@/lib/runtime/process-inbound'
 import { resolveChannelExact } from '@/lib/runtime/tenant'
-import { verifyTwilioSignature } from '@/lib/runtime/security'
-import { deliverOutbound } from '@/lib/runtime/outbound'
+import { publicWebhookError, verifyTwilioSignature } from '@/lib/runtime/security'
+import { deliverOutbound, recordDeliveredOutboundMessage } from '@/lib/runtime/outbound'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -23,8 +23,9 @@ export async function POST(req: NextRequest) {
     const from = String(params.From ?? '').trim()
     const to = String(params.To ?? '').trim()
     const body = String(params.Body ?? '').trim()
-    const sid = String(params.MessageSid ?? crypto.randomUUID())
+    const sid = String(params.MessageSid ?? '').trim()
     if (!from || !to || !body) return new NextResponse('OK')
+    if (!sid) return new NextResponse('Bad Request', { status: 400 })
 
     const acquired = await acquireWebhookEvent(supabase, 'twilio', sid, params)
     if (acquired.status === 'duplicate') return new NextResponse('OK')
@@ -57,7 +58,7 @@ export async function POST(req: NextRequest) {
     })
 
     if (result.reply) {
-      await deliverOutbound(supabase, {
+      const delivery = await deliverOutbound(supabase, {
         channel: {
           id: channel.id,
           organizationId: channel.organizationId,
@@ -69,6 +70,13 @@ export async function POST(req: NextRequest) {
         recipient: from,
         body: result.reply,
         idempotencyKey: 'sms:' + sid + ':reply',
+        conversationId: result.conversationId,
+      })
+      if (delivery === 'sent') await recordDeliveredOutboundMessage(supabase, {
+        organizationId: channel.organizationId,
+        conversationId: result.conversationId,
+        body: result.reply,
+        idempotencyKey: 'sms:' + sid + ':reply',
       })
     }
 
@@ -77,6 +85,6 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     const message = error instanceof Error ? error.message : 'sms webhook error'
     if (supabase && eventRowId) await markWebhookProcessed(supabase, eventRowId, 'failed', message)
-    return new NextResponse('Server error', { status: 500 })
+    return new NextResponse(publicWebhookError(), { status: 500 })
   }
 }

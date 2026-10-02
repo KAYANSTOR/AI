@@ -65,6 +65,17 @@ export function listMigrations(dir: string = MIGRATIONS_DIR): Migration[] {
     }
   }
 
+  if (migrations.length === 0 || migrations[0].version !== 0) {
+    throw new Error('Migration versions must start at 0000.');
+  }
+  for (let i = 1; i < migrations.length; i += 1) {
+    if (migrations[i].version !== migrations[i - 1].version + 1) {
+      throw new Error(
+        `Migration version gap between ${String(migrations[i - 1].version).padStart(4, '0')} and ${String(migrations[i].version).padStart(4, '0')}.`
+      );
+    }
+  }
+
   return migrations;
 }
 
@@ -80,7 +91,7 @@ function log(message: string) {
 
 type AppliedRow = {
   version: number;
-  name: string;
+  name: string | null;
   checksum: string | null;
   failed_at: string | null;
   error: string | null;
@@ -129,7 +140,9 @@ async function readApplied(sql: Sql): Promise<Map<number, AppliedRow>> {
   )) as unknown as AppliedRow[];
   const applied = new Map<number, AppliedRow>();
   for (const row of rows) {
-    if (row.name) applied.set(Number(row.version), row);
+    // Older schema_migrations ledgers may have no name/checksum. The version still
+    // means the migration was tracked; ignoring it would execute the SQL again.
+    applied.set(Number(row.version), row);
   }
   return applied;
 }
@@ -178,8 +191,11 @@ export async function runMigrations(argv: string[] = []) {
 
   const migrations = listMigrations();
   const sql = await open();
+  let lockHeld = false;
 
   try {
+    await sql.unsafe(`SELECT pg_advisory_lock(hashtext('frontdesk_ai_schema_migrations'))`);
+    lockHeld = true;
     await ensureLedger(sql as unknown as { unsafe: (q: string) => Promise<unknown> });
     const applied = await readApplied(sql);
     const { pending, drifted } = partition(migrations, applied);
@@ -239,13 +255,13 @@ export async function runMigrations(argv: string[] = []) {
       try {
         await sql.begin(async (tx) => {
           await tx.unsafe(contents);
+          await tx.unsafe(
+            `INSERT INTO schema_migrations (version, name, checksum, applied_at, failed_at, error)
+             VALUES (${migration.version}, '${migration.name}', '${migration.checksum}', now(), NULL, NULL)
+             ON CONFLICT (version) DO UPDATE SET name = EXCLUDED.name, checksum = EXCLUDED.checksum,
+               applied_at = now(), failed_at = NULL, error = NULL`
+          );
         });
-        await sql.unsafe(
-          `INSERT INTO schema_migrations (version, name, checksum, applied_at, failed_at, error)
-           VALUES (${migration.version}, '${migration.name}', '${migration.checksum}', now(), NULL, NULL)
-           ON CONFLICT (version) DO UPDATE SET name = EXCLUDED.name, checksum = EXCLUDED.checksum,
-             applied_at = now(), failed_at = NULL, error = NULL`
-        );
         log(`Applied ${migration.name}`);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -279,6 +295,9 @@ export async function runMigrations(argv: string[] = []) {
     const refreshed = await readApplied(sql);
     log(`Database is at version ${maxVersion(refreshed)}.`);
   } finally {
+    if (lockHeld) {
+      await sql.unsafe(`SELECT pg_advisory_unlock(hashtext('frontdesk_ai_schema_migrations'))`);
+    }
     await sql.end({ timeout: 5 });
   }
 }

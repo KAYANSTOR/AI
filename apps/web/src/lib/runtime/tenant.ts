@@ -9,7 +9,7 @@ export async function resolveChannelExact(supabase:SupabaseClient,input:{channel
     .eq('channel_type',input.channelType).eq('is_active',true).eq('verification_status','verified')
   query=providerAccountId ? query.eq('provider_account_id',providerAccountId) : query.eq('external_identifier',externalIdentifier)
   const {data,error}=await query.maybeSingle()
-  if(error) throw new Error(error.message)
+  if(error) return null
   if(!data?.business_id) return null
   return {
     id:data.id,organizationId:data.organization_id,businessId:data.business_id,
@@ -35,4 +35,3 @@ export async function resolveBusinessAgent(supabase:SupabaseClient,businessId:st
   if(error) throw new Error(error.message)
   return data ?? null
 }
-
