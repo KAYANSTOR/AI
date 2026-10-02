@@ -206,7 +206,6 @@ function ConnectionModal({
 }) {
   const spec = getChannelSpec(card.type)
   const [identifier, setIdentifier] = useState(card.type === 'whatsapp' ? card.publicNumber ?? '' : '')
-  const [publicNumber, setPublicNumber] = useState(card.publicNumber ?? '')
   const [busy, startTransition] = useTransition()
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null)
   const [testResult, setTestResult] = useState<BindingTestResult | null>(null)
