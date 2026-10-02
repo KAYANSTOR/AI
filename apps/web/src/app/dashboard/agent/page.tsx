@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getDashboardContext } from '@/lib/dashboard/context'
 import { TOOL_POLICIES } from '@/lib/ai/registry'
 import { AgentConsole, type AgentConsoleData } from './agent-console'
+import { AgentPlayground } from './agent-playground'
 import { ar } from '@/lib/i18n/ar'
 
 export const dynamic = 'force-dynamic'
@@ -15,15 +16,7 @@ export default async function AgentPage() {
 
   const supabase = await createClient()
 
-  const { data: business } = await supabase
-    .from('businesses')
-    .select('id, name')
-    .eq('organization_id', context.organizationId)
-    .order('created_at', { ascending: true })
-    .limit(1)
-    .maybeSingle()
-
-  if (!business) {
+  if (!context.businessId) {
     return (
       <div className="space-y-4">
         <h1 className="text-2xl font-bold tracking-tight text-text">الوكيل الذكي</h1>
@@ -38,14 +31,34 @@ export default async function AgentPage() {
     )
   }
 
+  const { data: business } = await supabase
+    .from('businesses')
+    .select('id, name')
+    .eq('id', context.businessId)
+    .eq('organization_id', context.organizationId)
+    .maybeSingle()
+
+  if (!business) {
+    return (
+      <div className="space-y-4">
+        <h1 className="text-2xl font-bold tracking-tight text-text">الوكيل الذكي</h1>
+        <p className="rounded-xl border border-error/40 bg-error/10 px-4 py-3 text-sm text-text">
+          تعذّر تحميل النشاط الحالي.
+        </p>
+      </div>
+    )
+  }
+
   const { data: agent, error: agentError } = await supabase
     .from('ai_agents')
     .select('id, name, locale, temperature, status, business_id')
     .eq('business_id', business.id)
+    .eq('organization_id', context.organizationId)
     .neq('status', 'archived')
     .order('created_at', { ascending: true })
     .limit(1)
     .maybeSingle()
+
   const enabled = new Set(context.enabledCapabilities)
 
   if (agentError) {
@@ -97,10 +110,10 @@ export default async function AgentPage() {
       const override = policyByTool.get(policy.name)
       return {
         policy,
-        // An agent with no stored policy falls back to the registry default, which is
-        // exactly what the runtime does.
         isAllowed: override ? Boolean(override.is_allowed) : true,
-        requiresConfirmation: override ? Boolean(override.requires_confirmation) : policy.requiresConfirmation,
+        requiresConfirmation: override
+          ? Boolean(override.requires_confirmation)
+          : policy.requiresConfirmation,
         capabilityEnabled: policy.capability === null || enabled.has(policy.capability),
       }
     }),
@@ -120,6 +133,7 @@ export default async function AgentPage() {
         </div>
       </header>
 
+      <AgentPlayground agentId={agent.id} />
       <AgentConsole data={data} />
     </div>
   )
