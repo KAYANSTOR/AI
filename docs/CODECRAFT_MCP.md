@@ -4,9 +4,10 @@
 
 ربط CodeCraft API بـ Antigravity كخادم MCP محلي حتى يستطيع وكيل التطوير استخدام نماذج CodeCraft في كتابة الكود، تصحيح الأخطاء، إعادة الهيكلة، شرح الكود، إنشاء الاختبارات، ومراجعة الكود.
 
-CodeCraft API متوافق مع OpenAI ويستخدم العنوان الأساسي:
+CodeCraft API متوافق مع OpenAI، والعنوان الأساسي هو:
 `https://codecraftapi.com/v1`
-كما يدعم tool calling وstreaming وvision بحسب النموذج. citeturn529253search1turn529253search5
+
+كما يدعم tool calling وstreaming وvision بحسب النموذج.
 
 ## الأمان
 
@@ -15,14 +16,14 @@ CodeCraft API متوافق مع OpenAI ويستخدم العنوان الأسا�
 
 لا يتم تخزين المفتاح في المستودع أو `.agents/mcp_config.json`.
 
-**تنبيه:** كان ملف workspace يحتوي سابقًا مفتاح API فعليًا؛ تمت إزالة السر من النسخة الحالية. أي مفتاح سبق نشره في GitHub يجب إلغاؤه وإنشاء مفتاح جديد، لأن CodeCraft يوصي بعدم وضع المفاتيح في المصدر أو ملفات الإعداد القابلة للمشاركة. citeturn427661search8turn529253search3
+**تنبيه أمني:** كان ملف workspace يحتوي سابقًا مفتاح API فعليًا؛ تمت إزالة السر من النسخة الحالية. أي مفتاح سبق نشره في GitHub يجب إلغاؤه وإنشاء مفتاح جديد.
 
 ## إعداد Antigravity
 
 Antigravity يدعم خوادم MCP المحلية عبر stdio، وملف workspace هو:
 `.agents/mcp_config.json`
 
-المحتوى الحالي في المستودع:
+المحتوى:
 
 ```json
 {
@@ -35,7 +36,7 @@ Antigravity يدعم خوادم MCP المحلية عبر stdio، وملف works
 }
 ```
 
-يمكن إدارة MCP من واجهة Antigravity عبر MCP Servers ثم Manage MCP Servers، أو استخدام ملف الإعداد مباشرة. citeturn848347search0turn848347search4
+بعد ضبط `CODECRAFT_API_KEY` في بيئة نظام التشغيل التي يبدأ منها Antigravity، أعد تحميل MCP Servers من الواجهة.
 
 ## التشغيل
 
@@ -44,20 +45,38 @@ Antigravity يدعم خوادم MCP المحلية عبر stdio، وملف works
 ```bash
 npm ci
 npm test
+```
+
+`npm test` يتحقق من صياغة JavaScript فقط ولا يرسل طلبًا إلى CodeCraft.
+
+لتشغيل الخادم يدويًا:
+
+```bash
 npm start
 ```
 
-`npm test` يتحقق من صياغة JavaScript فقط، ولا يرسل طلبًا إلى CodeCraft.
+## الأدوات
 
-## أدوات MCP
+الخادم يعرّف:
 
 - `codecraft_list_models`
 - `codecraft_chat`
 - `codecraft_code_assist`
 - `codecraft_model_info`
 
-الأداة `codecraft_code_assist` مخصصة مباشرة لمهام write/debug/refactor/explain/test/review/complete.
+الأداة `codecraft_code_assist` مخصصة مباشرة لمهام:
+`write`, `debug`, `refactor`, `explain`, `test`, `review`, `complete`.
 
 ## اختيار النموذج
 
-قائمة النماذج تتغير؛ افحص `GET /v1/models` بدل الاعتماد على اسم ثابت طويل الأجل. لمهام الوكلاء التي تحتاج أدوات ابحث عن capability=`tools`، وللتصحيح والتحليل العميق استخدم `reasoning`، ولتحليل الصور وواجهات المستخدم استخدم `vision`. citeturn529253search6turn529253search2
+قائمة النماذج يجب قراءتها من `GET /v1/models` بدل الاعتماد على اسم ثابت طويل الأجل.
+
+لمهمات الوكلاء التي تحتاج تنفيذ أدوات اختر نموذجًا يعلن capability=`tools`.
+للتصحيح والتحليل العميق اختر capability=`reasoning`.
+لفحص الصور وواجهات المستخدم اختر capability=`vision`.
+
+المراجع الرسمية:
+- https://codecraftapi.com/docs
+- https://codecraftapi.com/docs/models
+- https://codecraftapi.com/docs/coding-agents
+- https://antigravity.google/docs/mcp
