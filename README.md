@@ -24,9 +24,18 @@
 - docs/DB_CONTRACT.md
 - docs/CHANNELS.md
 - docs/ADR/
+- docs/CODECRAFT_MCP.md
 
 ## تطوير
     cd apps/web
     npm ci
     npm run lint
     npm run build
+
+## CodeCraft MCP for Antigravity
+
+هذا المستودع يتضمن خادم MCP محليًا باسم `codecraft-api` لاستخدام نماذج CodeCraft في مهام كتابة الكود، تصحيح الأخطاء، إعادة الهيكلة، مراجعة الكود، وإنشاء الاختبارات.
+
+شغّل `npm ci` في جذر المستودع، ثم اضبط `CODECRAFT_API_KEY` في بيئة نظام التشغيل التي يبدأ منها Antigravity. لا تضع المفتاح في Git أو داخل `.agents/mcp_config.json`.
+
+بعد ذلك يقرأ Antigravity ملف `.agents/mcp_config.json` ويشغّل الخادم محليًا عبر stdio.
