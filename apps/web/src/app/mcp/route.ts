@@ -202,8 +202,28 @@ async function modelInfo(modelId: string) {
   return await codecraftFetch(`/models/${encodeURIComponent(modelId)}`);
 }
 
+type GitHubFileContent = {
+  type?: string;
+  content?: string;
+  sha?: string;
+  size?: number;
+};
+
+type GitHubCommitResponse = {
+  commit?: { sha?: string };
+  content?: { sha?: string };
+};
+
+type GitHubWorkflowResponse = {
+  workflow_runs?: Array<Record<string, unknown>>;
+};
+
+type GitHubJobsResponse = {
+  jobs?: Array<Record<string, unknown>>;
+};
+
 async function readFile(path: string, ref: string) {
-  const data = await githubFetch(
+  const data = await githubFetch<GitHubFileContent>(
     `/repos/${REPO}/contents/${githubPath(path)}?ref=${encodeURIComponent(ref)}`
   );
 
@@ -263,7 +283,7 @@ async function writeFile(path: string, content: string, message: string, branch:
 
   let currentSha: string | undefined;
   try {
-    const current = await githubFetch(
+    const current = await githubFetch<GitHubFileContent>(
       `/repos/${REPO}/contents/${githubPath(path)}?ref=${encodeURIComponent(branch)}`
     );
     if (Array.isArray(current) || current.type !== "file") {
@@ -283,7 +303,7 @@ async function writeFile(path: string, content: string, message: string, branch:
 
   if (currentSha) payload.sha = currentSha;
 
-  const result = await githubFetch(
+  const result = await githubFetch<GitHubCommitResponse>(
     `/repos/${REPO}/contents/${githubPath(path)}`,
     { method: "PUT", body: JSON.stringify(payload) }
   );
@@ -298,7 +318,7 @@ async function writeFile(path: string, content: string, message: string, branch:
 }
 
 async function recentCiRuns(branch: string) {
-  const data = await githubFetch(
+  const data = await githubFetch<GitHubWorkflowResponse>(
     `/repos/${REPO}/actions/runs?branch=${encodeURIComponent(branch)}&per_page=10`
   );
   return (data.workflow_runs || []).map((run: Record<string, unknown>) => ({
@@ -316,7 +336,7 @@ async function recentCiRuns(branch: string) {
 }
 
 async function recentJobs(runId: number) {
-  const data = await githubFetch(
+  const data = await githubFetch<GitHubJobsResponse>(
     `/repos/${REPO}/actions/runs/${runId}/jobs?per_page=50`
   );
   return (data.jobs || []).map((job: Record<string, unknown>) => ({
