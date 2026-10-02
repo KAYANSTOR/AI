@@ -2,7 +2,7 @@
 /**
  * CodeCraft API - MCP Server
  * Integrates CodeCraft API models into Antigravity IDE
- * API Key: stored in CODECRAFT_API_KEY environment variable
+ * Secrets are read only from environment variables.
  */
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -14,7 +14,9 @@ if (!API_KEY) {
   console.error("CODECRAFT_API_KEY is not set. Export it in the environment; it is never stored in the repository.");
   process.exit(1);
 }
+
 const BASE_URL = "https://codecraftapi.com/v1";
+const DEFAULT_MODEL = process.env.CODECRAFT_DEFAULT_MODEL || "claude-opus-4.8";
 
 // ─── Helper: Fetch from CodeCraft API ────────────────────────────────────────
 async function codecraftFetch(endpoint, options = {}) {
@@ -44,7 +46,7 @@ const server = new McpServer({
 // ─── Tool 1: List Available Models ───────────────────────────────────────────
 server.tool(
   "codecraft_list_models",
-  "List all available AI models on CodeCraft API (GPT, Claude, Gemini, Grok, DeepSeek, etc.)",
+  "List all available AI models on CodeCraft API, including capabilities and pricing.",
   {},
   async () => {
     const data = await codecraftFetch("/models");
@@ -56,14 +58,22 @@ server.tool(
       description: m.description || "",
       context_window: m.context_window || m.context_length,
       capabilities: m.capabilities || [],
-      pricing_per_1k_tokens: m.pricing?.input_per_1k || 0,
+      pricing: m.pricing || {},
     }));
 
     return {
       content: [
         {
           type: "text",
-          text: JSON.stringify({ total: formatted.length, models: formatted }, null, 2),
+          text: JSON.stringify(
+            {
+              total: formatted.length,
+              default_model: DEFAULT_MODEL,
+              models: formatted,
+            },
+            null,
+            2
+          ),
         },
       ],
     };
@@ -73,10 +83,10 @@ server.tool(
 // ─── Tool 2: Chat Completion ──────────────────────────────────────────────────
 server.tool(
   "codecraft_chat",
-  "Send a chat message to any CodeCraft API model and get a response. Use for code generation, explanation, debugging, or any AI task.",
+  "Send a chat message to any CodeCraft API model for code generation, explanation, debugging, analysis, or other AI tasks.",
   {
     model: z.string().describe(
-      "Model ID to use. Examples: claude-opus-5.5, gpt-5.5-pro, gemini-3.7-flash, deepseek-v4-pro-0813, grok-4.6"
+      "Exact model ID from codecraft_list_models. Example currently documented by CodeCraft: claude-opus-4.8"
     ),
     messages: z.array(
       z.object({
@@ -87,11 +97,11 @@ server.tool(
     temperature: z.number().min(0).max(2).optional().default(0.7).describe(
       "Creativity level (0=deterministic, 2=very creative). Default: 0.7"
     ),
-    max_tokens: z.number().optional().default(4096).describe(
-      "Maximum tokens to generate. Default: 4096"
+    max_tokens: z.number().positive().optional().default(4096).describe(
+      "Maximum output tokens. Default: 4096"
     ),
     system_prompt: z.string().optional().describe(
-      "Optional system prompt to prepend (overrides any existing system message)"
+      "Optional replacement system prompt"
     ),
   },
   async ({ model, messages, temperature, max_tokens, system_prompt }) => {
@@ -102,16 +112,14 @@ server.tool(
       finalMessages.unshift({ role: "system", content: system_prompt });
     }
 
-    const body = {
-      model,
-      messages: finalMessages,
-      temperature,
-      max_tokens,
-    };
-
     const data = await codecraftFetch("/chat/completions", {
       method: "POST",
-      body: JSON.stringify(body),
+      body: JSON.stringify({
+        model,
+        messages: finalMessages,
+        temperature,
+        max_tokens,
+      }),
     });
 
     const choice = data.choices?.[0];
@@ -126,7 +134,7 @@ server.tool(
         },
         {
           type: "text",
-          text: `\n\n---\n📊 **Usage**: ${usage.prompt_tokens || 0} input tokens | ${usage.completion_tokens || 0} output tokens | Model: \`${model}\``,
+          text: `\n\n---\n📊 **Usage**: ${usage.prompt_tokens || 0} input | ${usage.completion_tokens || 0} output | Model: \`${model}\``,
         },
       ],
     };
@@ -136,7 +144,7 @@ server.tool(
 // ─── Tool 3: Code Assistant ───────────────────────────────────────────────────
 server.tool(
   "codecraft_code_assist",
-  "Specialized code assistant using CodeCraft API. Perfect for: writing code, debugging, refactoring, explaining code, generating tests, or reviewing code.",
+  "Specialized coding assistant for writing, debugging, refactoring, explaining, testing, reviewing, and completing code.",
   {
     task: z.enum([
       "write",
@@ -146,44 +154,45 @@ server.tool(
       "test",
       "review",
       "complete",
-    ]).describe("Type of coding task"),
-    code: z.string().optional().describe("Existing code to work with (for debug/refactor/explain/test/review)"),
-    instruction: z.string().describe("What you want the AI to do"),
-    language: z.string().optional().describe("Programming language (e.g., Python, JavaScript, TypeScript, etc.)"),
-    model: z.string().optional().default("claude-opus-5.5").describe(
-      "Model to use. Default: claude-opus-5.5 (best for coding)"
+    ]).describe("Coding task type"),
+    code: z.string().optional().describe(
+      "Existing code for debug/refactor/explain/test/review tasks"
+    ),
+    instruction: z.string().describe("Exact task or requirement"),
+    language: z.string().optional().describe(
+      "Programming language, such as TypeScript, JavaScript, Python, SQL, Dart, etc."
+    ),
+    model: z.string().optional().default(DEFAULT_MODEL).describe(
+      "Exact CodeCraft model ID. Defaults to CODECRAFT_DEFAULT_MODEL or claude-opus-4.8."
     ),
   },
   async ({ task, code, instruction, language, model }) => {
     const taskPrompts = {
-      write: "You are an expert software engineer. Write clean, well-documented, production-ready code.",
-      debug: "You are a debugging expert. Analyze the code carefully, identify all bugs and issues, and provide fixed code with clear explanations.",
-      refactor: "You are a code quality expert. Refactor the code to be cleaner, more efficient, and follow best practices. Explain all changes made.",
-      explain: "You are a code teacher. Explain the code clearly and thoroughly, covering what it does, how it works, and any important concepts.",
-      test: "You are a testing expert. Write comprehensive unit tests covering all edge cases and scenarios.",
-      review: "You are a senior code reviewer. Review the code for bugs, security issues, performance problems, and style improvements.",
-      complete: "You are an expert programmer. Complete the code intelligently based on the context and patterns you see.",
+      write: "You are an expert software engineer. Write clean, production-ready code with correct edge cases.",
+      debug: "You are a senior debugging engineer. Find root causes, not symptoms. Explain the cause and provide the corrected implementation.",
+      refactor: "You are a senior software engineer. Refactor for correctness, maintainability, performance, and clarity without changing intended behavior.",
+      explain: "You are an expert code teacher. Explain behavior, control flow, dependencies, risks, and important implementation details.",
+      test: "You are a testing expert. Produce comprehensive tests for happy paths, edge cases, regressions, failures, and security-sensitive behavior.",
+      review: "You are a senior code reviewer. Look for correctness bugs, security issues, race conditions, performance problems, missing tests, and architectural regressions.",
+      complete: "You are an expert programmer. Complete the implementation using the existing architecture and conventions; do not invent unrelated abstractions.",
     };
 
-    const systemPrompt = taskPrompts[task];
-    const langContext = language ? `\nProgramming Language: ${language}` : "";
-    const codeContext = code ? `\n\nCode:\n\`\`\`${language || ""}\n${code}\n\`\`\`` : "";
-
-    const userMessage = `${instruction}${langContext}${codeContext}`;
-
-    const body = {
-      model,
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userMessage },
-      ],
-      temperature: task === "write" || task === "complete" ? 0.3 : 0.5,
-      max_tokens: 8192,
-    };
+    const languageContext = language ? `\nProgramming Language: ${language}` : "";
+    const codeContext = code
+      ? `\n\nCode:\n\`\`\`${language || ""}\n${code}\n\`\`\``
+      : "";
 
     const data = await codecraftFetch("/chat/completions", {
       method: "POST",
-      body: JSON.stringify(body),
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: "system", content: taskPrompts[task] },
+          { role: "user", content: `${instruction}${languageContext}${codeContext}` },
+        ],
+        temperature: task === "write" || task === "complete" ? 0.2 : 0.4,
+        max_tokens: 8192,
+      }),
     });
 
     const content = data.choices?.[0]?.message?.content || "";
@@ -207,12 +216,12 @@ server.tool(
 // ─── Tool 4: Get Model Info ───────────────────────────────────────────────────
 server.tool(
   "codecraft_model_info",
-  "Get detailed information about a specific CodeCraft API model",
+  "Get detailed information about a specific CodeCraft model.",
   {
-    model_id: z.string().describe("Model ID to get info about (e.g., claude-opus-5.5)"),
+    model_id: z.string().describe("Exact model ID returned by codecraft_list_models"),
   },
   async ({ model_id }) => {
-    const data = await codecraftFetch(`/models/${model_id}`);
+    const data = await codecraftFetch(`/models/${encodeURIComponent(model_id)}`);
 
     return {
       content: [
@@ -231,7 +240,7 @@ async function main() {
   await server.connect(transport);
   console.error("✅ CodeCraft API MCP Server is running...");
   console.error(`🔗 Connected to: ${BASE_URL}`);
-  console.error("🛠️  Available tools: codecraft_list_models, codecraft_chat, codecraft_code_assist, codecraft_model_info");
+  console.error("🛠️  Tools: codecraft_list_models, codecraft_chat, codecraft_code_assist, codecraft_model_info");
 }
 
 main().catch((err) => {
