@@ -9,6 +9,7 @@ import { NETWORK_ERROR_MESSAGE, translateAuthError } from '@/lib/auth/messages'
 import { TextField } from '@/components/auth/field'
 import { BUSINESS_TYPES, DEFAULT_BUSINESS_TYPE } from '@/lib/capabilities/business-types'
 import { AuthProviderNotice } from '@/components/auth/provider-notice'
+import { getAuthRedirectUrl } from '@/lib/auth/redirect-url'
 
 // The FastPath lives at /onboarding; /dashboard/setup is only a compatibility redirect.
 const ONBOARDING_DESTINATION = '/onboarding'
@@ -40,7 +41,7 @@ export function SignupForm({ authConfigured }: { authConfigured: boolean }) {
             organization_name: companyName.trim(),
             business_type_id: businessType,
           },
-          emailRedirectTo: `${window.location.origin}/auth/callback?next=${ONBOARDING_DESTINATION}`,
+          emailRedirectTo: getAuthRedirectUrl(`/auth/callback?next=${encodeURIComponent(ONBOARDING_DESTINATION)}`),
         },
       })
 
