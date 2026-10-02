@@ -155,7 +155,7 @@ function githubPath(path: string) {
     .join("/");
 }
 
-async function githubFetch(path: string, init: RequestInit = {}) {
+async function githubFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
   const res = await fetch(`https://api.github.com${path}`, {
     ...init,
     headers: {
@@ -244,7 +244,7 @@ async function listDirectory(path: string, ref: string) {
 
 async function searchCode(query: string) {
   const q = `${query} repo:${REPO}`;
-  const data = await githubFetch(`/search/code?q=${encodeURIComponent(q)}&per_page=20`);
+  const data = await githubFetch<{ total_count?: number; items?: Array<Record<string, unknown>> }>(`/search/code?q=${encodeURIComponent(q)}&per_page=20`);
   return {
     total_count: data.total_count || 0,
     results: (data.items || []).map((item: Record<string, unknown>) => ({
