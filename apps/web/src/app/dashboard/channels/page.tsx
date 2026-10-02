@@ -1,3 +1,16 @@
+import { redirect } from 'next/navigation'
+import { Info } from 'lucide-react'
+import { createClient } from '@/lib/supabase/server'
+import { getDashboardContext } from '@/lib/dashboard/context'
+import { CHANNEL_SPECS, getChannelSpec, type ChannelType } from '@/lib/channels/management'
+import { ChannelsConsole } from './channels-console'
+import { PhonePanel } from './phone-panel'
+import { ar } from '@/lib/i18n/ar'
+import { formatNumber } from '@/lib/i18n/format'
+import { databaseErrorMessage, logDatabaseError } from '@/lib/db/errors'
+
+export const dynamic = 'force-dynamic'
+
 type ChannelRow = {
   id: string
   channel_type: string
