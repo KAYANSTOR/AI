@@ -44,6 +44,7 @@ describe('Gemini 3.8 provider contract', () => {
     })
 
     expect(result.content).toEqual([{ type: 'text', text: 'تم' }])
+    expect(result.providerPayload).toEqual([{ text: 'تم' }])
     expect(url).toContain('/v1beta/models/gemini-3.8-flash:generateContent')
     const headers = new Headers(request?.headers)
     expect(headers.get('Content-Type')).toBe('application/json')
