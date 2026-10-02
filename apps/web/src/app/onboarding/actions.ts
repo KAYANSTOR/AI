@@ -36,59 +36,91 @@ async function requireOnboardingAdmin(): Promise<OrgContext> {
   return org
 }
 
-// NOTE: Full file restored from commit 3c1809a — remaining functions kept via git history if truncated.
-export async function connectWhatsAppAction(input: { phoneNumber: string }): Promise<OnboardingResult> {
+async function runActivationChecks(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  org: OrgContext,
+  message: string
+) {
+  const structuralOutcome = await evaluateSmokeTest(supabase, org)
+  const { data: profile, error: profileError } = await supabase
+    .from('business_profiles')
+    .select('business_id, activation_state')
+    .eq('organization_id', org.organizationId)
+    .maybeSingle()
+  if (profileError) throw profileError
+
+  const businessId = (profile?.business_id as string | null) ?? null
+  const { data: agent, error: agentError } = businessId
+    ? await supabase
+        .from('ai_agents')
+        .select('id')
+        .eq('organization_id', org.organizationId)
+        .eq('business_id', businessId)
+        .eq('status', 'active')
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .maybeSingle()
+    : { data: null, error: null }
+  if (agentError) throw agentError
+
+  const reply = await tryAgentReply({
+    supabase,
+    organizationId: org.organizationId,
+    agentId: (agent?.id as string | undefined) ?? null,
+    message,
+  })
+
+  return {
+    outcome: withReplyTestCheck(structuralOutcome, reply.status),
+    reply,
+    activationState: String(profile?.activation_state ?? 'workspace_ready'),
+  }
+}
+
+function persistedSmokeResult(
+  outcome: SmokeTestOutcome,
+  reply: ReplyTestResult,
+  message: string
+) {
+  return {
+    ...outcome,
+    reply,
+    testMessage: message.trim(),
+  }
+}
+
+async function auditSetup(
+  organizationId: string,
+  businessId: string | null,
+  action: string,
+  entityType: string,
+  entityId: string | null,
+  metadata: Record<string, unknown>
+) {
   try {
-    const org = await requireOnboardingAdmin()
     const supabase = await createClient()
-
-    const { data: profile } = await supabase
-      .from('business_profiles')
-      .select('business_id, public_phone_number')
-      .eq('organization_id', org.organizationId)
-      .maybeSingle()
-
-    const { data: existing } = await supabase
-      .from('channels')
-      .select('id')
-      .eq('organization_id', org.organizationId)
-      .eq('channel_type', 'whatsapp')
-      .maybeSingle()
-
-    if (!existing) {
-      const { count } = await supabase
-        .from('channels')
-        .select('id', { count: 'exact', head: true })
-        .eq('organization_id', org.organizationId)
-      if ((count ?? 0) >= 1) {
-        return {
-          ok: false,
-          error: 'خطتك الحالية تسمح بقناة واحدة. أوقف القناة الحالية أو رقِّ الباقة لإضافة واتساب.',
-        }
-      }
-    }
-
-    const result = await connectWhatsAppChannel({
-      supabase,
-      organizationId: org.organizationId,
-      businessId: (profile?.business_id as string | null) ?? null,
-      number: input.phoneNumber,
+    const { error } = await supabase.rpc('log_audit_event', {
+      p_organization_id: organizationId,
+      p_action: action,
+      p_entity_type: entityType,
+      p_entity_id: entityId,
+      p_business_id: businessId,
+      p_metadata: metadata,
     })
-
-    if (!result.ok) return { ok: false, error: result.error }
-
-    if (!profile?.public_phone_number) {
-      await supabase
-        .from('business_profiles')
-        .update({ public_phone_number: normalizeChannelNumber(input.phoneNumber) })
-        .eq('organization_id', org.organizationId)
-    }
-
-    revalidatePath('/onboarding')
-    revalidatePath('/dashboard/channels')
-    return { ok: true, message: result.outcome.message }
+    if (error) console.error('Unable to record onboarding audit event', error)
   } catch (error) {
-    return { ok: false, error: actionErrorMessage(error, 'لم يكتمل ربط واتساب. حاول مرة أخرى.') }
+    console.error('Unable to record onboarding audit event', error)
+  }
+}
+
+function validTimezone(value: string | undefined): string | null {
+  const zone = value?.trim()
+  if (!zone || zone.length > 60) return null
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: zone })
+    return zone
+  } catch {
+    return null
   }
 }
 
@@ -115,6 +147,7 @@ export async function saveBasicsAction(input: {
       }
       publicPhone = normalizeChannelNumber(phoneInput)
     }
+    const timezone = validTimezone(input.timezone)
     const supabase = await createClient()
     const { data: profile, error: profileError } = await supabase
       .from('business_profiles')
@@ -127,6 +160,7 @@ export async function saveBasicsAction(input: {
       public_phone_number: publicPhone,
       updated_at: new Date().toISOString(),
     }
+    if (timezone && (!profile?.timezone || profile.timezone === 'UTC')) profilePatch.timezone = timezone
     if (businessTypeId && businessTypeId !== profile?.business_type_id) {
       await applyBusinessType(supabase, org.organizationId, businessTypeId)
     }
@@ -136,11 +170,18 @@ export async function saveBasicsAction(input: {
       .eq('organization_id', org.organizationId)
     if (profileUpdateError) return { ok: false, error: supabaseActionError(profileUpdateError) }
     if (businessId) {
-      const { error: businessError } = await supabase.from('businesses').update({ name }).eq('id', businessId)
+      const { error: businessError } = await supabase
+        .from('businesses')
+        .update({ name, ...(timezone ? { timezone } : {}) })
+        .eq('id', businessId)
       if (businessError) return { ok: false, error: supabaseActionError(businessError) }
     }
     if (name !== org.organizationName) {
-      await supabase.from('organizations').update({ name }).eq('id', org.organizationId)
+      const { error: orgError } = await supabase
+        .from('organizations')
+        .update({ name })
+        .eq('id', org.organizationId)
+      if (orgError) console.error('Unable to rename organization', orgError)
     }
     revalidatePath('/onboarding')
     revalidatePath('/dashboard')
@@ -180,15 +221,78 @@ export async function advanceStageAction(stage: number): Promise<OnboardingResul
   }
 }
 
+export async function connectWhatsAppAction(input: { phoneNumber: string }): Promise<OnboardingResult> {
+  try {
+    const org = await requireOnboardingAdmin()
+    const supabase = await createClient()
+    const { data: profile } = await supabase
+      .from('business_profiles')
+      .select('business_id, public_phone_number')
+      .eq('organization_id', org.organizationId)
+      .maybeSingle()
+    const { data: existing } = await supabase
+      .from('channels')
+      .select('id')
+      .eq('organization_id', org.organizationId)
+      .eq('channel_type', 'whatsapp')
+      .maybeSingle()
+    if (!existing) {
+      const { count } = await supabase
+        .from('channels')
+        .select('id', { count: 'exact', head: true })
+        .eq('organization_id', org.organizationId)
+      if ((count ?? 0) >= 1) {
+        return {
+          ok: false,
+          error: 'خطتك الحالية تسمح بقناة واحدة. أوقف القناة الحالية أو رقِّ الباقة لإضافة واتساب.',
+        }
+      }
+    }
+    const result = await connectWhatsAppChannel({
+      supabase,
+      organizationId: org.organizationId,
+      businessId: (profile?.business_id as string | null) ?? null,
+      number: input.phoneNumber,
+    })
+    if (!result.ok) return { ok: false, error: result.error }
+    if (!profile?.public_phone_number) {
+      await supabase
+        .from('business_profiles')
+        .update({ public_phone_number: normalizeChannelNumber(input.phoneNumber) })
+        .eq('organization_id', org.organizationId)
+    }
+    await auditSetup(
+      org.organizationId,
+      (profile?.business_id as string | null) ?? null,
+      'channel.whatsapp_connect_requested',
+      'channel',
+      null,
+      { status: result.outcome.status, reason: result.outcome.reason }
+    )
+    revalidatePath('/onboarding')
+    revalidatePath('/dashboard/channels')
+    return { ok: true, message: result.outcome.message }
+  } catch (error) {
+    return { ok: false, error: actionErrorMessage(error, 'لم يكتمل ربط واتساب. حاول مرة أخرى.') }
+  }
+}
+
 export async function generateAgentSetupAction(input: {
   description: string
 }): Promise<OnboardingResult & { result?: SetupDraftResult }> {
   try {
     const org = await requireOnboardingAdmin()
     const description = input.description?.trim() ?? ''
-    if (description.length < 10) return { ok: false, error: 'اكتب وصفاً قصيراً لنشاطك (10 أحرف على الأقل).' }
-    if (description.length > 1400) return { ok: false, error: 'الوصف طويل جدًا. اختصره في بضع جمل.' }
-    const result = await generateAgentSetupDraft({ description, businessName: org.organizationName })
+    if (description.length < 10) {
+      return { ok: false, error: 'اكتب وصفاً قصيراً لنشاطك (10 أحرف على الأقل).' }
+    }
+    if (description.length > 1400) {
+      return { ok: false, error: 'الوصف طويل جدًا. اختصره في بضع جمل.' }
+    }
+    const result = await generateAgentSetupDraft({
+      description,
+      businessName: org.organizationName,
+    })
     return { ok: true, result }
   } catch (error) {
     return { ok: false, error: actionErrorMessage(error, 'تعذّر تجهيز الوكيل. حاول مرة أخرى.') }
@@ -201,14 +305,26 @@ export async function saveAgentSetupDescriptionAction(input: {
   try {
     const org = await requireOnboardingAdmin()
     const description = input?.description
-    if (typeof description !== 'string') return { ok: false, error: 'اكتب وصف النشاط بصيغة صحيحة.' }
-    if (description.length > 1400) return { ok: false, error: 'الوصف طويل جدًا. اختصره في بضع جمل.' }
+    if (typeof description !== 'string') {
+      return { ok: false, error: 'اكتب وصف النشاط بصيغة صحيحة.' }
+    }
+    if (description.length > 1400) {
+      return { ok: false, error: 'الوصف طويل جدًا. اختصره في بضع جمل.' }
+    }
     const supabase = await createClient()
     const { error } = await supabase
       .from('business_profiles')
       .update({ setup_description: description })
       .eq('organization_id', org.organizationId)
     if (error) return { ok: false, error: supabaseActionError(error) }
+    await auditSetup(
+      org.organizationId,
+      null,
+      'agent.setup_description_saved',
+      'business_profile',
+      null,
+      { description_length: description.length }
+    )
     revalidatePath('/onboarding')
     return { ok: true, message: 'تم حفظ الوصف.' }
   } catch (error) {
@@ -216,7 +332,9 @@ export async function saveAgentSetupDescriptionAction(input: {
   }
 }
 
-export async function saveAgentSetupAction(input: { draft: unknown }): Promise<OnboardingResult> {
+export async function saveAgentSetupAction(input: {
+  draft: unknown
+}): Promise<OnboardingResult> {
   try {
     const org = await requireOnboardingAdmin()
     const supabase = await createClient()
@@ -278,6 +396,14 @@ export async function saveAgentSetupAction(input: { draft: unknown }): Promise<O
       })
       .eq('organization_id', org.organizationId)
     if (descriptionError) return { ok: false, error: supabaseActionError(descriptionError) }
+    await auditSetup(
+      org.organizationId,
+      (profile?.business_id as string | null) ?? null,
+      'agent.setup_saved',
+      'ai_agent',
+      agent?.id ?? null,
+      { services: draft.services.length, style: draft.replyStyle, handoff: draft.handoff }
+    )
     revalidatePath('/onboarding')
     revalidatePath('/dashboard/agent')
     return { ok: true, message: 'تم اعتماد إعداد الوكيل.' }
@@ -288,49 +414,104 @@ export async function saveAgentSetupAction(input: { draft: unknown }): Promise<O
 
 export async function runActivationTestAction(input?: {
   message?: string
-}): Promise<OnboardingResult & { outcome?: SmokeTestOutcome; reply?: ReplyTestResult }> {
+}): Promise<
+  OnboardingResult & { outcome?: SmokeTestOutcome; reply?: ReplyTestResult }
+> {
   try {
     const org = await requireOnboardingAdmin()
     const supabase = await createClient()
     const message = input?.message ?? 'السلام عليكم، أريد حجز موعد.'
-    const structuralOutcome = await evaluateSmokeTest(supabase, org)
-    const { data: profile } = await supabase
-      .from('business_profiles')
-      .select('business_id, activation_state')
-      .eq('organization_id', org.organizationId)
-      .maybeSingle()
-    const businessId = (profile?.business_id as string | null) ?? null
-    const { data: agent } = businessId
-      ? await supabase
-          .from('ai_agents')
-          .select('id')
-          .eq('organization_id', org.organizationId)
-          .eq('business_id', businessId)
-          .eq('status', 'active')
-          .order('created_at', { ascending: true })
-          .limit(1)
-          .maybeSingle()
-      : { data: null }
-    const reply = await tryAgentReply({
+    const { outcome, reply, activationState } = await runActivationChecks(
       supabase,
-      organizationId: org.organizationId,
-      agentId: (agent?.id as string | undefined) ?? null,
-      message,
-    })
-    const outcome = withReplyTestCheck(structuralOutcome, reply.status)
-    const activationState = String(profile?.activation_state ?? 'workspace_ready')
-    await createAdminClient()
+      org,
+      message
+    )
+    const storedOutcome = persistedSmokeResult(outcome, reply, message)
+    const { error } = await createAdminClient()
       .from('business_profiles')
       .update({
         smoke_test_status: outcome.passed ? 'passed' : 'failed',
-        smoke_test_result: { ...outcome, reply, testMessage: message.trim() },
-        activation_state: stateAfterActivationTest({ currentState: activationState, passed: outcome.passed }),
+        smoke_test_result: storedOutcome,
+        activation_state: stateAfterActivationTest({
+          currentState: activationState,
+          passed: outcome.passed,
+        }),
         activation_step: stepAfterActivationTest({ currentState: activationState }),
       })
       .eq('organization_id', org.organizationId)
+    if (error) return { ok: false, error: supabaseActionError(error) }
     revalidatePath('/onboarding')
     return { ok: true, outcome, reply }
   } catch (error) {
     return { ok: false, error: actionErrorMessage(error, 'تعذّر تشغيل الاختبار.') }
+  }
+}
+
+export async function activateAccountAction(): Promise<
+  OnboardingResult & { outcome?: SmokeTestOutcome }
+> {
+  try {
+    const org = await requireOnboardingAdmin()
+    const supabase = await createClient()
+    const message = 'السلام عليكم، أريد حجز موعد.'
+    const { outcome, reply, activationState } = await runActivationChecks(
+      supabase,
+      org,
+      message
+    )
+    const admin = createAdminClient()
+    const storedOutcome = persistedSmokeResult(outcome, reply, message)
+
+    if (!outcome.passed) {
+      const { error: saveError } = await admin
+        .from('business_profiles')
+        .update({
+          smoke_test_status: 'failed',
+          smoke_test_result: storedOutcome,
+          activation_state: stateAfterActivationTest({
+            currentState: activationState,
+            passed: false,
+          }),
+        })
+        .eq('organization_id', org.organizationId)
+      if (saveError) return { ok: false, error: supabaseActionError(saveError), outcome }
+      return {
+        ok: false,
+        error: 'لم يكتمل الإعداد بعد. راجع الخطوات الناقصة ثم أعد الاختبار.',
+        outcome: storedOutcome,
+      }
+    }
+
+    const { data: profile } = await supabase
+      .from('business_profiles')
+      .select('business_id')
+      .eq('organization_id', org.organizationId)
+      .maybeSingle()
+
+    const { error } = await admin
+      .from('business_profiles')
+      .update({
+        activation_state: 'active',
+        activation_step: 11,
+        smoke_test_status: 'passed',
+        smoke_test_result: storedOutcome,
+      })
+      .eq('organization_id', org.organizationId)
+    if (error) return { ok: false, error: supabaseActionError(error) }
+
+    await auditSetup(
+      org.organizationId,
+      (profile?.business_id as string | null) ?? null,
+      'tenant.activated',
+      'organization',
+      org.organizationId,
+      { source: 'fastpath' }
+    )
+
+    revalidatePath('/dashboard')
+    revalidatePath('/onboarding')
+    return { ok: true, message: 'تم تشغيل نشاطك 🎉' }
+  } catch (error) {
+    return { ok: false, error: actionErrorMessage(error, 'تعذّر تشغيل النشاط. حاول مرة أخرى.') }
   }
 }
