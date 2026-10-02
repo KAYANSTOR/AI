@@ -180,7 +180,11 @@ export async function runAgentTurn(args: {
         return reply
       }
 
-      messages.push({ role: 'assistant', content: result.content as unknown as Record<string, unknown>[] })
+      messages.push({
+        role: 'assistant',
+        content: result.content as unknown as Record<string, unknown>[],
+        providerPayload: result.providerPayload,
+      })
       const results: Record<string, unknown>[] = []
       for (const tool of toolBlocks) {
         const toolResult = await executeTool(
