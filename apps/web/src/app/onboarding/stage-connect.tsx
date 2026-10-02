@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, AtSign, CheckCircle2, Loader2, MessageCircle, Phone, Clock } from 'lucide-react'
+import { ArrowLeft, CheckCircle2, Loader2, MessageCircle, Phone, Clock } from 'lucide-react'
 import { connectWhatsAppAction } from './actions'
 import { CONNECTION_STATE_LABELS, type ChannelConnectionState } from '@/lib/channels/connect'
 
@@ -19,8 +19,8 @@ export type ConnectStageData = {
  * Stage 2 — وصّل نشاطك.
  *
  * WhatsApp is the primary path and the only filled button on the screen. The customer types
- * their own number; no provider identifier is ever requested. Voice and Instagram are
- * visible as planned-but-optional so nobody wonders where they are.
+ * their own number; no provider identifier is ever requested. Voice is visible as an
+ * optional later step, while secondary messaging channels stay out of first-run setup.
  */
 export function StageConnect({
   data,
@@ -188,21 +188,6 @@ export function StageConnect({
             رقمك الحالي: <span dir="ltr" className="font-medium">{data.phone.publicNumber}</span>
           </p>
         ) : null}
-      </section>
-
-      {/* Instagram — optional. */}
-      <section className="rounded-2xl border border-border bg-background p-5">
-        <header className="flex items-start gap-3">
-          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-surface text-text-muted">
-            <AtSign size={22} aria-hidden="true" />
-          </span>
-          <div className="min-w-0">
-            <h2 className="text-base font-bold text-text">Instagram</h2>
-            <p className="mt-0.5 text-xs leading-5 text-text-muted">
-              اختياري تماماً. اربطه لاحقاً من صفحة القنوات إذا كان عملاؤك يراسلونك هناك.
-            </p>
-          </div>
-        </header>
       </section>
 
       <div className="flex flex-col gap-3 border-t border-border pt-5 sm:flex-row sm:items-center sm:justify-between">

@@ -22,7 +22,9 @@ const PRESETS = [
 ]
 
 export function AgentPlayground({ agentId }: { agentId: string }) {
-  const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [messages, setMessages] = useState<ChatMessage[]>([
+    { id: 'welcome', role: 'assistant', content: WELCOME },
+  ])
   const [history, setHistory] = useState<Array<{ role: ChatRole; content: string }>>([])
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)

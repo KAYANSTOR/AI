@@ -1,6 +1,12 @@
 # FrontDesk AI
 
-منصة SaaS لموظف AI للشركات عبر Phone + SMS + WhatsApp + Instagram.
+منصة SaaS لموظف استقبال AI للشركات عبر WhatsApp، مع دعم الهاتف كخيار لاحق.
+
+## نطاق الإصدار المركّز
+
+المنتج يركز على مسار واحد واضح: ربط WhatsApp، تجهيز موظف الذكاء الاصطناعي، استقبال المحادثات، إدارة العملاء، حجز المواعيد، والتحويل إلى موظف بشري.
+
+SMS وInstagram والحملات والأتمتة المتقدمة والتقارير الموسعة ليست جزءًا من تجربة الإصدار الأول، حتى لو بقيت بعض المسارات الخلفية متوافقة مؤقتًا.
 
 ## القرارات المعتمدة
 - Voice: Vapi فقط؛ Retell تاريخي وغير معتمد.
@@ -14,10 +20,11 @@
 - /api/vapi/webhook
 - /api/whatsapp/webhook
 - /api/instagram/webhook
-- /api/sms/webhook
 - /api/cron/outbox — authentication and external scheduling: docs/OUTBOX_CRON.md
 
 ## الوثائق
+- docs/PRODUCT_SCOPE_AR.md — نطاق المنتج المركّز بالعربية
+- docs/DELIVERY_HANDOFF_AR.md — حالة التسليم والاختبارات والقيود
 - docs/PLAN.md
 - docs/OUTBOX_CRON.md
 - docs/AI_AGENT_RUNTIME_SPEC.md

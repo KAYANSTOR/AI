@@ -91,8 +91,10 @@ export default async function ChannelsPage() {
   }
 
   const byType = new Map(rows.map((row) => [row.channel_type, row]))
+  // Focused release: WhatsApp is the only customer-facing messaging channel.
+  // Instagram and SMS remain backend-compatible but are intentionally not surfaced.
   const cards: ChannelViewData[] = CHANNEL_SPECS
-    .filter((spec) => spec.type !== 'phone')
+    .filter((spec) => spec.type === 'whatsapp')
     .map((spec) => {
       const row = byType.get(spec.type)
       return {
@@ -120,7 +122,7 @@ export default async function ChannelsPage() {
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary-dark">Kayan Connect</p>
           <h1 className="mt-1 text-2xl font-bold tracking-tight text-text">{ar.channels.title}</h1>
           <p className="mt-1 max-w-3xl text-sm leading-6 text-text-muted">
-            اربط القنوات من مكان واحد. ابدأ بما يراه العميل: الرقم أو الحساب، وسنتولى حفظ الربط والتحقق منه دون عرض
+            ابدأ بربط WhatsApp الذي يتواصل من خلاله عملاؤك، وسنتولى حفظ الربط والتحقق منه دون عرض
             المعرّفات السرية أو التقنية في المسار العادي.
           </p>
         </div>
@@ -132,7 +134,7 @@ export default async function ChannelsPage() {
               <p className="mt-1 text-sm font-bold text-text">{businessName}</p>
             </div>
             <div className="rounded-xl border border-border bg-surface px-4 py-3 text-center">
-              <p className="text-xs text-text-muted">القنوات الجاهزة</p>
+              <p className="text-xs text-text-muted">قناة التواصل الأساسية</p>
               <p className="mt-0.5 text-xl font-bold text-text">{formatNumber(verifiedCount)} / {formatNumber(cards.length)}</p>
             </div>
           </div>
@@ -150,7 +152,7 @@ export default async function ChannelsPage() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <SummaryTile label="جاهزة" value={formatNumber(verifiedCount)} />
         <SummaryTile label="قيد الإعداد" value={formatNumber(cards.filter((card) => card.connected && card.verificationStatus !== 'verified').length)} />
-        <SummaryTile label="غير مربوطة" value={formatNumber(cards.filter((card) => !card.connected).length)} />
+        <SummaryTile label="الحالة" value={verifiedCount > 0 ? 'متصلة' : 'تحتاج ربطًا'} />
       </div>
 
       <p className="flex items-start gap-2 rounded-xl border border-border bg-surface px-4 py-3 text-xs leading-relaxed text-text">

@@ -3,15 +3,15 @@
 ## Phone
 Existing business number → carrier forwarding → Vapi → authenticated webhook/runtime.
 
-## SMS
-Twilio cloud number → X-Twilio-Signature → exact To-number Channel → Agent Runtime → Twilio reply.
-SMS is independent from call forwarding.
-
 ## WhatsApp
 Meta verification/signature → exact phone_number_id → Agent Runtime → Meta send.
 
 ## Instagram
 Meta verification/signature → exact account ID → Agent Runtime → Meta send.
+
+## الإصدار المركّز
+
+WhatsApp هو قناة الرسائل الوحيدة الظاهرة للمستخدم في الإصدار الأول. الهاتف اختياري ومؤجل إلى ما بعد استقرار مسار WhatsApp. Instagram وSMS غير ظاهرين في تجربة العميل، ويمكن إبقاء موصلاتهما الخلفية مؤقتًا للتوافق دون اعتبارهما جزءًا من المنتج.
 
 ## Universal
 Verify → deduplicate → exact tenant → identity → conversation → persist → eligibility → agent → outbound → audit/usage.
