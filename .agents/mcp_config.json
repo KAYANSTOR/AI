@@ -2,10 +2,7 @@
   "mcpServers": {
     "codecraft-api": {
       "command": "node",
-      "args": ["c:/Users/Owner/Desktop/AI/index.js"],
-      "env": {
-        "CODECRAFT_API_KEY": "cc_1zFrScz0jC3T3RRfVvMqtqcpMXrATUuWeRw6dYiBVC94Kpgr"
-      }
+      "args": ["index.js"]
     }
   }
 }
