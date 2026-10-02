@@ -2,7 +2,7 @@ import type { AIProvider, ModelBlock } from './types'
 
 type GeminiPart = {
   text?: string
-  functionCall?: { name: string; args?: Record<string, unknown> }
+  functionCall?: { id?: string; name: string; args?: Record<string, unknown> }
   functionResponse?: { id?: string; name: string; response: unknown }
 }
 
@@ -26,7 +26,12 @@ export const geminiProvider: AIProvider = {
 
     const contents: GeminiContent[] = []
     for (const msg of input.messages) {
-      if (typeof msg.content === 'string') {
+      if (msg.providerPayload && Array.isArray(msg.providerPayload)) {
+        contents.push({
+          role: msg.role === 'user' ? 'user' : 'model',
+          parts: msg.providerPayload as GeminiPart[],
+        })
+      } else if (typeof msg.content === 'string') {
         contents.push({
           role: msg.role === 'user' ? 'user' : 'model',
           parts: [{ text: msg.content }],
@@ -120,7 +125,7 @@ export const geminiProvider: AIProvider = {
         return [
           {
             type: 'tool_use',
-            id: `call_${Math.random().toString(36).substring(7)}`,
+            id: p.functionCall.id || `call_${crypto.randomUUID()}`,
             name: p.functionCall.name,
             input: p.functionCall.args || {},
           },
@@ -133,6 +138,7 @@ export const geminiProvider: AIProvider = {
       content,
       inputTokens: data.usageMetadata?.promptTokenCount ?? 0,
       outputTokens: data.usageMetadata?.candidatesTokenCount ?? 0,
+      providerPayload: contentParts,
     }
   },
 }
