@@ -1,4 +1,4 @@
-import { createGoogle, type GoogleLanguageModelInteractionsOptions } from '@ai-sdk/google'
+import { createGoogle } from '@ai-sdk/google'
 import { convertToModelMessages, streamText, tool, type UIMessage } from 'ai'
 import { z } from 'zod'
 import { NextResponse } from 'next/server'
@@ -79,14 +79,11 @@ export async function POST(req: Request) {
   try {
     const google = createGoogle({ apiKey })
     const result = streamText({
-      model: google.interactions(MODEL),
+      model: google(MODEL),
       system: `You are FrontDesk AI's internal Business Agent (Copilot).
 You help the business owner or staff manage their operations.
 You can answer questions about their data using tools.
 Be professional, concise, and helpful. Always answer in Arabic.`,
-      providerOptions: {
-        google: { store: false } satisfies GoogleLanguageModelInteractionsOptions,
-      },
       messages: await convertToModelMessages(messages),
       tools: {
         getBusinessMetrics: tool({
