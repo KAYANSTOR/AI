@@ -226,7 +226,6 @@ function ConnectionModal({
           : await saveChannelAction({
               channelType: card.type,
               identifier,
-              publicNumber: card.type === 'phone' ? publicNumber : undefined,
             })
 
       setNotice({
