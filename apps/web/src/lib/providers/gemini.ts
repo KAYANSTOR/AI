@@ -3,7 +3,7 @@ import type { AIProvider, ModelBlock } from './types'
 type GeminiPart = {
   text?: string
   functionCall?: { name: string; args?: Record<string, unknown> }
-  functionResponse?: { name: string; response: unknown }
+  functionResponse?: { id?: string; name: string; response: unknown }
 }
 
 type GeminiContent = {
@@ -52,6 +52,7 @@ export const geminiProvider: AIProvider = {
             }
             parts.push({
               functionResponse: {
+                id: block.tool_use_id,
                 name: block.name,
                 response: parsedContent,
               },
@@ -85,19 +86,19 @@ export const geminiProvider: AIProvider = {
       : undefined
 
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+  `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
       {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'x-goog-api-key': apiKey,
         },
         body: JSON.stringify({
           systemInstruction,
           contents,
           tools,
           generationConfig: {
-            temperature: 0.2,
-            maxOutputTokens: 700,
+            maxOutputTokens: 1024,
           },
         }),
       }
@@ -105,7 +106,8 @@ export const geminiProvider: AIProvider = {
 
     const data = (await response.json()) as GeminiResponse
     if (!response.ok) {
-      throw new Error(data.error?.message ?? 'Gemini request failed: HTTP ' + response.status)
+      const detail = data.error?.message ?? 'Gemini request failed'
+      throw new Error(`Gemini API error (${response.status}) using ${model}: ${detail}`)
     }
 
     const firstCandidate = data.candidates?.[0]
