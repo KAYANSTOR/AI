@@ -179,7 +179,7 @@ async function githubFetch<T>(path: string, init: RequestInit = {}): Promise<T> 
     throw new Error(`GitHub API ${res.status}: ${message.slice(0, 2000)}`);
   }
 
-  return body;
+  return body as T;
 }
 
 async function listModels() {
