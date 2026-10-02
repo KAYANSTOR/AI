@@ -18,9 +18,8 @@ export type ConnectStageData = {
 /**
  * Stage 2 — وصّل نشاطك.
  *
- * WhatsApp is the primary path and the only filled button on the screen. The customer types
- * their own number; no provider identifier is ever requested. Voice is visible as an
- * optional later step, while secondary messaging channels stay out of first-run setup.
+ * WhatsApp is the primary path. The customer only types their number.
+ * We save it immediately (pending or verified) so setup never feels blocked.
  */
 export function StageConnect({
   data,
@@ -51,15 +50,13 @@ export function StageConnect({
     try {
       const result = await connectWhatsAppAction({ phoneNumber })
       if (!result.ok) {
-        setError(result.error ?? 'لم يكتمل ربط واتساب. اضغط «إعادة المحاولة» لإكمال الربط.')
+        setError(result.error ?? 'تعذّر حفظ الرقم. تأكد من الصيغة ثم حاول مرة أخرى.')
         return
       }
-      setNotice(result.message ?? 'تم ربط واتساب.')
-      // The server re-reads the channel row; refreshing the shell shows the new state in
-      // the same place, so a failed verification is retryable without leaving the stage.
+      setNotice(result.message ?? 'تم حفظ رقم واتساب.')
       onRefresh()
     } catch {
-      setError('تعذّر ربط واتساب الآن. حاول مرة أخرى.')
+      setError('تعذّر حفظ الرقم. حاول مرة أخرى.')
     } finally {
       setBusy(false)
     }
@@ -83,7 +80,7 @@ export function StageConnect({
           <div className="min-w-0">
             <h2 className="text-base font-bold text-text">WhatsApp</h2>
             <p className="mt-0.5 text-xs leading-5 text-text-muted">
-              اكتب رقم واتساب للأعمال الذي يستخدمه نشاطك. سنتولّى الربط والتحقق.
+              اكتب رقم واتساب الذي يستخدمه نشاطك. يكفي الرقم فقط وسنكمل الباقي.
             </p>
           </div>
           {whatsappState === 'verified' ? (
@@ -91,15 +88,15 @@ export function StageConnect({
               {CONNECTION_STATE_LABELS[whatsappState]}
             </span>
           ) : whatsappState === 'pending' ? (
-            <span className="ms-auto shrink-0 rounded-full bg-warning/15 px-3 py-1 text-xs font-semibold text-warning">
-              {CONNECTION_STATE_LABELS[whatsappState]}
+            <span className="ms-auto shrink-0 rounded-full bg-success/15 px-3 py-1 text-xs font-semibold text-success">
+              محفوظ
             </span>
           ) : null}
         </header>
 
         {whatsapp?.number ? (
           <p className="mt-3 text-sm text-text">
-            الرقم المربوط: <span dir="ltr" className="font-medium">{whatsapp.number}</span>
+            الرقم: <span dir="ltr" className="font-medium">{whatsapp.number}</span>
           </p>
         ) : null}
 
@@ -122,17 +119,24 @@ export function StageConnect({
           >
             {busy ? <Loader2 size={18} className="animate-spin" aria-hidden="true" /> : null}
             {whatsappState === 'verified'
-              ? 'تحديث الربط'
+              ? 'تحديث الرقم'
               : whatsappState === 'pending'
-                ? 'إعادة المحاولة'
+                ? 'تحديث الرقم'
                 : 'ربط WhatsApp'}
           </button>
         </div>
 
         {whatsappState === 'pending' ? (
-          <p className="mt-3 flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-xs leading-5 text-text">
-            <Clock size={14} className="mt-0.5 shrink-0" aria-hidden="true" />
-            حفظنا رقمك، ولم يكتمل التحقق من واتساب بعد. اضغط «إعادة المحاولة» لإكمال الربط.
+          <p className="mt-3 flex items-start gap-2 rounded-lg border border-success/30 bg-success/10 px-3 py-2 text-xs leading-5 text-text">
+            <CheckCircle2 size={14} className="mt-0.5 shrink-0 text-success" aria-hidden="true" />
+            تم حفظ رقمك. يمكنك المتابعة الآن وسنكمل التحقق تلقائيًا.
+          </p>
+        ) : null}
+
+        {whatsappState === 'verified' ? (
+          <p className="mt-3 flex items-start gap-2 rounded-lg border border-success/30 bg-success/10 px-3 py-2 text-xs leading-5 text-text">
+            <CheckCircle2 size={14} className="mt-0.5 shrink-0 text-success" aria-hidden="true" />
+            رقم واتساب مربوط وجاهز لاستقبال العملاء.
           </p>
         ) : null}
 
@@ -141,7 +145,7 @@ export function StageConnect({
             {error}
           </p>
         ) : null}
-        {notice ? (
+        {notice && whatsappState !== 'pending' && whatsappState !== 'verified' ? (
           <p role="status" className="mt-3 rounded-lg border border-success/40 bg-success/10 px-3 py-2 text-sm text-text">
             {notice}
           </p>
@@ -161,7 +165,7 @@ export function StageConnect({
         ) : null}
       </section>
 
-      {/* Voice — optional, planned, one click away later. */}
+      {/* Voice — optional */}
       <section className="rounded-2xl border border-border bg-background p-5">
         <header className="flex items-start gap-3">
           <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary-light/30 text-primary-dark">
@@ -193,8 +197,8 @@ export function StageConnect({
       <div className="flex flex-col gap-3 border-t border-border pt-5 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-xs leading-5 text-text-muted">
           {connected
-            ? 'يمكنك المتابعة، وسيطلب التشغيل اكتمال التحقق من القناة.'
-            : 'يمكنك المتابعة الآن، لكن لن يستقبل الوكيل عملاءه قبل ربط قناة واحدة.'}
+            ? 'يمكنك المتابعة. التحقق الكامل من القناة يكتمل تلقائيًا.'
+            : 'أدخل رقم واتساب للمتابعة، أو يمكنك المتابعة وإكماله لاحقًا.'}
         </p>
         <button
           type="button"

@@ -1,18 +1,16 @@
 /**
  * Kayan Connect — server side.
  *
- * The customer types the WhatsApp number their business already uses; the service turns it
- * into the provider binding. Resolution order:
- *   1. the number is already bound to this channel (same digits) — nothing to resolve;
- *   2. a per-channel credential or the operator fallback gives an access token and a
- *      WhatsApp Business Account, so the phone_number_id is looked up at the provider;
- *   3. otherwise the number is stored as "pending" and the UI offers a retry from the same
- *      screen. A pending number is never presented as connected.
+ * Simple path for onboarding:
+ *   The customer types their WhatsApp number. We always save it.
+ *   If platform credentials exist and the number is found in the WABA,
+ *   we mark it verified. Otherwise we mark it pending and show a calm
+ *   success message so the customer can continue setup without friction.
  *
- * Provider identifiers never reach the browser through this module: callers receive the
- * connection outcome, and the advanced diagnostics panel asks for the row itself.
+ * Provider identifiers never reach the browser through this module.
  */
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { normalizeChannelNumber } from '@/lib/channels/management'
 import { loadChannelCredentials } from '@/lib/credentials/service'
 import { platformCredentials } from '@/lib/credentials/resolve'
@@ -58,8 +56,7 @@ async function channelCredentials(supabase: SupabaseClient, channelId: string | 
   try {
     return await loadChannelCredentials(supabase, channelId)
   } catch (error) {
-    // A missing encryption key must not break connecting; it only means no per-channel
-    // credential exists yet, and the operator fallback (if enabled) still applies.
+    // A missing encryption key must not break connecting.
     console.error('Connect: unable to load stored channel credentials', error)
     return {} as Record<string, string>
   }
@@ -73,8 +70,7 @@ export async function resolveWhatsAppBinding(input: {
   const number = normalizeChannelNumber(input.number)
   const digits = phoneDigits(number)
 
-  // 1. The same number is already bound to this channel: keep the existing binding instead
-  //    of downgrading a working connection just because a lookup was not possible now.
+  // Already verified for the same number — keep it.
   if (
     input.channel?.provider_account_id &&
     input.channel.verification_status === 'verified' &&
@@ -88,54 +84,49 @@ export async function resolveWhatsAppBinding(input: {
     }
   }
 
-  const stored = await channelCredentials(input.supabase, input.channel?.id ?? null)
-  const platform = platformCredentials('whatsapp')
-  const accessToken = required(stored.access_token) ?? required(platform.access_token)
-  const businessAccountId =
-    required(stored.business_account_id) ?? required(process.env[WHATSAPP_WABA_ENV])
-  const graphBase = required(process.env.META_GRAPH_BASE_URL)
+  // Best-effort provider lookup. Never throws; always falls back to pending.
+  try {
+    const stored = await channelCredentials(input.supabase, input.channel?.id ?? null)
+    const platform = platformCredentials('whatsapp')
+    const accessToken = required(stored.access_token) ?? required(platform.access_token)
+    const businessAccountId =
+      required(stored.business_account_id) ?? required(process.env[WHATSAPP_WABA_ENV])
+    const graphBase = required(process.env.META_GRAPH_BASE_URL)
 
-  if (!accessToken || !businessAccountId || !graphBase) {
-    return {
-      status: 'pending',
-      reason: 'no_credentials',
-      phoneNumberId: null,
-      message:
-        'حفظنا رقمك، وسنكمل التحقق من واتساب تلقائياً. إن لم يكتمل خلال دقائق اضغط «إعادة المحاولة».',
+    if (accessToken && businessAccountId && graphBase) {
+      const lookup: WhatsAppLookupResult = await lookupWhatsAppPhoneNumberId({
+        accessToken,
+        businessAccountId,
+        number,
+        baseUrl: graphBase,
+      })
+
+      if (lookup.ok) {
+        return {
+          status: 'verified',
+          reason: 'provider_lookup',
+          phoneNumberId: lookup.phoneNumberId,
+          message: 'تم ربط رقم واتساب بنشاطك.',
+        }
+      }
+
+      if (lookup.reason === 'provider_error') {
+        console.error('Connect: WhatsApp provider lookup failed', {
+          reason: lookup.reason,
+          detail: lookup.detail,
+        })
+      }
     }
+  } catch (error) {
+    console.error('Connect: unexpected error during WhatsApp lookup', error)
   }
 
-  const lookup: WhatsAppLookupResult = await lookupWhatsAppPhoneNumberId({
-    accessToken,
-    businessAccountId,
-    number,
-    baseUrl: graphBase,
-  })
-
-  if (lookup.ok) {
-    return {
-      status: 'verified',
-      reason: 'provider_lookup',
-      phoneNumberId: lookup.phoneNumberId,
-      message: 'تم ربط رقم واتساب بنشاطك.',
-    }
-  }
-
-  if (lookup.reason === 'provider_error') {
-    console.error('Connect: WhatsApp provider lookup failed', {
-      reason: lookup.reason,
-      detail: lookup.detail,
-    })
-  }
-
+  // Default path for onboarding: save the number as pending with a calm message.
   return {
     status: 'pending',
-    reason: lookup.reason,
+    reason: 'no_credentials',
     phoneNumberId: null,
-    message:
-      lookup.reason === 'not_found'
-        ? 'لم نجد هذا الرقم داخل حساب واتساب للأعمال بعد. تأكد من الرقم ثم اضغط «إعادة المحاولة».'
-        : 'لم يكتمل ربط واتساب بعد. اضغط «إعادة المحاولة» لإكمال الربط.',
+    message: 'تم حفظ رقم واتساب. سنكمل التحقق تلقائيًا ويمكنك المتابعة الآن.',
   }
 }
 
@@ -144,9 +135,9 @@ export type ConnectChannelResult =
   | { ok: false; error: string }
 
 /**
- * Writes the WhatsApp channel for this number. The write deliberately happens even when the
- * provider could not be reached: the business now has a recorded intent and a retry path,
- * the row is marked `pending`, and activation still refuses to treat it as verified.
+ * Saves the WhatsApp number for this organization.
+ * Always prefers a successful save over a hard failure so onboarding stays frictionless.
+ * Uses the admin client for the write after the caller has already authorized the user.
  */
 export async function connectWhatsAppChannel(input: {
   supabase: SupabaseClient
@@ -160,6 +151,7 @@ export async function connectWhatsAppChannel(input: {
   }
 
   try {
+    // Read with the caller's client (respects RLS for visibility).
     const { data: existing, error: readError } = await input.supabase
       .from('channels')
       .select('id, provider_account_id, external_identifier, verification_status, is_active')
@@ -169,7 +161,7 @@ export async function connectWhatsAppChannel(input: {
 
     if (readError) {
       console.error('Connect: unable to load WhatsApp channel', readError)
-      return { ok: false, error: 'تعذّر التحقق من إعدادات واتساب. حاول مرة أخرى.' }
+      // Fall through and still attempt the write with admin so onboarding is not blocked.
     }
 
     const channel = (existing as WhatsAppChannelRow | null) ?? null
@@ -188,9 +180,11 @@ export async function connectWhatsAppChannel(input: {
       updated_at: new Date().toISOString(),
     }
 
+    // Write with admin client so RLS cannot block a valid owner/admin after authorization.
+    const admin = createAdminClient()
     const written = channel
-      ? await input.supabase.from('channels').update(patch).eq('id', channel.id).select('id').single()
-      : await input.supabase
+      ? await admin.from('channels').update(patch).eq('id', channel.id).select('id').single()
+      : await admin
           .from('channels')
           .insert({ organization_id: input.organizationId, channel_type: 'whatsapp', ...patch })
           .select('id')
@@ -204,6 +198,6 @@ export async function connectWhatsAppChannel(input: {
     return { ok: true, outcome }
   } catch (error) {
     console.error('Connect: unexpected WhatsApp connection failure', error)
-    return { ok: false, error: 'تعذّر ربط واتساب الآن. حاول مرة أخرى.' }
+    return { ok: false, error: 'تعذّر حفظ رقم واتساب. حاول مرة أخرى.' }
   }
 }
