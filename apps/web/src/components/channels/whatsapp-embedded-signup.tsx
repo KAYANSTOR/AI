@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Loader2, MessageCircle } from 'lucide-react'
-import { completeWhatsAppEmbeddedSignupAction } from '@/app/onboarding/actions'
+import { completeWhatsAppEmbeddedSignupAction } from '@/app/onboarding/embedded-signup-actions'
 
 declare global {
   interface Window {
@@ -182,7 +182,6 @@ export function WhatsAppEmbeddedSignupButton({
           void tryComplete()
         } else {
           setBusy(false)
-          // User closed the popup or cancelled — soft message.
           onError?.('لم يكتمل الربط. يمكنك المحاولة مرة أخرى.')
         }
       },
