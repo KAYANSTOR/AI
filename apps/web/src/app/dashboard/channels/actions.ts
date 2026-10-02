@@ -13,6 +13,7 @@ import {
   type ChannelRow,
 } from '@/lib/channels/management'
 import { assertWithinLimit, EntitlementExceededError } from '@/lib/billing/entitlements'
+import { connectWhatsAppChannel } from '@/lib/channels/connect-service'
 
 export type ChannelActionResult = {
   ok: boolean
@@ -220,6 +221,58 @@ export async function saveChannelAction(input: {
     return { ok: true, message: 'تم ربط ' + spec.label + '.' }
   } catch (error) {
     return { ok: false, error: actionErrorMessage(error, 'تعذّر حفظ القناة. حاول مرة أخرى.') }
+  }
+}
+
+
+export async function connectWhatsAppChannelAction(input: {
+  number: string
+}): Promise<ChannelActionResult & { status?: 'verified' | 'pending' }> {
+  try {
+    const org = await requireChannelAdmin()
+    const supabase = await createClient()
+    const businessId = await ensurePrimaryBusinessId(org.organizationId, org.organizationName)
+
+    const result = await connectWhatsAppChannel({
+      supabase,
+      organizationId: org.organizationId,
+      businessId,
+      number: input.number,
+    })
+
+    if (!result.ok) return { ok: false, error: result.error }
+
+    const { data: channel } = await supabase
+      .from('channels')
+      .select('id')
+      .eq('organization_id', org.organizationId)
+      .eq('channel_type', 'whatsapp')
+      .maybeSingle()
+
+    if (channel?.id) {
+      await audit(
+        org.organizationId,
+        businessId,
+        result.outcome.status === 'verified' ? 'channel.connected' : 'channel.connection_pending',
+        'channel',
+        channel.id,
+        {
+          channel_type: 'whatsapp',
+          reason: result.outcome.reason,
+        }
+      )
+    }
+
+    revalidatePath('/dashboard/channels')
+    revalidatePath('/dashboard/integrations')
+
+    return {
+      ok: true,
+      status: result.outcome.status,
+      message: result.outcome.message,
+    }
+  } catch (error) {
+    return { ok: false, error: actionErrorMessage(error, 'تعذّر ربط واتساب الآن. حاول مرة أخرى.') }
   }
 }
 

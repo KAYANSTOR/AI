@@ -1,25 +1,20 @@
-import { redirect } from 'next/navigation'
-import { Info } from 'lucide-react'
-import { createClient } from '@/lib/supabase/server'
-import { getDashboardContext } from '@/lib/dashboard/context'
-import { CHANNEL_SPECS, getChannelSpec, type ChannelType } from '@/lib/channels/management'
-import { credentialsStorageConfigured, listCredentialMetadata } from '@/lib/credentials/service'
-import { PROVIDER_FOR_CHANNEL, type CredentialMetadata } from '@/lib/credentials/catalog'
-import { ChannelCard, type ChannelCardData } from './channel-card'
-import { PhonePanel } from './phone-panel'
-import { ar } from '@/lib/i18n/ar'
-import { formatNumber } from '@/lib/i18n/format'
-import { databaseErrorMessage, logDatabaseError } from '@/lib/db/errors'
-
-export const dynamic = 'force-dynamic'
-
 type ChannelRow = {
   id: string
   channel_type: string
-  provider_account_id: string | null
   external_identifier: string | null
   verification_status: string | null
   is_active: boolean | null
+}
+
+type ChannelViewData = {
+  type: ChannelType
+  label: string
+  provider: string
+  publicNumberLabel: string | null
+  publicNumber: string | null
+  connected: boolean
+  verificationStatus: string | null
+  isActive: boolean
 }
 
 export default async function ChannelsPage() {
@@ -28,16 +23,15 @@ export default async function ChannelsPage() {
 
   const supabase = await createClient()
   const canManage = context.role === 'owner' || context.role === 'admin'
-  const storageConfigured = credentialsStorageConfigured()
 
-  // Isolate each query so a missing table/RLS error never blanks the whole screen.
   let rows: ChannelRow[] = []
   let channelsError: string | null = null
   try {
     const result = await supabase
       .from('channels')
-      .select('id, channel_type, provider_account_id, external_identifier, verification_status, is_active')
+      .select('id, channel_type, external_identifier, verification_status, is_active')
       .eq('organization_id', context.organizationId)
+
     if (result.error) {
       logDatabaseError('channels page: load channels', result.error)
       channelsError = databaseErrorMessage(result.error, ar.errors.load)
@@ -49,7 +43,7 @@ export default async function ChannelsPage() {
     channelsError = databaseErrorMessage(error, ar.errors.load)
   }
 
-  let businessName: string | null = context.organizationName
+  let businessName = context.organizationName
   try {
     const { data: business } = await supabase
       .from('businesses')
@@ -58,7 +52,8 @@ export default async function ChannelsPage() {
       .order('created_at', { ascending: true })
       .limit(1)
       .maybeSingle()
-    if (business?.name) businessName = business.name as string
+
+    if (business?.name) businessName = String(business.name)
   } catch (error) {
     console.error('Unable to load business summary', error)
   }
@@ -70,6 +65,7 @@ export default async function ChannelsPage() {
     forwarding_status: string | null
     last_verified_at: string | null
   } | null = null
+
   try {
     const { data } = await supabase
       .from('phone_connections')
@@ -81,102 +77,103 @@ export default async function ChannelsPage() {
     console.error('Unable to load phone connection', error)
   }
 
-  let credentialMetadata: CredentialMetadata[] = []
-  // Swallowing this used to make the credential list look simply empty, which reads as
-  // "nothing is configured" instead of "this could not be loaded".
-  let credentialsError: string | null = null
-  if (canManage) {
-    try {
-      credentialMetadata = await listCredentialMetadata(supabase, context.organizationId)
-    } catch (credentialError) {
-      logDatabaseError('channels page: load credential metadata', credentialError)
-      credentialsError = databaseErrorMessage(credentialError, ar.errors.load)
-      credentialMetadata = []
-    }
-  }
-
-  const credentialsFor = (type: ChannelType) =>
-    credentialMetadata.filter((entry) => entry.provider === PROVIDER_FOR_CHANNEL[type])
-
   const byType = new Map(rows.map((row) => [row.channel_type, row]))
+  const cards: ChannelViewData[] = CHANNEL_SPECS
+    .filter((spec) => spec.type !== 'phone')
+    .map((spec) => {
+      const row = byType.get(spec.type)
+      return {
+        type: spec.type,
+        label: spec.label,
+        provider: spec.provider,
+        publicNumberLabel: spec.publicNumberLabel,
+        publicNumber: row?.external_identifier ?? null,
+        connected: Boolean(row?.id),
+        verificationStatus: row?.verification_status ?? null,
+        isActive: row?.is_active === true,
+      }
+    })
 
-  const cards: ChannelCardData[] = CHANNEL_SPECS.map((spec) => {
-    const row = byType.get(spec.type)
-    return {
-      spec,
-      timezone: context.timezone,
-      identifier: canManage ? (row?.provider_account_id ?? row?.external_identifier ?? null) : null,
-      publicNumber: spec.publicNumberLabel ? (row?.external_identifier ?? null) : null,
-      isActive: row?.is_active === true,
-      connected: Boolean(row?.id),
-      verificationStatus: row?.verification_status ?? null,
-      credentials: credentialsFor(spec.type),
-      credentialsStorageConfigured: storageConfigured,
-      canManage,
-    }
-  })
+  const verifiedCount = cards.filter(
+    (card) => card.verificationStatus === 'verified' && card.isActive
+  ).length
 
-  const activeCount = cards.filter((card) => card.connected && card.isActive).length
   const phoneSpec = getChannelSpec('phone')
 
   return (
     <div className="space-y-6">
-      <header className="space-y-1">
-        <h1 className="text-2xl font-bold tracking-tight text-text">{ar.channels.title}</h1>
-        <p className="text-sm text-text-muted">{ar.channelPage.description}</p>
+      <header className="space-y-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary-dark">Kayan Connect</p>
+          <h1 className="mt-1 text-2xl font-bold tracking-tight text-text">{ar.channels.title}</h1>
+          <p className="mt-1 max-w-3xl text-sm leading-6 text-text-muted">
+            اربط القنوات من مكان واحد. ابدأ بما يراه العميل: الرقم أو الحساب، وسنتولى حفظ الربط والتحقق منه دون عرض
+            المعرّفات السرية أو التقنية في المسار العادي.
+          </p>
+        </div>
+
+        <div className="rounded-2xl border border-primary-light/60 bg-primary-light/20 p-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-xs font-semibold text-primary-dark">النشاط المتصل</p>
+              <p className="mt-1 text-sm font-bold text-text">{businessName}</p>
+            </div>
+            <div className="rounded-xl border border-border bg-surface px-4 py-3 text-center">
+              <p className="text-xs text-text-muted">القنوات الجاهزة</p>
+              <p className="mt-0.5 text-xl font-bold text-text">{formatNumber(verifiedCount)} / {formatNumber(cards.length)}</p>
+            </div>
+          </div>
+        </div>
       </header>
 
       {!canManage && (
-        <p className="rounded-xl border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-text">
-          {ar.channelPage.adminOnly}
+        <p className="rounded-xl border border-warning/40 bg-warning/10 px-4 py-3 text-sm leading-6 text-text">
+          أنت في وضع الاطلاع فقط. يستطيع المالك أو المسؤول ربط القنوات أو تعديلها.
         </p>
       )}
 
-      {channelsError && (
-        <Notice tone="error" message={channelsError} />
-      )}
-
-      {credentialsError && <Notice tone="warning" message={credentialsError} />}
+      {channelsError && <Notice tone="error" message={channelsError} />}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <SummaryTile label={ar.channels.enabled} value={formatNumber(activeCount)} />
-        <SummaryTile
-          label={ar.channels.connected}
-          value={formatNumber(cards.filter((card) => card.connected).length)}
-        />
-        <SummaryTile label={ar.channels.activity} value={businessName ?? ar.common.notSet} />
+        <SummaryTile label="جاهزة" value={formatNumber(verifiedCount)} />
+        <SummaryTile label="قيد الإعداد" value={formatNumber(cards.filter((card) => card.connected && card.verificationStatus !== 'verified').length)} />
+        <SummaryTile label="غير مربوطة" value={formatNumber(cards.filter((card) => !card.connected).length)} />
       </div>
 
       <p className="flex items-start gap-2 rounded-xl border border-border bg-surface px-4 py-3 text-xs leading-relaxed text-text">
         <Info size={16} className="mt-0.5 shrink-0 text-primary-dark" aria-hidden="true" />
         <span>
-          {ar.channelPage.secretNoticeBefore}{' '}
-          <strong>{ar.channelPage.secretNoticeStrong}</strong> {ar.channelPage.secretNoticeAfter}
+          مفاتيح المزودين والأسرار لا تُعرض هنا. شاشة القنوات تتعامل مع الربط فقط، بينما تظل بيانات الاعتماد في الخادم.
         </span>
       </p>
 
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
-        {cards.map((card) => (
-          <ChannelCard key={card.spec.type} data={card} channelType={card.spec.type} />
-        ))}
-      </div>
+      <ChannelsConsole cards={cards} canManage={canManage} />
 
-      <PhonePanel
-        canManage={canManage}
-        timezone={context.timezone}
-        instructions={phoneSpec?.setup ?? []}
-        initial={
-          phoneConnection
-            ? {
-                existingPhoneNumber: phoneConnection.existing_phone_number ?? null,
-                vapiNumber: canManage ? (phoneConnection.internal_vapi_number ?? null) : null,
-                forwardType: phoneConnection.forward_type ?? 'no_answer',
-                forwardingStatus: phoneConnection.forwarding_status ?? 'pending_test',
-                lastVerifiedAt: phoneConnection.last_verified_at ?? null,
-              }
-            : null
-        }
-      />
+      <section className="space-y-3">
+        <div>
+          <h2 className="text-lg font-bold text-text">المكالمات</h2>
+          <p className="text-sm text-text-muted">
+            احتفظ برقم شركتك الحالي، ثم فعّل التحويل إلى الوكيل من دون شراء رقم جديد للمنصة.
+          </p>
+        </div>
+
+        <PhonePanel
+          canManage={canManage}
+          timezone={context.timezone}
+          instructions={phoneSpec?.setup ?? []}
+          initial={
+            phoneConnection
+              ? {
+                  existingPhoneNumber: phoneConnection.existing_phone_number ?? null,
+                  vapiNumber: canManage ? (phoneConnection.internal_vapi_number ?? null) : null,
+                  forwardType: phoneConnection.forward_type ?? 'no_answer',
+                  forwardingStatus: phoneConnection.forwarding_status ?? 'pending_test',
+                  lastVerifiedAt: phoneConnection.last_verified_at ?? null,
+                }
+              : null
+          }
+        />
+      </section>
     </div>
   )
 }
