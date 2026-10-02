@@ -24,6 +24,8 @@ type AgentLoopArgs = {
   userText: string
   agentId?: string | null
   history: ModelMessage[]
+  systemPrompt: string
+  toolSet: Array<{ name: string; description: string; input_schema: Record<string, unknown> }>
   serverActionResult?: unknown
   simulation: boolean
   onGovernanceEscalation?: (decision: GovernanceDecision) => Promise<void>
@@ -134,13 +136,9 @@ async function runAgentLoop(args: AgentLoopArgs): Promise<AgentLoopResult> {
   for (let round = 0; round < 5; round += 1) {
     const provider = getProvider()
     const result = await provider.call({
-      system: await buildBusinessSystemPrompt(args.supabase, args.organizationId, args.agentId),
+      system: args.systemPrompt,
       messages,
-      tools: await getToolDefinitionsForAgent(
-        args.supabase,
-        args.organizationId,
-        args.agentId
-      ),
+      tools: args.toolSet,
     })
 
     inputTokens += result.inputTokens
@@ -295,6 +293,8 @@ export async function runAgentTurn(args: {
     const loop = await runAgentLoop({
       ...args,
       history: messages,
+      systemPrompt: prompt,
+      toolSet,
       simulation: false,
       onGovernanceEscalation: async (decision) => {
         await args.supabase
@@ -411,6 +411,11 @@ export async function runAgentPreviewTurn(args: {
     throw new Error('preview_requires_user_message')
   }
 
+  const [systemPrompt, toolSet] = await Promise.all([
+    buildBusinessSystemPrompt(args.supabase, args.organizationId, args.agentId),
+    getToolDefinitionsForAgent(args.supabase, args.organizationId, args.agentId),
+  ])
+
   const loop = await runAgentLoop({
     supabase: args.supabase,
     organizationId: args.organizationId,
@@ -419,6 +424,8 @@ export async function runAgentPreviewTurn(args: {
     userText: String(lastUser.content),
     agentId: args.agentId,
     history: args.messages,
+    systemPrompt,
+    toolSet,
     conversationId: null,
     contactId: null,
     simulation: true,
