@@ -913,11 +913,11 @@ export function AgentTrainer({
       {activeTab === 'test' && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
           {/* Simulated WhatsApp / Live Chat Container (8 cols) */}
-          <div className="lg:col-span-8 flex flex-col h-[740px] rounded-2xl border border-border bg-surface shadow-sm overflow-hidden">
-            {/* Simulator Header */}
-            <div className="border-b border-border bg-emerald-600 text-white px-5 py-4 flex items-center justify-between">
+          <div className="lg:col-span-8 flex flex-col h-[740px] rounded-2xl border border-border bg-surface shadow-2xs overflow-hidden">
+            {/* Simulator Header - Brand Primary */}
+            <div className="border-b border-white/10 bg-primary-dark text-white px-5 py-4 flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/20 text-white font-bold">
+                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/15 text-white font-bold">
                   <Bot size={22} />
                 </div>
                 <div>
@@ -941,15 +941,15 @@ export function AgentTrainer({
                     },
                   ])
                 }}
-                className="flex items-center gap-1 text-xs bg-white/15 hover:bg-white/25 text-white px-3 py-1.5 rounded-lg transition-colors"
+                className="flex items-center gap-1.5 text-xs bg-white/15 hover:bg-white/25 text-white px-3 py-1.5 rounded-lg transition-colors font-semibold"
               >
                 <RotateCcw size={14} />
                 <span>محادثة جديدة</span>
               </button>
             </div>
 
-            {/* Messages Area */}
-            <div className="flex-1 overflow-y-auto p-5 space-y-4 bg-[#fbf9f6] dark:bg-stone-900/40">
+            {/* Messages Area - Warm Sand Background */}
+            <div className="flex-1 overflow-y-auto p-5 space-y-4 bg-background">
               {testMessages.map((m) => (
                 <div
                   key={m.id}
@@ -958,7 +958,7 @@ export function AgentTrainer({
                   }`}
                 >
                   {m.role === 'assistant' && (
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 mt-1">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-primary-light/40 text-primary-dark mt-1">
                       <Bot size={17} />
                     </div>
                   )}
@@ -967,7 +967,7 @@ export function AgentTrainer({
                     <div
                       className={`rounded-2xl px-4 py-3 text-sm leading-relaxed shadow-2xs ${
                         m.role === 'user'
-                          ? 'bg-emerald-600 text-white rounded-br-xs'
+                          ? 'bg-primary text-white rounded-br-xs shadow-xs'
                           : 'border border-border bg-surface text-text rounded-bl-xs'
                       }`}
                     >
@@ -976,15 +976,15 @@ export function AgentTrainer({
 
                     {/* Tool execution indicator */}
                     {m.tools && m.tools.length > 0 && (
-                      <div className="flex items-center gap-1.5 text-[11px] text-text-muted bg-surface/80 border border-border/60 rounded-md px-2 py-0.5 w-fit">
-                        <Check size={11} className="text-emerald-600" />
+                      <div className="flex items-center gap-1.5 text-[11px] text-text-muted bg-surface/90 border border-border/60 rounded-md px-2 py-0.5 w-fit">
+                        <Check size={11} className="text-primary-dark" />
                         <span>تم استخدام الأداة: <strong>{m.tools.join(', ')}</strong></span>
                       </div>
                     )}
                   </div>
 
                   {m.role === 'user' && (
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-stone-700 text-white mt-1">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-dark text-white mt-1">
                       <User size={16} />
                     </div>
                   )}
@@ -993,7 +993,7 @@ export function AgentTrainer({
 
               {testBusy && (
                 <div className="flex items-center gap-2 text-xs text-text-muted py-2 px-1">
-                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-100 text-emerald-800">
+                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary-light/40 text-primary-dark">
                     <Loader2 size={14} className="animate-spin" />
                   </div>
                   <span>الوكيل يبحث في المعرفة ويصيغ الرد الموثوق…</span>
@@ -1003,7 +1003,11 @@ export function AgentTrainer({
               {testError && (
                 <div className="flex items-center gap-2 rounded-xl border border-error/40 bg-error/10 p-3 text-xs text-error">
                   <AlertCircle size={16} className="shrink-0" />
-                  <span>{testError}</span>
+                  <span>
+                    {testError === 'agent_preview_failed'
+                      ? 'تعذّر إكمال استجابة الوكيل حالياً. تم تحديث الإعدادات، يرجى المحاولة مرة أخرى.'
+                      : testError}
+                  </span>
                 </div>
               )}
 
@@ -1025,13 +1029,13 @@ export function AgentTrainer({
                   onChange={(e) => setTestInput(e.target.value)}
                   placeholder="اكتب استفسارك كعميل... مثلاً: كم السعر؟ هل لديكم مواعيد؟"
                   disabled={testBusy}
-                  className="flex-1 rounded-xl border border-border bg-background px-4 py-3 text-sm text-text placeholder:text-text-muted focus:border-emerald-600 focus:outline-none focus:ring-1 focus:ring-emerald-600"
+                  className="flex-1 rounded-xl border border-border bg-background px-4 py-3 text-sm text-text placeholder:text-text-muted focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
                   dir="auto"
                 />
                 <button
                   type="submit"
                   disabled={testBusy || !testInput.trim()}
-                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-xs"
+                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary text-white hover:bg-primary-dark disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-xs"
                   aria-label="إرسال"
                 >
                   <Send size={18} className="rtl:rotate-180" />
@@ -1044,7 +1048,7 @@ export function AgentTrainer({
           <div className="lg:col-span-4 space-y-5">
             <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm space-y-3">
               <div className="flex items-center gap-2 text-text font-bold text-sm">
-                <MessageSquare size={17} className="text-emerald-600" />
+                <MessageSquare size={17} className="text-primary-dark" />
                 <span>سيناريوهات اختبار جاهزة:</span>
               </div>
               <p className="text-xs text-text-muted leading-relaxed">
@@ -1057,9 +1061,9 @@ export function AgentTrainer({
                     key={idx}
                     type="button"
                     onClick={() => handleSendTest(p.text)}
-                    className="w-full text-start p-3 rounded-xl border border-border bg-background hover:bg-surface hover:border-emerald-500/50 transition-all text-xs space-y-1 group"
+                    className="w-full text-start p-3 rounded-xl border border-border bg-background hover:bg-surface hover:border-primary/50 transition-all text-xs space-y-1 group"
                   >
-                    <div className="font-bold text-text group-hover:text-emerald-700 transition-colors flex items-center justify-between">
+                    <div className="font-bold text-text group-hover:text-primary-dark transition-colors flex items-center justify-between">
                       <span>{p.label}</span>
                       <ArrowRight size={13} className="opacity-0 group-hover:opacity-100 transition-opacity rtl:rotate-180" />
                     </div>
@@ -1072,7 +1076,7 @@ export function AgentTrainer({
             {/* Quality and Strict Policy Box */}
             <div className="rounded-2xl border border-border bg-background/50 p-5 space-y-2.5 text-xs text-text-muted leading-relaxed">
               <div className="flex items-center gap-2 font-bold text-text">
-                <ShieldCheck size={16} className="text-emerald-600" />
+                <ShieldCheck size={16} className="text-primary-dark" />
                 <span>قاعدة عدم اختراع المعلومات</span>
               </div>
               <p>

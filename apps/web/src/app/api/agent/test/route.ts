@@ -75,10 +75,8 @@ export async function POST(req: Request) {
       })),
     })
   } catch (error) {
-    console.error(
-      'Agent preview failed:',
-      error instanceof Error ? error.message : error
-    )
-    return NextResponse.json({ error: 'agent_preview_failed' }, { status: 502 })
+    const errorMsg = error instanceof Error ? error.message : 'agent_preview_failed'
+    console.error('Agent preview failed:', errorMsg)
+    return NextResponse.json({ error: errorMsg }, { status: 502 })
   }
 }

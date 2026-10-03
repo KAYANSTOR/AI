@@ -17,6 +17,26 @@ type GeminiResponse = {
   error?: { message?: string }
 }
 
+function cleanGeminiSchema(schema: unknown): unknown {
+  if (!schema || typeof schema !== 'object') return schema
+  if (Array.isArray(schema)) return schema.map(cleanGeminiSchema)
+  const copy = { ...(schema as Record<string, unknown>) }
+  delete copy.additionalProperties
+  delete copy['$schema']
+  delete copy.default
+  if (copy.properties && typeof copy.properties === 'object') {
+    const cleanProps: Record<string, unknown> = {}
+    for (const [k, v] of Object.entries(copy.properties as Record<string, unknown>)) {
+      cleanProps[k] = cleanGeminiSchema(v)
+    }
+    copy.properties = cleanProps
+  }
+  if (copy.items) {
+    copy.items = cleanGeminiSchema(copy.items)
+  }
+  return copy
+}
+
 export const geminiProvider: AIProvider = {
   async call(input) {
     const apiKey = process.env.GEMINI_API_KEY
@@ -76,7 +96,7 @@ export const geminiProvider: AIProvider = {
               functionDeclarations: input.tools.map((t) => ({
                 name: t.name,
                 description: t.description,
-                parameters: t.input_schema,
+                parameters: cleanGeminiSchema(t.input_schema),
               })),
             },
           ]
@@ -89,7 +109,13 @@ export const geminiProvider: AIProvider = {
       : undefined
 
     const candidateModels = Array.from(
-      new Set([process.env.GEMINI_MODEL || 'gemini-3-flash-preview', 'gemini-3-flash-preview', 'gemini-3.8-flash'])
+      new Set([
+        process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite-preview',
+        'gemini-3.1-flash-lite-preview',
+        'gemini-3.5-flash',
+        'gemini-3-flash-preview',
+        'gemini-3.7-flash',
+      ])
     )
 
     let response: Response | null = null
@@ -125,11 +151,7 @@ export const geminiProvider: AIProvider = {
           break
         } else {
           lastError = json.error?.message || res.statusText
-          // If rate limited or service unavailable, try next candidate model
-          if (res.status === 429 || res.status === 503) {
-            continue
-          }
-          throw new Error(`Gemini API error (${res.status}) using ${model}: ${lastError}`)
+          continue
         }
       } catch (err) {
         lastError = err instanceof Error ? err.message : String(err)
