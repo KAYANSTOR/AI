@@ -10,6 +10,7 @@ import { ar } from '@/lib/i18n/ar'
  * الـtrigger في migration 0004 يتحقق من الـid ويرجع للنوع الافتراضي عند عدم وجوده.
  */
 export type BusinessTypeId =
+  | 'it_technology'
   | 'weddings_events'
   | 'sales'
   | 'appointments'

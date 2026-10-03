@@ -1,3 +1,4 @@
+import { Suspense } from 'react'
 import { redirect } from 'next/navigation'
 import { Bot } from 'lucide-react'
 import Link from 'next/link'
@@ -60,8 +61,6 @@ export default async function AgentPage() {
     .limit(1)
     .maybeSingle()
 
-  const enabled = new Set(context.enabledCapabilities)
-
   if (agentError) {
     return (
       <div className="space-y-4">
@@ -75,35 +74,92 @@ export default async function AgentPage() {
 
   if (!agent) redirect('/onboarding')
 
+  return (
+    <div className="space-y-6">
+      {/* 0ms Instant Header */}
+      <header className="flex items-start gap-3">
+        <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary-light/40">
+          <Bot size={22} className="text-primary-dark" aria-hidden="true" />
+        </span>
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-text">وكيل الذكاء الاصطناعي</h1>
+          <p className="mt-0.5 text-sm text-text-muted">
+            مركز تدريب وتجهيز واختبار الوكيل الذكي لنشاط «{business.name}».
+          </p>
+        </div>
+      </header>
+
+      {/* Streamed Trainer & Readiness Console */}
+      <Suspense fallback={<AgentTrainerSkeleton />}>
+        <AgentTrainerSection
+          organizationId={context.organizationId}
+          businessName={business.name}
+          enabledCapabilities={context.enabledCapabilities}
+          agentId={agent.id}
+          agentName={agent.name}
+          agentLocale={agent.locale}
+          agentTemperature={agent.temperature}
+          agentStatus={agent.status}
+        />
+      </Suspense>
+    </div>
+  )
+}
+
+async function AgentTrainerSection({
+  organizationId,
+  businessName,
+  enabledCapabilities,
+  agentId,
+  agentName,
+  agentLocale,
+  agentTemperature,
+  agentStatus,
+}: {
+  organizationId: string
+  businessName: string
+  enabledCapabilities: string[]
+  agentId: string
+  agentName: string | null
+  agentLocale: string | null
+  agentTemperature: number | null
+  agentStatus: string | null
+}) {
+  const supabase = await createClient()
+  const enabled = new Set(enabledCapabilities)
+
   const [readiness, { data: profile }, { data: versions }, { data: policies }] = await Promise.all([
-    calculateAgentReadiness(supabase, context.organizationId),
+    calculateAgentReadiness(supabase, organizationId),
     supabase
       .from('business_profiles')
       .select('business_type_id, industry, setup_description, public_phone_number, system_prompt_addition')
-      .eq('organization_id', context.organizationId)
+      .eq('organization_id', organizationId)
       .maybeSingle(),
     supabase
       .from('agent_prompt_versions')
       .select('version, status, published_at, system_prompt_addition')
-      .eq('agent_id', agent.id)
+      .eq('agent_id', agentId)
       .order('version', { ascending: false }),
     supabase
       .from('agent_tool_policies')
       .select('tool_name, is_allowed, requires_confirmation')
-      .eq('agent_id', agent.id),
+      .eq('agent_id', agentId),
   ])
 
   const policyByTool = new Map(
-    (policies ?? []).map((row) => [row.tool_name as string, row as { is_allowed: boolean; requires_confirmation: boolean }])
+    (policies ?? []).map((row) => [
+      row.tool_name as string,
+      row as { is_allowed: boolean; requires_confirmation: boolean },
+    ])
   )
   const published = (versions ?? []).find((row) => row.status === 'published') ?? null
 
   const data: AgentConsoleData = {
-    agentId: agent.id,
-    name: agent.name ?? 'FrontDesk',
-    locale: agent.locale ?? 'ar',
-    temperature: Number(agent.temperature ?? 0.2),
-    status: agent.status ?? 'active',
+    agentId,
+    name: agentName ?? 'FrontDesk',
+    locale: agentLocale ?? 'ar',
+    temperature: Number(agentTemperature ?? 0.2),
+    status: agentStatus ?? 'active',
     modelProvider: 'Gemini API (Google AI Studio)',
     publishedVersion: published?.version ?? null,
     publishedInstructions: published?.system_prompt_addition ?? '',
@@ -127,33 +183,48 @@ export default async function AgentPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <header className="flex items-start gap-3">
-        <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary-light/40">
-          <Bot size={22} className="text-primary-dark" aria-hidden="true" />
-        </span>
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-text">وكيل الذكاء الاصطناعي</h1>
-          <p className="mt-0.5 text-sm text-text-muted">
-            مركز تدريب وتجهيز واختبار الوكيل الذكي لنشاط «{business.name}».
-          </p>
-        </div>
-      </header>
-
-      <AgentTrainer
-        agentId={agent.id}
-        businessName={business.name}
-        initialReadiness={readiness}
-        consoleData={data}
-        initialProfile={{
-          businessTypeId: profile?.business_type_id || 'it_technology',
-          industry: profile?.industry || '',
-          setupDescription: profile?.setup_description || '',
-          publicPhoneNumber: profile?.public_phone_number || '',
-          systemPromptAddition: published?.system_prompt_addition || profile?.system_prompt_addition || '',
-        }}
-      />
-    </div>
+    <AgentTrainer
+      agentId={agentId}
+      businessName={businessName}
+      initialReadiness={readiness}
+      consoleData={data}
+      initialProfile={{
+        businessTypeId: profile?.business_type_id ?? '',
+        industry: profile?.industry ?? '',
+        setupDescription: profile?.setup_description ?? '',
+        publicPhoneNumber: profile?.public_phone_number ?? '',
+        systemPromptAddition: profile?.system_prompt_addition ?? '',
+      }}
+    />
   )
 }
 
+function AgentTrainerSkeleton() {
+  return (
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-3 animate-pulse">
+      <div className="space-y-5 lg:col-span-2">
+        <div className="rounded-2xl border border-border bg-surface p-5 space-y-4">
+          <div className="h-6 w-36 rounded bg-border" />
+          <div className="space-y-2">
+            <div className="h-4 w-full rounded bg-border/50" />
+            <div className="h-4 w-4/5 rounded bg-border/50" />
+          </div>
+          <div className="h-28 rounded-xl bg-border/30" />
+        </div>
+        <div className="rounded-2xl border border-border bg-surface p-5 space-y-4">
+          <div className="h-6 w-40 rounded bg-border" />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="h-20 rounded-xl bg-border/30" />
+            ))}
+          </div>
+        </div>
+      </div>
+      <div className="rounded-2xl border border-border bg-surface p-5 space-y-4">
+        <div className="h-6 w-28 rounded bg-border" />
+        <div className="h-80 rounded-xl bg-border/20" />
+        <div className="h-11 rounded-xl bg-border/40" />
+      </div>
+    </div>
+  )
+}

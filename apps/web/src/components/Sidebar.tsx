@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import {
   LayoutDashboard,
   MessageSquare,
@@ -197,12 +197,17 @@ function NavLink({
   pathname: string
   onClick: () => void
 }) {
+  const router = useRouter()
   const Icon = item.icon
   const active = pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(`${item.href}/`))
   return (
     <Link
       href={item.href}
+      prefetch={true}
       onClick={onClick}
+      onMouseEnter={() => {
+        router.prefetch(item.href)
+      }}
       className={`flex min-h-11 items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
         active ? 'bg-primary/25 text-white' : 'text-white/70 hover:bg-white/5 hover:text-white'
       }`}

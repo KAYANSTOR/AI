@@ -56,7 +56,7 @@ export function DashboardShell({
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
           <Header />
           <main className="min-w-0 flex-1 overflow-y-auto p-4 sm:p-6">
-            <div className="mx-auto max-w-6xl space-y-4">
+            <div className="mx-auto max-w-6xl space-y-4 animate-page-enter">
               {setupBanner}
               {children}
             </div>

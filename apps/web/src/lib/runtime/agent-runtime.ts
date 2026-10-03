@@ -221,7 +221,7 @@ export async function runAgentTurn(args: {
       .eq('conversation_id', args.conversationId)
       .order('created_at', { ascending: false })
       .limit(20),
-    buildBusinessSystemPrompt(args.supabase, args.organizationId, args.agentId),
+    buildBusinessSystemPrompt(args.supabase, args.organizationId, args.agentId, args.userText),
     getToolDefinitionsForAgent(args.supabase, args.organizationId, args.agentId),
   ])
   if (historyError) throw new Error(historyError.message)
@@ -412,7 +412,12 @@ export async function runAgentPreviewTurn(args: {
   }
 
   const [systemPrompt, toolSet] = await Promise.all([
-    buildBusinessSystemPrompt(args.supabase, args.organizationId, args.agentId),
+    buildBusinessSystemPrompt(
+      args.supabase,
+      args.organizationId,
+      args.agentId,
+      String(lastUser.content)
+    ),
     getToolDefinitionsForAgent(args.supabase, args.organizationId, args.agentId),
   ])
 

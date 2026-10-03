@@ -22,8 +22,6 @@ export const geminiProvider: AIProvider = {
     const apiKey = process.env.GEMINI_API_KEY
     if (!apiKey) throw new Error('GEMINI_API_KEY is required')
 
-    const model = process.env.GEMINI_MODEL || 'gemini-3.8-flash'
-
     const contents: GeminiContent[] = []
     for (const msg of input.messages) {
       if (msg.providerPayload && Array.isArray(msg.providerPayload)) {
@@ -90,29 +88,56 @@ export const geminiProvider: AIProvider = {
         }
       : undefined
 
-    const response = await fetch(
-  `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-goog-api-key': apiKey,
-        },
-        body: JSON.stringify({
-          systemInstruction,
-          contents,
-          tools,
-          generationConfig: {
-            maxOutputTokens: 1024,
-          },
-        }),
-      }
+    const candidateModels = Array.from(
+      new Set([process.env.GEMINI_MODEL || 'gemini-3-flash-preview', 'gemini-3-flash-preview', 'gemini-3.8-flash'])
     )
 
-    const data = (await response.json()) as GeminiResponse
-    if (!response.ok) {
-      const detail = data.error?.message ?? 'Gemini request failed'
-      throw new Error(`Gemini API error (${response.status}) using ${model}: ${detail}`)
+    let response: Response | null = null
+    let data: GeminiResponse | null = null
+    let lastError: string | null = null
+
+    for (const model of candidateModels) {
+      try {
+        const res = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-goog-api-key': apiKey,
+            },
+            body: JSON.stringify({
+              systemInstruction,
+              contents,
+              tools,
+              generationConfig: {
+                maxOutputTokens: 1024,
+                temperature: 0.3,
+              },
+            }),
+          }
+        )
+
+        const json = (await res.json()) as GeminiResponse
+        if (res.ok) {
+          response = res
+          data = json
+          break
+        } else {
+          lastError = json.error?.message || res.statusText
+          // If rate limited or service unavailable, try next candidate model
+          if (res.status === 429 || res.status === 503) {
+            continue
+          }
+          throw new Error(`Gemini API error (${res.status}) using ${model}: ${lastError}`)
+        }
+      } catch (err) {
+        lastError = err instanceof Error ? err.message : String(err)
+      }
+    }
+
+    if (!response || !data) {
+      throw new Error(`Gemini API error: ${lastError ?? 'All candidate models failed'}`)
     }
 
     const firstCandidate = data.candidates?.[0]

@@ -9,7 +9,6 @@ import { NETWORK_ERROR_MESSAGE, translateAuthError } from '@/lib/auth/messages'
 import { TextField } from '@/components/auth/field'
 import { BUSINESS_TYPES, DEFAULT_BUSINESS_TYPE } from '@/lib/capabilities/business-types'
 import { AuthProviderNotice } from '@/components/auth/provider-notice'
-import { getAuthRedirectUrl } from '@/lib/auth/redirect-url'
 
 // The FastPath lives at /onboarding; /dashboard/setup is only a compatibility redirect.
 const ONBOARDING_DESTINATION = '/onboarding'
@@ -30,34 +29,45 @@ export function SignupForm({ authConfigured }: { authConfigured: boolean }) {
     setError(null)
 
     try {
-      const supabase = createClient()
-      const { data, error: signUpError } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          // These metadata fields create the organization, owner membership,
-          // business profile and default capabilities (see migration 0004).
-          data: {
-            organization_name: companyName.trim(),
-            business_type_id: businessType,
-          },
-          emailRedirectTo: getAuthRedirectUrl(`/auth/callback?next=${encodeURIComponent(ONBOARDING_DESTINATION)}`),
-        },
+      // 1. Create and auto-confirm account via server API to bypass email rate limits
+      const registerRes = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: email.trim(),
+          password,
+          companyName: companyName.trim(),
+          businessTypeId: businessType,
+        }),
       })
 
-      if (signUpError) {
-        setError(translateAuthError(signUpError.message))
+      const registerData = await registerRes.json().catch(() => ({}))
+
+      if (!registerRes.ok) {
+        if (registerRes.status === 409 || registerData.error === 'user_already_registered') {
+          setError('هذا البريد مسجّل بالفعل. يمكنك تسجيل الدخول مباشرة.')
+        } else {
+          setError(registerData.message || translateAuthError(registerData.error))
+        }
         setLoading(false)
         return
       }
 
-      if (data.session) {
-        router.replace(ONBOARDING_DESTINATION)
+      // 2. Immediately sign in with the newly created and auto-confirmed credentials
+      const supabase = createClient()
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password,
+      })
+
+      if (signInError) {
+        // Fallback: redirect to login if client cookie couldn't be set directly
+        router.replace('/login?registered=1')
         return
       }
 
-      setAwaitingConfirmation(true)
-      setLoading(false)
+      // 3. User is signed in! Redirect to onboarding / dashboard
+      router.replace(ONBOARDING_DESTINATION)
     } catch {
       setError(NETWORK_ERROR_MESSAGE)
       setLoading(false)

@@ -204,8 +204,16 @@ export function AgentTrainer({
       content: text,
     }
 
+    const assistantMsgId = crypto.randomUUID()
+    const placeholderAssistant: ChatMessage = {
+      id: assistantMsgId,
+      role: 'assistant',
+      content: '',
+      savedFacts: [],
+    }
+
     const nextMessages = [...messages, userMessage]
-    setMessages(nextMessages)
+    setMessages([...nextMessages, placeholderAssistant])
     setInput('')
     setTrainError(null)
     setBusy(true)
@@ -221,32 +229,72 @@ export function AgentTrainer({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           agentId,
+          stream: true,
           messages: payloadMessages,
         }),
       })
 
-      const data = await response.json()
-      if (!response.ok || !data.reply) {
-        throw new Error(data.error || 'تعذّر إكمال المحادثة.')
+      if (!response.ok || !response.body) {
+        throw new Error('تعذّر الاتصال بخادم التدريب.')
       }
 
-      const assistantMessage: ChatMessage = {
-        id: crypto.randomUUID(),
-        role: 'assistant',
-        content: data.reply,
-        savedFacts: data.savedFacts || [],
-      }
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
+      let streamText = ''
+      let done = false
 
-      setMessages([...nextMessages, assistantMessage])
-      if (data.readiness) {
-        setReadiness(data.readiness)
-      }
-
-      if (data.savedFacts && data.savedFacts.length > 0) {
-        showToast(`تم حفظ ${data.savedFacts.length} معلومة جديدة في ذاكرة الوكيل!`)
+      while (!done) {
+        const { value, done: readerDone } = await reader.read()
+        done = readerDone
+        if (value) {
+          const chunkStr = decoder.decode(value, { stream: true })
+          const lines = chunkStr.split('\n')
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              const dataStr = line.slice(6).trim()
+              try {
+                const data = JSON.parse(dataStr)
+                if (data.type === 'token') {
+                  streamText += data.content
+                  setMessages((prev) =>
+                    prev.map((m) => (m.id === assistantMsgId ? { ...m, content: streamText } : m))
+                  )
+                } else if (data.type === 'token_reset') {
+                  streamText = data.content
+                  setMessages((prev) =>
+                    prev.map((m) => (m.id === assistantMsgId ? { ...m, content: streamText } : m))
+                  )
+                } else if (data.type === 'done') {
+                  setMessages((prev) =>
+                    prev.map((m) =>
+                      m.id === assistantMsgId
+                        ? {
+                            ...m,
+                            content: data.reply || streamText,
+                            savedFacts: data.savedFacts || [],
+                          }
+                        : m
+                    )
+                  )
+                  if (data.readiness) {
+                    setReadiness(data.readiness)
+                  }
+                  if (data.savedFacts && data.savedFacts.length > 0) {
+                    showToast(`تم استيعاب وحفظ ${data.savedFacts.length} معلومة مؤكدة في ذاكرة الوكيل.`)
+                  }
+                } else if (data.type === 'error') {
+                  throw new Error(data.error)
+                }
+              } catch {
+                // Ignore parse errors on partial chunks
+              }
+            }
+          }
+        }
       }
     } catch (err) {
       setTrainError(err instanceof Error ? err.message : 'تعذّر إرسال الرسالة.')
+      setMessages((prev) => prev.filter((m) => m.id !== assistantMsgId || m.content.length > 0))
     } finally {
       setBusy(false)
     }

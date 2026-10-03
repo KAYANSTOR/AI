@@ -3,6 +3,12 @@ import { z } from 'zod'
 import { createClient } from '@/lib/supabase/server'
 import { getDashboardContext } from '@/lib/dashboard/context'
 import { calculateAgentReadiness } from '@/lib/ai/readiness'
+import {
+  saveValidatedKnowledge,
+  saveValidatedServices,
+  type ValidatedFact,
+  type ValidatedServiceDraft,
+} from '@/lib/knowledge/layer'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -10,6 +16,7 @@ export const maxDuration = 60
 
 const bodySchema = z.object({
   agentId: z.string().uuid(),
+  stream: z.boolean().optional(),
   messages: z
     .array(
       z.object({
@@ -21,52 +28,62 @@ const bodySchema = z.object({
     .max(50),
 })
 
-type ExtractedFact = {
-  title: string
-  category: 'business_info' | 'service_info' | 'pricing' | 'policy' | 'faq' | 'general'
-  content: string
-}
+const KNOWLEDGE_DELIMITER = '---KNOWLEDGE_EXTRACT---'
 
-type NewServiceDraft = {
-  name: string
-  price?: number | null
-  currency?: string | null
-  durationMinutes?: number | null
-  description?: string | null
-}
-
-type ModelTrainingOutput = {
-  reply: string
-  extractedFacts?: ExtractedFact[]
-  newServices?: NewServiceDraft[]
+type ModelExtractionBlock = {
+  extractedFacts?: ValidatedFact[]
+  newServices?: ValidatedServiceDraft[]
   systemPromptAddition?: string | null
 }
 
-function parseModelJson(rawText: string): ModelTrainingOutput {
-  const clean = rawText.trim()
+function parseExtractionBlock(rawText: string): { reply: string; extraction: ModelExtractionBlock } {
+  const delimIndex = rawText.indexOf(KNOWLEDGE_DELIMITER)
+  if (delimIndex === -1) {
+    // Check if the whole text is a JSON block
+    const jsonMatch = rawText.match(/```(?:json)?\s*([\s\S]*?)\s*```/i)
+    if (jsonMatch) {
+      try {
+        const parsed = JSON.parse(jsonMatch[1])
+        if (parsed && typeof parsed.reply === 'string') {
+          return {
+            reply: parsed.reply.trim(),
+            extraction: {
+              extractedFacts: Array.isArray(parsed.extractedFacts) ? parsed.extractedFacts : [],
+              newServices: Array.isArray(parsed.newServices) ? parsed.newServices : [],
+              systemPromptAddition:
+                typeof parsed.systemPromptAddition === 'string' ? parsed.systemPromptAddition : null,
+            },
+          }
+        }
+      } catch {
+        // Fallback
+      }
+    }
+    return {
+      reply: rawText.replace(/```(?:json)?[\s\S]*?```/g, '').trim() || rawText.trim(),
+      extraction: {},
+    }
+  }
 
-  // Match ```json ... ``` block
-  const jsonMatch = clean.match(/```(?:json)?\s*([\s\S]*?)\s*```/i)
-  const candidate = jsonMatch ? jsonMatch[1] : clean
+  const reply = rawText.slice(0, delimIndex).trim()
+  const trailing = rawText.slice(delimIndex + KNOWLEDGE_DELIMITER.length).trim()
+
+  const jsonMatch = trailing.match(/```(?:json)?\s*([\s\S]*?)\s*```/i)
+  const candidate = jsonMatch ? jsonMatch[1] : trailing
 
   try {
     const parsed = JSON.parse(candidate)
-    if (parsed && typeof parsed.reply === 'string') {
-      return {
-        reply: parsed.reply,
+    return {
+      reply,
+      extraction: {
         extractedFacts: Array.isArray(parsed.extractedFacts) ? parsed.extractedFacts : [],
         newServices: Array.isArray(parsed.newServices) ? parsed.newServices : [],
         systemPromptAddition:
           typeof parsed.systemPromptAddition === 'string' ? parsed.systemPromptAddition : null,
-      }
+      },
     }
   } catch {
-    // If not JSON, use the raw text as the conversational reply
-  }
-
-  return {
-    reply: clean.replace(/```(?:json)?[\s\S]*?```/g, '').trim() || clean,
-    extractedFacts: [],
+    return { reply, extraction: {} }
   }
 }
 
@@ -115,7 +132,7 @@ export async function POST(req: Request) {
         .maybeSingle(),
       supabase
         .from('business_profiles')
-        .select('setup_description, system_prompt_addition, public_phone_number')
+        .select('setup_description, system_prompt_addition, public_phone_number, industry')
         .eq('organization_id', context.organizationId)
         .maybeSingle(),
       supabase
@@ -137,48 +154,55 @@ export async function POST(req: Request) {
     .map((h) => `${dayNames[h.day_of_week]}: ${h.open_time?.slice(0, 5)}–${h.close_time?.slice(0, 5)}`)
     .join('، ')
 
-  const systemInstruction = `أنت المساعد الذكي لتدريب وتجهيز وكيل الذكاء الاصطناعي الخاص بنشاط «${businessName}».
+  const systemInstruction = `أنت المساعد الذكي لتدريب وتجهيز وكيل الذكاء الاصطناعي لنشاط «${businessName}».
 مهمتك:
-إجراء حوار ودي، ذكي، وسلس جداً مع صاحب النشاط لاستخراج وترتيب معلومات شركته، لكي يتمكن الوكيل لاحقاً من الرد على عملاء الشركة عبر قنوات التواصل (مثل WhatsApp والهاتف).
+إجراء حوار تفاعلي ذكي وسلس مع صاحب النشاط لاستخراج وتأكيد وترتيب معلومات شركته بدقة، ليتمكن الوكيل لاحقاً من خدمة عملاء الشركة (مثلاً عبر WhatsApp والهاتف).
 
-قواعد الحوار والشخصية:
-1. التحدث باللغة العربية الطبيعية، بأسلوب ودود، حبوب، محترم، وذكي. تفهم اللهجات العامية والأخطاء الإملائية.
-2. لا تسأل المستخدم عن كل شيء دفعة واحدة أبداً! اسأل سؤالاً واحداً أو سؤالين مترابطين في كل رسالة فقط.
-3. تفاعل مع إجابة المستخدم: أظهر فهمك للمعلومة وشجعه بكلمات طيبة، ثم انتقل بسلاسة إلى النقطة التالية الأكثر أهمية.
-4. اكتشف المعلومات الناقصة تلقائياً واطلبها في الوقت المناسب (اسم الشركة ووصفها، الخدمات والمنتجات، الأسعار، أوقات العمل وأيام الإجازة، الفروع والمواقع، أرقام التواصل، طرق وشروط الحجز والإلغاء، الأسئلة الشائعة، متى يتم التحويل لموظف بشري، ونبرة التعامل).
-5. إذا كانت هناك معلومات معروفة مسبقاً، لا تعيد السؤال عنها إلا للتأكيد أو التفصيل.
+قواعد السلوك والحوار:
+1. التحدث باللغة العربية الطبيعية، بأسلوب مرحّب، ذكي، وودود يفهم اللهجات العربية العامية.
+2. اطرح سؤالاً واحداً أو سؤالين مترابطين في كل رسالة فقط (لا تغرق المستخدم بأسئلة متعددة).
+3. أظهر فهمك لكلام المستخدم وشجعه بكلمات طيبة، ثم اسأله عن المعلومة الناقصة التالية.
+4. افصل بدقة بين:
+   - سياق الحوار والمجاملات (مثل: أهلاً، شكراً، تمام) -> لا تحفظه كمعرفة.
+   - المعرفة المؤكدة للشركة -> احفظها بدقة في extractedFacts.
+   - المعلومات غير المؤكدة أو الغامضة أو المتناقضة -> لا تحفظها، بل اسأل صاحب الشركة للتأكيد والتوضيح أولاً.
 
 المعلومات المعروفة حالياً عن الشركة:
 - اسم النشاط: ${businessName}
-- الخدمات المسجلة: ${(services ?? []).map((s) => s.name).join('، ') || 'لا توجد خدمات مسجلة بعد'}
+- المجال: ${profile?.industry || 'غير محدد'}
+- الخدمات المسجلة: ${(services ?? []).map((s) => s.name).join('، ') || 'لا توجد خدمات بعد'}
 - أوقات العمل المسجلة: ${hoursSummary || 'غير محددة بعد'}
 - الجاهزية الحالية: ${readiness.score}%
-- أبرز المعلومات الناقصة حالياً: ${missingSummary || 'اكتملت المعلومات الأساسية'}
+- أبرز النواقص التي يُنصح بالسؤال عنها: ${missingSummary || 'اكتملت المعلومات الأساسية'}
 
-صيغة الإخراج المطلوبة:
-يجب أن ترجع النتيجة ككتلة JSON داخل علامات \`\`\`json ... \`\`\` بالهيكل التالي:
+طريقة الإخراج الإلزامية:
+أولاً: اكتب ردك العربي المباشر لصاحب الشركة بشكل طبيعي جداً.
+ثم في نهاية الرد تماماً ضع السطر التالي بالضبط:
+${KNOWLEDGE_DELIMITER}
+ثم اكتب كتلة JSON بهذه البنية:
+\`\`\`json
 {
-  "reply": "نص ردك العربي الودود والمحاور، يرحب بالإجابة ويطرح السؤال التالي",
   "extractedFacts": [
     {
-      "title": "عنوان واضح وموجز للمعلومة المستخلصة من رسالة المستخدم الأخيرة (مثل: أوقات العمل الرسمية، سياسة الإلغاء، خدمة التنظيف الشامل، عنوان الفرع الرئيسي)",
+      "title": "عنوان موجز للمعلومة المؤكدة (مثال: هوية ونشاط الشركة، أوقات العمل الرسمية، سياسة الإلغاء، أسعار تنظيم الأعراس)",
       "category": "business_info" | "service_info" | "pricing" | "policy" | "faq" | "general",
-      "content": "شرح المعلومة المستخلصة بالتفصيل والصيغة الدقيقة المرتبة"
+      "content": "شرح المعلومة بالتفصيل والوضوح كما ذكرها المستخدم"
     }
   ],
   "newServices": [
     {
-      "name": "اسم الخدمة إن ذكرت خدمة جديدة",
-      "price": 150,
+      "name": "اسم الخدمة",
+      "price": 100,
       "currency": "SAR",
       "durationMinutes": 60,
       "description": "وصف الخدمة"
     }
   ],
-  "systemPromptAddition": "أي توجيهات أسلوب ونبرة أو قواعد تحويل لموظف بشري إن ذكرت في الحوار"
+  "systemPromptAddition": "أي توجيهات أسلوب أو نبرة أو سياسات تحويل لموظف إن ذكرت"
 }
+\`\`\`
 
-إذا لم تتضمن رسالة المستخدم الأخيرة أي معلومة جديدة قابلة للحفظ (مثلاً مجرد تحية أو استفسار)، اجعل extractedFacts مصفوفة فارغة [] وركز على السؤال التالي.`
+إذا لم يذكر المستخدم في رسالته الأخيرة أي معلومة جديدة مؤكدة للشركة، اجعل extractedFacts مصفوفة فارغة [].`
 
   const modelMessages = [
     {
@@ -189,7 +213,7 @@ export async function POST(req: Request) {
       role: 'model',
       parts: [
         {
-          text: '```json\n{"reply": "أهلاً بك 👋 أنا مساعدك الذكي لشركتك. سأساعدك في تجهيز معلومات شركتك حتى أتمكن من الرد على عملائك بطريقة صحيحة وطبيعية. سأطرح عليك بعض الأسئلة، وأثناء حديثنا سأكتشف المعلومات التي أحتاجها وأرتبها تلقائيًا. ما اسم شركتك وما الخدمة أو النشاط الرئيسي الذي تقدمونه؟", "extractedFacts": []}\n```',
+          text: `أهلاً بك 👋 أنا مساعدك الذكي لشركتك. سأساعدك في تجهيز معلومات شركتك حتى أتمكن من الرد على عملائك بطريقة صحيحة وطبيعية. سأطرح عليك بعض الأسئلة، وأثناء حديثنا سأكتشف المعلومات التي أحتاجها وأرتبها تلقائيًا. ما اسم شركتك وما الخدمة أو النشاط الرئيسي الذي تقدمونه؟\n${KNOWLEDGE_DELIMITER}\n\`\`\`json\n{"extractedFacts": []}\n\`\`\``,
         },
       ],
     },
@@ -199,12 +223,210 @@ export async function POST(req: Request) {
     })),
   ]
 
-  const model = process.env.GEMINI_MODEL || 'gemini-3.8-flash'
+  const candidateModels = Array.from(
+    new Set([
+      process.env.GEMINI_MODEL || 'gemini-3-flash-preview',
+      'gemini-3-flash-preview',
+      'gemini-3.8-flash',
+    ])
+  )
+
+  // If streaming is requested:
+  if (body.stream) {
+    let geminiRes: Response | null = null
+
+    for (const model of candidateModels) {
+      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
+        model
+      )}:streamGenerateContent?alt=sse`
+
+      try {
+        const res = await fetch(geminiUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-goog-api-key': apiKey,
+          },
+          body: JSON.stringify({
+            contents: modelMessages,
+            generationConfig: {
+              maxOutputTokens: 2048,
+              temperature: 0.3,
+            },
+          }),
+        })
+
+        if (res.ok && res.body) {
+          geminiRes = res
+          break
+        }
+
+        if (res.status === 429 || res.status === 503) {
+          continue
+        }
+      } catch {
+        continue
+      }
+    }
+
+    if (!geminiRes || !geminiRes.body) {
+      return NextResponse.json({ error: 'gemini_stream_failed' }, { status: 502 })
+    }
+
+    const encoder = new TextEncoder()
+    const reader = geminiRes.body.getReader()
+    const decoder = new TextDecoder()
+
+    const stream = new ReadableStream({
+      async start(controller) {
+        let fullAccumulated = ''
+        let reachedDelimiter = false
+
+        try {
+          while (true) {
+            const { done, value } = await reader.read()
+            if (done) break
+
+            const chunkStr = decoder.decode(value, { stream: true })
+            const lines = chunkStr.split('\n')
+
+            for (const line of lines) {
+              if (line.startsWith('data: ')) {
+                const dataJson = line.slice(6).trim()
+                if (dataJson === '[DONE]') continue
+                try {
+                  const parsedChunk = JSON.parse(dataJson)
+                  const textPart =
+                    parsedChunk?.candidates?.[0]?.content?.parts?.[0]?.text || ''
+
+                  if (textPart) {
+                    fullAccumulated += textPart
+
+                    if (!reachedDelimiter) {
+                      const delimIdx = fullAccumulated.indexOf(KNOWLEDGE_DELIMITER)
+                      if (delimIdx !== -1) {
+                        reachedDelimiter = true
+                        // Emit the remaining visible text before the delimiter
+                        const beforeDelim = fullAccumulated.slice(0, delimIdx)
+                        controller.enqueue(
+                          encoder.encode(
+                            `data: ${JSON.stringify({ type: 'token_reset', content: beforeDelim.trim() })}\n\n`
+                          )
+                        )
+                      } else {
+                        // Stream token to client
+                        controller.enqueue(
+                          encoder.encode(
+                            `data: ${JSON.stringify({ type: 'token', content: textPart })}\n\n`
+                          )
+                        )
+                      }
+                    }
+                  }
+                } catch {
+                  // Skip invalid JSON lines
+                }
+              }
+            }
+          }
+
+          // Complete response received: parse and persist knowledge
+          const { reply, extraction } = parseExtractionBlock(fullAccumulated)
+
+          let savedFacts: Array<{ title: string; category: string }> = []
+
+          // Persist confirmed facts via Knowledge Layer
+          if (extraction.extractedFacts && extraction.extractedFacts.length > 0) {
+            const persisted = await saveValidatedKnowledge(
+              supabase,
+              context.organizationId,
+              extraction.extractedFacts
+            )
+            savedFacts = persisted.map((p) => ({ title: p.title, category: p.category }))
+          }
+
+          // Persist services if any
+          if (extraction.newServices && extraction.newServices.length > 0) {
+            const persistedServices = await saveValidatedServices(
+              supabase,
+              context.organizationId,
+              extraction.newServices
+            )
+            for (const s of persistedServices) {
+              savedFacts.push({ title: `خدمة: ${s.name}`, category: 'service_info' })
+            }
+          }
+
+          // Persist system prompt additions if any
+          if (extraction.systemPromptAddition && extraction.systemPromptAddition.trim()) {
+            const addition = extraction.systemPromptAddition.trim()
+            const currentAddition = profile?.system_prompt_addition || ''
+            const merged = currentAddition ? `${currentAddition}\n${addition}` : addition
+
+            await supabase
+              .from('business_profiles')
+              .update({
+                system_prompt_addition: merged,
+                updated_at: new Date().toISOString(),
+              })
+              .eq('organization_id', context.organizationId)
+
+            await supabase.rpc('publish_agent_prompt', {
+              p_agent_id: agent.id,
+              p_system_prompt_addition: merged,
+            })
+          }
+
+          // Recalculate agent readiness
+          const updatedReadiness = await calculateAgentReadiness(supabase, context.organizationId)
+
+          // Send final completion event
+          controller.enqueue(
+            encoder.encode(
+              `data: ${JSON.stringify({
+                type: 'done',
+                reply: reply || fullAccumulated.trim(),
+                savedFacts,
+                readiness: updatedReadiness,
+              })}\n\n`
+            )
+          )
+        } catch (streamErr) {
+          console.error('Error during training stream handling:', streamErr)
+          controller.enqueue(
+            encoder.encode(
+              `data: ${JSON.stringify({
+                type: 'error',
+                error: 'حدث انقطاع في المعالجة.',
+              })}\n\n`
+            )
+          )
+        } finally {
+          controller.close()
+        }
+      },
+    })
+
+    return new Response(stream, {
+      headers: {
+        'Content-Type': 'text/event-stream; charset=utf-8',
+        'Cache-Control': 'no-cache, no-transform',
+        Connection: 'keep-alive',
+      },
+    })
+  }
+
+  // Non-streaming fallback
   let rawText = ''
-  try {
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
-      {
+  let lastError = ''
+
+  for (const model of candidateModels) {
+    const nonStreamUrl = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
+      model
+    )}:generateContent`
+
+    try {
+      const response = await fetch(nonStreamUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -214,105 +436,60 @@ export async function POST(req: Request) {
           contents: modelMessages,
           generationConfig: {
             maxOutputTokens: 2048,
+            temperature: 0.3,
           },
         }),
-      }
-    )
+      })
 
-    if (!response.ok) {
-      const errJson = await response.json().catch(() => ({}))
-      console.error('Gemini training call error:', response.status, errJson)
-      return NextResponse.json(
-        { error: 'gemini_error', details: errJson?.error?.message || response.statusText },
-        { status: 502 }
-      )
-    }
-
-    const data = await response.json()
-    rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text || ''
-  } catch (err) {
-    console.error('Gemini training request failed:', err)
-    return NextResponse.json({ error: 'ai_request_failed' }, { status: 502 })
-  }
-
-  const parsed = parseModelJson(rawText)
-  const savedFacts: Array<{ title: string; category: string }> = []
-
-  // Persist extracted facts into knowledge_base
-  if (parsed.extractedFacts && parsed.extractedFacts.length > 0) {
-    for (const fact of parsed.extractedFacts) {
-      if (!fact.title || !fact.content) continue
-      const title = fact.title.trim().slice(0, 255)
-      const content = fact.content.trim()
-      const category = ['business_info', 'service_info', 'pricing', 'policy', 'faq', 'general'].includes(
-        fact.category
-      )
-        ? fact.category
-        : 'general'
-
-      // Check for existing item with identical or very similar title in this org
-      const { data: existing } = await supabase
-        .from('knowledge_base')
-        .select('id')
-        .eq('organization_id', context.organizationId)
-        .ilike('title', title)
-        .maybeSingle()
-
-      if (existing?.id) {
-        await supabase
-          .from('knowledge_base')
-          .update({
-            content,
-            category,
-            is_active: true,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', existing.id)
+      if (response.ok) {
+        const data = await response.json()
+        rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text || ''
+        break
       } else {
-        await supabase.from('knowledge_base').insert({
-          organization_id: context.organizationId,
-          title,
-          content,
-          category,
-          is_active: true,
-          updated_at: new Date().toISOString(),
-        })
+        const errJson = await response.json().catch(() => ({}))
+        lastError = errJson?.error?.message || response.statusText
+        if (response.status === 429 || response.status === 503) {
+          continue
+        }
+        return NextResponse.json({ error: 'gemini_error', details: lastError }, { status: 502 })
       }
-      savedFacts.push({ title, category })
+    } catch (err) {
+      lastError = err instanceof Error ? err.message : String(err)
     }
   }
 
-  // Persist new services if extracted
-  if (parsed.newServices && parsed.newServices.length > 0) {
-    for (const s of parsed.newServices) {
-      if (!s.name || !s.name.trim()) continue
-      const name = s.name.trim()
+  if (!rawText) {
+    return NextResponse.json({ error: 'ai_request_failed', details: lastError }, { status: 502 })
+  }
 
-      const { data: existingSvc } = await supabase
-        .from('services')
-        .select('id')
-        .eq('organization_id', context.organizationId)
-        .ilike('name', name)
-        .maybeSingle()
+  const { reply, extraction } = parseExtractionBlock(rawText)
+  let savedFacts: Array<{ title: string; category: string }> = []
 
-      if (!existingSvc) {
-        await supabase.from('services').insert({
-          organization_id: context.organizationId,
-          name,
-          description: s.description || null,
-          price_amount: s.price != null ? Number(s.price) : null,
-          price_currency: s.currency || 'SAR',
-          duration_minutes: s.durationMinutes != null ? Number(s.durationMinutes) : 30,
-          is_active: true,
-        })
-        savedFacts.push({ title: `خدمة جديدة: ${name}`, category: 'service_info' })
-      }
+  // Persist confirmed facts via Knowledge Layer
+  if (extraction.extractedFacts && extraction.extractedFacts.length > 0) {
+    const persisted = await saveValidatedKnowledge(
+      supabase,
+      context.organizationId,
+      extraction.extractedFacts
+    )
+    savedFacts = persisted.map((p) => ({ title: p.title, category: p.category }))
+  }
+
+  // Persist services if any
+  if (extraction.newServices && extraction.newServices.length > 0) {
+    const persistedServices = await saveValidatedServices(
+      supabase,
+      context.organizationId,
+      extraction.newServices
+    )
+    for (const s of persistedServices) {
+      savedFacts.push({ title: `خدمة: ${s.name}`, category: 'service_info' })
     }
   }
 
-  // Persist system prompt additions if provided
-  if (parsed.systemPromptAddition && parsed.systemPromptAddition.trim()) {
-    const addition = parsed.systemPromptAddition.trim()
+  // Persist system prompt additions if any
+  if (extraction.systemPromptAddition && extraction.systemPromptAddition.trim()) {
+    const addition = extraction.systemPromptAddition.trim()
     const currentAddition = profile?.system_prompt_addition || ''
     const merged = currentAddition ? `${currentAddition}\n${addition}` : addition
 
@@ -324,18 +501,17 @@ export async function POST(req: Request) {
       })
       .eq('organization_id', context.organizationId)
 
-    // Publish to agent prompt versions
     await supabase.rpc('publish_agent_prompt', {
       p_agent_id: agent.id,
       p_system_prompt_addition: merged,
     })
   }
 
-  // Recalculate agent readiness after any new data has been saved
+  // Recalculate agent readiness
   const updatedReadiness = await calculateAgentReadiness(supabase, context.organizationId)
 
   return NextResponse.json({
-    reply: parsed.reply,
+    reply: reply || rawText.trim(),
     savedFacts,
     readiness: updatedReadiness,
   })
