@@ -219,10 +219,12 @@ export function AgentTrainer({
     setBusy(true)
 
     try {
-      const payloadMessages = nextMessages.map((m) => ({
-        role: m.role,
-        content: m.content,
-      }))
+      const payloadMessages = nextMessages
+        .filter((m) => m && typeof m.content === 'string' && m.content.trim().length > 0)
+        .map((m) => ({
+          role: m.role,
+          content: m.content.trim(),
+        }))
 
       const response = await fetch('/api/agent/train', {
         method: 'POST',
@@ -234,8 +236,14 @@ export function AgentTrainer({
         }),
       })
 
-      if (!response.ok || !response.body) {
-        throw new Error('تعذّر الاتصال بخادم التدريب.')
+      if (!response.ok) {
+        const errorJson = await response.json().catch(() => ({}))
+        const errorMsg = errorJson?.details || errorJson?.error || 'تعذّر الاتصال بخادم التدريب.'
+        throw new Error(errorMsg)
+      }
+
+      if (!response.body) {
+        throw new Error('لم يتم استلام تدفق الرد من الخادم.')
       }
 
       const reader = response.body.getReader()

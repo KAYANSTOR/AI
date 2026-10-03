@@ -21,12 +21,47 @@ const bodySchema = z.object({
     .array(
       z.object({
         role: z.enum(['user', 'assistant']),
-        content: z.string().trim().min(1).max(5000),
+        content: z.string(),
       })
     )
-    .min(1)
-    .max(50),
+    .min(1),
 })
+
+function normalizeGeminiMessages(messages: Array<{ role: 'user' | 'assistant'; content: string }>) {
+  const valid = messages
+    .filter((m) => m && typeof m.content === 'string' && m.content.trim().length > 0)
+    .map((m) => ({
+      role: m.role === 'assistant' ? ('model' as const) : ('user' as const),
+      content: m.content.trim(),
+    }))
+
+  if (valid.length === 0) return []
+
+  // Retain the last 30 turns to avoid exceeding context while preserving recency
+  const sliced = valid.slice(-30)
+
+  const merged: Array<{ role: 'user' | 'model'; parts: Array<{ text: string }> }> = []
+  for (const m of sliced) {
+    if (merged.length > 0 && merged[merged.length - 1].role === m.role) {
+      merged[merged.length - 1].parts[0].text += '\n\n' + m.content
+    } else {
+      merged.push({
+        role: m.role,
+        parts: [{ text: m.content }],
+      })
+    }
+  }
+
+  // Ensure first message is user for Gemini API
+  if (merged.length > 0 && merged[0].role === 'model') {
+    merged.unshift({
+      role: 'user',
+      parts: [{ text: 'مرحباً، أود بدء تدريب الوكيل لمعلومات الشركة.' }],
+    })
+  }
+
+  return merged
+}
 
 const KNOWLEDGE_DELIMITER = '---KNOWLEDGE_EXTRACT---'
 
@@ -204,36 +239,24 @@ ${KNOWLEDGE_DELIMITER}
 
 إذا لم يذكر المستخدم في رسالته الأخيرة أي معلومة جديدة مؤكدة للشركة، اجعل extractedFacts مصفوفة فارغة [].`
 
-  const modelMessages = [
-    {
-      role: 'user',
-      parts: [{ text: systemInstruction }],
-    },
-    {
-      role: 'model',
-      parts: [
-        {
-          text: `أهلاً بك 👋 أنا مساعدك الذكي لشركتك. سأساعدك في تجهيز معلومات شركتك حتى أتمكن من الرد على عملائك بطريقة صحيحة وطبيعية. سأطرح عليك بعض الأسئلة، وأثناء حديثنا سأكتشف المعلومات التي أحتاجها وأرتبها تلقائيًا. ما اسم شركتك وما الخدمة أو النشاط الرئيسي الذي تقدمونه؟\n${KNOWLEDGE_DELIMITER}\n\`\`\`json\n{"extractedFacts": []}\n\`\`\``,
-        },
-      ],
-    },
-    ...body.messages.map((m) => ({
-      role: m.role === 'assistant' ? 'model' : 'user',
-      parts: [{ text: m.content }],
-    })),
-  ]
+  const normalizedContents = normalizeGeminiMessages(body.messages)
+  if (normalizedContents.length === 0) {
+    return NextResponse.json({ error: 'messages_empty' }, { status: 400 })
+  }
 
   const candidateModels = Array.from(
     new Set([
-      process.env.GEMINI_MODEL || 'gemini-3-flash-preview',
+      process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite-preview',
+      'gemini-3.1-flash-lite-preview',
+      'gemini-3.5-flash',
       'gemini-3-flash-preview',
-      'gemini-3.8-flash',
     ])
   )
 
   // If streaming is requested:
   if (body.stream) {
     let geminiRes: Response | null = null
+    let lastStreamError = ''
 
     for (const model of candidateModels) {
       const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
@@ -248,7 +271,10 @@ ${KNOWLEDGE_DELIMITER}
             'x-goog-api-key': apiKey,
           },
           body: JSON.stringify({
-            contents: modelMessages,
+            systemInstruction: {
+              parts: [{ text: systemInstruction }],
+            },
+            contents: normalizedContents,
             generationConfig: {
               maxOutputTokens: 2048,
               temperature: 0.3,
@@ -261,16 +287,17 @@ ${KNOWLEDGE_DELIMITER}
           break
         }
 
-        if (res.status === 429 || res.status === 503) {
-          continue
-        }
-      } catch {
+        const errJson = await res.json().catch(() => ({}))
+        lastStreamError = errJson?.error?.message || res.statusText
+        continue
+      } catch (e) {
+        lastStreamError = e instanceof Error ? e.message : String(e)
         continue
       }
     }
 
     if (!geminiRes || !geminiRes.body) {
-      return NextResponse.json({ error: 'gemini_stream_failed' }, { status: 502 })
+      return NextResponse.json({ error: 'gemini_stream_failed', details: lastStreamError }, { status: 502 })
     }
 
     const encoder = new TextEncoder()
@@ -433,7 +460,10 @@ ${KNOWLEDGE_DELIMITER}
           'x-goog-api-key': apiKey,
         },
         body: JSON.stringify({
-          contents: modelMessages,
+          systemInstruction: {
+            parts: [{ text: systemInstruction }],
+          },
+          contents: normalizedContents,
           generationConfig: {
             maxOutputTokens: 2048,
             temperature: 0.3,
