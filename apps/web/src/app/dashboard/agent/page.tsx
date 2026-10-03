@@ -4,8 +4,9 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { getDashboardContext } from '@/lib/dashboard/context'
 import { TOOL_POLICIES } from '@/lib/ai/registry'
-import { AgentConsole, type AgentConsoleData } from './agent-console'
-import { AgentPlayground } from './agent-playground'
+import type { AgentConsoleData } from './agent-console'
+import { AgentTrainer } from './agent-trainer'
+import { calculateAgentReadiness } from '@/lib/ai/readiness'
 import { ar } from '@/lib/i18n/ar'
 
 export const dynamic = 'force-dynamic'
@@ -19,7 +20,7 @@ export default async function AgentPage() {
   if (!context.businessId) {
     return (
       <div className="space-y-4">
-        <h1 className="text-2xl font-bold tracking-tight text-text">الوكيل الذكي</h1>
+        <h1 className="text-2xl font-bold tracking-tight text-text">وكيل الذكاء الاصطناعي</h1>
         <p className="rounded-xl border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-text">
           لا يوجد نشاط مُهيّأ لهذه الشركة بعد.{' '}
           <Link href="/onboarding" className="font-semibold underline">
@@ -41,7 +42,7 @@ export default async function AgentPage() {
   if (!business) {
     return (
       <div className="space-y-4">
-        <h1 className="text-2xl font-bold tracking-tight text-text">الوكيل الذكي</h1>
+        <h1 className="text-2xl font-bold tracking-tight text-text">وكيل الذكاء الاصطناعي</h1>
         <p className="rounded-xl border border-error/40 bg-error/10 px-4 py-3 text-sm text-text">
           تعذّر تحميل النشاط الحالي.
         </p>
@@ -64,7 +65,7 @@ export default async function AgentPage() {
   if (agentError) {
     return (
       <div className="space-y-4">
-        <h1 className="text-2xl font-bold tracking-tight text-text">الوكيل الذكي</h1>
+        <h1 className="text-2xl font-bold tracking-tight text-text">وكيل الذكاء الاصطناعي</h1>
         <p className="rounded-xl border border-error/40 bg-error/10 px-4 py-3 text-sm text-text">
           {ar.errors.load}
         </p>
@@ -74,7 +75,13 @@ export default async function AgentPage() {
 
   if (!agent) redirect('/onboarding')
 
-  const [{ data: versions }, { data: policies }] = await Promise.all([
+  const [readiness, { data: profile }, { data: versions }, { data: policies }] = await Promise.all([
+    calculateAgentReadiness(supabase, context.organizationId),
+    supabase
+      .from('business_profiles')
+      .select('business_type_id, industry, setup_description, public_phone_number, system_prompt_addition')
+      .eq('organization_id', context.organizationId)
+      .maybeSingle(),
     supabase
       .from('agent_prompt_versions')
       .select('version, status, published_at, system_prompt_addition')
@@ -122,19 +129,31 @@ export default async function AgentPage() {
   return (
     <div className="space-y-6">
       <header className="flex items-start gap-3">
-        <span className="flex h-11 w-11 items-center justify-center rounded-lg bg-primary-light/40">
+        <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary-light/40">
           <Bot size={22} className="text-primary-dark" aria-hidden="true" />
         </span>
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-text">الوكيل الذكي</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-text">وكيل الذكاء الاصطناعي</h1>
           <p className="mt-0.5 text-sm text-text-muted">
-            اضبط هوية الوكيل وتعليماته وأدواته المسموحة لنشاط «{business.name}».
+            مركز تدريب وتجهيز واختبار الوكيل الذكي لنشاط «{business.name}».
           </p>
         </div>
       </header>
 
-      <AgentPlayground agentId={agent.id} />
-      <AgentConsole data={data} />
+      <AgentTrainer
+        agentId={agent.id}
+        businessName={business.name}
+        initialReadiness={readiness}
+        consoleData={data}
+        initialProfile={{
+          businessTypeId: profile?.business_type_id || 'it_technology',
+          industry: profile?.industry || '',
+          setupDescription: profile?.setup_description || '',
+          publicPhoneNumber: profile?.public_phone_number || '',
+          systemPromptAddition: published?.system_prompt_addition || profile?.system_prompt_addition || '',
+        }}
+      />
     </div>
   )
 }
+

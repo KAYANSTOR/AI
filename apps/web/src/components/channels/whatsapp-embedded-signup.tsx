@@ -94,6 +94,34 @@ export function WhatsAppEmbeddedSignupButton({
   const sessionRef = useRef<SessionPayload | null>(null)
   const codeRef = useRef<string | null>(null)
 
+  const tryComplete = useCallback(async () => {
+    const code = codeRef.current
+    const session = sessionRef.current
+    if (!code || !session?.phone_number_id || !session?.waba_id) return
+
+    setBusy(true)
+    try {
+      const result = await completeWhatsAppEmbeddedSignupAction({
+        code,
+        phoneNumberId: session.phone_number_id,
+        wabaId: session.waba_id,
+        businessPortfolioId: session.business_id ?? null,
+      })
+      if (!result.ok) {
+        onError?.(result.error ?? 'تعذّر إتمام الربط.')
+        return
+      }
+      onSuccess?.(result.message ?? 'تم ربط واتساب بنجاح.')
+      onRefresh?.()
+    } catch {
+      onError?.('تعذّر إتمام الربط. حاول مرة أخرى.')
+    } finally {
+      setBusy(false)
+      codeRef.current = null
+      sessionRef.current = null
+    }
+  }, [onError, onRefresh, onSuccess])
+
   useEffect(() => {
     if (!appId || !configId) return
 
@@ -130,36 +158,7 @@ export function WhatsAppEmbeddedSignupButton({
       cancelled = true
       window.removeEventListener('message', onMessage)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [appId, configId])
-
-  const tryComplete = useCallback(async () => {
-    const code = codeRef.current
-    const session = sessionRef.current
-    if (!code || !session?.phone_number_id || !session?.waba_id) return
-
-    setBusy(true)
-    try {
-      const result = await completeWhatsAppEmbeddedSignupAction({
-        code,
-        phoneNumberId: session.phone_number_id,
-        wabaId: session.waba_id,
-        businessPortfolioId: session.business_id ?? null,
-      })
-      if (!result.ok) {
-        onError?.(result.error ?? 'تعذّر إتمام الربط.')
-        return
-      }
-      onSuccess?.(result.message ?? 'تم ربط واتساب بنجاح.')
-      onRefresh?.()
-    } catch {
-      onError?.('تعذّر إتمام الربط. حاول مرة أخرى.')
-    } finally {
-      setBusy(false)
-      codeRef.current = null
-      sessionRef.current = null
-    }
-  }, [onError, onRefresh, onSuccess])
+  }, [appId, configId, onError, tryComplete])
 
   async function launch() {
     if (!appId || !configId) {

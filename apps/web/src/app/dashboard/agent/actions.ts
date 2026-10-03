@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { getCurrentOrg, type OrgContext } from '@/lib/org'
 import { getToolPolicy } from '@/lib/ai/registry'
+import { applyBusinessType } from '@/lib/capabilities/profile'
 import { actionErrorMessage, supabaseActionError } from '@/lib/i18n/action-error'
 
 export type AgentActionResult = { ok: boolean; error?: string; message?: string; version?: number }
@@ -209,3 +210,202 @@ export async function setToolPolicyAction(input: {
     return { ok: false, error: actionErrorMessage(error, 'تعذّر تحديث الأداة. حاول مرة أخرى.') }
   }
 }
+
+export async function saveAgentKnowledgeItemAction(input: {
+  id?: string | null
+  title: string
+  content: string
+  category: string
+}): Promise<AgentActionResult & { id?: string }> {
+  try {
+    const org = await requireAgentAdmin()
+    const title = input.title.trim().slice(0, 255)
+    const content = input.content.trim()
+    if (!title) return { ok: false, error: 'عنوان المعلومة مطلوب.' }
+    if (!content) return { ok: false, error: 'نص المعلومة مطلوب.' }
+
+    const supabase = await createClient()
+    if (input.id) {
+      const { data, error } = await supabase
+        .from('knowledge_base')
+        .update({
+          title,
+          content,
+          category: input.category || 'general',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', input.id)
+        .eq('organization_id', org.organizationId)
+        .select('id')
+        .maybeSingle()
+
+      if (error) return { ok: false, error: supabaseActionError(error) }
+      if (!data) return { ok: false, error: 'لم يتم العثور على المعلومة.' }
+      revalidatePath('/dashboard/agent')
+      return { ok: true, message: 'تم تحديث المعلومة بنجاح.', id: data.id }
+    }
+
+    const { data, error } = await supabase
+      .from('knowledge_base')
+      .insert({
+        organization_id: org.organizationId,
+        title,
+        content,
+        category: input.category || 'general',
+        is_active: true,
+        updated_at: new Date().toISOString(),
+      })
+      .select('id')
+      .single()
+
+    if (error) return { ok: false, error: supabaseActionError(error) }
+    revalidatePath('/dashboard/agent')
+    return { ok: true, message: 'تمت إضافة المعلومة بنجاح.', id: data.id }
+  } catch (error) {
+    return { ok: false, error: actionErrorMessage(error, 'تعذّر حفظ المعلومة.') }
+  }
+}
+
+export async function deleteAgentKnowledgeItemAction(id: string): Promise<AgentActionResult> {
+  try {
+    const org = await requireAgentAdmin()
+    const supabase = await createClient()
+    const { error } = await supabase
+      .from('knowledge_base')
+      .delete()
+      .eq('id', id)
+      .eq('organization_id', org.organizationId)
+
+    if (error) return { ok: false, error: supabaseActionError(error) }
+    revalidatePath('/dashboard/agent')
+    return { ok: true, message: 'تم حذف المعلومة من المعرفة.' }
+  } catch (error) {
+    return { ok: false, error: actionErrorMessage(error, 'تعذّر حذف المعلومة.') }
+  }
+}
+
+export async function toggleAgentKnowledgeItemAction(id: string, isActive: boolean): Promise<AgentActionResult> {
+  try {
+    const org = await requireAgentAdmin()
+    const supabase = await createClient()
+    const { error } = await supabase
+      .from('knowledge_base')
+      .update({ is_active: isActive, updated_at: new Date().toISOString() })
+      .eq('id', id)
+      .eq('organization_id', org.organizationId)
+
+    if (error) return { ok: false, error: supabaseActionError(error) }
+    revalidatePath('/dashboard/agent')
+    return { ok: true, message: isActive ? 'تم تفعيل المعلومة.' : 'تم تعطيل المعلومة.' }
+  } catch (error) {
+    return { ok: false, error: actionErrorMessage(error, 'تعذّر تعديل حالة المعلومة.') }
+  }
+}
+
+export async function updateBusinessTypeAndInstructionsAction(input: {
+  agentId: string
+  businessTypeId: string
+  businessName: string
+  setupDescription?: string
+  industry?: string
+  publicPhoneNumber?: string
+  systemPromptAddition: string
+}): Promise<AgentActionResult> {
+  try {
+    const org = await requireAgentAdmin()
+    const agent = await assertAgentInOrg(input.agentId, org.organizationId)
+    const supabase = await createClient()
+
+    const name = input.businessName.trim()
+    if (!name) return { ok: false, error: 'اسم النشاط مطلوب.' }
+    if (!input.businessTypeId) return { ok: false, error: 'نوع النشاط مطلوب.' }
+
+    // 1. Update business name
+    if (agent.business_id) {
+      await supabase
+        .from('businesses')
+        .update({ name, updated_at: new Date().toISOString() })
+        .eq('id', agent.business_id)
+        .eq('organization_id', org.organizationId)
+    }
+
+    // 2. Apply business type (updates business_profiles.business_type_id and default capabilities)
+    await applyBusinessType(supabase, org.organizationId, input.businessTypeId)
+
+    // 3. Update business profile details
+    const { error: profileError } = await supabase
+      .from('business_profiles')
+      .update({
+        setup_description: input.setupDescription?.trim() || null,
+        industry: input.industry?.trim() || null,
+        public_phone_number: input.publicPhoneNumber?.trim() || null,
+        system_prompt_addition: input.systemPromptAddition.trim() || null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('organization_id', org.organizationId)
+
+    if (profileError) return { ok: false, error: supabaseActionError(profileError) }
+
+    // 4. Publish agent prompt version
+    let version: number | undefined
+    if (input.systemPromptAddition) {
+      const { data: pubData, error: pubErr } = await supabase.rpc('publish_agent_prompt', {
+        p_agent_id: agent.id,
+        p_system_prompt_addition: input.systemPromptAddition.trim(),
+      })
+      if (!pubErr && typeof pubData === 'number') {
+        version = pubData
+      }
+    }
+
+    // 5. Upsert business info in knowledge base
+    const summaryContent = [
+      `اسم النشاط: ${name}`,
+      input.industry ? `المجال: ${input.industry}` : '',
+      input.setupDescription ? `طبيعة العمل والخدمات: ${input.setupDescription}` : '',
+      input.publicPhoneNumber ? `هاتف التواصل: ${input.publicPhoneNumber}` : '',
+    ]
+      .filter(Boolean)
+      .join('\n')
+
+    const { data: existingKb } = await supabase
+      .from('knowledge_base')
+      .select('id')
+      .eq('organization_id', org.organizationId)
+      .eq('category', 'business_info')
+      .ilike('title', '%هوية ونشاط الشركة%')
+      .maybeSingle()
+
+    if (existingKb?.id) {
+      await supabase
+        .from('knowledge_base')
+        .update({
+          content: summaryContent,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', existingKb.id)
+    } else {
+      await supabase.from('knowledge_base').insert({
+        organization_id: org.organizationId,
+        title: 'هوية ونشاط الشركة',
+        content: summaryContent,
+        category: 'business_info',
+        is_active: true,
+        updated_at: new Date().toISOString(),
+      })
+    }
+
+    await audit(org.organizationId, agent.business_id, 'agent.business_profile_updated', agent.id, {
+      businessTypeId: input.businessTypeId,
+      businessName: name,
+      version,
+    })
+
+    revalidatePath('/dashboard/agent')
+    revalidatePath('/dashboard')
+    return { ok: true, message: 'تم تحديث نوع النشاط والبيانات وتعليمات الوكيل بنجاح.' }
+  } catch (error) {
+    return { ok: false, error: actionErrorMessage(error, 'تعذّر تحديث نوع النشاط والبيانات.') }
+  }
+}
+

@@ -6,9 +6,9 @@
   "type": "module",
   "license": "UNLICENSED",
   "scripts": {
-    "migrate": "bun run --cwd ../.. scripts/db/migrate.ts",
-    "migrate:up": "bun run --cwd ../.. scripts/db/migrate.ts up",
-    "migrate:down": "bun run --cwd ../.. scripts/db/migrate.ts down",
+    "migrate": "npx tsx ../../scripts/db/migrate.ts",
+    "migrate:up": "npx tsx ../../scripts/db/migrate.ts up",
+    "migrate:down": "npx tsx ../../scripts/db/migrate.ts down",
     "drizzle:generate": "drizzle-kit generate",
     "drizzle:migrate": "drizzle-kit migrate",
     "drizzle:studio": "drizzle-kit studio"

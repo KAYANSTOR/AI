@@ -1,0 +1,6 @@
+{
+  "name": "FrontDesk AI",
+  "description": "منصة SaaS لموظف استقبال بالذكاء الاصطناعي للشركات عبر WhatsApp وإدارة العملاء والمواعيد.",
+  "permissions": [],
+  "capabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

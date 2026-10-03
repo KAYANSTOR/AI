@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useState, useTransition } from 'react'
-import { CheckCircle2, CircleAlert, Link2, Loader2, MoreHorizontal, Power, RefreshCw, Sparkles, X } from 'lucide-react'
+import { CheckCircle2, CircleAlert, Link2, Loader2, Power, RefreshCw, X } from 'lucide-react'
 import {
   saveChannelAction,
   setChannelActiveAction,

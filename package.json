@@ -1,18 +1,17 @@
 {
-  "name": "codecraft-mcp-server",
+  "name": "frontdesk-ai",
   "version": "1.0.0",
-  "description": "MCP Server for CodeCraft API - Use AI models inside Antigravity IDE",
-  "main": "index.js",
+  "private": true,
   "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "tools/*"
+  ],
   "scripts": {
-    "start": "node index.js",
-    "dev": "node --watch index.js",
-    "test": "node --check index.js"
-  },
-  "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.0.0"
-  },
-  "engines": {
-    "node": ">=18.0.0"
+    "dev": "npm run dev --workspace=apps/web",
+    "build": "npm run build --workspace=apps/web",
+    "start": "npm run start --workspace=apps/web",
+    "lint": "npm run lint --workspace=apps/web"
   }
 }
