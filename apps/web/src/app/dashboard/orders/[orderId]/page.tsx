@@ -43,7 +43,7 @@ export default async function OrderDetailsPage({
   const statusColors: Record<string, string> = {
     draft: 'bg-background text-text-muted',
     confirmation: 'bg-primary/15 text-primary-dark',
-    processing: 'bg-warning/15 text-warning-dark',
+    processing: 'bg-warning/15 text-warning',
     completed: 'bg-success/15 text-success',
     cancelled: 'bg-error/15 text-error'
   }
