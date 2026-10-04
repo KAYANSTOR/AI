@@ -16,10 +16,9 @@ import {
   Clock,
   BookOpen,
   X,
-  Sparkles,
 } from 'lucide-react'
-import { useEffect, useRef, useState, useTransition } from 'react'
-import { BrandMark } from '@/components/site/brand'
+import { useEffect, useRef } from 'react'
+import { BrandGlyph } from '@/components/site/brand'
 import { useDashboardShell } from '@/components/dashboard/dashboard-shell'
 import { ar } from '@/lib/i18n/ar'
 import { roleLabel } from '@/lib/i18n/labels'
@@ -142,7 +141,7 @@ export function Sidebar({
           className="group flex items-center gap-2.5 text-lg font-extrabold tracking-tight text-white transition-opacity hover:opacity-90"
         >
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-white shadow-xs transition-transform group-hover:scale-105">
-            <BrandMark className="h-5 w-5" />
+            <BrandGlyph className="h-[92%] w-[92%]" />
           </div>
           <span className="flex items-center gap-1.5 font-bold">
             FrontDesk AI
@@ -159,7 +158,7 @@ export function Sidebar({
       </div>
 
       {/* Navigation Sections */}
-      <div className="flex-1 overflow-y-auto px-3.5 py-4 space-y-6 scrollbar-thin scrollbar-thumb-white/15">
+      <div className="flex-1 space-y-6 overflow-y-auto px-3.5 py-4 scrollbar-thin">
         {navSections.map((section) => {
           const visibleItems = section.items.filter(
             (item) => item.capability === null || enabled.has(item.capability)
@@ -231,18 +230,13 @@ function NavLink({
     pathname === item.href ||
     (item.href !== '/dashboard' && pathname.startsWith(`${item.href}/`))
 
-  const [isPending, startTransition] = useTransition()
-
+  // Navigation feedback is owned by <NavigationProgress /> in the dashboard shell; the
+  // previous empty transition never produced a pending state, so that branch was dead code.
   return (
     <Link
       href={item.href}
       prefetch={true}
-      onClick={(e) => {
-        onClick()
-        startTransition(() => {
-          // Trigger optimistic navigation
-        })
-      }}
+      onClick={() => onClick()}
       onMouseEnter={() => {
         router.prefetch(item.href)
       }}
@@ -250,7 +244,7 @@ function NavLink({
         active
           ? 'bg-primary text-white shadow-xs font-bold'
           : 'text-white/70 hover:bg-white/10 hover:text-white'
-      } ${isPending ? 'opacity-70 scale-[0.99]' : ''}`}
+      }`}
       aria-current={active ? 'page' : undefined}
     >
       <div className="flex items-center gap-2.5 min-w-0">
