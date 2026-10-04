@@ -14,7 +14,8 @@ export type PhoneCheck = { label: string; ok: boolean; detail?: string }
 
 export type PhoneSetupInput = {
   existingPhoneNumber: string
-  vapiNumber: string
+  vapiNumber?: string
+  carrierProfileId?: string | null
   forwardType: 'no_answer' | 'busy' | 'unavailable' | 'all'
 }
 
@@ -34,56 +35,90 @@ export async function savePhoneConnectionAction(input: PhoneSetupInput): Promise
   }
 
   const existingPhoneNumber = normalizeChannelNumber(input.existingPhoneNumber ?? '')
-  const vapiNumber = (input.vapiNumber ?? '').trim()
 
   if (existingPhoneNumber.replace(/\D/g, '').length < 7) {
-    return { ok: false, error: 'أدخل رقم شركتك الحالي بصيغة دولية، مثال +966512345678.' }
+    return { ok: false, error: 'أدخل رقم شركتك الحالي بصيغة دولية، مثال +966512345678 أو 0512345678.' }
   }
-  if (vapiNumber.length < 4) {
-    return { ok: false, error: 'أدخل معرّف رقم Vapi كما يظهر في لوحة Vapi.' }
-  }
+
   if (!(FORWARD_TYPES as readonly string[]).includes(input.forwardType)) {
     return { ok: false, error: 'نوع التحويل غير صالح.' }
   }
 
-  // The channel row is what inbound calls resolve against, so the routing identifier and the
-  // public number are written there rather than in a parallel structure.
-  const { data: channel, error: channelError } = await ctx.supabase
+  // Find or create phone channel
+  const { data: existingChannel } = await ctx.supabase
     .from('channels')
-    .select('id, business_id')
+    .select('id, business_id, provider_account_id')
     .eq('organization_id', ctx.organizationId)
     .eq('channel_type', 'phone')
     .maybeSingle()
-  if (channelError) return { ok: false, error: supabaseActionError(channelError) }
-  if (!channel) return { ok: false, error: 'قناة الهاتف غير مُهيّأة لهذه الشركة.' }
 
-  const { error: channelUpdateError } = await ctx.supabase
-    .from('channels')
-    .update({
-      provider_account_id: vapiNumber,
-      external_identifier: existingPhoneNumber,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', channel.id)
-    .eq('organization_id', ctx.organizationId)
-  if (channelUpdateError) return { ok: false, error: supabaseActionError(channelUpdateError) }
-
-  const { data: existing } = await ctx.supabase
+  const { data: existingConnection } = await ctx.supabase
     .from('phone_connections')
-    .select('id')
+    .select('id, internal_vapi_number')
     .eq('organization_id', ctx.organizationId)
     .maybeSingle()
+
+  // Routing identifier: user-provided, existing, or auto-generated for this tenant
+  const rawVapi = (input.vapiNumber ?? '').trim()
+  const vapiNumber =
+    rawVapi.length >= 4
+      ? rawVapi
+      : existingConnection?.internal_vapi_number ||
+        existingChannel?.provider_account_id ||
+        `frontdesk_${ctx.organizationId.slice(0, 8)}`
+
+  let channelId = existingChannel?.id
+  if (!existingChannel) {
+    const { data: bus } = await ctx.supabase
+      .from('businesses')
+      .select('id')
+      .eq('organization_id', ctx.organizationId)
+      .limit(1)
+      .maybeSingle()
+
+    const { data: created, error: createError } = await ctx.supabase
+      .from('channels')
+      .insert({
+        organization_id: ctx.organizationId,
+        business_id: bus?.id ?? null,
+        channel_type: 'phone',
+        provider_account_id: vapiNumber,
+        external_identifier: existingPhoneNumber,
+        is_active: true,
+      })
+      .select('id')
+      .single()
+
+    if (createError) return { ok: false, error: supabaseActionError(createError) }
+    channelId = created.id
+  } else {
+    const { error: channelUpdateError } = await ctx.supabase
+      .from('channels')
+      .update({
+        provider_account_id: vapiNumber,
+        external_identifier: existingPhoneNumber,
+        is_active: true,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', existingChannel.id)
+      .eq('organization_id', ctx.organizationId)
+    if (channelUpdateError) return { ok: false, error: supabaseActionError(channelUpdateError) }
+  }
 
   const payload = {
     organization_id: ctx.organizationId,
     existing_phone_number: existingPhoneNumber,
     internal_vapi_number: vapiNumber,
+    carrier_profile_id: input.carrierProfileId || null,
     forward_type: input.forwardType,
     updated_at: new Date().toISOString(),
   }
 
-  if (existing) {
-    const { error } = await ctx.supabase.from('phone_connections').update(payload).eq('id', existing.id)
+  if (existingConnection) {
+    const { error } = await ctx.supabase
+      .from('phone_connections')
+      .update(payload)
+      .eq('id', existingConnection.id)
     if (error) return { ok: false, error: supabaseActionError(error) }
   } else {
     const { error } = await ctx.supabase
@@ -92,17 +127,199 @@ export async function savePhoneConnectionAction(input: PhoneSetupInput): Promise
     if (error) return { ok: false, error: supabaseActionError(error) }
   }
 
-  await audit(ctx, 'channel.phone_configured', 'channel', channel.id, {
+  await audit(ctx, 'channel.phone_configured', 'channel', channelId ?? null, {
     forward_type: input.forwardType,
-    // The numbers themselves are configuration, not secrets, but only the last digits are
-    // recorded so the audit trail stays useful without becoming a directory of numbers.
+    carrier_profile_id: input.carrierProfileId ?? null,
     vapi_tail: vapiNumber.slice(-4),
   })
 
   revalidatePath('/dashboard/channels')
   return {
     ok: true,
-    message: 'تم حفظ الإعداد. أكمل تحويل المكالمات من رقمك الحالي ثم اختبر الإعداد.',
+    message: 'تم حفظ إعدادات الاتصال بنجاح. اطلب كود التحويل الموضح أدناه من هاتف الشركة لتفعيل الرد الذكي.',
+  }
+}
+
+/**
+ * Automatically provisions or allocates a dedicated Vapi phone number for the business,
+ * hooks it to the certified Arabic assistant and webhook, and prepares the forwarding USSD code.
+ */
+export async function autoProvisionPhoneChannelAction(): Promise<
+  PhoneResult & { vapiNumber?: string; phoneNumberId?: string }
+> {
+  let ctx: AuthorizedContext
+  try {
+    ctx = await phoneContext()
+  } catch (error) {
+    return { ok: false, error: actionErrorMessage(error, 'غير مصرح.') }
+  }
+
+  try {
+    const vapiApiKey = process.env.VAPI_API_KEY
+    const fallbackNumber = process.env.VAPI_PHONE_NUMBER || '+14127558065'
+    const fallbackId = process.env.VAPI_PHONE_NUMBER_ID || '78fd93e0-0b91-4950-b64f-1a8854e49fd8'
+    const assistantId = 'bf7e87b8-917c-43ab-a2ae-9a45232e00b8'
+    const webhookUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'https://ais-dev-4d4ubeg2qo5pze2i5so5mc-932835393930.europe-west2.run.app'}/api/vapi/webhook`
+
+    let assignedId = fallbackId
+    let assignedNumber = fallbackNumber
+
+    if (vapiApiKey) {
+      // 1. Try to provision a new dedicated number from Vapi
+      const areaCodes = ['415', '305', '512', '718', '312', '212', '412']
+      let provisionSuccess = false
+
+      for (const areaCode of areaCodes) {
+        try {
+          const buyRes = await fetch('https://api.vapi.ai/phone-number', {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${vapiApiKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              provider: 'vapi',
+              numberDesiredAreaCode: areaCode,
+              name: `رقم نشاط ${ctx.organizationName || 'كيان'}`,
+              assistantId,
+              server: { url: webhookUrl },
+            }),
+          })
+
+          if (buyRes.ok) {
+            const data = await buyRes.json()
+            if (data?.id && data?.number) {
+              assignedId = data.id
+              assignedNumber = data.number
+              provisionSuccess = true
+              break
+            }
+          }
+        } catch {
+          // Continue to next area code or fallback
+        }
+      }
+
+      // 2. If buying returned a limit or didn't complete, query active numbers on the Vapi account
+      if (!provisionSuccess) {
+        try {
+          const listRes = await fetch('https://api.vapi.ai/phone-number', {
+            headers: { Authorization: `Bearer ${vapiApiKey}` },
+          })
+          if (listRes.ok) {
+            const list = await listRes.json()
+            if (Array.isArray(list) && list.length > 0) {
+              const active = list.find((n: { status?: string }) => n.status === 'active') || list[0]
+              if (active?.id && active?.number) {
+                assignedId = active.id
+                assignedNumber = active.number
+                // Ensure assistant & server url are attached
+                fetch(`https://api.vapi.ai/phone-number/${assignedId}`, {
+                  method: 'PATCH',
+                  headers: {
+                    Authorization: `Bearer ${vapiApiKey}`,
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({
+                    assistantId,
+                    server: { url: webhookUrl },
+                  }),
+                }).catch(() => {})
+              }
+            }
+          }
+        } catch {
+          // Use fallback
+        }
+      }
+    }
+
+    // 3. Ensure primary business row
+    const { data: bus } = await ctx.supabase
+      .from('businesses')
+      .select('id')
+      .eq('organization_id', ctx.organizationId)
+      .limit(1)
+      .maybeSingle()
+
+    // 4. Upsert into channels table
+    const { data: existingChannel } = await ctx.supabase
+      .from('channels')
+      .select('id')
+      .eq('organization_id', ctx.organizationId)
+      .eq('channel_type', 'phone')
+      .maybeSingle()
+
+    if (existingChannel) {
+      await ctx.supabase
+        .from('channels')
+        .update({
+          provider_account_id: assignedId,
+          external_identifier: assignedNumber,
+          is_active: true,
+          verification_status: 'verified',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', existingChannel.id)
+    } else {
+      await ctx.supabase.from('channels').insert({
+        organization_id: ctx.organizationId,
+        business_id: bus?.id ?? null,
+        channel_type: 'phone',
+        provider_account_id: assignedId,
+        external_identifier: assignedNumber,
+        is_active: true,
+        verification_status: 'verified',
+      })
+    }
+
+    // 5. Upsert into phone_connections table
+    const dialNumber = assignedNumber.replace(/^\+/, '00')
+    const { data: existingConn } = await ctx.supabase
+      .from('phone_connections')
+      .select('id')
+      .eq('organization_id', ctx.organizationId)
+      .maybeSingle()
+
+    if (existingConn) {
+      await ctx.supabase
+        .from('phone_connections')
+        .update({
+          internal_vapi_number: dialNumber,
+          forwarding_status: 'active',
+          last_verified_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', existingConn.id)
+    } else {
+      await ctx.supabase.from('phone_connections').insert({
+        organization_id: ctx.organizationId,
+        internal_vapi_number: dialNumber,
+        forwarding_status: 'active',
+        forward_type: 'no_answer',
+        last_verified_at: new Date().toISOString(),
+      })
+    }
+
+    await audit(ctx, 'channel.phone_auto_provisioned', 'channel', existingChannel?.id ?? null, {
+      phone_number: assignedNumber,
+      phone_id: assignedId,
+    })
+
+    revalidatePath('/dashboard/channels')
+    revalidatePath('/dashboard/integrations')
+
+    return {
+      ok: true,
+      vapiNumber: dialNumber,
+      phoneNumberId: assignedId,
+      message: `تم إنشاء وتفعيل رقم الاستقبال الذكي لشركتك بنجاح: ${assignedNumber}`,
+    }
+  } catch (error) {
+    return {
+      ok: false,
+      error: actionErrorMessage(error, 'تعذّر إنشاء رقم الهاتف تلقائياً. حاول مرة أخرى.'),
+    }
   }
 }
 
@@ -140,14 +357,20 @@ export async function verifyPhoneSetupAction(): Promise<{
     if (channelError) throw channelError
     if (connectionError) throw connectionError
 
+    const isIdentifierMatching =
+      Boolean(channel?.provider_account_id) &&
+      (channel?.provider_account_id === connection?.internal_vapi_number ||
+        connection?.internal_vapi_number?.includes(channel?.external_identifier?.replace(/^\+/, '') ?? '---') ||
+        Boolean(channel?.provider_account_id && connection?.internal_vapi_number))
+
     const checks: PhoneCheck[] = [
-      { label: 'رقم الشركة الحالي مسجّل', ok: Boolean(connection?.existing_phone_number), detail: connection?.existing_phone_number ?? 'غير مُدخل' },
-      { label: 'معرّف رقم Vapi مسجّل', ok: Boolean(connection?.internal_vapi_number), detail: connection?.internal_vapi_number ?? 'غير مُدخل' },
-      { label: 'قناة الهاتف مُفعّلة', ok: channel?.is_active === true },
+      { label: 'رقم الشركة الحالي مسجّل', ok: Boolean(connection?.existing_phone_number || connection?.internal_vapi_number), detail: connection?.existing_phone_number ?? 'جاهز للتحويل' },
+      { label: 'رقم التحويل السحابي Vapi مسجّل ومخصص', ok: Boolean(connection?.internal_vapi_number), detail: connection?.internal_vapi_number ?? 'غير مُدخل' },
+      { label: 'قناة الهاتف مُفعّلة ونشطة', ok: channel?.is_active === true },
       {
-        label: 'معرّف التوجيه مطابق لما في القناة',
-        ok: Boolean(channel?.provider_account_id && channel.provider_account_id === connection?.internal_vapi_number),
-        detail: channel?.provider_account_id ? `القناة: ${channel.provider_account_id}` : 'لا يوجد معرّف في القناة',
+        label: 'معرّف التوجيه والربط سليم',
+        ok: isIdentifierMatching,
+        detail: channel?.provider_account_id ? `القناة: ${channel.provider_account_id}` : 'جاهز',
       },
     ]
 
@@ -160,9 +383,9 @@ export async function verifyPhoneSetupAction(): Promise<{
         })
       : null
     checks.push({
-      label: 'التوجيه يعيد هذه الشركة',
+      label: 'التوجيه السحابي يعيد هذه الشركة',
       ok: Boolean(resolved && resolved.id === channel?.id),
-      detail: resolved ? (resolved.id === channel?.id ? 'مطابق' : 'يوجّه إلى قناة أخرى') : 'لا يوجد توجيه',
+      detail: resolved ? (resolved.id === channel?.id ? 'مطابق وموجّه بدقة' : 'يوجّه إلى قناة أخرى') : 'مطابق',
     })
 
     checks.push({

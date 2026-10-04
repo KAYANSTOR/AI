@@ -74,20 +74,40 @@ export default async function ChannelsPage() {
   let phoneConnection: {
     existing_phone_number: string | null
     internal_vapi_number: string | null
+    carrier_profile_id: string | null
     forward_type: string | null
     forwarding_status: string | null
     last_verified_at: string | null
   } | null = null
 
+  let carriers: Array<{
+    id: string
+    country_code: string
+    operator_name: string
+    forward_on_no_answer_code: string | null
+    forward_on_busy_code: string | null
+    forward_all_code: string | null
+    cancel_forward_code: string | null
+    setup_instructions_url: string | null
+  }> = []
+
   try {
-    const { data } = await supabase
-      .from('phone_connections')
-      .select('existing_phone_number, internal_vapi_number, forward_type, forwarding_status, last_verified_at')
-      .eq('organization_id', context.organizationId)
-      .maybeSingle()
-    phoneConnection = data
+    const [{ data: conn }, { data: carrierList }] = await Promise.all([
+      supabase
+        .from('phone_connections')
+        .select('existing_phone_number, internal_vapi_number, carrier_profile_id, forward_type, forwarding_status, last_verified_at')
+        .eq('organization_id', context.organizationId)
+        .maybeSingle(),
+      supabase
+        .from('carrier_profiles')
+        .select('id, country_code, operator_name, forward_on_no_answer_code, forward_on_busy_code, forward_all_code, cancel_forward_code, setup_instructions_url')
+        .order('country_code', { ascending: true })
+        .order('operator_name', { ascending: true }),
+    ])
+    phoneConnection = conn
+    carriers = (carrierList ?? []) as typeof carriers
   } catch (error) {
-    console.error('Unable to load phone connection', error)
+    console.error('Unable to load phone connection or carriers', error)
   }
 
   const byType = new Map(rows.map((row) => [row.channel_type, row]))
@@ -114,6 +134,10 @@ export default async function ChannelsPage() {
   ).length
 
   const phoneSpec = getChannelSpec('phone')
+
+  const phoneRow = byType.get('phone')
+  const resolvedVapiNumber =
+    phoneConnection?.internal_vapi_number || phoneRow?.external_identifier || null
 
   return (
     <div className="space-y-6">
@@ -175,15 +199,17 @@ export default async function ChannelsPage() {
         <PhonePanel
           canManage={canManage}
           timezone={context.timezone}
+          carriers={carriers}
           instructions={phoneSpec?.setup ?? []}
           initial={
-            phoneConnection
+            phoneConnection || phoneRow
               ? {
-                  existingPhoneNumber: phoneConnection.existing_phone_number ?? null,
-                  vapiNumber: canManage ? (phoneConnection.internal_vapi_number ?? null) : null,
-                  forwardType: phoneConnection.forward_type ?? 'no_answer',
-                  forwardingStatus: phoneConnection.forwarding_status ?? 'pending_test',
-                  lastVerifiedAt: phoneConnection.last_verified_at ?? null,
+                  existingPhoneNumber: phoneConnection?.existing_phone_number ?? null,
+                  vapiNumber: canManage ? resolvedVapiNumber : null,
+                  carrierProfileId: phoneConnection?.carrier_profile_id ?? null,
+                  forwardType: phoneConnection?.forward_type ?? 'no_answer',
+                  forwardingStatus: phoneConnection?.forwarding_status ?? (phoneRow?.is_active ? 'active' : 'pending_test'),
+                  lastVerifiedAt: phoneConnection?.last_verified_at ?? null,
                 }
               : null
           }

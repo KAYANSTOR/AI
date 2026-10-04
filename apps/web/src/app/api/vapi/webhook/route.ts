@@ -11,6 +11,14 @@ import { publicWebhookError, stablePayloadEventId, verifyVapiRequest } from '@/l
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
+export async function GET() {
+  return NextResponse.json({ status: 'ok', provider: 'vapi', healthy: true })
+}
+
+export async function HEAD() {
+  return new NextResponse(null, { status: 200 })
+}
+
 /**
  * Vapi server webhook (the only voice provider — ADR-0001).
  *
@@ -26,16 +34,31 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'invalid_vapi_signature' }, { status: 401 })
   }
 
+  let body: Record<string, unknown> = {}
+  try {
+    body = (await req.json()) as Record<string, unknown>
+  } catch {
+    return NextResponse.json({ status: 'ok' })
+  }
+
+  const message = (body.message ?? body) as Record<string, unknown>
+  const type = String(message.type ?? body.type ?? 'unknown')
+
+  // Handle Vapi dashboard health-check / ping probes
+  if (type === 'ping' || type === 'test' || Object.keys(body).length === 0) {
+    return NextResponse.json({ status: 'ok', message: 'pong' })
+  }
+
+  const call = (message.call ?? body.call ?? {}) as Record<string, unknown>
+  const callId = String(call.id ?? message.callId ?? body.callId ?? '').trim()
+  if (!callId) {
+    return NextResponse.json({ status: 'ok', note: 'acknowledged' })
+  }
+
   const supabase = createAdminClient()
   let eventRowId: string | null = null
 
   try {
-    const body = (await req.json()) as Record<string, unknown>
-    const message = (body.message ?? body) as Record<string, unknown>
-    const type = String(message.type ?? body.type ?? 'unknown')
-    const call = (message.call ?? body.call ?? {}) as Record<string, unknown>
-    const callId = String(call.id ?? message.callId ?? body.callId ?? '').trim()
-    if (!callId) return NextResponse.json({ error: 'missing_vapi_call_id' }, { status: 400 })
     const explicitEventId = String(message.id ?? body.eventId ?? '').trim()
     const externalEventId = explicitEventId || stablePayloadEventId('vapi', { type, callId, message })
 

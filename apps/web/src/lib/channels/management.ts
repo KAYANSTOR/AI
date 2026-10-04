@@ -92,6 +92,13 @@ export function normalizeChannelNumber(value: string): string {
   if (!trimmed) return trimmed
   const digits = trimmed.replace(/\D/g, '')
   if (trimmed.startsWith('+')) return '+' + digits
+  if (digits.startsWith('00')) return '+' + digits.slice(2)
+  // Yemen local 9-digit mobile (77xxxxxxx, 73xxxxxxx, 71xxxxxxx, 70xxxxxxx)
+  if (digits.length === 9 && digits.startsWith('7')) return '+967' + digits
+  // Yemen with leading 0 (077xxxxxxx, 073xxxxxxx, etc.)
+  if (digits.length === 10 && digits.startsWith('07')) return '+967' + digits.slice(1)
+  // Saudi with leading 0 (05xxxxxxxx)
+  if (digits.length === 10 && digits.startsWith('05')) return '+966' + digits.slice(1)
   return digits ? '+' + digits : trimmed
 }
 

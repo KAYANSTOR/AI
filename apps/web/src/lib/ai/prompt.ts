@@ -38,7 +38,7 @@ export async function buildBusinessSystemPrompt(
     versionAddition = data?.system_prompt_addition ?? ''
   }
 
-  // Retrieve ONLY relevant context dynamically via the Knowledge Layer
+  // Retrieve relevant context dynamically via the Knowledge Layer
   let contextualKnowledgeSection = ''
   if (userQuery && userQuery.trim()) {
     try {
@@ -48,6 +48,70 @@ export async function buildBusinessSystemPrompt(
       }
     } catch {
       // Fallback silently if contextual lookup encounters an issue
+    }
+  } else {
+    // When no specific turn query is provided (e.g. initial Voice Call connection),
+    // load core knowledge base facts, active services, and operating hours so the agent
+    // is immediately grounded from the very first spoken word.
+    try {
+      const [{ data: kbFacts }, { data: svcRows }, { data: hoursRows }] = await Promise.all([
+        supabase
+          .from('knowledge_base')
+          .select('title, category, content')
+          .eq('organization_id', organizationId)
+          .eq('is_active', true)
+          .limit(15),
+        supabase
+          .from('services')
+          .select('name, price_amount, price_currency, duration_minutes')
+          .eq('organization_id', organizationId)
+          .eq('is_active', true)
+          .limit(12),
+        supabase
+          .from('business_hours')
+          .select('day_of_week, open_time, close_time, is_closed')
+          .eq('organization_id', organizationId)
+          .order('day_of_week'),
+      ])
+
+      const lines: string[] = []
+      if (kbFacts && kbFacts.length > 0) {
+        lines.push('معلومات الشركة المعتمدة من قاعدة المعرفة:')
+        for (const f of kbFacts) {
+          lines.push(`• [${f.title}]: ${f.content}`)
+        }
+      }
+
+      if (svcRows && svcRows.length > 0) {
+        lines.push('الخدمات والأسعار المعتمدة:')
+        for (const s of svcRows) {
+          const price =
+            s.price_amount != null
+              ? `${Number(s.price_amount)} ${s.price_currency || 'SAR'}`
+              : 'حسب الطلب'
+          lines.push(`• ${s.name}: ${price} (${s.duration_minutes ?? 30} دقيقة)`)
+        }
+      }
+
+      if (hoursRows && hoursRows.length > 0) {
+        const dayNames = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت']
+        const hoursSummary = hoursRows
+          .map((h) =>
+            h.is_closed
+              ? `${dayNames[h.day_of_week]}: مغلق`
+              : `${dayNames[h.day_of_week]}: ${h.open_time?.slice(0, 5)}–${h.close_time?.slice(0, 5)}`
+          )
+          .join('، ')
+        lines.push(`أوقات وساعات العمل المعتمدة: ${hoursSummary}`)
+      }
+
+      if (lines.length > 0) {
+        contextualKnowledgeSection = `\nCORE BUSINESS KNOWLEDGE & CATALOG (Multi-tenant verified):\n${lines.join(
+          '\n'
+        )}`
+      }
+    } catch {
+      // Fallback silently if lookup encounters an issue
     }
   }
 
