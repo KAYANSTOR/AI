@@ -17,6 +17,16 @@ type GeminiResponse = {
   error?: { message?: string }
 }
 
+/**
+ * Server-safe provider error text. It must carry the failing model and HTTP status so
+ * operators can diagnose without exposing request or credential details.
+ */
+function formatGeminiError(failure: { model: string; status: number | null; message: string } | null) {
+  if (!failure) return 'Gemini API error: all candidate models failed'
+  const status = failure.status === null ? '' : ` (${failure.status})`
+  return `Gemini API error${status} using ${failure.model}: ${failure.message}`
+}
+
 function cleanGeminiSchema(schema: unknown): unknown {
   if (!schema || typeof schema !== 'object') return schema
   if (Array.isArray(schema)) return schema.map(cleanGeminiSchema)
@@ -118,13 +128,13 @@ export const geminiProvider: AIProvider = {
       ])
     )
 
-    let response: Response | null = null
     let data: GeminiResponse | null = null
-    let lastError: string | null = null
+    let lastFailure: { model: string; status: number | null; message: string } | null = null
 
     for (const model of candidateModels) {
+      let res: Response
       try {
-        const res = await fetch(
+        res = await fetch(
           `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
           {
             method: 'POST',
@@ -137,29 +147,37 @@ export const geminiProvider: AIProvider = {
               contents,
               tools,
               generationConfig: {
+                // Temperature sampling is deprecated on current Gemini models, so the
+                // sampling config must not be sent at all.
                 maxOutputTokens: 1024,
-                temperature: 0.3,
               },
             }),
           }
         )
-
-        const json = (await res.json()) as GeminiResponse
-        if (res.ok) {
-          response = res
-          data = json
-          break
-        } else {
-          lastError = json.error?.message || res.statusText
-          continue
-        }
       } catch (err) {
-        lastError = err instanceof Error ? err.message : String(err)
+        lastFailure = {
+          model,
+          status: null,
+          message: err instanceof Error ? err.message : String(err),
+        }
+        continue
       }
+
+      const json = (await res.json().catch(() => ({}))) as GeminiResponse
+      if (res.ok) {
+        data = json
+        break
+      }
+
+      lastFailure = { model, status: res.status, message: json.error?.message || res.statusText }
+
+      // Auth and validation failures are not fixed by another model, so stop instead of
+      // retrying the whole candidate list and reporting a misleading final error.
+      if (res.status >= 400 && res.status < 500 && res.status !== 429) break
     }
 
-    if (!response || !data) {
-      throw new Error(`Gemini API error: ${lastError ?? 'All candidate models failed'}`)
+    if (!data) {
+      throw new Error(formatGeminiError(lastFailure))
     }
 
     const firstCandidate = data.candidates?.[0]
