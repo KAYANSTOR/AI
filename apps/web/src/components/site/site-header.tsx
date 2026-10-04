@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { usePathname } from 'next/navigation'
 import { Menu, X } from 'lucide-react'
 import { BrandLockup } from './brand'
 import { PrimaryCta, SecondaryCta } from './cta'
@@ -10,6 +11,7 @@ import { InstallAppButton } from '@/components/pwa/install-app-button'
 
 export function SiteHeader() {
   const [open, setOpen] = useState(false)
+  const pathname = usePathname()
 
   useEffect(() => {
     if (!open) return
@@ -35,16 +37,27 @@ export function SiteHeader() {
 
         <nav aria-label="التنقل الرئيسي" className="hidden lg:block">
           <ul className="flex items-center gap-1">
-            {SITE_NAV.map((item) => (
-              <li key={item.href}>
-                <Link
-                  href={item.href}
-                  className="rounded-lg px-3 py-2 text-sm font-medium text-text-muted transition-colors hover:bg-background hover:text-text"
-                >
-                  {item.label}
-                </Link>
-              </li>
-            ))}
+            {SITE_NAV.map((item) => {
+              const active =
+                pathname === item.href ||
+                (item.href !== '/' && pathname.startsWith(item.href))
+
+              return (
+                <li key={item.href}>
+                  <Link
+                    href={item.href}
+                    prefetch={true}
+                    className={`rounded-xl px-3.5 py-2 text-sm font-semibold transition-all duration-150 ${
+                      active
+                        ? 'bg-primary-light/25 text-primary-dark font-bold'
+                        : 'text-text-muted hover:bg-background hover:text-text'
+                    }`}
+                  >
+                    {item.label}
+                  </Link>
+                </li>
+              )
+            })}
           </ul>
         </nav>
 
@@ -73,19 +86,30 @@ export function SiteHeader() {
 
       {open ? (
         <div id="site-mobile-menu" className="border-t border-border bg-surface lg:hidden">
-            <nav aria-label="التنقل الرئيسي — الجوال" className="mx-auto w-full max-w-6xl px-4 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-6">
-            <ul className="flex flex-col">
-              {SITE_NAV.map((item) => (
-                <li key={item.href}>
-                  <Link
-                    href={item.href}
-                    onClick={() => setOpen(false)}
-                    className="block rounded-lg px-3 py-3 text-sm font-medium text-text transition-colors hover:bg-background"
-                  >
-                    {item.label}
-                  </Link>
-                </li>
-              ))}
+          <nav aria-label="التنقل الرئيسي — الجوال" className="mx-auto w-full max-w-6xl px-4 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-6">
+            <ul className="flex flex-col gap-1">
+              {SITE_NAV.map((item) => {
+                const active =
+                  pathname === item.href ||
+                  (item.href !== '/' && pathname.startsWith(item.href))
+
+                return (
+                  <li key={item.href}>
+                    <Link
+                      href={item.href}
+                      prefetch={true}
+                      onClick={() => setOpen(false)}
+                      className={`block rounded-xl px-3.5 py-3 text-sm font-semibold transition-colors ${
+                        active
+                          ? 'bg-primary-light/25 text-primary-dark font-bold'
+                          : 'text-text hover:bg-background'
+                      }`}
+                    >
+                      {item.label}
+                    </Link>
+                  </li>
+                )
+              })}
             </ul>
             <div className="mt-4 flex flex-col gap-3">
               <PrimaryCta href="/signup" className="w-full">

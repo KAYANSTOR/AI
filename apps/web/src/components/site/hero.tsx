@@ -38,7 +38,7 @@ export function Hero() {
           </div>
 
           <Link
-            href="/#how-it-works"
+            href="/how-it-works"
             className="mt-4 inline-flex rounded-md text-sm font-semibold text-primary-dark underline decoration-primary-light decoration-2 underline-offset-4 transition-colors hover:decoration-primary-dark"
           >
             كيف تعمل المنصة؟

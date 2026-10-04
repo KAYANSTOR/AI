@@ -1,21 +1,29 @@
 export default function DashboardLoading() {
   return (
-    <div className="space-y-6" aria-label="جارٍ تحميل لوحة التحكم" role="status">
+    <div className="space-y-6 animate-pulse" aria-label="جارٍ التحميل" role="status">
+      {/* Header Skeleton */}
       <div className="space-y-2">
-        <div className="motion-safe:animate-pulse h-8 w-40 rounded bg-border" />
-        <div className="motion-safe:animate-pulse h-4 w-64 max-w-full rounded bg-border" />
+        <div className="h-7 w-48 rounded-xl bg-border/60" />
+        <div className="h-4 w-80 max-w-full rounded-lg bg-border/40" />
       </div>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {Array.from({ length: 4 }, (_, index) => (
-          <div key={index} className="rounded-xl border border-border bg-surface p-5">
-            <div className="motion-safe:animate-pulse h-4 w-24 rounded bg-background" />
-            <div className="motion-safe:animate-pulse mt-5 h-8 w-16 rounded bg-background" />
-          </div>
-        ))}
+
+      {/* Main Content Area Skeleton */}
+      <div className="rounded-2xl border border-border/80 bg-surface p-6 shadow-xs space-y-4">
+        <div className="flex items-center justify-between border-b border-border/60 pb-4">
+          <div className="h-5 w-36 rounded-lg bg-border/50" />
+          <div className="h-8 w-24 rounded-xl bg-border/40" />
+        </div>
+        <div className="space-y-3 pt-2">
+          <div className="h-4 w-full rounded-md bg-border/30" />
+          <div className="h-4 w-5/6 rounded-md bg-border/30" />
+          <div className="h-4 w-3/4 rounded-md bg-border/30" />
+        </div>
       </div>
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <div className="motion-safe:animate-pulse h-56 rounded-xl border border-border bg-surface lg:col-span-2" />
-        <div className="motion-safe:animate-pulse h-56 rounded-xl border border-border bg-surface" />
+
+      {/* Secondary Card Skeleton */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="h-32 rounded-2xl border border-border/80 bg-surface p-5" />
+        <div className="h-32 rounded-2xl border border-border/80 bg-surface p-5" />
       </div>
     </div>
   )

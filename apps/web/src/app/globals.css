@@ -74,3 +74,21 @@
   animation: pageFadeIn 0.12s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   will-change: opacity, transform;
 }
+
+@keyframes progressIndeterminate {
+  0% {
+    transform: translateX(-100%) scaleX(0.2);
+  }
+  50% {
+    transform: translateX(20%) scaleX(0.7);
+  }
+  100% {
+    transform: translateX(100%) scaleX(0.3);
+  }
+}
+
+.animate-progress-indeterminate {
+  animation: progressIndeterminate 0.75s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  transform-origin: 0% 50%;
+  will-change: transform;
+}

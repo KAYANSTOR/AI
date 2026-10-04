@@ -16,9 +16,9 @@ import {
   Clock,
   BookOpen,
   X,
-  Ellipsis,
+  Sparkles,
 } from 'lucide-react'
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState, useTransition } from 'react'
 import { BrandMark } from '@/components/site/brand'
 import { useDashboardShell } from '@/components/dashboard/dashboard-shell'
 import { ar } from '@/lib/i18n/ar'
@@ -29,29 +29,42 @@ type NavItem = {
   href: string
   icon: React.ElementType
   capability: string | null
+  badge?: string
 }
 
-const navItems: NavItem[] = [
-  { name: ar.nav.dashboard, href: '/dashboard', icon: LayoutDashboard, capability: null },
-  { name: ar.nav.conversations, href: '/dashboard/conversations', icon: MessageSquare, capability: 'inbox' },
-  { name: ar.nav.appointments, href: '/dashboard/appointments', icon: Calendar, capability: 'appointments' },
-  { name: ar.nav.contacts, href: '/dashboard/contacts', icon: Contact, capability: 'lead_capture' },
-  { name: ar.nav.agent, href: '/dashboard/agent', icon: Bot, capability: null },
-  { name: ar.nav.leads, href: '/dashboard/leads', icon: Users, capability: 'lead_capture' },
-  { name: ar.nav.services, href: '/dashboard/services', icon: Wrench, capability: 'appointments' },
-  { name: ar.nav.knowledge, href: '/dashboard/knowledge', icon: BookOpen, capability: 'knowledge_base' },
-  { name: ar.nav.hours, href: '/dashboard/hours', icon: Clock, capability: null },
-  { name: ar.nav.channels, href: '/dashboard/channels', icon: RadioTower, capability: null },
-  { name: ar.nav.settings, href: '/dashboard/settings', icon: Settings, capability: null },
-]
+type NavSection = {
+  title: string
+  items: NavItem[]
+}
 
-const primaryHrefs = new Set([
-  '/dashboard',
-  '/dashboard/conversations',
-  '/dashboard/appointments',
-  '/dashboard/contacts',
-  '/dashboard/agent',
-])
+const navSections: NavSection[] = [
+  {
+    title: 'العمليات والعملاء',
+    items: [
+      { name: ar.nav.dashboard, href: '/dashboard', icon: LayoutDashboard, capability: null },
+      { name: ar.nav.conversations, href: '/dashboard/conversations', icon: MessageSquare, capability: 'inbox' },
+      { name: ar.nav.appointments, href: '/dashboard/appointments', icon: Calendar, capability: 'appointments' },
+      { name: ar.nav.contacts, href: '/dashboard/contacts', icon: Contact, capability: 'lead_capture' },
+      { name: ar.nav.leads, href: '/dashboard/leads', icon: Users, capability: 'lead_capture' },
+    ],
+  },
+  {
+    title: 'الذكاء الاصطناعي والاستقبال',
+    items: [
+      { name: ar.nav.agent, href: '/dashboard/agent', icon: Bot, capability: null, badge: 'AI' },
+      { name: ar.nav.channels, href: '/dashboard/channels', icon: RadioTower, capability: null, badge: 'صوت / شات' },
+      { name: ar.nav.knowledge, href: '/dashboard/knowledge', icon: BookOpen, capability: 'knowledge_base' },
+      { name: ar.nav.hours, href: '/dashboard/hours', icon: Clock, capability: null },
+    ],
+  },
+  {
+    title: 'النظام',
+    items: [
+      { name: ar.nav.services, href: '/dashboard/services', icon: Wrench, capability: 'appointments' },
+      { name: ar.nav.settings, href: '/dashboard/settings', icon: Settings, capability: null },
+    ],
+  },
+]
 
 export function Sidebar({
   orgName,
@@ -65,23 +78,7 @@ export function Sidebar({
   const pathname = usePathname()
   const { open, close } = useDashboardShell()
   const drawerRef = useRef<HTMLElement>(null)
-  const moreRef = useRef<HTMLDetailsElement>(null)
   const enabled = new Set(enabledCapabilities)
-
-  const visible = navItems.filter(
-    (item) => item.capability === null || enabled.has(item.capability)
-  )
-  const primary = visible.filter((item) => primaryHrefs.has(item.href))
-  const more = visible.filter((item) => !primaryHrefs.has(item.href))
-  const activeMoreItem = more.find(
-    (item) => pathname === item.href || pathname.startsWith(`${item.href}/`)
-  )
-
-  useEffect(() => {
-    if (moreRef.current) {
-      moreRef.current.open = Boolean(activeMoreItem)
-    }
-  }, [activeMoreItem, pathname])
 
   useEffect(() => {
     if (!open) return
@@ -127,61 +124,92 @@ export function Sidebar({
     <aside
       id="dashboard-sidebar"
       ref={drawerRef}
-      className={`invisible fixed inset-y-0 start-0 z-50 flex h-dvh w-72 max-w-[85vw] flex-col border-e border-white/10 bg-dark pt-[env(safe-area-inset-top)] text-white shadow-xl transition-transform duration-200 motion-reduce:transition-none lg:visible lg:static lg:z-auto lg:h-dvh lg:w-64 lg:max-w-none lg:shrink-0 lg:translate-x-0 lg:shadow-none ${
+      className={`fixed inset-y-0 start-0 z-50 flex h-dvh w-72 max-w-[85vw] flex-col border-e border-white/10 bg-dark pt-[env(safe-area-inset-top)] text-white shadow-2xl transition-all duration-300 ease-out transform-gpu lg:static lg:z-auto lg:h-dvh lg:w-64 lg:max-w-none lg:shrink-0 lg:translate-x-0 lg:shadow-none ${
         open
-          ? 'visible translate-x-0'
-          : 'invisible max-lg:rtl:translate-x-full max-lg:ltr:-translate-x-full'
+          ? 'translate-x-0 opacity-100 visible'
+          : 'max-lg:rtl:translate-x-full max-lg:ltr:-translate-x-full max-lg:opacity-0 max-lg:invisible lg:visible lg:opacity-100'
       }`}
       role={open ? 'dialog' : undefined}
       aria-modal={open ? true : undefined}
       aria-label={ar.nav.sidebarLabel}
     >
-      <div className="flex h-16 shrink-0 items-center justify-between border-b border-white/10 ps-[max(1rem,env(safe-area-inset-right))] pe-[max(1rem,env(safe-area-inset-left))]">
+      {/* Brand Header */}
+      <div className="flex h-16 shrink-0 items-center justify-between border-b border-white/10 ps-[max(1.25rem,env(safe-area-inset-right))] pe-[max(1rem,env(safe-area-inset-left))]">
         <Link
           href="/dashboard"
+          prefetch={true}
           onClick={close}
-          className="flex items-center gap-2 text-xl font-bold tracking-tight text-white"
+          className="group flex items-center gap-2.5 text-lg font-extrabold tracking-tight text-white transition-opacity hover:opacity-90"
         >
-          <BrandMark className="h-8 w-8" />
-          FrontDesk AI
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-white shadow-xs transition-transform group-hover:scale-105">
+            <BrandMark className="h-5 w-5" />
+          </div>
+          <span className="flex items-center gap-1.5 font-bold">
+            FrontDesk AI
+          </span>
         </Link>
         <button
           type="button"
           onClick={close}
-          className="inline-flex h-11 w-11 items-center justify-center rounded-lg text-white/80 hover:bg-white/10 lg:hidden"
+          className="inline-flex h-10 w-10 items-center justify-center rounded-xl text-white/80 hover:bg-white/10 hover:text-white transition-colors lg:hidden"
           aria-label={ar.header.closeMenu}
         >
           <X size={20} aria-hidden="true" />
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4">
-        <div className="mb-3 px-3 text-xs font-semibold tracking-wider text-white/50">
-          {ar.nav.section}
-        </div>
-        <nav aria-label={ar.nav.sidebarLabel} className="flex flex-col gap-1">
-          {primary.map((item) => <NavLink key={item.href} item={item} pathname={pathname} onClick={close} />)}
-          {more.length ? (
-            <details ref={moreRef} className="group">
-              <summary className="flex min-h-11 cursor-pointer list-none items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-white/70 transition-colors hover:bg-white/5 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary-light">
-                <Ellipsis size={18} className="text-white/60" aria-hidden="true" />
-                المزيد
-              </summary>
-              <div className="mt-1 flex flex-col gap-1 border-s border-white/15 ms-5 ps-2">
-                {more.map((item) => <NavLink key={item.href} item={item} pathname={pathname} onClick={close} />)}
-              </div>
-            </details>
-          ) : null}
-        </nav>
+      {/* Navigation Sections */}
+      <div className="flex-1 overflow-y-auto px-3.5 py-4 space-y-6 scrollbar-thin scrollbar-thumb-white/15">
+        {navSections.map((section) => {
+          const visibleItems = section.items.filter(
+            (item) => item.capability === null || enabled.has(item.capability)
+          )
+          if (visibleItems.length === 0) return null
+
+          return (
+            <div key={section.title} className="space-y-1.5">
+              <p className="px-3 text-[11px] font-extrabold tracking-wider text-white/40 uppercase">
+                {section.title}
+              </p>
+              <nav aria-label={section.title} className="flex flex-col gap-0.5">
+                {visibleItems.map((item) => (
+                  <NavLink
+                    key={item.href}
+                    item={item}
+                    pathname={pathname}
+                    onClick={close}
+                  />
+                ))}
+              </nav>
+            </div>
+          )
+        })}
       </div>
 
-      <div className="shrink-0 border-t border-white/10 p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
-        <div className="flex items-center gap-2 px-3 py-2">
-          <ShieldCheck size={16} className="shrink-0 text-primary-light" />
-          <div className="min-w-0">
-            <p className="truncate text-sm font-medium text-white">{orgName}</p>
-            <p className="text-xs text-white/60">{roleLabel(role)}</p>
+      {/* Organization Badge Footer */}
+      <div className="shrink-0 border-t border-white/10 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+        <div className="flex items-center gap-3 rounded-xl bg-white/5 p-2.5 transition-colors hover:bg-white/10">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary-light/20 text-primary-light font-bold text-sm">
+            {orgName ? orgName.slice(0, 1) : 'ك'}
           </div>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-xs font-bold text-white">{orgName || 'المؤسسة'}</p>
+            <div className="flex items-center gap-1 text-[11px] text-white/60">
+              <ShieldCheck size={12} className="text-primary-light shrink-0" />
+              <span className="truncate">{roleLabel(role)}</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-2 px-1 text-center">
+          <a
+            href="https://kayan-soft.online"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-block text-[10px] text-white/40 hover:text-primary-light transition-colors"
+          >
+            برمجة وتطوير شركة كيان سوفت
+          </a>
         </div>
       </div>
     </aside>
@@ -199,22 +227,54 @@ function NavLink({
 }) {
   const router = useRouter()
   const Icon = item.icon
-  const active = pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(`${item.href}/`))
+  const active =
+    pathname === item.href ||
+    (item.href !== '/dashboard' && pathname.startsWith(`${item.href}/`))
+
+  const [isPending, startTransition] = useTransition()
+
   return (
     <Link
       href={item.href}
       prefetch={true}
-      onClick={onClick}
+      onClick={(e) => {
+        onClick()
+        startTransition(() => {
+          // Trigger optimistic navigation
+        })
+      }}
       onMouseEnter={() => {
         router.prefetch(item.href)
       }}
-      className={`flex min-h-11 items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
-        active ? 'bg-primary/25 text-white' : 'text-white/70 hover:bg-white/5 hover:text-white'
-      }`}
+      className={`group relative flex min-h-10 items-center justify-between rounded-xl px-3 py-2 text-xs font-semibold transition-all duration-150 transform-gpu ${
+        active
+          ? 'bg-primary text-white shadow-xs font-bold'
+          : 'text-white/70 hover:bg-white/10 hover:text-white'
+      } ${isPending ? 'opacity-70 scale-[0.99]' : ''}`}
       aria-current={active ? 'page' : undefined}
     >
-      <Icon size={18} className={active ? 'text-primary-light' : 'text-white/60'} aria-hidden="true" />
-      {item.name}
+      <div className="flex items-center gap-2.5 min-w-0">
+        <Icon
+          size={17}
+          className={`shrink-0 transition-colors ${
+            active ? 'text-white' : 'text-white/60 group-hover:text-white'
+          }`}
+          aria-hidden="true"
+        />
+        <span className="truncate">{item.name}</span>
+      </div>
+
+      {item.badge && (
+        <span
+          className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-extrabold ${
+            active
+              ? 'bg-white/20 text-white'
+              : 'bg-primary-light/20 text-primary-light group-hover:bg-primary-light/30'
+          }`}
+        >
+          {item.badge}
+        </span>
+      )}
     </Link>
   )
 }

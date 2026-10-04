@@ -55,7 +55,17 @@ export function SiteFooter() {
 
         <div className="mt-12 flex flex-col gap-3 border-t border-border pt-6 text-xs text-text-muted sm:flex-row sm:items-center sm:justify-between">
           <p>© {new Date().getFullYear()} FrontDesk AI — جميع الحقوق محفوظة.</p>
-          <p>منصة عربية أولًا (RTL) · قنوات اليوم: الهاتف وواتساب</p>
+          <p className="flex items-center gap-1.5">
+            <span>حقوق البرمجة والتطوير لدى</span>
+            <a
+              href="https://kayan-soft.online"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-bold text-primary-dark underline decoration-primary-light decoration-2 underline-offset-4 transition-colors hover:decoration-primary-dark hover:text-primary"
+            >
+              شركة كيان سوفت
+            </a>
+          </p>
         </div>
       </div>
     </footer>

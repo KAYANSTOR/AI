@@ -1,7 +1,8 @@
 'use client'
 
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useRef, useState, Suspense } from 'react'
 import { Header } from '@/components/Header'
+import { NavigationProgress } from './navigation-progress'
 import { ar } from '@/lib/i18n/ar'
 
 type DashboardShellContextValue = {
@@ -43,6 +44,9 @@ export function DashboardShell({
 
   return (
     <DashboardShellContext.Provider value={{ open, close, toggle, triggerRef }}>
+      <Suspense fallback={null}>
+        <NavigationProgress />
+      </Suspense>
       <div className="flex h-dvh min-w-0 overflow-hidden bg-background font-sans">
         {open && (
           <button
