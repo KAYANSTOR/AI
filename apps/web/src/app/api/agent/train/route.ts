@@ -276,8 +276,8 @@ ${KNOWLEDGE_DELIMITER}
             },
             contents: normalizedContents,
             generationConfig: {
+              // Temperature sampling is deprecated on current Gemini models.
               maxOutputTokens: 2048,
-              temperature: 0.3,
             },
           }),
         })
@@ -308,54 +308,61 @@ ${KNOWLEDGE_DELIMITER}
       async start(controller) {
         let fullAccumulated = ''
         let reachedDelimiter = false
+        let buffer = ''
+
+        // إطارات SSE الخاصة بـ Gemini قد تُقسَّم عبر حزم الشبكة، لذلك نحتفظ بالجزء
+        // غير المكتمل حتى يكتمل السطر. بدون ذلك يُهمَل رمز كامل فيتشوّه نص الرد
+        // ويتلف استخراج كتلة المعرفة (---KNOWLEDGE_EXTRACT---).
+        const handleLine = (line: string) => {
+          if (!line.startsWith('data:')) return
+          const dataJson = line.slice(5).trim()
+          if (!dataJson || dataJson === '[DONE]') return
+
+          let parsedChunk: {
+            candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>
+          }
+          try {
+            parsedChunk = JSON.parse(dataJson)
+          } catch {
+            // سطر غير مكتمل أو غير صالح: نتجاهل التحليل فقط دون إسقاط بقية الرد.
+            return
+          }
+
+          const textPart = parsedChunk?.candidates?.[0]?.content?.parts?.[0]?.text || ''
+          if (!textPart) return
+
+          fullAccumulated += textPart
+          if (reachedDelimiter) return
+
+          const delimIdx = fullAccumulated.indexOf(KNOWLEDGE_DELIMITER)
+          if (delimIdx !== -1) {
+            reachedDelimiter = true
+            // Emit the remaining visible text before the delimiter
+            const beforeDelim = fullAccumulated.slice(0, delimIdx)
+            controller.enqueue(
+              encoder.encode(
+                `data: ${JSON.stringify({ type: 'token_reset', content: beforeDelim.trim() })}\n\n`
+              )
+            )
+          } else {
+            // Stream token to client
+            controller.enqueue(
+              encoder.encode(`data: ${JSON.stringify({ type: 'token', content: textPart })}\n\n`)
+            )
+          }
+        }
 
         try {
           while (true) {
             const { done, value } = await reader.read()
             if (done) break
 
-            const chunkStr = decoder.decode(value, { stream: true })
-            const lines = chunkStr.split('\n')
-
-            for (const line of lines) {
-              if (line.startsWith('data: ')) {
-                const dataJson = line.slice(6).trim()
-                if (dataJson === '[DONE]') continue
-                try {
-                  const parsedChunk = JSON.parse(dataJson)
-                  const textPart =
-                    parsedChunk?.candidates?.[0]?.content?.parts?.[0]?.text || ''
-
-                  if (textPart) {
-                    fullAccumulated += textPart
-
-                    if (!reachedDelimiter) {
-                      const delimIdx = fullAccumulated.indexOf(KNOWLEDGE_DELIMITER)
-                      if (delimIdx !== -1) {
-                        reachedDelimiter = true
-                        // Emit the remaining visible text before the delimiter
-                        const beforeDelim = fullAccumulated.slice(0, delimIdx)
-                        controller.enqueue(
-                          encoder.encode(
-                            `data: ${JSON.stringify({ type: 'token_reset', content: beforeDelim.trim() })}\n\n`
-                          )
-                        )
-                      } else {
-                        // Stream token to client
-                        controller.enqueue(
-                          encoder.encode(
-                            `data: ${JSON.stringify({ type: 'token', content: textPart })}\n\n`
-                          )
-                        )
-                      }
-                    }
-                  }
-                } catch {
-                  // Skip invalid JSON lines
-                }
-              }
-            }
+            buffer += decoder.decode(value, { stream: true })
+            const lines = buffer.split('\n')
+            buffer = lines.pop() ?? ''
+            for (const line of lines) handleLine(line.trim())
           }
+          if (buffer.trim()) handleLine(buffer.trim())
 
           // Complete response received: parse and persist knowledge
           const { reply, extraction } = parseExtractionBlock(fullAccumulated)
@@ -465,8 +472,8 @@ ${KNOWLEDGE_DELIMITER}
           },
           contents: normalizedContents,
           generationConfig: {
+            // Temperature sampling is deprecated on current Gemini models.
             maxOutputTokens: 2048,
-            temperature: 0.3,
           },
         }),
       })

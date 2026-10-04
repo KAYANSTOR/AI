@@ -34,6 +34,7 @@ import {
   deleteAgentKnowledgeItemAction,
   toggleAgentKnowledgeItemAction,
   updateBusinessTypeAndInstructionsAction,
+  getAgentReadinessAction,
 } from './actions'
 
 type InitialProfileData = {
@@ -96,6 +97,14 @@ const DEFAULT_WELCOME = `أهلًا بك 👋 أنا مساعدك الذكي ل�
 سأطرح عليك بعض الأسئلة، وأثناء حديثنا سأكتشف المعلومات التي أحتاجها وأرتبها تلقائيًا.
 لن تحتاج إلى تعبئة نماذج طويلة، فقط تحدث معي كأنك تتحدث مع موظف يفهمك.`
 
+type AgentTab = 'train' | 'test' | 'settings'
+
+const AGENT_TABS: Array<{ id: AgentTab; label: string; icon: typeof Sparkles }> = [
+  { id: 'train', label: 'جلسة تدريب الوكيل (بناء المعرفة)', icon: Sparkles },
+  { id: 'test', label: 'اختبر الوكيل كعميل حقيقي', icon: Bot },
+  { id: 'settings', label: 'الإعدادات المتقدمة', icon: Sliders },
+]
+
 const TEST_PRESETS = [
   { label: 'طلب حجز موعد', text: 'مرحبًا، أريد حجز موعد لديكم.' },
   { label: 'استفسار عن الأسعار', text: 'كم سعر الخدمة لديكم؟ وما طرق الدفع؟' },
@@ -117,7 +126,7 @@ export function AgentTrainer({
   consoleData: AgentConsoleData
   initialProfile?: InitialProfileData
 }) {
-  const [activeTab, setActiveTab] = useState<'train' | 'test' | 'settings'>('train')
+  const [activeTab, setActiveTab] = useState<AgentTab>('train')
   const [readiness, setReadiness] = useState<ReadinessResult>(initialReadiness)
 
   // ─────────────────────────────────────────────────────────────
@@ -149,8 +158,12 @@ export function AgentTrainer({
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
   const [trainError, setTrainError] = useState<string | null>(null)
-  const [toastMessage, setToastMessage] = useState<string | null>(null)
+  const [toast, setToast] = useState<{ text: string; kind: 'success' | 'error' } | null>(null)
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const chatBottomRef = useRef<HTMLDivElement>(null)
+  // يبقى المؤشر ملتصقًا بأسفل المحادثة فقط إذا كان المستخدم قريبًا من الأسفل،
+  // حتى لا يُقاطع تمريره للأعلى أثناء وصول الرد المتدفّق.
+  const [chatPinned, setChatPinned] = useState(true)
 
   // ─────────────────────────────────────────────────────────────
   // TESTING SESSION STATE
@@ -167,6 +180,7 @@ export function AgentTrainer({
   const [testBusy, setTestBusy] = useState(false)
   const [testError, setTestError] = useState<string | null>(null)
   const testBottomRef = useRef<HTMLDivElement>(null)
+  const [testPinned, setTestPinned] = useState(true)
 
   // ─────────────────────────────────────────────────────────────
   // KNOWLEDGE BASE MANAGEMENT MODAL / FORM STATE
@@ -180,17 +194,29 @@ export function AgentTrainer({
   } | null>(null)
   const [isPending, startTransition] = useTransition()
 
+  // auto-scroll فوري (بدون smooth) أثناء البث حتى لا يهتزّ التمرير مع كل رمز.
   useEffect(() => {
-    chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages, busy])
+    if (!chatPinned) return
+    chatBottomRef.current?.scrollIntoView({ behavior: 'auto', block: 'end' })
+  }, [messages, busy, chatPinned])
 
   useEffect(() => {
-    testBottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [testMessages, testBusy])
+    if (!testPinned) return
+    testBottomRef.current?.scrollIntoView({ behavior: 'auto', block: 'end' })
+  }, [testMessages, testBusy, testPinned])
 
-  function showToast(msg: string) {
-    setToastMessage(msg)
-    setTimeout(() => setToastMessage(null), 4000)
+  useEffect(() => () => {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
+  }, [])
+
+  function showToast(text: string, kind: 'success' | 'error' = 'success') {
+    setToast({ text, kind })
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
+    toastTimerRef.current = setTimeout(() => setToast(null), 4000)
+  }
+
+  function isNearBottom(el: HTMLElement) {
+    return el.scrollHeight - el.scrollTop - el.clientHeight < 120
   }
 
   // Send message in Training mode
@@ -249,57 +275,71 @@ export function AgentTrainer({
       const reader = response.body.getReader()
       const decoder = new TextDecoder()
       let streamText = ''
-      let done = false
+      let buffer = ''
 
-      while (!done) {
-        const { value, done: readerDone } = await reader.read()
-        done = readerDone
-        if (value) {
-          const chunkStr = decoder.decode(value, { stream: true })
-          const lines = chunkStr.split('\n')
-          for (const line of lines) {
-            if (line.startsWith('data: ')) {
-              const dataStr = line.slice(6).trim()
-              try {
-                const data = JSON.parse(dataStr)
-                if (data.type === 'token') {
-                  streamText += data.content
-                  setMessages((prev) =>
-                    prev.map((m) => (m.id === assistantMsgId ? { ...m, content: streamText } : m))
-                  )
-                } else if (data.type === 'token_reset') {
-                  streamText = data.content
-                  setMessages((prev) =>
-                    prev.map((m) => (m.id === assistantMsgId ? { ...m, content: streamText } : m))
-                  )
-                } else if (data.type === 'done') {
-                  setMessages((prev) =>
-                    prev.map((m) =>
-                      m.id === assistantMsgId
-                        ? {
-                            ...m,
-                            content: data.reply || streamText,
-                            savedFacts: data.savedFacts || [],
-                          }
-                        : m
-                    )
-                  )
-                  if (data.readiness) {
-                    setReadiness(data.readiness)
+      // إطارات SSE قد تُقسَّم عبر حزم الشبكة، لذلك نحتفظ بالجزء غير المكتمل في buffer
+      // ولا نحلّل السطر إلا بعد اكتماله، وإلا ضاعت الرموز وانقطع نص الرد.
+      const handleEvent = (line: string) => {
+        if (!line.startsWith('data:')) return
+        const dataStr = line.slice(5).trim()
+        if (!dataStr) return
+
+        let data: {
+          type?: string
+          content?: string
+          reply?: string
+          savedFacts?: Array<{ title: string; category: string }>
+          readiness?: ReadinessResult
+          error?: string
+        }
+        try {
+          data = JSON.parse(dataStr)
+        } catch {
+          // سطر غير مكتمل أو غير صالح: نتجاهل التحليل فقط دون إسقاط بقية الرد.
+          return
+        }
+
+        if (data.type === 'token') {
+          streamText += data.content ?? ''
+          setMessages((prev) =>
+            prev.map((m) => (m.id === assistantMsgId ? { ...m, content: streamText } : m))
+          )
+        } else if (data.type === 'token_reset') {
+          streamText = data.content ?? ''
+          setMessages((prev) =>
+            prev.map((m) => (m.id === assistantMsgId ? { ...m, content: streamText } : m))
+          )
+        } else if (data.type === 'done') {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantMsgId
+                ? {
+                    ...m,
+                    content: data.reply || streamText,
+                    savedFacts: data.savedFacts || [],
                   }
-                  if (data.savedFacts && data.savedFacts.length > 0) {
-                    showToast(`تم استيعاب وحفظ ${data.savedFacts.length} معلومة مؤكدة في ذاكرة الوكيل.`)
-                  }
-                } else if (data.type === 'error') {
-                  throw new Error(data.error)
-                }
-              } catch {
-                // Ignore parse errors on partial chunks
-              }
-            }
+                : m
+            )
+          )
+          if (data.readiness) setReadiness(data.readiness)
+          if (data.savedFacts && data.savedFacts.length > 0) {
+            showToast(`تم استيعاب وحفظ ${data.savedFacts.length} معلومة مؤكدة في ذاكرة الوكيل.`)
           }
+        } else if (data.type === 'error') {
+          // كان هذا الخطأ يُبتلع داخل catch الخاص بتحليل JSON، فينتهي الرد بلا رسالة.
+          throw new Error(data.error || 'حدث خطأ أثناء تدريب الوكيل.')
         }
       }
+
+      while (true) {
+        const { value, done: readerDone } = await reader.read()
+        if (readerDone) break
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() ?? ''
+        for (const line of lines) handleEvent(line.trim())
+      }
+      if (buffer.trim()) handleEvent(buffer.trim())
     } catch (err) {
       setTrainError(err instanceof Error ? err.message : 'تعذّر إرسال الرسالة.')
       setMessages((prev) => prev.filter((m) => m.id !== assistantMsgId || m.content.length > 0))
@@ -331,7 +371,9 @@ export function AgentTrainer({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           agentId,
-          messages: nextHistory,
+          // الخادم يحدّ الطلب بـ 24 رسالة؛ بدون هذا القصّ تتوقف المحاكاة عن
+          // العمل بعد 24 تبادلًا وتظهر رسالة خطأ مبهمة.
+          messages: nextHistory.slice(-24),
         }),
       })
 
@@ -374,19 +416,10 @@ export function AgentTrainer({
       if (res.ok) {
         showToast(res.message || 'تم حفظ المعلومة بنجاح.')
         setEditingItem(null)
-        // Refresh readiness client-side
-        const r = await fetch('/api/agent/train', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            agentId,
-            messages: [{ role: 'user', content: 'تحديث الجاهزية' }],
-          }),
-        })
-        const data = await r.json()
-        if (data?.readiness) setReadiness(data.readiness)
+        const fresh = await getAgentReadinessAction()
+        if (fresh) setReadiness(fresh)
       } else {
-        alert(res.error || 'تعذّر الحفظ.')
+        showToast(res.error || 'تعذّر حفظ المعلومة.', 'error')
       }
     })
   }
@@ -423,12 +456,14 @@ export function AgentTrainer({
     })
   }
 
+  // ألوان الحالة من هوية العلامة نفسها (success / warning / error) بدلًا من ألوان عامة
+  // حتى تبقى كل الشاشات بنفس اللوحة البصرية.
   const scoreColor =
     readiness.score >= 80
-      ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800'
+      ? 'text-success bg-success/10 border-success/30'
       : readiness.score >= 50
-      ? 'text-amber-600 bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800'
-      : 'text-rose-600 bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800'
+      ? 'text-warning bg-warning/10 border-warning/30'
+      : 'text-error bg-error/10 border-error/30'
 
   async function handleSaveProfileForm(e: React.FormEvent) {
     e.preventDefault()
@@ -454,17 +489,8 @@ export function AgentTrainer({
       showToast('تم تحديث نوع النشاط والبيانات وتعليمات الوكيل بنجاح!')
       setIsProfileModalOpen(false)
 
-      // Refresh readiness
-      const r = await fetch('/api/agent/train', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          agentId,
-          messages: [{ role: 'user', content: 'تحديث بيانات الشركة والنشاط' }],
-        }),
-      })
-      const data = await r.json()
-      if (data?.readiness) setReadiness(data.readiness)
+      const fresh = await getAgentReadinessAction()
+      if (fresh) setReadiness(fresh)
     } catch (err) {
       setProfileError(err instanceof Error ? err.message : 'حدث خطأ أثناء الحفظ.')
     } finally {
@@ -475,66 +501,67 @@ export function AgentTrainer({
   return (
     <div className="space-y-6">
       {/* Toast notification */}
-      {toastMessage && (
-        <div className="fixed top-20 start-1/2 -translate-x-1/2 z-50 rounded-xl bg-surface border border-primary/40 px-5 py-3 shadow-lg flex items-center gap-3 text-sm font-semibold text-primary-dark animate-fade-in">
-          <CheckCircle2 size={18} className="text-primary" />
-          <span>{toastMessage}</span>
+      {toast && (
+        <div
+          role="status"
+          aria-live="polite"
+          className={`fixed top-20 start-1/2 -translate-x-1/2 z-[60] flex items-center gap-3 rounded-xl border bg-surface px-5 py-3 text-sm font-semibold shadow-lg animate-fade-in ${
+            toast.kind === 'error'
+              ? 'border-error/40 text-error'
+              : 'border-primary/40 text-primary-dark'
+          }`}
+        >
+          {toast.kind === 'error' ? (
+            <AlertCircle size={18} className="text-error" />
+          ) : (
+            <CheckCircle2 size={18} className="text-primary" />
+          )}
+          <span>{toast.text}</span>
         </div>
       )}
 
       {/* Main Navigation Tabs & Action Button */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-        <div className="flex flex-1 border-b border-border bg-surface rounded-2xl p-1.5 shadow-xs">
-          <button
-            type="button"
-            onClick={() => setActiveTab('train')}
-            className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-sm font-bold transition-all ${
-              activeTab === 'train'
-                ? 'bg-primary text-white shadow-sm'
-                : 'text-text-muted hover:text-text hover:bg-background/60'
-            }`}
-          >
-            <Sparkles size={18} />
-            <span>جلسة تدريب الوكيل (بناء المعرفة)</span>
-            <span className="ms-1.5 rounded-full bg-white/20 px-2 py-0.5 text-xs">
-              {readiness.score}%
-            </span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('test')}
-            className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-sm font-bold transition-all ${
-              activeTab === 'test'
-                ? 'bg-primary text-white shadow-sm'
-                : 'text-text-muted hover:text-text hover:bg-background/60'
-            }`}
-          >
-            <Bot size={18} />
-            <span>اختبر الوكيل كعميل حقيقي</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('settings')}
-            className={`flex items-center justify-center gap-2 py-3 px-5 rounded-xl text-sm font-bold transition-all ${
-              activeTab === 'settings'
-                ? 'bg-primary text-white shadow-sm'
-                : 'text-text-muted hover:text-text hover:bg-background/60'
-            }`}
-          >
-            <Sliders size={18} />
-            <span>الإعدادات المتقدمة</span>
-          </button>
+      <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div
+          role="tablist"
+          aria-label="أقسام صفحة الوكيل"
+          className="no-scrollbar flex flex-1 gap-1 overflow-x-auto rounded-2xl border border-border bg-surface p-1.5 shadow-xs"
+        >
+          {AGENT_TABS.map((tab) => {
+            const Icon = tab.icon
+            const isActive = activeTab === tab.id
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                role="tab"
+                aria-selected={isActive}
+                onClick={() => setActiveTab(tab.id)}
+                className={`flex min-h-11 flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-xl px-4 py-2.5 text-sm font-bold transition-colors ${
+                  isActive
+                    ? 'bg-primary text-primary-foreground shadow-xs'
+                    : 'text-text-muted hover:bg-background/60 hover:text-text'
+                }`}
+              >
+                <Icon size={18} aria-hidden="true" />
+                <span>{tab.label}</span>
+                {tab.id === 'train' && (
+                  <span className="ms-1 rounded-full bg-white/20 px-2 py-0.5 text-xs">
+                    {readiness.score}%
+                  </span>
+                )}
+              </button>
+            )
+          })}
         </div>
 
         {/* Embedded action button requested by user */}
         <button
           type="button"
           onClick={() => setIsProfileModalOpen(true)}
-          className="flex items-center justify-center gap-2 py-3 px-5 rounded-2xl text-sm font-bold bg-primary text-white hover:bg-primary-dark transition-all shadow-sm shrink-0"
+          className="flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-2xl bg-primary px-5 py-2.5 text-sm font-bold text-primary-foreground shadow-xs transition-colors hover:bg-primary-dark"
         >
-          <Building2 size={18} />
+          <Building2 size={18} aria-hidden="true" />
           <span>تحديث نوع النشاط والبيانات</span>
         </button>
       </div>
@@ -545,7 +572,7 @@ export function AgentTrainer({
       {activeTab === 'train' && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
           {/* Main Chat Interface (7 cols) */}
-          <div className="lg:col-span-7 flex flex-col h-[740px] rounded-2xl border border-border bg-surface shadow-sm overflow-hidden">
+          <div className="flex h-[640px] flex-col overflow-hidden rounded-2xl border border-border bg-surface shadow-xs lg:col-span-7 lg:h-[740px]">
             {/* Chat Header */}
             <div className="border-b border-border bg-background/50 px-5 py-4 flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -555,7 +582,7 @@ export function AgentTrainer({
                 <div>
                   <h2 className="text-base font-bold text-text flex items-center gap-2">
                     جلسة تدريب الوكيل الذكي
-                    <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                    <span className="h-2 w-2 animate-pulse rounded-full bg-success" aria-hidden="true" />
                   </h2>
                   <p className="text-xs text-text-muted">
                     تحدث مع الوكيل بحرية، وسيقوم هو باستيعاب وحفظ معلومات نشاطك تلقائياً.
@@ -578,7 +605,10 @@ export function AgentTrainer({
             </div>
 
             {/* Messages Body */}
-            <div className="flex-1 overflow-y-auto p-5 space-y-4">
+            <div
+              className="flex-1 space-y-4 overflow-y-auto p-5 scrollbar-thin"
+              onScroll={(e) => setChatPinned(isNearBottom(e.currentTarget))}
+            >
               {messages.map((msg) => (
                 <div
                   key={msg.id}
@@ -609,7 +639,7 @@ export function AgentTrainer({
                         {msg.savedFacts.map((fact, idx) => (
                           <span
                             key={idx}
-                            className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-success/30 bg-success/10 px-2.5 py-1 text-xs text-success"
                           >
                             <CheckCircle2 size={13} />
                             <span>تم استيعاب وحفظ: <strong>{fact.title}</strong></span>
@@ -763,7 +793,7 @@ export function AgentTrainer({
             {/* Missing Info Recommendations */}
             {readiness.missingItems.length > 0 && (
               <div className="rounded-2xl border border-warning/30 bg-warning/5 p-5 shadow-sm space-y-3">
-                <div className="flex items-center gap-2 text-warning-dark font-bold text-xs">
+                <div className="flex items-center gap-2 text-warning font-bold text-xs">
                   <AlertCircle size={15} />
                   <span>معلومات ناقصة يُنصح بإضافتها للوكيل:</span>
                 </div>
@@ -865,10 +895,10 @@ export function AgentTrainer({
                                     <button
                                       type="button"
                                       onClick={() => handleToggleKnowledge(item.id, item.isActive)}
-                                      className={`px-2 py-0.5 rounded text-[10px] font-semibold transition-colors ${
+                                      className={`rounded px-2 py-0.5 text-[10px] font-semibold transition-colors ${
                                         item.isActive
-                                          ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300'
-                                          : 'bg-stone-200 text-stone-600 dark:bg-stone-800 dark:text-stone-400'
+                                          ? 'bg-success/15 text-success'
+                                          : 'bg-border/60 text-text-muted'
                                       }`}
                                     >
                                       {item.isActive ? 'مفعّلة' : 'معطّلة'}
@@ -921,7 +951,7 @@ export function AgentTrainer({
       {activeTab === 'test' && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
           {/* Simulated WhatsApp / Live Chat Container (8 cols) */}
-          <div className="lg:col-span-8 flex flex-col h-[740px] rounded-2xl border border-border bg-surface shadow-2xs overflow-hidden">
+          <div className="flex h-[640px] flex-col overflow-hidden rounded-2xl border border-border bg-surface shadow-xs lg:col-span-8 lg:h-[740px]">
             {/* Simulator Header - Brand Primary */}
             <div className="border-b border-white/10 bg-primary-dark text-white px-5 py-4 flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -957,7 +987,10 @@ export function AgentTrainer({
             </div>
 
             {/* Messages Area - Warm Sand Background */}
-            <div className="flex-1 overflow-y-auto p-5 space-y-4 bg-background">
+            <div
+              className="flex-1 space-y-4 overflow-y-auto bg-background p-5 scrollbar-thin"
+              onScroll={(e) => setTestPinned(isNearBottom(e.currentTarget))}
+            >
               {testMessages.map((m) => (
                 <div
                   key={m.id}
@@ -1108,8 +1141,13 @@ export function AgentTrainer({
           EDIT / ADD KNOWLEDGE MODAL
          ───────────────────────────────────────────────────────────── */}
       {editingItem && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4">
-          <div className="w-full max-w-lg rounded-2xl border border-border bg-surface p-6 shadow-xl space-y-5 animate-scale-in">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-dark/50 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label={editingItem.id ? 'تعديل معلومة في ذاكرة الوكيل' : 'إضافة معلومة جديدة لذاكرة الوكيل'}
+        >
+          <div className="w-full max-w-lg space-y-5 rounded-2xl border border-border bg-surface p-6 shadow-xl animate-scale-in">
             <div className="flex items-center justify-between border-b border-border pb-3">
               <h3 className="text-base font-bold text-text">
                 {editingItem.id ? 'تعديل معلومة في ذاكرة الوكيل' : 'إضافة معلومة جديدة لذاكرة الوكيل'}
@@ -1196,8 +1234,13 @@ export function AgentTrainer({
           UPDATE BUSINESS TYPE, DATA & AGENT INSTRUCTIONS MODAL
          ───────────────────────────────────────────────────────────── */}
       {isProfileModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto">
-          <div className="w-full max-w-2xl rounded-3xl border border-border bg-surface p-6 sm:p-8 shadow-2xl space-y-6 animate-scale-in my-8 max-h-[90vh] overflow-y-auto">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-dark/60 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="تحديث نوع النشاط والبيانات وتعليمات الوكيل"
+        >
+          <div className="my-8 max-h-[90vh] w-full max-w-2xl space-y-6 overflow-y-auto rounded-2xl border border-border bg-surface p-6 shadow-xl sm:p-8 animate-scale-in">
             <div className="flex items-start justify-between border-b border-border pb-4">
               <div>
                 <h3 className="text-lg font-bold text-text flex items-center gap-2">
@@ -1250,7 +1293,7 @@ export function AgentTrainer({
                           <span className="text-xs font-bold text-text flex items-center gap-1.5">
                             {opt.label}
                             {opt.badge && (
-                              <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                              <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-extrabold text-primary-dark">
                                 {opt.badge}
                               </span>
                             )}

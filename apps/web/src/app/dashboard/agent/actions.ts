@@ -6,6 +6,7 @@ import { getCurrentOrg, type OrgContext } from '@/lib/org'
 import { getToolPolicy } from '@/lib/ai/registry'
 import { applyBusinessType } from '@/lib/capabilities/profile'
 import { actionErrorMessage, supabaseActionError } from '@/lib/i18n/action-error'
+import { calculateAgentReadiness, type ReadinessResult } from '@/lib/ai/readiness'
 
 export type AgentActionResult = { ok: boolean; error?: string; message?: string; version?: number }
 
@@ -406,6 +407,26 @@ export async function updateBusinessTypeAndInstructionsAction(input: {
     return { ok: true, message: 'تم تحديث نوع النشاط والبيانات وتعليمات الوكيل بنجاح.' }
   } catch (error) {
     return { ok: false, error: actionErrorMessage(error, 'تعذّر تحديث نوع النشاط والبيانات.') }
+  }
+}
+
+/**
+ * Recomputes readiness directly from the database.
+ *
+ * The training chat is an LLM turn, so using it to merely refresh the readiness
+ * score fired a real (and billable) model call after every manual knowledge edit
+ * and could even re-extract facts. This read-only path keeps the score honest and
+ * makes the UI update instantly.
+ */
+export async function getAgentReadinessAction(): Promise<ReadinessResult | null> {
+  try {
+    const org = await getCurrentOrg()
+    if (!org) return null
+    const supabase = await createClient()
+    return await calculateAgentReadiness(supabase, org.organizationId)
+  } catch (error) {
+    console.error('Unable to recompute agent readiness', error)
+    return null
   }
 }
 
