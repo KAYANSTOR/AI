@@ -1,30 +1,22 @@
 import Link from 'next/link'
+import { BrandGlyph } from './brand-glyph'
 
 export const BRAND_NAME = 'FrontDesk AI'
 export const BRAND_TAGLINE = 'موظّف استقبال بالذكاء الاصطناعي'
 
+export { BrandGlyph }
+
 /**
- * Brand mark: brand-colored surface + speech bubble glyph.
+ * Brand mark: brand-colored tile + the reception-bell glyph.
  * Decorative — the accessible name comes from the surrounding link/label.
  */
 export function BrandMark({ className = 'h-9 w-9' }: { className?: string }) {
   return (
     <span
       aria-hidden="true"
-      className={`inline-flex shrink-0 items-center justify-center rounded-xl bg-primary text-surface ${className}`}
+      className={`inline-flex shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground ${className}`}
     >
-      <svg viewBox="0 0 32 32" fill="none" className="h-[62%] w-[62%]">
-        <path
-          fill="currentColor"
-          d="M9.5 8h13A3.5 3.5 0 0 1 26 11.5v8a3.5 3.5 0 0 1-3.5 3.5h-6.9l-4.2 3.3a.9.9 0 0 1-1.45-.7V23H9.5A3.5 3.5 0 0 1 6 19.5v-8A3.5 3.5 0 0 1 9.5 8Z"
-        />
-        <path
-          stroke="var(--color-primary)"
-          strokeWidth="1.8"
-          strokeLinecap="round"
-          d="M12.5 13.5h7M12.5 17h4"
-        />
-      </svg>
+      <BrandGlyph className="h-[92%] w-[92%]" />
     </span>
   )
 }
