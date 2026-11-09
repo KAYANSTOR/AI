@@ -9,6 +9,7 @@ import { CreditCard } from 'lucide-react'
 
 export const metadata: Metadata = {
   title: 'خطط الأسعار والاشتراكات | KAYAN AI',
+  alternates: { canonical: '/pricing' },
   description: 'خطط اشتراك شفافة ومرنة تناسب نشاطك التجاري. اختر الخطة المناسبة وابدأ في استقبال عملائك بالذكاء الاصطناعي.',
 }
 
