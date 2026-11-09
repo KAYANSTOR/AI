@@ -111,15 +111,22 @@ async function copyTable(tx, schema, table, cols, hasIdentity, pk) {
   const staging = ident(`_import_${table}`.slice(0, 60))
 
   await tx.unsafe(`create temp table ${staging} (like ${qualified} including defaults) on commit drop`)
-  // The staging table must accept every source column, including generated ones we skip.
-  const readable = await source.unsafe(`copy (select ${list} from ${qualified}) to stdout`).readable()
-  const writable = await tx.unsafe(`copy ${staging} (${list}) from stdin`).writable()
-  await new Promise((resolve, reject) => {
-    readable.on('error', reject)
-    writable.on('error', reject)
-    writable.on('finish', resolve)
-    readable.pipe(writable)
-  })
+  // Rows travel as JSON in batches: robust across poolers and fast enough for
+  // operational data volumes.
+  const BATCH = 500
+  for (let offset = 0; ; offset += BATCH) {
+    const [{ rows }] = await source.unsafe(
+      `select coalesce(json_agg(t), '[]'::json)::text as rows
+       from (select ${list} from ${qualified} order by 1 offset ${offset} limit ${BATCH}) t`
+    )
+    const parsed = JSON.parse(rows)
+    if (!parsed.length) break
+    await tx.unsafe(
+      `insert into ${staging} (${list}) select ${list} from json_populate_recordset(null::${staging}, $1::text::json)`,
+      [rows]
+    )
+    if (parsed.length < BATCH) break
+  }
 
   // Reference rows seeded by migrations carry their own random ids. When the source holds
   // the same content, the source row wins so foreign keys in the imported data stay valid.
