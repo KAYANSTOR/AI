@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * FrontDesk database migration runner.
+ * KAYAN AI database migration runner.
  *
  *   DATABASE_URL=postgres://... node packages/db/scripts/migrate.mjs up        # bootstrap + pending migrations
  *   DATABASE_URL=postgres://... node packages/db/scripts/migrate.mjs up 12     # up to version 12

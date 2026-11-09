@@ -8,8 +8,8 @@ import { Section } from '@/components/site/section'
 import { ShieldCheck, HeartHandshake, Eye } from 'lucide-react'
 
 export const metadata: Metadata = {
-  title: 'عن المنصة ورؤيتنا | FrontDesk AI',
-  description: 'تعرف على قصة ورؤية FrontDesk AI: منصة عربية متطورة تمكن الشركات في العالم العربي من أتمتة خدمة الاستقبال بالذكاء الاصطناعي.',
+  title: 'عن المنصة ورؤيتنا | KAYAN AI',
+  description: 'تعرف على قصة ورؤية KAYAN AI: منصة عربية متطورة تمكن الشركات في العالم العربي من أتمتة خدمة الاستقبال بالذكاء الاصطناعي.',
 }
 
 export default function AboutPage() {
@@ -29,7 +29,7 @@ export default function AboutPage() {
               إعادة ابتكار تجربة استقبال العملاء في العالم العربي
             </h1>
             <p className="text-base text-text-muted leading-relaxed sm:text-lg">
-              صُممت FrontDesk AI من البداية لتفهم اللهجات والسياق العربي، وتوفر حلاً احترافياً متكاملاً يغني عن انتظار الموظفين أو فقدان الاتصالات.
+              صُممت KAYAN AI من البداية لتفهم اللهجات والسياق العربي، وتوفر حلاً احترافياً متكاملاً يغني عن انتظار الموظفين أو فقدان الاتصالات.
             </p>
           </div>
 

@@ -30,7 +30,7 @@ export function ProblemSolution() {
       <div className="mt-12 grid gap-6 lg:grid-cols-2">
         <article className="rounded-2xl border border-border bg-surface p-6 sm:p-8">
           <div className="flex items-center justify-between gap-3">
-            <h3 className="text-lg font-bold text-text">قبل FrontDesk AI</h3>
+            <h3 className="text-lg font-bold text-text">قبل KAYAN AI</h3>
             <Chip tone="neutral">ما يحدث اليوم</Chip>
           </div>
           <ul className="mt-6 space-y-4">
@@ -45,7 +45,7 @@ export function ProblemSolution() {
 
         <article className="rounded-2xl bg-dark p-6 text-surface shadow-[var(--shadow-raised)] sm:p-8">
           <div className="flex items-center justify-between gap-3">
-            <h3 className="text-lg font-bold">مع FrontDesk AI</h3>
+            <h3 className="text-lg font-bold">مع KAYAN AI</h3>
             <span className="rounded-full bg-primary/25 px-3 py-1 text-xs font-medium text-primary-light">نفس الفريق، نتائج مختلفة</span>
           </div>
           <ul className="mt-6 space-y-4">

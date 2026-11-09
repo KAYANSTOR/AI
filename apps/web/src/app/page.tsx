@@ -13,7 +13,7 @@ const structuredData = {
   '@graph': [
     {
       '@type': 'SoftwareApplication',
-      name: 'FrontDesk AI',
+      name: 'KAYAN AI',
       applicationCategory: 'BusinessApplication',
       operatingSystem: 'Web',
       inLanguage: 'ar',

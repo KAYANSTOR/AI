@@ -8,7 +8,7 @@ import { Section } from '@/components/site/section'
 import { Workflow } from 'lucide-react'
 
 export const metadata: Metadata = {
-  title: 'طريقة العمل | FrontDesk AI',
+  title: 'طريقة العمل | KAYAN AI',
   description: 'كيف تبدأ وتفعّل موظف الاستقبال الذكي لشركتك في ٣ خطوات بسيطة دون أي تعقيد تقني.',
 }
 

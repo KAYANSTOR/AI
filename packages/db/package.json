@@ -1,8 +1,8 @@
 {
-  "name": "@frontdesk/db",
+  "name": "@kayan-ai/db",
   "version": "1.0.0",
   "private": true,
-  "description": "FrontDesk database: SQL migrations, bootstrap and data tooling.",
+  "description": "KAYAN AI database: SQL migrations, bootstrap and data tooling.",
   "type": "module",
   "license": "UNLICENSED",
   "scripts": {

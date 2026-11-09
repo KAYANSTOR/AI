@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Copies all application data from an existing Postgres database (for example the
- * previous Supabase project) into the FrontDesk database.
+ * previous Supabase project) into the KAYAN AI database.
  *
  *   SOURCE_DATABASE_URL=postgres://...  DATABASE_URL=postgres://...  \
  *     node packages/db/scripts/import-from-postgres.mjs [--dry-run] [--allow-non-empty]

@@ -8,7 +8,7 @@ import { Section } from '@/components/site/section'
 import { Sparkles, PhoneCall, MessageSquare, Shield, Clock } from 'lucide-react'
 
 export const metadata: Metadata = {
-  title: 'المميزات والقدرات | FrontDesk AI',
+  title: 'المميزات والقدرات | KAYAN AI',
   description: 'تعرف على إمكانيات موظف الاستقبال الذكي لشركتك: الرد الصوتي بالهاتف، واتساب، جدولة المواعيد، وتأهيل العملاء على مدار الساعة.',
 }
 
@@ -29,7 +29,7 @@ export default function FeaturesPage() {
               مميزات صُممت لتمكين وتوسيع أعمالك
             </h1>
             <p className="text-base text-text-muted leading-relaxed sm:text-lg">
-              لا تفوّت أي عميل أو اتصال بعد اليوم. يجمع FrontDesk AI بين الرد الصوتي الطبيعي ومحادثات واتساب الذكية، وحفظ بيانات ومواعيد كل عميل في مكان واحد.
+              لا تفوّت أي عميل أو اتصال بعد اليوم. يجمع KAYAN AI بين الرد الصوتي الطبيعي ومحادثات واتساب الذكية، وحفظ بيانات ومواعيد كل عميل في مكان واحد.
             </p>
           </div>
 

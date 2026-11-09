@@ -156,7 +156,7 @@ async function AgentTrainerSection({
 
   const data: AgentConsoleData = {
     agentId,
-    name: agentName ?? 'FrontDesk',
+    name: agentName ?? 'KAYAN',
     locale: agentLocale ?? 'ar',
     temperature: Number(agentTemperature ?? 0.2),
     status: agentStatus ?? 'active',

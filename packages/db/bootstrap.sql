@@ -1,4 +1,4 @@
--- FrontDesk database bootstrap.
+-- KAYAN AI database bootstrap.
 --
 -- Runs before the numbered migrations on every `migrate up` and is fully idempotent.
 -- It provisions what the application expects to exist independently of the product

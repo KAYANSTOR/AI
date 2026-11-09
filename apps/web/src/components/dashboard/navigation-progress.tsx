@@ -53,7 +53,7 @@ export function NavigationProgress() {
       aria-hidden="true"
       className="fixed inset-x-0 top-0 z-[100] h-[2.5px] overflow-hidden bg-transparent pointer-events-none"
     >
-      <div className="h-full bg-gradient-to-r from-primary via-primary-dark to-primary-light animate-progress-indeterminate shadow-[0_0_8px_rgba(15,122,99,0.45)]" />
+      <div className="h-full bg-gradient-to-r from-primary via-primary-dark to-primary-light animate-progress-indeterminate shadow-[0_0_8px_rgba(217,119,87,0.45)]" />
     </div>
   )
 }

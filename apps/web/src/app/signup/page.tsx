@@ -6,7 +6,7 @@ import { SignupForm } from './signup-form'
 export const metadata: Metadata = {
   title: 'إنشاء حساب للشركة',
   description:
-    'أنشئ حساب شركتك في FrontDesk AI، اختر نوع نشاطها، وابدأ إعداد الخدمات والقنوات وتفعيل الوكيل الذكي.',
+    'أنشئ حساب شركتك في KAYAN AI، اختر نوع نشاطها، وابدأ إعداد الخدمات والقنوات وتفعيل الوكيل الذكي.',
 }
 
 export default function SignupPage() {

@@ -144,7 +144,7 @@ export function Sidebar({
             <BrandMark className="h-5 w-5" />
           </div>
           <span className="flex items-center gap-1.5 font-bold">
-            FrontDesk AI
+            KAYAN AI
           </span>
         </Link>
         <button

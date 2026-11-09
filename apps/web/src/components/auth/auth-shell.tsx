@@ -77,7 +77,7 @@ export function AuthShell({
           ))}
         </ul>
 
-        <p className="relative px-12 pb-10 text-xs text-surface/40">© {new Date().getFullYear()} FrontDesk AI</p>
+        <p className="relative px-12 pb-10 text-xs text-surface/40">© {new Date().getFullYear()} KAYAN AI</p>
       </aside>
     </div>
   )

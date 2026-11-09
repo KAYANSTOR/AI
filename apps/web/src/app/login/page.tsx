@@ -5,7 +5,7 @@ import { LoginForm } from './login-form'
 
 export const metadata: Metadata = {
   title: 'تسجيل الدخول',
-  description: 'سجّل الدخول إلى حساب شركتك في FrontDesk AI للوصول إلى المحادثات والعملاء والمواعيد.',
+  description: 'سجّل الدخول إلى حساب شركتك في KAYAN AI للوصول إلى المحادثات والعملاء والمواعيد.',
 }
 
 const DEFAULT_DESTINATION = '/dashboard'

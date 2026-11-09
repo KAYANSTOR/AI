@@ -27,16 +27,16 @@ const plexMono = IBM_Plex_Mono({
 const siteUrl =
   process.env.NEXT_PUBLIC_SITE_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
 
-const title = 'FrontDesk AI — موظّف استقبال بالذكاء الاصطناعي لشركتك'
+const title = 'KAYAN AI — موظّف استقبال بالذكاء الاصطناعي لشركتك'
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: {
     default: title,
-    template: '%s · FrontDesk AI',
+    template: '%s · KAYAN AI',
   },
   description: siteDescription,
-  applicationName: 'FrontDesk AI',
-  appleWebApp: { capable: true, title: 'FrontDesk', statusBarStyle: 'default' },
+  applicationName: 'KAYAN AI',
+  appleWebApp: { capable: true, title: 'KAYAN AI', statusBarStyle: 'default' },
   formatDetection: { telephone: false },
   keywords: [
     'موظف استقبال ذكاء اصطناعي',
@@ -46,12 +46,12 @@ export const metadata: Metadata = {
     'واتساب للأعمال',
     'AI receptionist',
   ],
-  authors: [{ name: 'FrontDesk AI' }],
+  authors: [{ name: 'KAYAN AI' }],
   alternates: { canonical: '/' },
   openGraph: {
     type: 'website',
     locale: 'ar_SA',
-    siteName: 'FrontDesk AI',
+    siteName: 'KAYAN AI',
     title,
     description: siteDescription,
     url: '/',
@@ -65,7 +65,7 @@ export const metadata: Metadata = {
 }
 
 export const viewport: Viewport = {
-  themeColor: '#0f7a63',
+  themeColor: '#d97757',
   colorScheme: 'light',
   viewportFit: 'cover',
 }

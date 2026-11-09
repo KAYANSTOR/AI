@@ -80,7 +80,7 @@ export async function POST(req: Request) {
     const google = createGoogle({ apiKey })
     const result = streamText({
       model: google(MODEL),
-      system: `You are FrontDesk AI's internal Business Agent (Copilot).
+      system: `You are KAYAN AI's internal Business Agent (Copilot).
 You help the business owner or staff manage their operations.
 You can answer questions about their data using tools.
 Be professional, concise, and helpful. Always answer in Arabic.`,

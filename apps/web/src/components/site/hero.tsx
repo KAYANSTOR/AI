@@ -27,7 +27,7 @@ export function Hero() {
           </h1>
 
           <p className="mt-6 max-w-xl text-base leading-8 text-text-muted sm:text-lg sm:leading-9">
-            FrontDesk يرد على عملائك في واتساب وإنستغرام والهاتف من معلومات شركتك، يؤهّل الطلب، يحجز
+            KAYAN AI يرد على عملائك في واتساب وإنستغرام والهاتف من معلومات شركتك، يؤهّل الطلب، يحجز
             الموعد، ويسلّم فريقك محادثة مرتبة في لوحة واحدة.
           </p>
 
