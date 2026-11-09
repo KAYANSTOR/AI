@@ -9,6 +9,7 @@ import { Sparkles, PhoneCall, MessageSquare, Shield, Clock } from 'lucide-react'
 
 export const metadata: Metadata = {
   title: 'المميزات والقدرات | KAYAN AI',
+  alternates: { canonical: '/features' },
   description: 'تعرف على إمكانيات موظف الاستقبال الذكي لشركتك: الرد الصوتي بالهاتف، واتساب، جدولة المواعيد، وتأهيل العملاء على مدار الساعة.',
 }
 
