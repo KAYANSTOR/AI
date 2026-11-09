@@ -47,7 +47,6 @@ export const metadata: Metadata = {
     'AI receptionist',
   ],
   authors: [{ name: 'KAYAN AI' }],
-  alternates: { canonical: '/' },
   openGraph: {
     type: 'website',
     locale: 'ar_SA',
