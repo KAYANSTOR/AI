@@ -9,6 +9,7 @@ import { Workflow } from 'lucide-react'
 
 export const metadata: Metadata = {
   title: 'طريقة العمل | KAYAN AI',
+  alternates: { canonical: '/how-it-works' },
   description: 'كيف تبدأ وتفعّل موظف الاستقبال الذكي لشركتك في ٣ خطوات بسيطة دون أي تعقيد تقني.',
 }
 
