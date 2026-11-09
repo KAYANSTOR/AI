@@ -1,3 +1,4 @@
+import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/db/server'
 import { getDashboardContext } from '@/lib/dashboard/context'
@@ -6,6 +7,10 @@ import { describeChannelState, type ChannelConnectionState } from '@/lib/channel
 import type { SmokeTestOutcome } from '@/lib/onboarding/smoke-test'
 import type { ReplyTestResult } from '@/lib/onboarding/reply-test'
 import { FastPath, type FastPathData } from './fastpath'
+
+export const metadata: Metadata = {
+  robots: { index: false, follow: false, noarchive: true, nosnippet: true },
+}
 
 /** The FastPath reads the tenant's own activation state: never prerender it. */
 export const dynamic = 'force-dynamic'
