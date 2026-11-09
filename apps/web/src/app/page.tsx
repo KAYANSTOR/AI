@@ -1,3 +1,4 @@
+import type { Metadata } from 'next'
 import Link from 'next/link'
 import { SiteHeader } from '@/components/site/site-header'
 import { Hero } from '@/components/site/hero'
@@ -7,6 +8,10 @@ import { FinalCta } from '@/components/site/final-cta'
 import { SiteFooter } from '@/components/site/site-footer'
 import { Section, SectionHeading } from '@/components/site/section'
 import { ArrowLeft, Briefcase, Check, CreditCard, PhoneForwarded, Sparkles, Workflow } from 'lucide-react'
+
+export const metadata: Metadata = {
+  alternates: { canonical: '/' },
+}
 
 const structuredData = {
   '@context': 'https://schema.org',
