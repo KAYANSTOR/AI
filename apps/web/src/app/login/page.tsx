@@ -5,6 +5,7 @@ import { LoginForm } from './login-form'
 
 export const metadata: Metadata = {
   title: 'تسجيل الدخول',
+  robots: { index: false, follow: false },
   description: 'سجّل الدخول إلى حساب شركتك في KAYAN AI للوصول إلى المحادثات والعملاء والمواعيد.',
 }
 
