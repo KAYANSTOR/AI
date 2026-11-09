@@ -9,6 +9,7 @@ import { ShieldCheck, HeartHandshake, Eye } from 'lucide-react'
 
 export const metadata: Metadata = {
   title: 'عن المنصة ورؤيتنا | KAYAN AI',
+  alternates: { canonical: '/about' },
   description: 'تعرف على قصة ورؤية KAYAN AI: منصة عربية متطورة تمكن الشركات في العالم العربي من أتمتة خدمة الاستقبال بالذكاء الاصطناعي.',
 }
 
