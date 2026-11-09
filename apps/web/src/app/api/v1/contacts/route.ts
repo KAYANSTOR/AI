@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createAdminClient } from '@/lib/supabase/admin'
+import { createAdminClient } from '@/lib/db/admin'
 import { resolveApiKeyOrganization } from '@/lib/api-keys'
 
 export const runtime = 'nodejs'
@@ -10,8 +10,8 @@ export async function GET(req: NextRequest) {
   const token = auth.startsWith('Bearer ') ? auth.slice(7).trim() : ''
   if (!token) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
 
-  const supabase = createAdminClient()
-  const resolved = await resolveApiKeyOrganization(supabase, token)
+  const db = createAdminClient()
+  const resolved = await resolveApiKeyOrganization(db, token)
   if (!resolved) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   if (!resolved.scopes.includes('read') && !resolved.scopes.includes('*')) {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 })
@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
 
   const limit = Math.min(200, Math.max(1, Number(req.nextUrl.searchParams.get('limit') || 50)))
 
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from('contacts')
     .select('id, full_name, phone, email, created_at')
     .eq('organization_id', resolved.organizationId)

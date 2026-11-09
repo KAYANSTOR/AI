@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { isAuthorizedCronRequest } from '@/lib/cron/auth'
-import { createAdminClient } from '@/lib/supabase/admin'
+import { createAdminClient } from '@/lib/db/admin'
 import { DEFAULT_SLA_POLICY, evaluateSlaState, loadDefaultSlaPolicy, type SlaPolicy } from '@/lib/sla'
 import { runEscalationPolicies } from '@/lib/escalation'
 import { publicWebhookError } from '@/lib/runtime/security'
@@ -13,8 +13,8 @@ async function handle(req: NextRequest) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }
 
-  const supabase = createAdminClient()
-  const { data: rows, error } = await supabase
+  const db = createAdminClient()
+  const { data: rows, error } = await db
     .from('conversations')
     .select(
       'id, organization_id, human_assignee_id, first_response_due_at, resolution_due_at, first_responded_at, resolved_at, sla_state, status'
@@ -31,7 +31,7 @@ async function handle(req: NextRequest) {
   const organizationIds = [...new Set((rows ?? []).map((row) => row.organization_id as string))]
   await Promise.all(
     organizationIds.map(async (organizationId) => {
-      policyByOrg.set(organizationId, await loadDefaultSlaPolicy(supabase, organizationId))
+      policyByOrg.set(organizationId, await loadDefaultSlaPolicy(db, organizationId))
     })
   )
 
@@ -58,7 +58,7 @@ async function handle(req: NextRequest) {
 
     if (next === 'at_risk' && row.sla_state === 'normal') {
       warned++
-      const result = await runEscalationPolicies(supabase, {
+      const result = await runEscalationPolicies(db, {
         organizationId: row.organization_id,
         conversationId: row.id,
         trigger: 'sla_warning',
@@ -70,7 +70,7 @@ async function handle(req: NextRequest) {
     if (next === 'breached' && row.sla_state !== 'breached') {
       patch.sla_breached_at = new Date().toISOString()
       breached++
-      const result = await runEscalationPolicies(supabase, {
+      const result = await runEscalationPolicies(db, {
         organizationId: row.organization_id,
         conversationId: row.id,
         trigger: 'sla_breach',
@@ -79,7 +79,7 @@ async function handle(req: NextRequest) {
       escalations += result.notified
     }
 
-    const { error: updError } = await supabase
+    const { error: updError } = await db
       .from('conversations')
       .update(patch)
       .eq('id', row.id)

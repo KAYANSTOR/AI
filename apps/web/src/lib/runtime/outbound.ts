@@ -1,4 +1,4 @@
-import type { SupabaseClient } from '@supabase/supabase-js'
+import type { DbClient } from '@/lib/db/client'
 import { enqueueOutbound } from '@/lib/channels/outbox'
 import { CredentialConfigError, CredentialMissingError, requireCredential } from '@/lib/credentials/service'
 import { resolveChannelProviderCredentials } from '@/lib/credentials/resolve'
@@ -28,7 +28,7 @@ export type OutboundChannel = {
  * worker itself is the retry path and must record its own failure state.
  */
 export async function deliverOutbound(
-  supabase: SupabaseClient,
+  db: DbClient,
   input: {
     channel: OutboundChannel
     recipient: string
@@ -42,7 +42,7 @@ export async function deliverOutbound(
 
   let credentials: Record<string, string>
   try {
-    credentials = await resolveChannelProviderCredentials(supabase, {
+    credentials = await resolveChannelProviderCredentials(db, {
       channelId: input.channel.id,
       channelType: input.channel.channelType,
     })
@@ -61,7 +61,7 @@ export async function deliverOutbound(
     }
     if (!queueOnFailure) throw error
     await enqueueOutbound({
-      supabase,
+      db,
       organizationId: input.channel.organizationId,
       businessId: input.channel.businessId,
       channelId: input.channel.id,
@@ -73,7 +73,7 @@ export async function deliverOutbound(
     return 'queued'
   }
 
-  await supabase.from('usage_ledger').insert({
+  await db.from('usage_ledger').insert({
     organization_id: input.channel.organizationId,
     business_id: input.channel.businessId,
     event_type: 'message_outbound',
@@ -88,10 +88,10 @@ export async function deliverOutbound(
 
 /** Persist a customer-visible outbound message only after the provider accepted it. */
 export async function recordDeliveredOutboundMessage(
-  supabase: SupabaseClient,
+  db: DbClient,
   input: { organizationId: string; conversationId: string; body: string; idempotencyKey: string; state?: string }
 ) {
-  const { error } = await supabase.from('messages').insert({
+  const { error } = await db.from('messages').insert({
     organization_id: input.organizationId,
     conversation_id: input.conversationId,
     direction: 'outbound',
@@ -102,14 +102,14 @@ export async function recordDeliveredOutboundMessage(
   if (error && error.code !== '23505') throw new Error('outbound_message_record_failed')
 
   const now = new Date().toISOString()
-  const { error: conversationError } = await supabase
+  const { error: conversationError } = await db
     .from('conversations')
     .update({ last_message_at: now, last_outbound_at: now, state: input.state ?? 'waiting_customer' })
     .eq('id', input.conversationId)
     .eq('organization_id', input.organizationId)
   if (conversationError) throw new Error('outbound_conversation_update_failed')
 
-  await supabase.from('audit_events').insert({
+  await db.from('audit_events').insert({
     organization_id: input.organizationId,
     action: 'message.outbound_delivered',
     entity_type: 'conversation',
@@ -117,7 +117,7 @@ export async function recordDeliveredOutboundMessage(
     actor_type: 'system',
     metadata: { idempotency_key: input.idempotencyKey },
   })
-  await markFirstResponse(supabase, {
+  await markFirstResponse(db, {
     organizationId: input.organizationId,
     conversationId: input.conversationId,
   })

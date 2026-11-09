@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
-import type { SupabaseClient } from '@supabase/supabase-js'
+import type { DbClient } from '@/lib/db/client'
 import { resolveWhatsAppBinding } from '@/lib/channels/connect-service'
 import { encryptSecret } from '@/lib/credentials/service'
-import { createFakeSupabase } from './support/fake-supabase'
+import { createFakeDb } from './support/fake-db'
 
 const TEST_KEY = Buffer.alloc(32, 7).toString('base64')
 const originalKey = process.env.CREDENTIAL_ENCRYPTION_KEY
@@ -22,7 +22,7 @@ afterEach(() => {
 
 describe('WhatsApp number binding', () => {
   test('does not reuse a stored provider id when the submitted number differs', async () => {
-    const fake = createFakeSupabase({
+    const fake = createFakeDb({
       provider_credentials: {
         rows: [
           {
@@ -37,7 +37,7 @@ describe('WhatsApp number binding', () => {
     })
 
     const result = await resolveWhatsAppBinding({
-      supabase: fake.client as unknown as SupabaseClient,
+      db: fake.client as unknown as DbClient,
       channel: {
         id: 'channel-1',
         provider_account_id: 'existing-provider-id',
@@ -54,10 +54,10 @@ describe('WhatsApp number binding', () => {
   })
 
   test('reuses an existing provider id only when the exact number matches', async () => {
-    const fake = createFakeSupabase({})
+    const fake = createFakeDb({})
 
     const result = await resolveWhatsAppBinding({
-      supabase: fake.client as unknown as SupabaseClient,
+      db: fake.client as unknown as DbClient,
       channel: {
         id: 'channel-1',
         provider_account_id: 'existing-provider-id',
@@ -74,10 +74,10 @@ describe('WhatsApp number binding', () => {
   })
 
   test('does not reuse a provider id from a matching but unverified binding', async () => {
-    const fake = createFakeSupabase({})
+    const fake = createFakeDb({})
 
     const result = await resolveWhatsAppBinding({
-      supabase: fake.client as unknown as SupabaseClient,
+      db: fake.client as unknown as DbClient,
       channel: {
         id: 'channel-1',
         provider_account_id: 'existing-provider-id',

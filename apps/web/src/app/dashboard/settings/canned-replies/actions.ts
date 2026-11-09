@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { requireAdminCapability, audit } from '@/lib/capabilities/guard'
-import { actionErrorMessage, supabaseActionError } from '@/lib/i18n/action-error'
+import { actionErrorMessage, dbActionError } from '@/lib/i18n/action-error'
 
 export type CannedResult = { ok: true; id?: string } | { ok: false; error: string }
 
@@ -19,7 +19,7 @@ export async function createCannedReplyAction(input: {
     if (!title) return { ok: false, error: 'العنوان مطلوب.' }
     if (!body) return { ok: false, error: 'نص الرد مطلوب.' }
 
-    const { data, error } = await ctx.supabase
+    const { data, error } = await ctx.db
       .from('canned_replies')
       .insert({
         organization_id: ctx.organizationId,
@@ -32,7 +32,7 @@ export async function createCannedReplyAction(input: {
       .select('id')
       .single()
 
-    if (error || !data) return { ok: false, error: supabaseActionError(error) }
+    if (error || !data) return { ok: false, error: dbActionError(error) }
     await audit(ctx, 'canned_reply.created', 'canned_reply', data.id)
     revalidatePath('/dashboard/settings/canned-replies')
     return { ok: true, id: data.id }
@@ -44,12 +44,12 @@ export async function createCannedReplyAction(input: {
 export async function deactivateCannedReplyAction(id: string): Promise<CannedResult> {
   try {
     const ctx = await requireAdminCapability('inbox')
-    const { error } = await ctx.supabase
+    const { error } = await ctx.db
       .from('canned_replies')
       .update({ is_active: false, updated_at: new Date().toISOString() })
       .eq('id', id)
       .eq('organization_id', ctx.organizationId)
-    if (error) return { ok: false, error: supabaseActionError(error) }
+    if (error) return { ok: false, error: dbActionError(error) }
     await audit(ctx, 'canned_reply.deactivated', 'canned_reply', id)
     revalidatePath('/dashboard/settings/canned-replies')
     return { ok: true, id }

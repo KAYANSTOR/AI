@@ -17,12 +17,6 @@ dist/
 .env.production.local
 .env*.local
 
-# Supabase
-.supabase/
-
-# Vercel
-.vercel
-
 # IDE
 .vscode/
 .idea/

@@ -1,4 +1,4 @@
-import type { SupabaseClient } from '@supabase/supabase-js'
+import type { DbClient } from '@/lib/db/client'
 import { resolveChannelExact } from '@/lib/runtime/tenant'
 
 export type ChannelType = 'whatsapp' | 'instagram' | 'sms' | 'phone'
@@ -120,7 +120,7 @@ export type BindingTestResult = {
 }
 
 export async function verifyChannelBinding(
-  supabase: SupabaseClient,
+  db: DbClient,
   channel: ChannelRow
 ): Promise<BindingTestResult> {
   const spec = getChannelSpec(channel.channel_type)
@@ -165,7 +165,7 @@ export async function verifyChannelBinding(
     })
   }
 
-  const resolved = await resolveChannelExact(supabase, {
+  const resolved = await resolveChannelExact(db, {
     channelType: channel.channel_type,
     providerAccountId:
       spec.type === 'whatsapp' && !channel.provider_account_id ? null : channel.provider_account_id,

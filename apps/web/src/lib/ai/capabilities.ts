@@ -1,6 +1,6 @@
-import type { SupabaseClient } from '@supabase/supabase-js'
+import type { DbClient } from '@/lib/db/client'
 
-/** Capability IDs aligned with PLAN.md Capability Registry */
+/** Capability identifiers used across the agent runtime. */
 export type CapabilityId =
   | 'lead_capture'
   | 'appointments'
@@ -16,10 +16,10 @@ export type CapabilityId =
  * (lib/ai/registry.ts), which is the governance source of truth.
  */
 export async function getEnabledCapabilities(
-  supabase: SupabaseClient,
+  db: DbClient,
   organizationId: string
 ): Promise<Set<string>> {
-  const { data } = await supabase
+  const { data } = await db
     .from('organization_capabilities')
     .select('capability_id')
     .eq('organization_id', organizationId)

@@ -18,7 +18,7 @@ export default async function CannedRepliesPage() {
     redirect('/login')
   }
 
-  const replies = await listCannedReplies(ctx.supabase, ctx.organizationId)
+  const replies = await listCannedReplies(ctx.db, ctx.organizationId)
 
   return (
     <div className="space-y-6">

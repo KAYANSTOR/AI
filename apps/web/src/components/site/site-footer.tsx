@@ -54,7 +54,7 @@ export function SiteFooter() {
         </div>
 
         <div className="mt-12 flex flex-col gap-3 border-t border-border pt-6 text-xs text-text-muted sm:flex-row sm:items-center sm:justify-between">
-          <p>© {new Date().getFullYear()} FrontDesk AI — جميع الحقوق محفوظة.</p>
+          <p>© {new Date().getFullYear()} KAYAN AI — جميع الحقوق محفوظة.</p>
           <p className="flex items-center gap-1.5">
             <span>حقوق البرمجة والتطوير لدى</span>
             <a

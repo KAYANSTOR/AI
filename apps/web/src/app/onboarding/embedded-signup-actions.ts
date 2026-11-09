@@ -1,7 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/db/server'
 import { getCurrentOrg } from '@/lib/org'
 import { actionErrorMessage } from '@/lib/i18n/action-error'
 import { completeEmbeddedSignup } from '@/lib/channels/embedded-signup'
@@ -26,8 +26,8 @@ async function auditSetup(
   metadata: Record<string, unknown>
 ) {
   try {
-    const supabase = await createClient()
-    const { error } = await supabase.rpc('log_audit_event', {
+    const db = await createClient()
+    const { error } = await db.rpc('log_audit_event', {
       p_organization_id: organizationId,
       p_action: action,
       p_entity_type: entityType,
@@ -52,9 +52,9 @@ export async function completeWhatsAppEmbeddedSignupAction(input: {
 }): Promise<OnboardingResult> {
   try {
     const org = await requireOnboardingAdmin()
-    const supabase = await createClient()
+    const db = await createClient()
 
-    const { data: profile } = await supabase
+    const { data: profile } = await db
       .from('business_profiles')
       .select('business_id')
       .eq('organization_id', org.organizationId)

@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { requireCapability, audit } from '@/lib/capabilities/guard'
-import { actionErrorMessage, supabaseActionError } from '@/lib/i18n/action-error'
+import { actionErrorMessage, dbActionError } from '@/lib/i18n/action-error'
 
 export type ViewResult = { ok: true; id?: string } | { ok: false; error: string }
 
@@ -23,14 +23,14 @@ export async function saveInboxViewAction(input: {
     const name = input.name.trim()
     if (!name) return { ok: false, error: 'الاسم مطلوب.' }
 
-    const { data: member } = await ctx.supabase
+    const { data: member } = await ctx.db
       .from('organization_members')
       .select('id')
       .eq('organization_id', ctx.organizationId)
       .eq('user_id', ctx.userId)
       .maybeSingle()
 
-    const { data, error } = await ctx.supabase
+    const { data, error } = await ctx.db
       .from('saved_inbox_views')
       .insert({
         organization_id: ctx.organizationId,
@@ -42,7 +42,7 @@ export async function saveInboxViewAction(input: {
       .select('id')
       .single()
 
-    if (error || !data) return { ok: false, error: supabaseActionError(error) }
+    if (error || !data) return { ok: false, error: dbActionError(error) }
     await audit(ctx, 'inbox_view.saved', 'saved_inbox_view', data.id)
     revalidatePath('/dashboard/conversations')
     return { ok: true, id: data.id }
@@ -54,12 +54,12 @@ export async function saveInboxViewAction(input: {
 export async function deleteInboxViewAction(viewId: string): Promise<ViewResult> {
   try {
     const ctx = await requireCapability('inbox')
-    const { error } = await ctx.supabase
+    const { error } = await ctx.db
       .from('saved_inbox_views')
       .delete()
       .eq('id', viewId)
       .eq('organization_id', ctx.organizationId)
-    if (error) return { ok: false, error: supabaseActionError(error) }
+    if (error) return { ok: false, error: dbActionError(error) }
     await audit(ctx, 'inbox_view.deleted', 'saved_inbox_view', viewId)
     revalidatePath('/dashboard/conversations')
     return { ok: true, id: viewId }

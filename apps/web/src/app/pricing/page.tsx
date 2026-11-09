@@ -5,10 +5,10 @@ import { Faq, FAQ_ITEMS } from '@/components/site/faq'
 import { FinalCta } from '@/components/site/final-cta'
 import { SiteFooter } from '@/components/site/site-footer'
 import { Section } from '@/components/site/section'
-import { CreditCard, CheckCircle2 } from 'lucide-react'
+import { CreditCard } from 'lucide-react'
 
 export const metadata: Metadata = {
-  title: 'خطط الأسعار والاشتراكات | FrontDesk AI',
+  title: 'خطط الأسعار والاشتراكات | KAYAN AI',
   description: 'خطط اشتراك شفافة ومرنة تناسب نشاطك التجاري. اختر الخطة المناسبة وابدأ في استقبال عملائك بالذكاء الاصطناعي.',
 }
 
@@ -17,7 +17,7 @@ const pricingStructuredData = {
   '@graph': [
     {
       '@type': 'Product',
-      name: 'FrontDesk AI Plans',
+      name: 'KAYAN AI Plans',
       description: 'باقات اشتراك موظف الاستقبال الذكي لشركتك عبر الهاتف وواتساب.',
       offers: [
         { '@type': 'Offer', name: 'Starter', price: '49', priceCurrency: 'USD' },

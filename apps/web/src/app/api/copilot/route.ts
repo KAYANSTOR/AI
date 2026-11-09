@@ -2,8 +2,8 @@ import { createGoogle } from '@ai-sdk/google'
 import { convertToModelMessages, streamText, tool, type UIMessage } from 'ai'
 import { z } from 'zod'
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
-import { isSupabaseConfigured } from '@/lib/supabase/env'
+import { createClient } from '@/lib/db/server'
+import { isAuthConfigured } from '@/lib/auth/config'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -19,23 +19,23 @@ const MODEL = process.env.GEMINI_MODEL || 'gemini-3.8-flash'
  * catch-all would otherwise produce.
  */
 export async function POST(req: Request) {
-  if (!isSupabaseConfigured()) {
-    return NextResponse.json({ error: 'supabase_not_configured' }, { status: 503 })
+  if (!isAuthConfigured()) {
+    return NextResponse.json({ error: 'service_not_configured' }, { status: 503 })
   }
 
-  let supabase: Awaited<ReturnType<typeof createClient>>
+  let db: Awaited<ReturnType<typeof createClient>>
   try {
-    supabase = await createClient()
+    db = await createClient()
   } catch {
-    return NextResponse.json({ error: 'supabase_not_configured' }, { status: 503 })
+    return NextResponse.json({ error: 'service_not_configured' }, { status: 503 })
   }
 
   const {
     data: { user },
-  } = await supabase.auth.getUser()
+  } = await db.auth.getUser()
   if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
 
-  const { data: member, error: memberError } = await supabase
+  const { data: member, error: memberError } = await db
     .from('organization_members')
     .select('organization_id')
     .eq('user_id', user.id)
@@ -80,7 +80,7 @@ export async function POST(req: Request) {
     const google = createGoogle({ apiKey })
     const result = streamText({
       model: google(MODEL),
-      system: `You are FrontDesk AI's internal Business Agent (Copilot).
+      system: `You are KAYAN AI's internal Business Agent (Copilot).
 You help the business owner or staff manage their operations.
 You can answer questions about their data using tools.
 Be professional, concise, and helpful. Always answer in Arabic.`,
@@ -96,15 +96,15 @@ Be professional, concise, and helpful. Always answer in Arabic.`,
               { count: leads },
               { data: orders },
             ] = await Promise.all([
-              supabase
+              db
                 .from('conversations')
                 .select('*', { count: 'exact', head: true })
                 .eq('organization_id', organizationId),
-              supabase
+              db
                 .from('leads')
                 .select('*', { count: 'exact', head: true })
                 .eq('organization_id', organizationId),
-              supabase
+              db
                 .from('orders')
                 .select('total_amount')
                 .eq('organization_id', organizationId)

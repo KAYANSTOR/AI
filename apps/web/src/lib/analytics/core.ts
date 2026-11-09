@@ -1,4 +1,4 @@
-import type { SupabaseClient } from '@supabase/supabase-js'
+import type { DbClient } from '@/lib/db/client'
 
 export type CoreAnalytics = {
   leadsTotal: number
@@ -22,7 +22,7 @@ type CountFilter =
   | { kind: 'in'; column: string; value: string[] }
 
 export async function loadCoreAnalytics(
-  supabase: SupabaseClient,
+  db: DbClient,
   organizationId: string
 ): Promise<CoreAnalytics> {
   const nowIso = new Date().toISOString()
@@ -41,24 +41,24 @@ export async function loadCoreAnalytics(
     followupsActive,
     followupsCompleted,
   ] = await Promise.all([
-    count(supabase, 'leads', organizationId),
-    count(supabase, 'leads', organizationId, [
+    count(db, 'leads', organizationId),
+    count(db, 'leads', organizationId, [
       { kind: 'in', column: 'status', value: ['new', 'qualified', 'contacted', 'booked', 'waiting', 'recovered'] },
     ]),
-    count(supabase, 'leads', organizationId, [{ kind: 'eq', column: 'status', value: 'won' }]),
-    count(supabase, 'conversations', organizationId, [{ kind: 'neq', column: 'status', value: 'closed' }]),
-    count(supabase, 'conversations', organizationId, [{ kind: 'eq', column: 'sla_state', value: 'breached' }]),
-    count(supabase, 'appointments', organizationId, [{ kind: 'gte', column: 'starts_at', value: nowIso }]),
-    count(supabase, 'quotes', organizationId, [{ kind: 'in', column: 'status', value: ['draft', 'sent'] }]),
-    count(supabase, 'quotes', organizationId, [{ kind: 'eq', column: 'status', value: 'accepted' }]),
-    count(supabase, 'orders', organizationId, [
+    count(db, 'leads', organizationId, [{ kind: 'eq', column: 'status', value: 'won' }]),
+    count(db, 'conversations', organizationId, [{ kind: 'neq', column: 'status', value: 'closed' }]),
+    count(db, 'conversations', organizationId, [{ kind: 'eq', column: 'sla_state', value: 'breached' }]),
+    count(db, 'appointments', organizationId, [{ kind: 'gte', column: 'starts_at', value: nowIso }]),
+    count(db, 'quotes', organizationId, [{ kind: 'in', column: 'status', value: ['draft', 'sent'] }]),
+    count(db, 'quotes', organizationId, [{ kind: 'eq', column: 'status', value: 'accepted' }]),
+    count(db, 'orders', organizationId, [
       { kind: 'in', column: 'status', value: ['draft', 'confirmation', 'processing'] },
     ]),
-    count(supabase, 'orders', organizationId, [{ kind: 'eq', column: 'status', value: 'completed' }]),
-    count(supabase, 'followup_enrollments', organizationId, [
+    count(db, 'orders', organizationId, [{ kind: 'eq', column: 'status', value: 'completed' }]),
+    count(db, 'followup_enrollments', organizationId, [
       { kind: 'in', column: 'status', value: ['scheduled', 'eligible', 'sending'] },
     ]),
-    count(supabase, 'followup_enrollments', organizationId, [
+    count(db, 'followup_enrollments', organizationId, [
       { kind: 'eq', column: 'status', value: 'completed' },
     ]),
   ])
@@ -80,12 +80,12 @@ export async function loadCoreAnalytics(
 }
 
 async function count(
-  supabase: SupabaseClient,
+  db: DbClient,
   table: string,
   organizationId: string,
   filters: CountFilter[] = []
 ): Promise<number> {
-  let query = supabase.from(table).select('id', { count: 'exact', head: true }).eq('organization_id', organizationId)
+  let query = db.from(table).select('id', { count: 'exact', head: true }).eq('organization_id', organizationId)
 
   for (const filter of filters) {
     switch (filter.kind) {

@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { requireCapability, audit, type AuthorizedContext } from '@/lib/capabilities/guard'
-import { actionErrorMessage, supabaseActionError } from '@/lib/i18n/action-error'
+import { actionErrorMessage, dbActionError } from '@/lib/i18n/action-error'
 
 export type OrderResult = { ok: boolean; error?: string; orderId?: string }
 
@@ -62,9 +62,9 @@ export async function createOrderAction(input: CreateOrderInput): Promise<OrderR
   const calculatedTotal = calculatedSubtotal - calculatedDiscount
 
   try {
-    const user = (await ctx.supabase.auth.getUser()).data.user?.id
+    const user = (await ctx.db.auth.getUser()).data.user?.id
 
-    const { data: order, error: orderError } = await ctx.supabase
+    const { data: order, error: orderError } = await ctx.db
       .from('orders')
       .insert({
         organization_id: ctx.organizationId,
@@ -86,7 +86,7 @@ export async function createOrderAction(input: CreateOrderInput): Promise<OrderR
       .single()
 
     if (orderError || !order) {
-      return { ok: false, error: supabaseActionError(orderError) }
+      return { ok: false, error: dbActionError(orderError) }
     }
 
     const itemsToInsert = items.map((item) => ({
@@ -94,10 +94,10 @@ export async function createOrderAction(input: CreateOrderInput): Promise<OrderR
       order_id: order.id,
     }))
 
-    const { error: itemsError } = await ctx.supabase.from('order_items').insert(itemsToInsert)
+    const { error: itemsError } = await ctx.db.from('order_items').insert(itemsToInsert)
 
     if (itemsError) {
-      return { ok: false, error: supabaseActionError(itemsError) }
+      return { ok: false, error: dbActionError(itemsError) }
     }
 
     await audit(ctx, 'order.created', 'order', order.id, {
@@ -121,7 +121,7 @@ export async function convertQuoteToOrderAction(quoteId: string): Promise<OrderR
   }
 
   try {
-    const { data: quote, error: quoteError } = await ctx.supabase
+    const { data: quote, error: quoteError } = await ctx.db
       .from('quotes')
       .select('*, quote_items(*)')
       .eq('id', quoteId)
@@ -137,7 +137,7 @@ export async function convertQuoteToOrderAction(quoteId: string): Promise<OrderR
       return { ok: false, error: 'يجب أن يكون عرض السعر مقبولاً ليتم تحويله إلى طلب.' }
     }
 
-    const { data: existingOrder } = await ctx.supabase
+    const { data: existingOrder } = await ctx.db
       .from('orders')
       .select('id')
       .eq('quote_id', quoteId)
@@ -188,7 +188,7 @@ export async function changeOrderStatusAction(
   }
 
   try {
-    const { data: currentOrder, error: fetchError } = await ctx.supabase
+    const { data: currentOrder, error: fetchError } = await ctx.db
       .from('orders')
       .select('status, contact_id')
       .eq('id', orderId)
@@ -214,14 +214,14 @@ export async function changeOrderStatusAction(
       return { ok: false, error: 'لا يمكن تغيير الحالة المطلوبة من الحالة الحالية.' }
     }
 
-    const { error: updateError } = await ctx.supabase
+    const { error: updateError } = await ctx.db
       .from('orders')
       .update({ status: newStatus })
       .eq('id', orderId)
       .eq('organization_id', ctx.organizationId)
 
     if (updateError) {
-      return { ok: false, error: supabaseActionError(updateError) }
+      return { ok: false, error: dbActionError(updateError) }
     }
 
     await audit(ctx, 'order.status_changed', 'order', orderId, {

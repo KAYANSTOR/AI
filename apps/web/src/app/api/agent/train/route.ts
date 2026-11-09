@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
-import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/db/server'
 import { getDashboardContext } from '@/lib/dashboard/context'
 import { calculateAgentReadiness } from '@/lib/ai/readiness'
 import {
@@ -141,10 +141,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'ai_provider_not_configured' }, { status: 503 })
   }
 
-  const supabase = await createClient()
+  const db = await createClient()
 
   // Verify the agent belongs to this organization
-  const { data: agent, error: agentError } = await supabase
+  const { data: agent, error: agentError } = await db
     .from('ai_agents')
     .select('id, name, locale, status')
     .eq('id', body.agentId)
@@ -158,24 +158,24 @@ export async function POST(req: Request) {
   // Load current readiness and existing knowledge to ground the training assistant
   const [readiness, { data: business }, { data: profile }, { data: services }, { data: hours }] =
     await Promise.all([
-      calculateAgentReadiness(supabase, context.organizationId),
-      supabase
+      calculateAgentReadiness(db, context.organizationId),
+      db
         .from('businesses')
         .select('name')
         .eq('id', context.businessId)
         .eq('organization_id', context.organizationId)
         .maybeSingle(),
-      supabase
+      db
         .from('business_profiles')
         .select('setup_description, system_prompt_addition, public_phone_number, industry')
         .eq('organization_id', context.organizationId)
         .maybeSingle(),
-      supabase
+      db
         .from('services')
         .select('name, price_amount, duration_minutes')
         .eq('organization_id', context.organizationId)
         .eq('is_active', true),
-      supabase
+      db
         .from('business_hours')
         .select('day_of_week, open_time, close_time, is_closed')
         .eq('organization_id', context.organizationId)
@@ -365,7 +365,7 @@ ${KNOWLEDGE_DELIMITER}
           // Persist confirmed facts via Knowledge Layer
           if (extraction.extractedFacts && extraction.extractedFacts.length > 0) {
             const persisted = await saveValidatedKnowledge(
-              supabase,
+              db,
               context.organizationId,
               extraction.extractedFacts
             )
@@ -375,7 +375,7 @@ ${KNOWLEDGE_DELIMITER}
           // Persist services if any
           if (extraction.newServices && extraction.newServices.length > 0) {
             const persistedServices = await saveValidatedServices(
-              supabase,
+              db,
               context.organizationId,
               extraction.newServices
             )
@@ -390,7 +390,7 @@ ${KNOWLEDGE_DELIMITER}
             const currentAddition = profile?.system_prompt_addition || ''
             const merged = currentAddition ? `${currentAddition}\n${addition}` : addition
 
-            await supabase
+            await db
               .from('business_profiles')
               .update({
                 system_prompt_addition: merged,
@@ -398,14 +398,14 @@ ${KNOWLEDGE_DELIMITER}
               })
               .eq('organization_id', context.organizationId)
 
-            await supabase.rpc('publish_agent_prompt', {
+            await db.rpc('publish_agent_prompt', {
               p_agent_id: agent.id,
               p_system_prompt_addition: merged,
             })
           }
 
           // Recalculate agent readiness
-          const updatedReadiness = await calculateAgentReadiness(supabase, context.organizationId)
+          const updatedReadiness = await calculateAgentReadiness(db, context.organizationId)
 
           // Send final completion event
           controller.enqueue(
@@ -498,7 +498,7 @@ ${KNOWLEDGE_DELIMITER}
   // Persist confirmed facts via Knowledge Layer
   if (extraction.extractedFacts && extraction.extractedFacts.length > 0) {
     const persisted = await saveValidatedKnowledge(
-      supabase,
+      db,
       context.organizationId,
       extraction.extractedFacts
     )
@@ -508,7 +508,7 @@ ${KNOWLEDGE_DELIMITER}
   // Persist services if any
   if (extraction.newServices && extraction.newServices.length > 0) {
     const persistedServices = await saveValidatedServices(
-      supabase,
+      db,
       context.organizationId,
       extraction.newServices
     )
@@ -523,7 +523,7 @@ ${KNOWLEDGE_DELIMITER}
     const currentAddition = profile?.system_prompt_addition || ''
     const merged = currentAddition ? `${currentAddition}\n${addition}` : addition
 
-    await supabase
+    await db
       .from('business_profiles')
       .update({
         system_prompt_addition: merged,
@@ -531,14 +531,14 @@ ${KNOWLEDGE_DELIMITER}
       })
       .eq('organization_id', context.organizationId)
 
-    await supabase.rpc('publish_agent_prompt', {
+    await db.rpc('publish_agent_prompt', {
       p_agent_id: agent.id,
       p_system_prompt_addition: merged,
     })
   }
 
   // Recalculate agent readiness
-  const updatedReadiness = await calculateAgentReadiness(supabase, context.organizationId)
+  const updatedReadiness = await calculateAgentReadiness(db, context.organizationId)
 
   return NextResponse.json({
     reply: reply || rawText.trim(),

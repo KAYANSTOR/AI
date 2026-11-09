@@ -8,8 +8,8 @@
  *
  * Provider identifiers never reach the browser through this module.
  */
-import type { SupabaseClient } from '@supabase/supabase-js'
-import { createAdminClient } from '@/lib/supabase/admin'
+import type { DbClient } from '@/lib/db/client'
+import { createAdminClient } from '@/lib/db/admin'
 import { normalizeChannelNumber } from '@/lib/channels/management'
 import { loadChannelCredentials } from '@/lib/credentials/service'
 import { platformCredentials } from '@/lib/credentials/resolve'
@@ -48,10 +48,10 @@ function required(value: string | undefined | null): string | undefined {
   return trimmed ? trimmed : undefined
 }
 
-async function channelCredentials(supabase: SupabaseClient, channelId: string | null) {
+async function channelCredentials(db: DbClient, channelId: string | null) {
   if (!channelId) return {} as Record<string, string>
   try {
-    return await loadChannelCredentials(supabase, channelId)
+    return await loadChannelCredentials(db, channelId)
   } catch (error) {
     console.error('Connect: unable to load stored channel credentials', error)
     return {} as Record<string, string>
@@ -59,7 +59,7 @@ async function channelCredentials(supabase: SupabaseClient, channelId: string | 
 }
 
 export async function resolveWhatsAppBinding(input: {
-  supabase: SupabaseClient
+  db: DbClient
   channel: WhatsAppChannelRow | null
   number: string
 }): Promise<WhatsAppBindingOutcome> {
@@ -80,7 +80,7 @@ export async function resolveWhatsAppBinding(input: {
   }
 
   try {
-    const stored = await channelCredentials(input.supabase, input.channel?.id ?? null)
+    const stored = await channelCredentials(input.db, input.channel?.id ?? null)
     const platform = platformCredentials('whatsapp')
     const accessToken = required(stored.access_token) ?? required(platform.access_token)
     const businessAccountId =
@@ -128,7 +128,7 @@ export type ConnectChannelResult =
   | { ok: false; error: string }
 
 export async function connectWhatsAppChannel(input: {
-  supabase: SupabaseClient
+  db: DbClient
   organizationId: string
   businessId: string | null
   number: string
@@ -139,7 +139,7 @@ export async function connectWhatsAppChannel(input: {
   }
 
   try {
-    const { data: existing, error: readError } = await input.supabase
+    const { data: existing, error: readError } = await input.db
       .from('channels')
       .select('id, provider_account_id, external_identifier, verification_status, is_active')
       .eq('organization_id', input.organizationId)
@@ -150,9 +150,9 @@ export async function connectWhatsAppChannel(input: {
       console.error('Connect: unable to load WhatsApp channel', readError)
     }
 
-    const channel = (existing as WhatsAppChannelRow | null) ?? null
+    const channel = (existing as unknown as WhatsAppChannelRow | null) ?? null
     const outcome = await resolveWhatsAppBinding({
-      supabase: input.supabase,
+      db: input.db,
       channel,
       number,
     })

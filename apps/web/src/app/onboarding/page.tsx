@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/db/server'
 import { getDashboardContext } from '@/lib/dashboard/context'
 import { stageForStoredStep } from '@/lib/onboarding/stages'
 import { describeChannelState, type ChannelConnectionState } from '@/lib/channels/connect'
@@ -58,33 +58,33 @@ export default async function OnboardingPage() {
   const context = await getDashboardContext()
   if (!context) redirect('/login')
 
-  const supabase = await createClient()
+  const db = await createClient()
 
   const [profileResult, businessResult, channelsResult, phoneResult, agentResult] = await Promise.all([
-    supabase
+    db
       .from('business_profiles')
       .select(
         'business_id, business_type_id, public_phone_number, timezone, setup_description, system_prompt_addition, smoke_test_result'
       )
       .eq('organization_id', context.organizationId)
       .maybeSingle(),
-    supabase
+    db
       .from('businesses')
       .select('name')
       .eq('organization_id', context.organizationId)
       .order('created_at', { ascending: true })
       .limit(1)
       .maybeSingle(),
-    supabase
+    db
       .from('channels')
       .select('channel_type, provider_account_id, external_identifier, verification_status, is_active')
       .eq('organization_id', context.organizationId),
-    supabase
+    db
       .from('phone_connections')
       .select('existing_phone_number, forwarding_status')
       .eq('organization_id', context.organizationId)
       .maybeSingle(),
-    supabase
+    db
       .from('ai_agents')
       .select('id, name, status')
       .eq('organization_id', context.organizationId)

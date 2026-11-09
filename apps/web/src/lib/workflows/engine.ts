@@ -1,4 +1,4 @@
-import type { SupabaseClient } from '@supabase/supabase-js'
+import type { DbClient } from '@/lib/db/client'
 import { createNotification } from '@/lib/notifications'
 
 export type WorkflowNodeType =
@@ -114,7 +114,7 @@ function evalCondition(
 }
 
 export async function startWorkflowRun(
-  supabase: SupabaseClient,
+  db: DbClient,
   input: {
     organizationId: string
     workflowId: string
@@ -123,7 +123,7 @@ export async function startWorkflowRun(
     context?: Record<string, unknown>
   }
 ): Promise<{ runId: string; status: string }> {
-  const { data: workflow, error } = await supabase
+  const { data: workflow, error } = await db
     .from('workflows')
     .select('id, status, definition, version, max_iterations')
     .eq('id', input.workflowId)
@@ -140,7 +140,7 @@ export async function startWorkflowRun(
   const start = definition.nodes.find((n) => n.type === 'trigger') ?? definition.nodes[0] ?? null
   if (!start) throw new Error('workflow_has_no_nodes')
 
-  const { data: run, error: runError } = await supabase
+  const { data: run, error: runError } = await db
     .from('workflow_runs')
     .insert({
       organization_id: input.organizationId,
@@ -158,7 +158,7 @@ export async function startWorkflowRun(
 
   if (runError) {
     if (runError.code === '23505' && input.idempotencyKey) {
-      const { data: existing } = await supabase
+      const { data: existing } = await db
         .from('workflow_runs')
         .select('id, status')
         .eq('organization_id', input.organizationId)
@@ -169,12 +169,12 @@ export async function startWorkflowRun(
     throw runError
   }
 
-  await advanceWorkflowRun(supabase, {
+  await advanceWorkflowRun(db, {
     organizationId: input.organizationId,
     runId: run.id,
   })
 
-  const { data: refreshed } = await supabase
+  const { data: refreshed } = await db
     .from('workflow_runs')
     .select('status')
     .eq('id', run.id)
@@ -184,10 +184,10 @@ export async function startWorkflowRun(
 }
 
 export async function advanceWorkflowRun(
-  supabase: SupabaseClient,
+  db: DbClient,
   input: { organizationId: string; runId: string }
 ): Promise<{ status: string }> {
-  const { data: run, error } = await supabase
+  const { data: run, error } = await db
     .from('workflow_runs')
     .select(
       'id, workflow_id, status, context, current_node_id, iteration_count, max_iterations, wait_until'
@@ -208,7 +208,7 @@ export async function advanceWorkflowRun(
     }
   }
 
-  const { data: workflow } = await supabase
+  const { data: workflow } = await db
     .from('workflows')
     .select('definition')
     .eq('id', run.workflow_id)
@@ -221,7 +221,7 @@ export async function advanceWorkflowRun(
     definition = parseWorkflowDefinition(workflow?.definition)
   } catch {
     await failRun(
-      supabase,
+      db,
       input,
       'workflow_definition_invalid',
       (run.current_node_id as string | null) ?? null,
@@ -239,13 +239,13 @@ export async function advanceWorkflowRun(
 
   while (currentId) {
     if (iterations >= maxIterations) {
-      await failRun(supabase, input, 'max_iterations_exceeded', currentId, context, iterations)
+      await failRun(db, input, 'max_iterations_exceeded', currentId, context, iterations)
       return { status: 'failed' }
     }
 
     const node = nodes.get(currentId)
     if (!node) {
-      await failRun(supabase, input, 'unknown_node', currentId, context, iterations)
+      await failRun(db, input, 'unknown_node', currentId, context, iterations)
       return { status: 'failed' }
     }
 
@@ -253,15 +253,15 @@ export async function advanceWorkflowRun(
 
     try {
       if (node.type === 'stop') {
-        await completeRun(supabase, input, context, iterations, node.id)
-        await logStep(supabase, input, node, 'completed', {}, { stopped: true }, iterations)
+        await completeRun(db, input, context, iterations, node.id)
+        await logStep(db, input, node, 'completed', {}, { stopped: true }, iterations)
         return { status: 'completed' }
       }
 
       if (node.type === 'wait') {
         const minutes = Number(node.config?.minutes ?? 0)
         const waitUntil = new Date(Date.now() + Math.max(0, minutes) * 60_000).toISOString()
-        await supabase
+        await db
           .from('workflow_runs')
           .update({
             status: 'waiting',
@@ -273,20 +273,20 @@ export async function advanceWorkflowRun(
           })
           .eq('id', input.runId)
           .eq('organization_id', input.organizationId)
-        await logStep(supabase, input, node, 'completed', node.config ?? {}, { waitUntil }, iterations)
+        await logStep(db, input, node, 'completed', node.config ?? {}, { waitUntil }, iterations)
         return { status: 'waiting' }
       }
 
       if (node.type === 'condition') {
         const ok = evalCondition(node.config, context)
-        await logStep(supabase, input, node, 'completed', node.config ?? {}, { result: ok }, iterations)
+        await logStep(db, input, node, 'completed', node.config ?? {}, { result: ok }, iterations)
         currentId = resolveNext(node, ok)
         continue
       }
 
       if (node.type === 'notify') {
         const memberId = (node.config?.memberId as string | null) ?? null
-        await createNotification(supabase, {
+        await createNotification(db, {
           organizationId: input.organizationId,
           memberId,
           entityType: 'workflow_run',
@@ -296,7 +296,7 @@ export async function advanceWorkflowRun(
           body: String(node.config?.body ?? ''),
           idempotencyKey: `wf-notify:${input.runId}:${node.id}:${iterations}`,
         })
-        await logStep(supabase, input, node, 'completed', node.config ?? {}, { notified: true }, iterations)
+        await logStep(db, input, node, 'completed', node.config ?? {}, { notified: true }, iterations)
         currentId = resolveNext(node)
         continue
       }
@@ -304,7 +304,7 @@ export async function advanceWorkflowRun(
       if (node.type === 'action') {
         const key = String(node.config?.key ?? 'noop')
         context = { ...context, lastAction: key, [`action_${key}`]: true }
-        await logStep(supabase, input, node, 'completed', node.config ?? {}, { key }, iterations)
+        await logStep(db, input, node, 'completed', node.config ?? {}, { key }, iterations)
         currentId = resolveNext(node)
         continue
       }
@@ -314,33 +314,33 @@ export async function advanceWorkflowRun(
         const max = Math.min(Number(node.config?.max ?? 3), 20)
         const idx = Number(context.loopIndex ?? 0)
         if (idx >= max) {
-          await logStep(supabase, input, node, 'completed', node.config ?? {}, { exited: true }, iterations)
+          await logStep(db, input, node, 'completed', node.config ?? {}, { exited: true }, iterations)
           currentId = resolveNext(node)
           continue
         }
         context = { ...context, loopIndex: idx + 1 }
-        await logStep(supabase, input, node, 'completed', node.config ?? {}, { loopIndex: idx + 1 }, iterations)
+        await logStep(db, input, node, 'completed', node.config ?? {}, { loopIndex: idx + 1 }, iterations)
         currentId = (node.config?.body as string) || resolveNext(node)
         continue
       }
 
       // trigger / assign / handoff: record and continue
-      await logStep(supabase, input, node, 'completed', node.config ?? {}, {}, iterations)
+      await logStep(db, input, node, 'completed', node.config ?? {}, {}, iterations)
       currentId = resolveNext(node)
     } catch (err) {
       const message = err instanceof Error ? err.message : 'node_failed'
-      await logStep(supabase, input, node, 'failed', node.config ?? {}, {}, iterations, message)
-      await failRun(supabase, input, message, node.id, context, iterations)
+      await logStep(db, input, node, 'failed', node.config ?? {}, {}, iterations, message)
+      await failRun(db, input, message, node.id, context, iterations)
       return { status: 'failed' }
     }
   }
 
-  await completeRun(supabase, input, context, iterations, null)
+  await completeRun(db, input, context, iterations, null)
   return { status: 'completed' }
 }
 
 async function logStep(
-  supabase: SupabaseClient,
+  db: DbClient,
   input: { organizationId: string; runId: string },
   node: WorkflowNode,
   status: 'completed' | 'failed' | 'skipped',
@@ -349,7 +349,7 @@ async function logStep(
   iteration: number,
   error?: string
 ) {
-  await supabase.from('workflow_run_steps').insert({
+  await db.from('workflow_run_steps').insert({
     organization_id: input.organizationId,
     run_id: input.runId,
     node_id: node.id,
@@ -363,13 +363,13 @@ async function logStep(
 }
 
 async function completeRun(
-  supabase: SupabaseClient,
+  db: DbClient,
   input: { organizationId: string; runId: string },
   context: Record<string, unknown>,
   iterations: number,
   nodeId: string | null
 ) {
-  await supabase
+  await db
     .from('workflow_runs')
     .update({
       status: 'completed',
@@ -384,14 +384,14 @@ async function completeRun(
 }
 
 async function failRun(
-  supabase: SupabaseClient,
+  db: DbClient,
   input: { organizationId: string; runId: string },
   message: string,
   nodeId: string | null,
   context: Record<string, unknown>,
   iterations: number
 ) {
-  await supabase
+  await db
     .from('workflow_runs')
     .update({
       status: 'failed',

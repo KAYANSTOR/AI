@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { isAuthorizedCronRequest } from '@/lib/cron/auth'
-import { createAdminClient } from '@/lib/supabase/admin'
+import { createAdminClient } from '@/lib/db/admin'
 import { assertMarketingAllowed, ConsentBlockedError } from '@/lib/channels/consent'
 import { DEFAULT_SEND_WINDOW, isInQuietHours, nextSendWindowOpen } from '@/lib/channels/quiet-hours'
 import { claimDueEnrollment, completeFollowUpStep, exitFollowUp } from '@/lib/followup'
@@ -15,10 +15,10 @@ async function handle(req: NextRequest) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }
 
-  const supabase = createAdminClient()
+  const db = createAdminClient()
   const now = new Date().toISOString()
 
-  const { data: due, error } = await supabase
+  const { data: due, error } = await db
     .from('followup_enrollments')
     .select('id, organization_id, contact_id, sequence_id, current_step_id')
     .eq('status', 'scheduled')
@@ -39,7 +39,7 @@ async function handle(req: NextRequest) {
     // Quiet hours: reschedule without claiming so another worker does not race.
     if (isInQuietHours(DEFAULT_SEND_WINDOW)) {
       const reopen = nextSendWindowOpen(DEFAULT_SEND_WINDOW)
-      await supabase
+      await db
         .from('followup_enrollments')
         .update({
           next_send_at: reopen.toISOString(),
@@ -52,7 +52,7 @@ async function handle(req: NextRequest) {
       continue
     }
 
-    const advance = await claimDueEnrollment(supabase, row.id, row.organization_id)
+    const advance = await claimDueEnrollment(db, row.id, row.organization_id)
     if (advance.status === 'skipped') continue
     if (advance.status === 'completed') {
       completed++
@@ -62,13 +62,13 @@ async function handle(req: NextRequest) {
     claimed++
 
     try {
-      await assertMarketingAllowed(supabase, {
+      await assertMarketingAllowed(db, {
         contactId: advance.contactId,
         channel: advance.channel,
       })
     } catch (err) {
       if (err instanceof ConsentBlockedError) {
-        await exitFollowUp(supabase, {
+        await exitFollowUp(db, {
           organizationId: advance.organizationId,
           enrollmentId: advance.enrollmentId,
           reason: 'opted_out',
@@ -79,7 +79,7 @@ async function handle(req: NextRequest) {
       throw err
     }
 
-    const { data: channel, error: channelError } = await supabase
+    const { data: channel, error: channelError } = await db
       .from('channels')
       .select('id, organization_id, business_id, channel_type, provider_account_id, external_identifier')
       .eq('organization_id', advance.organizationId)
@@ -90,7 +90,7 @@ async function handle(req: NextRequest) {
 
     if (channelError) throw new Error(channelError.message)
     if (!channel) {
-      await exitFollowUp(supabase, {
+      await exitFollowUp(db, {
         organizationId: advance.organizationId,
         enrollmentId: advance.enrollmentId,
         reason: 'channel_unavailable',
@@ -99,14 +99,14 @@ async function handle(req: NextRequest) {
       continue
     }
 
-    const { data: contact } = await supabase
+    const { data: contact } = await db
       .from('contacts')
       .select('id, phone')
       .eq('id', advance.contactId)
       .eq('organization_id', advance.organizationId)
       .maybeSingle()
 
-    const { data: identity } = await supabase
+    const { data: identity } = await db
       .from('contact_identities')
       .select('external_user_id, external_phone')
       .eq('contact_id', advance.contactId)
@@ -118,7 +118,7 @@ async function handle(req: NextRequest) {
       identity?.external_user_id || identity?.external_phone || contact?.phone || ''
 
     if (!recipient) {
-      await exitFollowUp(supabase, {
+      await exitFollowUp(db, {
         organizationId: advance.organizationId,
         enrollmentId: advance.enrollmentId,
         reason: 'missing_recipient',
@@ -128,7 +128,7 @@ async function handle(req: NextRequest) {
     }
 
     try {
-      await deliverOutbound(supabase, {
+      await deliverOutbound(db, {
         channel: {
           id: channel.id,
           organizationId: channel.organization_id,
@@ -143,7 +143,7 @@ async function handle(req: NextRequest) {
         queueOnFailure: true,
       })
 
-      const result = await completeFollowUpStep(supabase, {
+      const result = await completeFollowUpStep(db, {
         organizationId: advance.organizationId,
         enrollmentId: advance.enrollmentId,
         sequenceId: advance.sequenceId,
@@ -153,7 +153,7 @@ async function handle(req: NextRequest) {
       sent++
       if (result.status === 'completed') completed++
 
-      await supabase.from('audit_events').insert({
+      await db.from('audit_events').insert({
         organization_id: advance.organizationId,
         actor_type: 'system',
         action: 'followup.step_sent',
@@ -167,7 +167,7 @@ async function handle(req: NextRequest) {
       })
     } catch {
       const message = 'followup_send_failed'
-      await supabase
+      await db
         .from('followup_enrollments')
         .update({
           status: 'scheduled',

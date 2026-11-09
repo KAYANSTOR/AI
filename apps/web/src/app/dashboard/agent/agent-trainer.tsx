@@ -92,7 +92,7 @@ const BUSINESS_TYPE_OPTIONS = [
   },
 ]
 
-const DEFAULT_WELCOME = `أهلًا بك 👋 أنا مساعدك الذكي لشركتك. سأساعدك في تجهيز معلومات شركتك حتى أتمكن من الرد على عملائك بطريقة صحيحة وطبيعية.
+const DEFAULT_WELCOME = `أهلًا بك أنا مساعدك الذكي لشركتك. سأساعدك في تجهيز معلومات شركتك حتى أتمكن من الرد على عملائك بطريقة صحيحة وطبيعية.
 سأطرح عليك بعض الأسئلة، وأثناء حديثنا سأكتشف المعلومات التي أحتاجها وأرتبها تلقائيًا.
 لن تحتاج إلى تعبئة نماذج طويلة، فقط تحدث معي كأنك تتحدث مع موظف يفهمك.`
 
@@ -451,7 +451,7 @@ export function AgentTrainer({
       }
 
       setCurrentBusinessName(profileForm.businessName)
-      showToast('تم تحديث نوع النشاط والبيانات وتعليمات الوكيل بنجاح!')
+      showToast('تم تحديث نوع النشاط والبيانات وتعليمات الوكيل بنجاح')
       setIsProfileModalOpen(false)
 
       // Refresh readiness
@@ -845,7 +845,7 @@ export function AgentTrainer({
                         <div className="p-3 border-t border-border bg-surface space-y-2">
                           {cat.items.length === 0 ? (
                             <p className="text-xs text-text-muted text-center py-3">
-                              لا توجد معلومات مسجلة في هذا القسم بعد. تحدث مع الوكيل لإضافتها!
+                              لا توجد معلومات مسجلة في هذا القسم بعد. تحدث مع الوكيل لإضافتها.
                             </p>
                           ) : (
                             cat.items.map((item) => (

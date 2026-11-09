@@ -1,7 +1,7 @@
 /**
  * Kayan Connect — the shared vocabulary of a channel connection.
  *
- * This module stays free of server-only imports (no node:crypto, no Supabase service) so
+ * This module stays free of server-only imports (no node:crypto, no database client) so
  * the client components that render connection state can import it. The provider calls and
  * storage live in connect-service.ts.
  *

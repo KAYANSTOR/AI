@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
-import type { SupabaseClient } from '@supabase/supabase-js'
-import { createFakeSupabase, type FakeDb } from './support/fake-supabase'
+import type { DbClient } from '@/lib/db/client'
+import { createFakeDb, type FakeDb } from './support/fake-db'
 import { ensureOpenConversation } from '@/lib/runtime/conversation'
 import { processInboundMessage } from '@/lib/runtime/process-inbound'
 
@@ -37,8 +37,8 @@ function seededContactTables(conversation: Record<string, unknown>): FakeDb {
   }
 }
 
-function inbound(supabase: SupabaseClient) {
-  return processInboundMessage(supabase, {
+function inbound(db: DbClient) {
+  return processInboundMessage(db, {
     organizationId: ORG,
     businessId: BIZ,
     channelId: CHANNEL,
@@ -53,7 +53,7 @@ function inbound(supabase: SupabaseClient) {
 
 describe('human handoff', () => {
   test('a handed-off conversation is reused, not replaced by a fresh AI-enabled one', async () => {
-    const fake = createFakeSupabase(
+    const fake = createFakeDb(
       seededContactTables({
         id: 'conv-handoff',
         organization_id: ORG,
@@ -65,9 +65,9 @@ describe('human handoff', () => {
         last_message_at: '2026-03-01T00:00:00.000Z',
       })
     )
-    const supabase = fake.client as unknown as SupabaseClient
+    const db = fake.client as unknown as DbClient
 
-    const conversationId = await ensureOpenConversation(supabase, {
+    const conversationId = await ensureOpenConversation(db, {
       organizationId: ORG,
       businessId: BIZ,
       contactId: CONTACT,
@@ -75,11 +75,11 @@ describe('human handoff', () => {
     })
 
     expect(conversationId).toBe('conv-handoff')
-    expect(fake.db.conversations.rows?.length).toBe(1)
+    expect(fake.store.conversations.rows?.length).toBe(1)
   })
 
   test('the AI does not reply while a human controls the conversation', async () => {
-    const fake = createFakeSupabase(
+    const fake = createFakeDb(
       seededContactTables({
         id: 'conv-handoff',
         organization_id: ORG,
@@ -91,20 +91,20 @@ describe('human handoff', () => {
         last_message_at: '2026-03-01T00:00:00.000Z',
       })
     )
-    const supabase = fake.client as unknown as SupabaseClient
+    const db = fake.client as unknown as DbClient
 
-    const result = await inbound(supabase)
+    const result = await inbound(db)
 
     expect(result.reply).toBeNull()
     expect(result.conversationId).toBe('conv-handoff')
     // The customer's message is still recorded for the human to read.
-    expect(fake.db.messages.rows?.length).toBe(1)
-    expect(fake.db.messages.rows?.[0]?.direction).toBe('inbound')
-    expect(fake.db.conversations.rows?.[0]?.ai_enabled).toBe(false)
+    expect(fake.store.messages.rows?.length).toBe(1)
+    expect(fake.store.messages.rows?.[0]?.direction).toBe('inbound')
+    expect(fake.store.conversations.rows?.[0]?.ai_enabled).toBe(false)
   })
 
   test('a closed conversation does not block a new session', async () => {
-    const fake = createFakeSupabase(
+    const fake = createFakeDb(
       seededContactTables({
         id: 'conv-closed',
         organization_id: ORG,
@@ -116,9 +116,9 @@ describe('human handoff', () => {
         last_message_at: '2026-02-01T00:00:00.000Z',
       })
     )
-    const supabase = fake.client as unknown as SupabaseClient
+    const db = fake.client as unknown as DbClient
 
-    const conversationId = await ensureOpenConversation(supabase, {
+    const conversationId = await ensureOpenConversation(db, {
       organizationId: ORG,
       businessId: BIZ,
       contactId: CONTACT,
@@ -126,11 +126,11 @@ describe('human handoff', () => {
     })
 
     expect(conversationId).not.toBe('conv-closed')
-    expect(fake.db.conversations.rows?.length).toBe(2)
+    expect(fake.store.conversations.rows?.length).toBe(2)
   })
 
   test('a handoff never leaks to another organization conversation', async () => {
-    const fake = createFakeSupabase({
+    const fake = createFakeDb({
       conversations: {
         unique: [{ columns: ['organization_id', 'contact_id', 'channel_id'], where: (row) => row.status !== 'closed' }],
         rows: [
@@ -145,9 +145,9 @@ describe('human handoff', () => {
         ],
       },
     })
-    const supabase = fake.client as unknown as SupabaseClient
+    const db = fake.client as unknown as DbClient
 
-    const conversationId = await ensureOpenConversation(supabase, {
+    const conversationId = await ensureOpenConversation(db, {
       organizationId: ORG,
       businessId: BIZ,
       contactId: CONTACT,
@@ -160,7 +160,7 @@ describe('human handoff', () => {
 
 describe('customer opt-out', () => {
   test('explicit "stop" records consent and stops automation for that channel', async () => {
-    const fake = createFakeSupabase(
+    const fake = createFakeDb(
       seededContactTables({
         id: 'conv-1',
         organization_id: ORG,
@@ -171,9 +171,9 @@ describe('customer opt-out', () => {
         ai_enabled: true,
       })
     )
-    const supabase = fake.client as unknown as SupabaseClient
+    const db = fake.client as unknown as DbClient
 
-    const result = await processInboundMessage(supabase, {
+    const result = await processInboundMessage(db, {
       organizationId: ORG,
       businessId: BIZ,
       channelId: CHANNEL,
@@ -186,8 +186,8 @@ describe('customer opt-out', () => {
     })
 
     expect(result.reply).toBeNull()
-    expect(fake.db.consents.rows?.[0]?.status).toBe('opted_out')
-    expect(fake.db.audit_events.rows?.[0]?.action).toBe('consent.opted_out')
+    expect(fake.store.consents.rows?.[0]?.status).toBe('opted_out')
+    expect(fake.store.audit_events.rows?.[0]?.action).toBe('consent.opted_out')
   })
 
   test('an already opted-out contact is never answered again', async () => {
@@ -210,10 +210,10 @@ describe('customer opt-out', () => {
         },
       ],
     }
-    const fake = createFakeSupabase(tables)
-    const supabase = fake.client as unknown as SupabaseClient
+    const fake = createFakeDb(tables)
+    const db = fake.client as unknown as DbClient
 
-    const result = await processInboundMessage(supabase, {
+    const result = await processInboundMessage(db, {
       organizationId: ORG,
       businessId: BIZ,
       channelId: CHANNEL,

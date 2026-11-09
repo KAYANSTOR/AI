@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
 import { Info } from 'lucide-react'
-import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/db/server'
 import { getDashboardContext } from '@/lib/dashboard/context'
 import { CHANNEL_SPECS, getChannelSpec, type ChannelType } from '@/lib/channels/management'
 import { ChannelsConsole } from './channels-console'
@@ -34,13 +34,13 @@ export default async function ChannelsPage() {
   const context = await getDashboardContext()
   if (!context) redirect('/login')
 
-  const supabase = await createClient()
+  const db = await createClient()
   const canManage = context.role === 'owner' || context.role === 'admin'
 
   let rows: ChannelRow[] = []
   let channelsError: string | null = null
   try {
-    const result = await supabase
+    const result = await db
       .from('channels')
       .select('id, channel_type, external_identifier, verification_status, is_active')
       .eq('organization_id', context.organizationId)
@@ -58,7 +58,7 @@ export default async function ChannelsPage() {
 
   let businessName = context.organizationName
   try {
-    const { data: business } = await supabase
+    const { data: business } = await db
       .from('businesses')
       .select('id, name')
       .eq('organization_id', context.organizationId)
@@ -71,14 +71,15 @@ export default async function ChannelsPage() {
     console.error('Unable to load business summary', error)
   }
 
-  let phoneConnection: {
+  type PhoneConnection = {
     existing_phone_number: string | null
     internal_vapi_number: string | null
     carrier_profile_id: string | null
     forward_type: string | null
     forwarding_status: string | null
     last_verified_at: string | null
-  } | null = null
+  }
+  let phoneConnection: PhoneConnection | null = null
 
   let carriers: Array<{
     id: string
@@ -93,18 +94,18 @@ export default async function ChannelsPage() {
 
   try {
     const [{ data: conn }, { data: carrierList }] = await Promise.all([
-      supabase
+      db
         .from('phone_connections')
         .select('existing_phone_number, internal_vapi_number, carrier_profile_id, forward_type, forwarding_status, last_verified_at')
         .eq('organization_id', context.organizationId)
         .maybeSingle(),
-      supabase
+      db
         .from('carrier_profiles')
         .select('id, country_code, operator_name, forward_on_no_answer_code, forward_on_busy_code, forward_all_code, cancel_forward_code, setup_instructions_url')
         .order('country_code', { ascending: true })
         .order('operator_name', { ascending: true }),
     ])
-    phoneConnection = conn
+    phoneConnection = (conn ?? null) as unknown as PhoneConnection | null
     carriers = (carrierList ?? []) as typeof carriers
   } catch (error) {
     console.error('Unable to load phone connection or carriers', error)

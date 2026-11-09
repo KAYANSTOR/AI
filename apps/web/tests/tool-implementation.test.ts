@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
-import type { SupabaseClient } from '@supabase/supabase-js'
-import { createFakeSupabase, holidayAwareHoursRpc, type FakeDb } from './support/fake-supabase'
+import type { DbClient } from '@/lib/db/client'
+import { createFakeDb, holidayAwareHoursRpc, type FakeDb } from './support/fake-db'
 import { TOOL_POLICIES } from '@/lib/ai/registry'
 import { executeTool, getToolDefinitionsForAgent } from '@/lib/ai/tools'
 
@@ -51,8 +51,8 @@ function tables(): FakeDb {
 }
 
 function setup() {
-  const fake = createFakeSupabase(tables(), { holiday_aware_hours: (args) => holidayAwareHoursRpc(fake.db)(args) })
-  return { db: fake.db, supabase: fake.client as unknown as SupabaseClient }
+  const fake = createFakeDb(tables(), { holiday_aware_hours: (args) => holidayAwareHoursRpc(fake.store)(args) })
+  return { store: fake.store, db: fake.client as unknown as DbClient }
 }
 
 /**
@@ -63,7 +63,7 @@ function setup() {
 describe('every advertised tool has an implementation', () => {
   test('no policy falls through the executor dispatch', async () => {
     for (const name of Object.keys(TOOL_POLICIES)) {
-      const { supabase } = setup()
+      const { db } = setup()
 
       // confirmed:true so a confirmation-gated write reaches the dispatcher instead of
       // stopping at the pending-action stage.
@@ -71,7 +71,7 @@ describe('every advertised tool has an implementation', () => {
         name,
         {},
         {
-          supabase,
+          db,
           organizationId: ORG,
           businessId: BIZ,
           conversationId: CONVERSATION,
@@ -93,12 +93,12 @@ describe('every advertised tool has an implementation', () => {
     for (const name of ['create_quote', 'create_order', 'convert_quote_to_order']) {
       expect(TOOL_POLICIES[name]).toBeDefined()
 
-      const { supabase } = setup()
+      const { db } = setup()
       const result = await executeTool(
         name,
         {},
         {
-          supabase,
+          db,
           organizationId: ORG,
           businessId: BIZ,
           conversationId: CONVERSATION,
@@ -116,8 +116,8 @@ describe('every advertised tool has an implementation', () => {
   })
 
   test('the advertised tool list matches the policy registry exactly', async () => {
-    const { supabase } = setup()
-    const exposed = (await getToolDefinitionsForAgent(supabase, ORG, null)).map((tool) => tool.name)
+    const { db } = setup()
+    const exposed = (await getToolDefinitionsForAgent(db, ORG, null)).map((tool) => tool.name)
 
     expect([...exposed].sort()).toEqual(Object.keys(TOOL_POLICIES).sort())
   })

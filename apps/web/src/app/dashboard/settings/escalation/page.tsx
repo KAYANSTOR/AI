@@ -17,7 +17,7 @@ export default async function EscalationSettingsPage() {
     redirect('/login')
   }
 
-  const { data: policies } = await ctx.supabase
+  const { data: policies } = await ctx.db
     .from('escalation_policies')
     .select('id, name, trigger_type, escalate_after_minutes, notify_roles, is_active')
     .eq('organization_id', ctx.organizationId)

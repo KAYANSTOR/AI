@@ -1,9 +1,10 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { KNOWLEDGE_CATEGORIES } from './categories'
 import { requireAdminCapability, audit, type AuthorizedContext } from '@/lib/capabilities/guard'
 import { searchKnowledge } from '@/lib/knowledge/retrieval'
-import { actionErrorMessage, supabaseActionError } from '@/lib/i18n/action-error'
+import { actionErrorMessage, dbActionError } from '@/lib/i18n/action-error'
 
 export type KnowledgeResult = { ok: boolean; error?: string; message?: string }
 
@@ -16,14 +17,6 @@ export type KnowledgeInput = {
 
 const MAX_TITLE = 255
 
-/** Allowed categories are stable identifiers so the agent filter stays predictable. */
-export const KNOWLEDGE_CATEGORIES = [
-  'general',
-  'faq',
-  'policy',
-  'business_info',
-  'service_info',
-] as const
 
 function normalizeCategory(value: string | null | undefined): string {
   const raw = (value ?? 'general').trim()
@@ -55,22 +48,22 @@ export async function saveKnowledgeAction(input: KnowledgeInput): Promise<Knowle
   }
 
   if (input.id) {
-    const { data, error } = await ctx.supabase
+    const { data, error } = await ctx.db
       .from('knowledge_base')
       .update({ title: payload.title, content: payload.content, category: payload.category, updated_at: payload.updated_at })
       .eq('id', input.id)
       .eq('organization_id', ctx.organizationId)
       .select('id')
       .maybeSingle()
-    if (error) return { ok: false, error: supabaseActionError(error) }
+    if (error) return { ok: false, error: dbActionError(error) }
     if (!data) return { ok: false, error: 'لم يتم العثور على المدخل.' }
     await audit(ctx, 'knowledge.updated', 'knowledge_base', data.id, { category: payload.category })
     revalidatePath('/dashboard/knowledge')
     return { ok: true, message: 'تم تحديث المدخل.' }
   }
 
-  const { data, error } = await ctx.supabase.from('knowledge_base').insert(payload).select('id').single()
-  if (error) return { ok: false, error: supabaseActionError(error) }
+  const { data, error } = await ctx.db.from('knowledge_base').insert(payload).select('id').single()
+  if (error) return { ok: false, error: dbActionError(error) }
 
   await audit(ctx, 'knowledge.created', 'knowledge_base', data.id, { category: payload.category })
   revalidatePath('/dashboard/knowledge')
@@ -86,14 +79,14 @@ export async function setKnowledgeActiveAction(id: string, isActive: boolean): P
     return { ok: false, error: actionErrorMessage(error, 'غير مصرح.') }
   }
 
-  const { data, error } = await ctx.supabase
+  const { data, error } = await ctx.db
     .from('knowledge_base')
     .update({ is_active: isActive, updated_at: new Date().toISOString() })
     .eq('id', id)
     .eq('organization_id', ctx.organizationId)
     .select('id')
     .maybeSingle()
-  if (error) return { ok: false, error: supabaseActionError(error) }
+  if (error) return { ok: false, error: dbActionError(error) }
   if (!data) return { ok: false, error: 'لم يتم العثور على المدخل.' }
 
   await audit(ctx, isActive ? 'knowledge.activated' : 'knowledge.deactivated', 'knowledge_base', id)
@@ -115,7 +108,7 @@ export async function previewKnowledgeAction(query: string): Promise<{
     const ctx = await requireAdminCapability('knowledge_base')
     const trimmed = query.trim()
     if (trimmed.length < 2) return { ok: false, error: 'اكتب كلمة بحث أطول.' }
-    const matches = await searchKnowledge(ctx.supabase, ctx.organizationId, trimmed)
+    const matches = await searchKnowledge(ctx.db, ctx.organizationId, trimmed)
     return { ok: true, titles: matches.map((match) => match.title) }
   } catch (error) {
     return { ok: false, error: actionErrorMessage(error, 'تعذّر تنفيذ البحث. حاول مرة أخرى.') }
@@ -130,12 +123,12 @@ export async function deleteKnowledgeAction(id: string): Promise<KnowledgeResult
     return { ok: false, error: actionErrorMessage(error, 'غير مصرح.') }
   }
 
-  const { error } = await ctx.supabase
+  const { error } = await ctx.db
     .from('knowledge_base')
     .delete()
     .eq('id', id)
     .eq('organization_id', ctx.organizationId)
-  if (error) return { ok: false, error: supabaseActionError(error) }
+  if (error) return { ok: false, error: dbActionError(error) }
 
   await audit(ctx, 'knowledge.deleted', 'knowledge_base', id)
   revalidatePath('/dashboard/knowledge')

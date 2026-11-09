@@ -17,7 +17,7 @@ export default async function ApiKeysPage() {
     redirect('/login')
   }
 
-  const { data: keys } = await ctx.supabase
+  const { data: keys } = await ctx.db
     .from('organization_api_keys')
     .select('id, name, key_prefix, scopes, last_used_at, revoked_at, created_at')
     .eq('organization_id', ctx.organizationId)

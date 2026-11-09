@@ -1,30 +1,26 @@
 import { cache } from 'react'
-import { createClient } from '@/lib/supabase/server'
-import { isSupabaseConfigured } from '@/lib/supabase/env'
+import { createClient } from '@/lib/db/server'
+import { isAuthConfigured } from '@/lib/auth/config'
+import { getCurrentUser } from '@/lib/auth/current-user'
 
 export type OrgContext = {
   userId: string
+  email: string
   organizationId: string
   organizationName: string
   role: string
 }
 
-/**
- * Resolve the authenticated user's primary organization.
- * Phase 1 assumes one org per user (owner). Multi-org comes later.
- */
+/** Resolve the authenticated user's primary (earliest) organization membership. */
 export const getCurrentOrg = cache(async (): Promise<OrgContext | null> => {
-  // لا مزوّد مصادقة مُهيّأ بعد: لا توجد جلسة ممكنة، والمسار المحمي يعيد الزائر
-  // إلى صفحة تسجيل الدخول بدل أن يسقط بخطأ مزوّد غير مضبوط.
-  if (!isSupabaseConfigured()) return null
+  if (!isAuthConfigured()) return null
 
-  const supabase = await createClient()
-  const { data } = await supabase.auth.getClaims()
+  const user = await getCurrentUser()
+  if (!user) return null
+  const userId = user.id
+  const db = await createClient()
 
-  const userId = typeof data?.claims.sub === 'string' ? data.claims.sub : null
-  if (!userId) return null
-
-  const { data: membership } = await supabase
+  const { data: membership } = await db
     .from('organization_members')
     .select('organization_id, role, organizations(name)')
     .eq('user_id', userId)
@@ -38,6 +34,7 @@ export const getCurrentOrg = cache(async (): Promise<OrgContext | null> => {
 
   return {
     userId,
+    email: user.email,
     organizationId: membership.organization_id,
     organizationName: org?.name ?? '—',
     role: membership.role,

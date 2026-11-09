@@ -1,4 +1,4 @@
-import type { SupabaseClient } from '@supabase/supabase-js'
+import type { DbClient } from '@/lib/db/client'
 import { dispatchWorkflowTrigger } from '@/lib/workflows/triggers'
 
 export const LEAD_STATUSES = [
@@ -42,7 +42,7 @@ export class LeadTransitionError extends Error {
 }
 
 export async function transitionLead(
-  supabase: SupabaseClient,
+  db: DbClient,
   args: {
     organizationId: string
     leadId: string
@@ -60,7 +60,7 @@ export async function transitionLead(
     throw new LeadTransitionError(`invalid status: ${args.nextStatus}`)
   }
 
-  const { data: current, error: readError } = await supabase
+  const { data: current, error: readError } = await db
     .from('leads')
     .select('id, status, owner_member_id, contact_id')
     .eq('organization_id', args.organizationId)
@@ -86,7 +86,7 @@ export async function transitionLead(
   if (args.source !== undefined) patch.source = args.source
   if (args.sourceChannel !== undefined) patch.source_channel = args.sourceChannel
 
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from('leads')
     .update(patch)
     .eq('organization_id', args.organizationId)
@@ -96,13 +96,13 @@ export async function transitionLead(
 
   if (error) throw error
 
-  await supabase.from('lead_events').insert({
+  await db.from('lead_events').insert({
     lead_id: args.leadId,
     event_type: args.nextStatus === 'recovered' ? 'recovered' : 'created',
     description: `status:${from}->${args.nextStatus}`,
   })
 
-  await supabase.from('audit_events').insert({
+  await db.from('audit_events').insert({
     organization_id: args.organizationId,
     actor_type: 'user',
     actor_id: args.actorUserId ?? null,
@@ -114,7 +114,7 @@ export async function transitionLead(
 
   if (args.nextStatus === 'won' || args.nextStatus === 'lost') {
     try {
-      await dispatchWorkflowTrigger(supabase, {
+      await dispatchWorkflowTrigger(db, {
         organizationId: args.organizationId,
         triggerType: args.nextStatus === 'won' ? 'lead.won' : 'lead.lost',
         payload: {

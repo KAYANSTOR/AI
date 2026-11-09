@@ -1,4 +1,4 @@
-import type { SupabaseClient } from '@supabase/supabase-js'
+import type { DbClient } from '@/lib/db/client'
 
 export type DayAvailability = {
   isClosed: boolean
@@ -11,10 +11,10 @@ export type DayAvailability = {
  * Uses DB function holiday_aware_hours when available; falls back to explicit queries.
  */
 export async function getDayAvailability(
-  supabase: SupabaseClient,
+  db: DbClient,
   input: { organizationId: string; locationId?: string | null; day: string }
 ): Promise<DayAvailability> {
-  const { data: rpcData, error: rpcError } = await supabase.rpc('holiday_aware_hours', {
+  const { data: rpcData, error: rpcError } = await db.rpc('holiday_aware_hours', {
     p_organization_id: input.organizationId,
     p_location_id: input.locationId ?? null,
     p_day: input.day,
@@ -35,7 +35,7 @@ export async function getDayAvailability(
   }
 
   // Fallback: exception then weekly hours
-  const { data: exception } = await supabase
+  const { data: exception } = await db
     .from('business_hour_exceptions')
     .select('is_closed, open_time, close_time, location_id')
     .eq('organization_id', input.organizationId)
@@ -59,7 +59,7 @@ export async function getDayAvailability(
   }
 
   const dow = new Date(`${input.day}T12:00:00Z`).getUTCDay()
-  const { data: weekly } = await supabase
+  const { data: weekly } = await db
     .from('business_hours')
     .select('is_closed, open_time, close_time')
     .eq('organization_id', input.organizationId)

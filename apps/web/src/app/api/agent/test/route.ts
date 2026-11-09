@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
-import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/db/server'
 import { getDashboardContext } from '@/lib/dashboard/context'
 import { runAgentPreviewTurn } from '@/lib/runtime/agent-runtime'
 
@@ -39,8 +39,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'ai_provider_not_configured' }, { status: 503 })
   }
 
-  const supabase = await createClient()
-  const { data: agent, error } = await supabase
+  const db = await createClient()
+  const { data: agent, error } = await db
     .from('ai_agents')
     .select('id, organization_id, business_id, status')
     .eq('id', body.agentId)
@@ -57,7 +57,7 @@ export async function POST(req: Request) {
 
   try {
     const result = await runAgentPreviewTurn({
-      supabase,
+      db,
       organizationId: context.organizationId,
       businessId: context.businessId,
       agentId: agent.id,

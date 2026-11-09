@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { requireAdminCapability, audit } from '@/lib/capabilities/guard'
-import { actionErrorMessage, supabaseActionError } from '@/lib/i18n/action-error'
+import { actionErrorMessage, dbActionError } from '@/lib/i18n/action-error'
 import { materializeCampaignAudience } from '@/lib/campaigns'
 import { assertWithinLimit, EntitlementExceededError } from '@/lib/billing/entitlements'
 
@@ -23,7 +23,7 @@ export async function createCampaignAction(input: {
     if (!name) return { ok: false, error: 'الاسم مطلوب.' }
     if (!body) return { ok: false, error: 'نص الرسالة مطلوب.' }
 
-    const { data, error } = await ctx.supabase
+    const { data, error } = await ctx.db
       .from('campaigns')
       .insert({
         organization_id: ctx.organizationId,
@@ -41,7 +41,7 @@ export async function createCampaignAction(input: {
       .select('id')
       .single()
 
-    if (error || !data) return { ok: false, error: supabaseActionError(error) }
+    if (error || !data) return { ok: false, error: dbActionError(error) }
 
     await audit(ctx, 'campaign.created', 'campaign', data.id)
     revalidatePath('/dashboard/campaigns')
@@ -55,20 +55,20 @@ export async function startCampaignAction(campaignId: string): Promise<CampaignR
   try {
     const ctx = await requireAdminCapability(null)
 
-    const { data: campaign, error: readError } = await ctx.supabase
+    const { data: campaign, error: readError } = await ctx.db
       .from('campaigns')
       .select('id, status, segment_id')
       .eq('id', campaignId)
       .eq('organization_id', ctx.organizationId)
       .maybeSingle()
 
-    if (readError) return { ok: false, error: supabaseActionError(readError) }
+    if (readError) return { ok: false, error: dbActionError(readError) }
     if (!campaign) return { ok: false, error: 'الحملة غير موجودة.' }
     if (!['draft', 'scheduled', 'paused'].includes(campaign.status)) {
       return { ok: false, error: 'لا يمكن بدء الحملة من حالتها الحالية.' }
     }
 
-    const audienceSize = await materializeCampaignAudience(ctx.supabase, {
+    const audienceSize = await materializeCampaignAudience(ctx.db, {
       organizationId: ctx.organizationId,
       campaignId,
       segmentId: campaign.segment_id,
@@ -76,7 +76,7 @@ export async function startCampaignAction(campaignId: string): Promise<CampaignR
 
     try {
       await assertWithinLimit(
-        ctx.supabase,
+        ctx.db,
         ctx.organizationId,
         'campaign_sends',
         Math.max(1, audienceSize)
@@ -91,7 +91,7 @@ export async function startCampaignAction(campaignId: string): Promise<CampaignR
       throw err
     }
 
-    const { error } = await ctx.supabase
+    const { error } = await ctx.db
       .from('campaigns')
       .update({
         status: 'running',
@@ -101,7 +101,7 @@ export async function startCampaignAction(campaignId: string): Promise<CampaignR
       .eq('id', campaignId)
       .eq('organization_id', ctx.organizationId)
 
-    if (error) return { ok: false, error: supabaseActionError(error) }
+    if (error) return { ok: false, error: dbActionError(error) }
 
     await audit(ctx, 'campaign.started', 'campaign', campaignId, { audienceSize })
     revalidatePath('/dashboard/campaigns')
@@ -114,14 +114,14 @@ export async function startCampaignAction(campaignId: string): Promise<CampaignR
 export async function pauseCampaignAction(campaignId: string): Promise<CampaignResult> {
   try {
     const ctx = await requireAdminCapability(null)
-    const { error } = await ctx.supabase
+    const { error } = await ctx.db
       .from('campaigns')
       .update({ status: 'paused', updated_at: new Date().toISOString() })
       .eq('id', campaignId)
       .eq('organization_id', ctx.organizationId)
       .eq('status', 'running')
 
-    if (error) return { ok: false, error: supabaseActionError(error) }
+    if (error) return { ok: false, error: dbActionError(error) }
     await audit(ctx, 'campaign.paused', 'campaign', campaignId)
     revalidatePath('/dashboard/campaigns')
     return { ok: true, campaignId }

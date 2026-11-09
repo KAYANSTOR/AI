@@ -1,4 +1,4 @@
-import type { SupabaseClient } from '@supabase/supabase-js'
+import type { DbClient } from '@/lib/db/client'
 
 export type TimeSlot = {
   startsAt: string
@@ -27,12 +27,12 @@ type OpeningHours = { is_closed: boolean; open_time: string | null; close_time: 
  * inventing a default schedule.
  */
 export async function getOpeningHours(
-  supabase: SupabaseClient,
+  db: DbClient,
   organizationId: string,
   dateYmd: string,
   locationId?: string | null
 ): Promise<OpeningHours> {
-  const { data, error } = await supabase.rpc('holiday_aware_hours', {
+  const { data, error } = await db.rpc('holiday_aware_hours', {
     p_organization_id: organizationId,
     p_location_id: locationId ?? null,
     p_day: dateYmd,
@@ -54,14 +54,14 @@ export async function getOpeningHours(
 }
 
 export async function findAvailableSlots(
-  supabase: SupabaseClient,
+  db: DbClient,
   organizationId: string,
   serviceId: string,
   dateYmd: string,
   limit = 8,
   locationId?: string | null
 ): Promise<TimeSlot[]> {
-  const { data: service } = await supabase
+  const { data: service } = await db
     .from('services')
     .select('id, duration_minutes, is_active')
     .eq('id', serviceId)
@@ -73,7 +73,7 @@ export async function findAvailableSlots(
   }
 
   const duration = service.duration_minutes ?? 60
-  const hours = await getOpeningHours(supabase, organizationId, dateYmd, locationId)
+  const hours = await getOpeningHours(db, organizationId, dateYmd, locationId)
 
   if (hours.is_closed || !hours.open_time || !hours.close_time) {
     return []
@@ -83,7 +83,7 @@ export async function findAvailableSlots(
   const dayEnd = parseTimeOnDate(dateYmd, hours.close_time)
   if (!dayStart || !dayEnd || dayEnd <= dayStart) return []
 
-  const { data: booked } = await supabase
+  const { data: booked } = await db
     .from('appointments')
     .select('starts_at, ends_at')
     .eq('organization_id', organizationId)
@@ -134,7 +134,7 @@ function formatLabel(iso: string): string {
 }
 
 export async function createAppointmentRecord(
-  supabase: SupabaseClient,
+  db: DbClient,
   args: {
     organizationId: string
     contactId: string
@@ -145,7 +145,7 @@ export async function createAppointmentRecord(
     notes?: string
   }
 ) {
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from('appointments')
     .insert({
       organization_id: args.organizationId,

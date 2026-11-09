@@ -25,7 +25,7 @@ export default async function NewOrderPage(props: {
   }
 
   // Fetch recent contacts to populate the dropdown
-  const { data: contacts } = await ctx.supabase
+  const { data: contacts } = await ctx.db
     .from('contacts')
     .select('id, full_name, phone')
     .eq('organization_id', ctx.organizationId)
@@ -35,7 +35,7 @@ export default async function NewOrderPage(props: {
   let defaultValues = undefined
 
   if (searchParams?.quote_id) {
-    const { data: quote } = await ctx.supabase
+    const { data: quote } = await ctx.db
       .from('quotes')
       .select('*, quote_items(*)')
       .eq('id', searchParams.quote_id)

@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { getCurrentOrg } from '@/lib/org'
-import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/db/server'
 import { transitionLead, LeadTransitionError } from '@/lib/leads'
 
 export type LeadActionResult = { ok: true } | { ok: false; error: string }
@@ -17,10 +17,10 @@ export async function updateLeadStatusAction(input: {
   if (!org) return { ok: false, error: 'Unauthorized' }
   if (org.role === 'read_only') return { ok: false, error: 'read_only role cannot update leads' }
 
-  const supabase = await createClient()
+  const db = await createClient()
 
   try {
-    await transitionLead(supabase, {
+    await transitionLead(db, {
       organizationId: org.organizationId,
       leadId: input.leadId,
       nextStatus: input.nextStatus,

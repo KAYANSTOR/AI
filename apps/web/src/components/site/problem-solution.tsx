@@ -30,37 +30,32 @@ export function ProblemSolution() {
       <div className="mt-12 grid gap-6 lg:grid-cols-2">
         <article className="rounded-2xl border border-border bg-surface p-6 sm:p-8">
           <div className="flex items-center justify-between gap-3">
-            <h3 className="text-lg font-bold text-text">قبل FrontDesk AI</h3>
+            <h3 className="text-lg font-bold text-text">قبل KAYAN AI</h3>
             <Chip tone="neutral">ما يحدث اليوم</Chip>
           </div>
           <ul className="mt-6 space-y-4">
             {PROBLEMS.map((problem) => (
               <li key={problem} className="flex items-start gap-3 text-sm leading-7 text-text-muted">
-                <XCircle size={18} aria-hidden="true" className="mt-1 shrink-0 text-error" />
+                <XCircle size={18} aria-hidden="true" className="mt-1 shrink-0 text-text-muted/60" />
                 <span>{problem}</span>
               </li>
             ))}
           </ul>
         </article>
 
-        <article className="rounded-2xl border border-primary-light bg-surface p-6 shadow-sm sm:p-8">
+        <article className="rounded-2xl bg-dark p-6 text-surface shadow-[var(--shadow-raised)] sm:p-8">
           <div className="flex items-center justify-between gap-3">
-            <h3 className="text-lg font-bold text-text">مع FrontDesk AI</h3>
-            <Chip tone="brand">نفس الشركة، نظام مختلف</Chip>
+            <h3 className="text-lg font-bold">مع KAYAN AI</h3>
+            <span className="rounded-full bg-primary/25 px-3 py-1 text-xs font-medium text-primary-light">نفس الفريق، نتائج مختلفة</span>
           </div>
           <ul className="mt-6 space-y-4">
             {SOLUTIONS.map((solution) => (
-              <li key={solution} className="flex items-start gap-3 text-sm leading-7 text-text">
-                <CheckCircle2 size={18} aria-hidden="true" className="mt-1 shrink-0 text-success" />
+              <li key={solution} className="flex items-start gap-3 text-sm leading-7 text-surface/85">
+                <CheckCircle2 size={18} aria-hidden="true" className="mt-1 shrink-0 text-primary-light" />
                 <span>{solution}</span>
               </li>
             ))}
           </ul>
-          <p className="mt-6 flex flex-wrap items-center gap-2 text-xs leading-6 text-text-muted">
-            <Chip tone="soon">قريبًا</Chip>
-            محرّك المتابعة التلقائي (مكالمة فائتة، عدم حضور، عميل جديد) ضمن المرحلة القادمة من
-            الخطة.
-          </p>
         </article>
       </div>
     </Section>

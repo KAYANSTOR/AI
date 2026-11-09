@@ -1,4 +1,4 @@
-import type { SupabaseClient } from '@supabase/supabase-js'
+import type { DbClient } from '@/lib/db/client'
 
 /**
  * Knowledge retrieval.
@@ -39,7 +39,7 @@ export function tokenize(query: string): string[] {
  * instead of guessing.
  */
 export async function searchKnowledge(
-  supabase: SupabaseClient,
+  db: DbClient,
   organizationId: string,
   query: string,
   options: { category?: string | null; limit?: number } = {}
@@ -47,7 +47,7 @@ export async function searchKnowledge(
   const tokens = tokenize(query)
   if (tokens.length === 0) return []
 
-  let request = supabase
+  let request = db
     .from('knowledge_base')
     .select('id, title, content, category, is_active')
     .eq('organization_id', organizationId)

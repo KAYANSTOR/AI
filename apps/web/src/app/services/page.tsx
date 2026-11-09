@@ -8,7 +8,7 @@ import { Section } from '@/components/site/section'
 import { Briefcase, Building2, Stethoscope, UtensilsCrossed, Calendar } from 'lucide-react'
 
 export const metadata: Metadata = {
-  title: 'الأنشطة والحلول المخصصة | FrontDesk AI',
+  title: 'الأنشطة والحلول المخصصة | KAYAN AI',
   description: 'حلول ذكية مهيأة خصيصاً لقطاعك: العيادات الطبية، الشركات، المطاعم والفنادق، تنظيم الفعاليات، ومكاتب الخدمات المهنية.',
 }
 

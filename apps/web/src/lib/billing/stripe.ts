@@ -1,4 +1,4 @@
-import type { SupabaseClient } from '@supabase/supabase-js'
+import type { DbClient } from '@/lib/db/client'
 
 export type SubscriptionStatus =
   | 'trial'
@@ -35,7 +35,7 @@ export function isStripeConfigured(): boolean {
  * Does not call Stripe APIs — used by webhooks after signature verification.
  */
 export async function applySubscriptionEvent(
-  supabase: SupabaseClient,
+  db: DbClient,
   input: {
     organizationId: string
     status: SubscriptionStatus
@@ -45,7 +45,7 @@ export async function applySubscriptionEvent(
     currentPeriodEnd?: string | null
   }
 ): Promise<void> {
-  const { data: current } = await supabase
+  const { data: current } = await db
     .from('subscriptions')
     .select('id, status')
     .eq('organization_id', input.organizationId)
@@ -65,21 +65,21 @@ export async function applySubscriptionEvent(
   if (input.currentPeriodEnd) patch.current_period_end = input.currentPeriodEnd
 
   if (current) {
-    const { error } = await supabase
+    const { error } = await db
       .from('subscriptions')
       .update(patch)
       .eq('id', current.id)
       .eq('organization_id', input.organizationId)
     if (error) throw error
   } else {
-    const { error } = await supabase.from('subscriptions').insert({
+    const { error } = await db.from('subscriptions').insert({
       organization_id: input.organizationId,
       ...patch,
     })
     if (error) throw error
   }
 
-  await supabase.from('audit_events').insert({
+  await db.from('audit_events').insert({
     organization_id: input.organizationId,
     actor_type: 'system',
     action: 'subscription.status_changed',

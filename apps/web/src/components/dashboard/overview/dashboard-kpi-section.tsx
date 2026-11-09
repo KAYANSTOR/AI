@@ -1,18 +1,18 @@
 import { Users, Calendar, MessageSquare, FileText, ShoppingCart, Clock, TrendingUp } from 'lucide-react'
-import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/db/server'
 import { loadCoreAnalytics } from '@/lib/analytics/core'
 import { formatNumber } from '@/lib/i18n/format'
 
 export async function DashboardKpiSection({ organizationId }: { organizationId: string }) {
-  const supabase = await createClient()
+  const db = await createClient()
 
   const [metrics, contactsCountResult, conversationCountResult] = await Promise.all([
-    loadCoreAnalytics(supabase, organizationId),
-    supabase
+    loadCoreAnalytics(db, organizationId),
+    db
       .from('contacts')
       .select('id', { count: 'exact', head: true })
       .eq('organization_id', organizationId),
-    supabase
+    db
       .from('conversations')
       .select('id', { count: 'exact', head: true })
       .eq('organization_id', organizationId),
@@ -23,11 +23,11 @@ export async function DashboardKpiSection({ organizationId }: { organizationId: 
 
   const kpis = [
     {
-      title: 'العملاء المحتملين (Leads)',
+      title: 'العملاء المحتملون',
       value: metrics.leadsTotal,
       subtitle: `مفتوح ${formatNumber(metrics.leadsOpen)} · تم الفوز ${formatNumber(metrics.leadsWon)}`,
       icon: Users,
-      highlight: metrics.leadsWon > 0 ? `+${metrics.leadsWon} عميل مؤكد` : 'تأهيل آلي مستمر',
+      highlight: metrics.leadsWon > 0 ? `${formatNumber(metrics.leadsWon)} تحولوا لعملاء` : 'يتم التأهيل تلقائيًا من المحادثات',
       tone: 'primary',
     },
     {
@@ -35,23 +35,23 @@ export async function DashboardKpiSection({ organizationId }: { organizationId: 
       value: metrics.conversationsOpen,
       subtitle: `إجمالي المحادثات ${formatNumber(conversationsTotal)}`,
       icon: MessageSquare,
-      highlight: metrics.conversationsBreachedSla ? `⚠️ ${metrics.conversationsBreachedSla} متجاوز SLA` : 'مستوفية لشروط الرد السريع',
+      highlight: metrics.conversationsBreachedSla ? `${formatNumber(metrics.conversationsBreachedSla)} تجاوزت مهلة الرد` : 'كل المحادثات ضمن مهلة الرد',
       tone: metrics.conversationsBreachedSla ? 'warning' : 'neutral',
     },
     {
       title: 'المواعيد القادمة',
       value: metrics.appointmentsUpcoming,
-      subtitle: 'حجوزات مجدولة ومؤكدة عبر الوكيل',
+      subtitle: 'حجوزات مجدولة ومؤكدة',
       icon: Calendar,
       highlight: metrics.appointmentsUpcoming > 0 ? 'مواعيد بانتظار الخدمة' : 'لا توجد مواعيد اليوم',
       tone: 'success',
     },
     {
-      title: 'متابعات ذكية نشطة',
+      title: 'المتابعات النشطة',
       value: metrics.followupsActive,
       subtitle: `مكتمل ${formatNumber(metrics.followupsCompleted)} متابعة تلقائية`,
       icon: Clock,
-      highlight: 'تذكير آلي بعد المكالمات',
+      highlight: 'تذكيرات تلقائية للعملاء',
       tone: 'info',
     },
     {
@@ -73,17 +73,18 @@ export async function DashboardKpiSection({ organizationId }: { organizationId: 
     {
       title: 'دليل جهات الاتصال',
       value: contactsCount,
-      subtitle: 'عملاء مسجلين ومحدثين تلقائياً',
+      subtitle: 'كل العملاء المسجلين',
       icon: Users,
       highlight: 'سجل موحد لكل عميل',
       tone: 'neutral',
     },
     {
-      title: 'متوسط سرعة الرد الآلي',
-      valueText: '< 1s',
-      subtitle: 'معالجة مباشرة على مدار الساعة',
+      title: 'معدل الإغلاق',
+      valueText:
+        metrics.leadsTotal > 0 ? `${Math.round((metrics.leadsWon / metrics.leadsTotal) * 100)}%` : '—',
+      subtitle: 'نسبة العملاء المحتملين الذين تحولوا لعملاء',
       icon: TrendingUp,
-      highlight: 'أعلى سرعة استجابة',
+      highlight: metrics.leadsTotal > 0 ? `${formatNumber(metrics.leadsWon)} من ${formatNumber(metrics.leadsTotal)}` : 'لا توجد بيانات كافية بعد',
       tone: 'success',
     },
   ]
@@ -95,17 +96,17 @@ export async function DashboardKpiSection({ organizationId }: { organizationId: 
         return (
           <div
             key={idx}
-            className="group relative rounded-2xl border border-border bg-surface p-5 shadow-2xs transition-all hover:border-primary/40 hover:shadow-xs"
+            className="rounded-2xl border border-border bg-surface p-5 shadow-[var(--shadow-card)]"
           >
             <div className="flex items-center justify-between gap-3">
               <span className="text-xs font-semibold text-text-muted">{kpi.title}</span>
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary-light/30 text-primary-dark transition-colors group-hover:bg-primary group-hover:text-white">
-                <Icon size={18} />
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-background text-text-muted">
+                <Icon size={16} aria-hidden="true" />
               </div>
             </div>
 
             <div className="mt-3 flex items-baseline gap-2">
-              <span className="text-2xl font-bold tracking-tight text-text sm:text-3xl font-mono">
+              <span className="text-[1.75rem] font-bold tabular-nums leading-none text-text">
                 {kpi.valueText ?? formatNumber(kpi.value ?? 0)}
               </span>
             </div>

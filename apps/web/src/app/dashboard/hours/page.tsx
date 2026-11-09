@@ -14,12 +14,12 @@ export default async function BusinessHoursPage() {
   }
 
   const [{ data: hours }, { data: exceptions }] = await Promise.all([
-    ctx.supabase
+    ctx.db
       .from('business_hours')
       .select('day_of_week, open_time, close_time, is_closed')
       .eq('organization_id', ctx.organizationId)
       .order('day_of_week'),
-    ctx.supabase
+    ctx.db
       .from('business_hour_exceptions')
       .select('id, exception_date, is_closed, open_time, close_time, reason')
       .eq('organization_id', ctx.organizationId)

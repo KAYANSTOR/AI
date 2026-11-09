@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createAdminClient } from '@/lib/supabase/admin'
+import { createAdminClient } from '@/lib/db/admin'
 import { acquireWebhookEvent, markWebhookProcessed } from '@/lib/channels/idempotency'
 import { normalizeE164 } from '@/lib/channels/contacts'
 import { processInboundMessage } from '@/lib/runtime/process-inbound'
@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   let eventRowId: string | null = null
-  let supabase: ReturnType<typeof createAdminClient> | null = null
+  let db: ReturnType<typeof createAdminClient> | null = null
 
   try {
     const rawBody = await req.text()
@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'invalid_webhook_signature' }, { status: 401 })
     }
 
-    supabase = createAdminClient()
+    db = createAdminClient()
 
     const body = JSON.parse(rawBody) as Record<string, unknown>
 
@@ -62,26 +62,26 @@ export async function POST(req: NextRequest) {
           if (!from || !text) continue
 
           const externalEventId = String(msg.id ?? '').trim() || stablePayloadEventId('whatsapp', msg)
-          const acquired = await acquireWebhookEvent(supabase, 'whatsapp', externalEventId, msg)
+          const acquired = await acquireWebhookEvent(db, 'whatsapp', externalEventId, msg)
           if (acquired.status === 'duplicate') continue
           if (acquired.status === 'error') throw new Error(acquired.message)
           eventRowId = acquired.eventRowId
 
           // Exact tenant binding: WhatsApp phone_number_id → channels.provider_account_id.
           const channel = phoneNumberId
-            ? await resolveChannelExact(supabase, {
+            ? await resolveChannelExact(db, {
                 channelType: 'whatsapp',
                 providerAccountId: phoneNumberId,
               })
             : null
 
           if (!channel) {
-            await markWebhookProcessed(supabase, eventRowId, 'failed', 'unmapped_whatsapp_number')
+            await markWebhookProcessed(db, eventRowId, 'failed', 'unmapped_whatsapp_number')
             eventRowId = null
             continue
           }
 
-          await supabase
+          await db
             .from('webhook_events')
             .update({
               organization_id: channel.organizationId,
@@ -91,7 +91,7 @@ export async function POST(req: NextRequest) {
             })
             .eq('id', eventRowId)
 
-          const result = await processInboundMessage(supabase, {
+          const result = await processInboundMessage(db, {
             organizationId: channel.organizationId,
             businessId: channel.businessId,
             channelId: channel.id,
@@ -105,7 +105,7 @@ export async function POST(req: NextRequest) {
           })
 
           if (result.reply) {
-            const delivery = await deliverOutbound(supabase, {
+            const delivery = await deliverOutbound(db, {
               channel: {
                 id: channel.id,
                 organizationId: channel.organizationId,
@@ -119,7 +119,7 @@ export async function POST(req: NextRequest) {
               idempotencyKey: 'whatsapp:' + externalEventId + ':reply',
               conversationId: result.conversationId,
             })
-            if (delivery === 'sent') await recordDeliveredOutboundMessage(supabase, {
+            if (delivery === 'sent') await recordDeliveredOutboundMessage(db, {
               organizationId: channel.organizationId,
               conversationId: result.conversationId,
               body: result.reply,
@@ -127,7 +127,7 @@ export async function POST(req: NextRequest) {
             })
           }
 
-          await markWebhookProcessed(supabase, eventRowId, 'processed')
+          await markWebhookProcessed(db, eventRowId, 'processed')
           eventRowId = null
         }
       }
@@ -136,7 +136,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'whatsapp webhook error'
-    if (supabase && eventRowId) await markWebhookProcessed(supabase, eventRowId, 'failed', message)
+    if (db && eventRowId) await markWebhookProcessed(db, eventRowId, 'failed', message)
     return NextResponse.json({ error: publicWebhookError() }, { status: 500 })
   }
 }

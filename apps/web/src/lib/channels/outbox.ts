@@ -1,7 +1,7 @@
-import type { SupabaseClient } from '@supabase/supabase-js'
+import type { DbClient } from '@/lib/db/client'
 
 export async function enqueueOutbound(args: {
-  supabase: SupabaseClient
+  db: DbClient
   organizationId: string
   businessId: string | null
   channelId: string
@@ -19,7 +19,7 @@ export async function enqueueOutbound(args: {
         ? new Date(args.scheduledAt).toISOString()
         : new Date().toISOString()
 
-  const { data, error } = await args.supabase
+  const { data, error } = await args.db
     .from('outbox_events')
     .insert({
       organization_id: args.organizationId,

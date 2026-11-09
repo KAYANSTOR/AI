@@ -1,23 +1,23 @@
 @import "tailwindcss";
 
-/* ─────────────────────────────────────────────────────────────
-   FrontDesk AI — Brand Tokens (docs/PLAN.md · الهوية البصرية)
-   الهوية الرسمية الثابتة. كل الواجهات تستهلك هذه الـtokens،
-   ولا يجوز استخدام قيم hex مباشرة داخل الـcomponents.
-   `@theme static` يجعل الـtokens متاحة كـCSS Variables أيضًا.
-   ───────────────────────────────────────────────────────────── */
+/* Design tokens. Components use these names only — never raw hex values. */
 @theme static {
   --color-primary: #d97757;
   --color-primary-dark: #b85c3e;
   --color-primary-light: #f3c5b5;
   --color-primary-foreground: #ffffff;
 
+  --color-accent: #d59a3a;
+  --color-accent-light: #f7ebd6;
+
   --color-background: #f7f4ef;
   --color-surface: #ffffff;
+  --color-surface-muted: #fbf9f6;
 
   --color-text: #292524;
   --color-text-muted: #78716c;
   --color-border: #e7e2dc;
+  --color-border-strong: #d6cfc6;
 
   --color-success: #6b8e72;
   --color-warning: #d59a3a;
@@ -25,10 +25,15 @@
   --color-info: #64748b;
 
   --color-dark: #1f1f1f;
+  --color-dark-muted: #2b2826;
 
-  --font-sans: var(--font-plex-arabic), var(--font-geist-sans), ui-sans-serif, system-ui,
-    "Segoe UI", sans-serif;
-  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  --radius-card: 1rem;
+
+  --shadow-card: 0 1px 2px rgb(31 31 31 / 0.04), 0 1px 1px rgb(31 31 31 / 0.03);
+  --shadow-raised: 0 12px 32px -12px rgb(31 31 31 / 0.18), 0 2px 6px rgb(31 31 31 / 0.05);
+
+  --font-sans: var(--font-plex-arabic), var(--font-inter), ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+  --font-mono: var(--font-plex-mono), ui-monospace, monospace;
 }
 
 @layer base {
@@ -40,6 +45,17 @@
     background-color: var(--color-background);
     color: var(--color-text);
     font-family: var(--font-sans);
+    font-feature-settings: "kern" 1;
+    text-rendering: optimizeLegibility;
+  }
+
+  h1, h2, h3 {
+    letter-spacing: -0.01em;
+    text-wrap: balance;
+  }
+
+  p {
+    text-wrap: pretty;
   }
 
   ::selection {
@@ -91,4 +107,15 @@
   animation: progressIndeterminate 0.75s cubic-bezier(0.4, 0, 0.2, 1) infinite;
   transform-origin: 0% 50%;
   will-change: transform;
+}
+
+/* Subtle dotted texture for dark brand panels. */
+.bg-grid-dark {
+  background-image: radial-gradient(rgb(255 255 255 / 0.07) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+
+.bg-grid-light {
+  background-image: radial-gradient(rgb(41 37 36 / 0.06) 1px, transparent 1px);
+  background-size: 22px 22px;
 }

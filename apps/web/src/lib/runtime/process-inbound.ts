@@ -1,4 +1,4 @@
-import type { SupabaseClient } from '@supabase/supabase-js'
+import type { DbClient } from '@/lib/db/client'
 import { resolveContactIdentity } from '@/lib/channels/contacts'
 import { getConsentStatus, isOptOutMessage, recordOptOut } from '@/lib/channels/consent'
 import { checkEligibility } from '@/lib/channels/eligibility'
@@ -17,7 +17,7 @@ import {
 export type RuntimeChannel = 'sms' | 'whatsapp' | 'instagram' | 'phone'
 
 export async function processInboundMessage(
-  supabase: SupabaseClient,
+  db: DbClient,
   input: {
     organizationId: string
     businessId: string
@@ -32,7 +32,7 @@ export async function processInboundMessage(
     text: string
   }
 ): Promise<{ reply: string | null; conversationId: string; contactId: string }> {
-  const contact = await resolveContactIdentity(supabase, input.organizationId, {
+  const contact = await resolveContactIdentity(db, input.organizationId, {
     channel: input.channelType,
     externalUserId: input.externalUserId,
     externalUsername: input.senderUsername,
@@ -40,14 +40,14 @@ export async function processInboundMessage(
     displayName: input.displayName,
   })
 
-  const conversationId = await ensureOpenConversation(supabase, {
+  const conversationId = await ensureOpenConversation(db, {
     organizationId: input.organizationId,
     businessId: input.businessId,
     contactId: contact.contactId,
     channelId: input.channelId,
   })
 
-  const stored = await supabase.from('messages').insert({
+  const stored = await db.from('messages').insert({
     organization_id: input.organizationId,
     conversation_id: conversationId,
     direction: 'inbound',
@@ -57,29 +57,29 @@ export async function processInboundMessage(
   })
   if (stored.error && stored.error.code !== '23505') throw new Error(stored.error.message)
 
-  await supabase
+  await db
     .from('conversations')
     .update({ last_message_at: new Date().toISOString(), last_inbound_at: new Date().toISOString() })
     .eq('id', conversationId)
 
-  await armConversationSla(supabase, {
+  await armConversationSla(db, {
     organizationId: input.organizationId,
     conversationId,
   })
 
-  const conversation = await getConversationRef(supabase, conversationId, input.organizationId)
+  const conversation = await getConversationRef(db, conversationId, input.organizationId)
   if (!conversation || !conversation.aiEnabled || conversation.status === 'handed_off') {
     return { reply: null, conversationId, contactId: contact.contactId }
   }
 
   if (isOptOutMessage(input.text)) {
-    await recordOptOut(supabase, {
+    await recordOptOut(db, {
       organizationId: input.organizationId,
       contactId: contact.contactId,
       channel: input.channelType,
       source: input.provider + '_inbound',
     })
-    await supabase.from('audit_events').insert({
+    await db.from('audit_events').insert({
       organization_id: input.organizationId,
       business_id: input.businessId,
       actor_type: 'provider',
@@ -91,18 +91,18 @@ export async function processInboundMessage(
     return { reply: null, conversationId, contactId: contact.contactId }
   }
 
-  const consent = await getConsentStatus(supabase, contact.contactId, input.channelType)
+  const consent = await getConsentStatus(db, contact.contactId, input.channelType)
   if (consent === 'opted_out') {
     return { reply: null, conversationId, contactId: contact.contactId }
   }
 
   let serverActionResult: unknown
-  const pending = await getPendingAction(supabase, conversationId)
+  const pending = await getPendingAction(db, conversationId)
 
   if (pending && isNegative(input.text)) {
-    const cancelled = await markPendingAction(supabase, pending.id, 'cancelled')
+    const cancelled = await markPendingAction(db, pending.id, 'cancelled')
     if (!cancelled) return { reply: 'تمت معالجة العملية مسبقًا.', conversationId, contactId: contact.contactId }
-    await supabase.from('conversations').update({ state: 'waiting_customer' }).eq('id', conversationId)
+    await db.from('conversations').update({ state: 'waiting_customer' }).eq('id', conversationId)
     return {
       reply: 'تم إلغاء العملية. أخبرني عندما تريد المتابعة.',
       conversationId,
@@ -111,9 +111,9 @@ export async function processInboundMessage(
   }
 
   if (pending && isAffirmative(input.text)) {
-    const confirmed = await markPendingAction(supabase, pending.id, 'confirmed')
+    const confirmed = await markPendingAction(db, pending.id, 'confirmed')
     if (!confirmed) return { reply: 'هذه العملية قيد المعالجة بالفعل.', conversationId, contactId: contact.contactId }
-    const agent = await resolveBusinessAgent(supabase, input.businessId)
+    const agent = await resolveBusinessAgent(db, input.businessId)
     const actionResult = await executeTool(
       pending.tool_name,
       pending.arguments,
@@ -122,21 +122,21 @@ export async function processInboundMessage(
         businessId: input.businessId,
         conversationId,
         contactId: contact.contactId,
-        supabase,
+        db,
         agentId: agent?.id ?? null,
         actor: 'agent',
       },
       { confirmed: true }
     )
     serverActionResult = actionResult.ok ? actionResult.result : { error: actionResult.error }
-    await markPendingAction(supabase, pending.id, actionResult.ok ? 'executed' : 'failed', serverActionResult, 'confirmed')
-    await supabase
+    await markPendingAction(db, pending.id, actionResult.ok ? 'executed' : 'failed', serverActionResult, 'confirmed')
+    await db
       .from('conversations')
       .update({ state: actionResult.ok ? 'completed' : 'action_pending' })
       .eq('id', conversationId)
   }
 
-  const agent = await resolveBusinessAgent(supabase, input.businessId)
+  const agent = await resolveBusinessAgent(db, input.businessId)
   if (!agent) return { reply: null, conversationId, contactId: contact.contactId }
 
   const eligibility = checkEligibility({
@@ -151,10 +151,10 @@ export async function processInboundMessage(
   }
 
   try {
-    await assertWithinLimit(supabase, input.organizationId, 'ai_messages', 1)
+    await assertWithinLimit(db, input.organizationId, 'ai_messages', 1)
   } catch (err) {
     if (err instanceof EntitlementExceededError) {
-      await supabase.from('audit_events').insert({
+      await db.from('audit_events').insert({
         organization_id: input.organizationId,
         business_id: input.businessId,
         actor_type: 'system',
@@ -173,7 +173,7 @@ export async function processInboundMessage(
   }
 
   const reply = await runAgentTurn({
-    supabase,
+    db,
     organizationId: input.organizationId,
     businessId: input.businessId,
     conversationId,
@@ -186,7 +186,7 @@ export async function processInboundMessage(
   if (!reply) return { reply: null, conversationId, contactId: contact.contactId }
 
   try {
-    await recordMeterUsage(supabase, input.organizationId, 'ai_messages', 1)
+    await recordMeterUsage(db, input.organizationId, 'ai_messages', 1)
   } catch {
     // meter table may be absent until migration; ledger still records tokens
   }

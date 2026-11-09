@@ -1,4 +1,4 @@
-import type { SupabaseClient } from '@supabase/supabase-js'
+import type { DbClient } from '@/lib/db/client'
 
 export type CannedReply = {
   id: string
@@ -10,11 +10,11 @@ export type CannedReply = {
 }
 
 export async function listCannedReplies(
-  supabase: SupabaseClient,
+  db: DbClient,
   organizationId: string,
   channel?: string | null
 ): Promise<CannedReply[]> {
-  let query = supabase
+  let query = db
     .from('canned_replies')
     .select('id, title, body, shortcut, channel, is_active')
     .eq('organization_id', organizationId)

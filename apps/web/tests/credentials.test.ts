@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
-import type { SupabaseClient } from '@supabase/supabase-js'
-import { createFakeSupabase } from './support/fake-supabase'
+import type { DbClient } from '@/lib/db/client'
+import { createFakeDb } from './support/fake-db'
 import {
   CredentialConfigError,
   CredentialMissingError,
@@ -127,10 +127,10 @@ describe('per-channel storage', () => {
   }
 
   test('saving encrypts at rest: the row never holds the plaintext', async () => {
-    const fake = createFakeSupabase(channelTables())
-    const supabase = fake.client as unknown as SupabaseClient
+    const fake = createFakeDb(channelTables())
+    const db = fake.client as unknown as DbClient
 
-    await saveChannelCredential(supabase, {
+    await saveChannelCredential(db, {
       organizationId: 'org-1',
       channelId: 'chan-1',
       provider: 'meta',
@@ -138,15 +138,15 @@ describe('per-channel storage', () => {
       value: SECRET,
     })
 
-    const stored = String(fake.db.provider_credentials.rows?.[0]?.encrypted_value ?? '')
+    const stored = String(fake.store.provider_credentials.rows?.[0]?.encrypted_value ?? '')
     expect(stored).not.toContain(SECRET)
     expect(stored.startsWith('v1:')).toBe(true)
   })
 
   test('loading returns decrypted values for active credentials', async () => {
-    const fake = createFakeSupabase(channelTables())
-    const supabase = fake.client as unknown as SupabaseClient
-    await saveChannelCredential(supabase, {
+    const fake = createFakeDb(channelTables())
+    const db = fake.client as unknown as DbClient
+    await saveChannelCredential(db, {
       organizationId: 'org-1',
       channelId: 'chan-1',
       provider: 'twilio',
@@ -154,13 +154,13 @@ describe('per-channel storage', () => {
       value: SECRET,
     })
 
-    const credentials = await loadChannelCredentials(supabase, 'chan-1')
+    const credentials = await loadChannelCredentials(db, 'chan-1')
     expect(credentials.auth_token).toBe(SECRET)
   })
 
   test('a credential encrypted with another key surfaces a configuration error', async () => {
     const payload = encryptSecret(SECRET)
-    const fake = createFakeSupabase({
+    const fake = createFakeDb({
       provider_credentials: {
         rows: [
           {
@@ -173,21 +173,21 @@ describe('per-channel storage', () => {
         ],
       },
     })
-    const supabase = fake.client as unknown as SupabaseClient
+    const db = fake.client as unknown as DbClient
     process.env.CREDENTIAL_ENCRYPTION_KEY = OTHER_KEY
 
-    expect(loadChannelCredentials(supabase, 'chan-1')).rejects.toThrow(CredentialConfigError)
+    expect(loadChannelCredentials(db, 'chan-1')).rejects.toThrow(CredentialConfigError)
   })
 
   test('status changes use the tenant-guarded RPC with the organization id', async () => {
     let received: Record<string, unknown> | undefined
-    const fake = createFakeSupabase({}, {
+    const fake = createFakeDb({}, {
       set_channel_credential_status: (args) => {
         received = args
       },
     })
 
-    await setChannelCredentialStatus(fake.client as unknown as SupabaseClient, {
+    await setChannelCredentialStatus(fake.client as unknown as DbClient, {
       organizationId: 'org-1',
       channelId: 'chan-1',
       provider: 'meta',
@@ -204,13 +204,13 @@ describe('per-channel storage', () => {
 
   test('deletion uses the tenant-guarded RPC with an optional credential type', async () => {
     let received: Record<string, unknown> | undefined
-    const fake = createFakeSupabase({}, {
+    const fake = createFakeDb({}, {
       delete_channel_credential: (args) => {
         received = args
       },
     })
 
-    await deleteChannelCredential(fake.client as unknown as SupabaseClient, {
+    await deleteChannelCredential(fake.client as unknown as DbClient, {
       organizationId: 'org-1',
       channelId: 'chan-1',
       provider: 'meta',
@@ -228,10 +228,10 @@ describe('per-channel storage', () => {
 
 describe('resolution policy', () => {
   test('an unconfigured channel yields no credentials rather than a shared global token', async () => {
-    const fake = createFakeSupabase({ provider_credentials: { rows: [] } })
-    const supabase = fake.client as unknown as SupabaseClient
+    const fake = createFakeDb({ provider_credentials: { rows: [] } })
+    const db = fake.client as unknown as DbClient
 
-    const credentials = await resolveChannelProviderCredentials(supabase, {
+    const credentials = await resolveChannelProviderCredentials(db, {
       channelId: 'chan-1',
       channelType: 'whatsapp',
     })
@@ -254,7 +254,7 @@ describe('resolution policy', () => {
   test('channel credentials win over the operator fallback', async () => {
     process.env.PLATFORM_PROVIDER_CREDENTIALS = 'true'
     process.env.WHATSAPP_ACCESS_TOKEN = 'platform-token'
-    const fake = createFakeSupabase({
+    const fake = createFakeDb({
       provider_credentials: {
         rows: [
           {
@@ -267,9 +267,9 @@ describe('resolution policy', () => {
         ],
       },
     })
-    const supabase = fake.client as unknown as SupabaseClient
+    const db = fake.client as unknown as DbClient
 
-    const credentials = await resolveChannelProviderCredentials(supabase, {
+    const credentials = await resolveChannelProviderCredentials(db, {
       channelId: 'chan-1',
       channelType: 'whatsapp',
     })

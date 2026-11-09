@@ -26,7 +26,7 @@ export default async function KnowledgePage() {
     redirect('/login')
   }
 
-  const { data } = await ctx.supabase
+  const { data } = await ctx.db
     .from('knowledge_base')
     .select('id, title, content, category, is_active')
     .eq('organization_id', ctx.organizationId)

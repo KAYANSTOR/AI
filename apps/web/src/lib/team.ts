@@ -1,5 +1,5 @@
-import type { SupabaseClient } from '@supabase/supabase-js'
-import { createClient } from '@/lib/supabase/server'
+import type { DbClient } from '@/lib/db/client'
+import { createClient } from '@/lib/db/server'
 
 export const TEAM_ROLES = ['owner', 'admin', 'manager', 'member', 'read_only'] as const
 export type TeamRole = (typeof TEAM_ROLES)[number]
@@ -51,10 +51,10 @@ function ensureRoleChangeAllowed(actorRole: string | null | undefined, nextRole:
 }
 
 export async function listOrganizationMembers(
-  supabase: SupabaseClient | Awaited<ReturnType<typeof createClient>>,
+  db: DbClient | Awaited<ReturnType<typeof createClient>>,
   organizationId: string
 ): Promise<TeamMember[]> {
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from('organization_members')
     .select('id, organization_id, user_id, role, is_active, created_at')
     .eq('organization_id', organizationId)
@@ -65,7 +65,7 @@ export async function listOrganizationMembers(
 }
 
 export async function addOrganizationMember(
-  supabase: SupabaseClient | Awaited<ReturnType<typeof createClient>>,
+  db: DbClient | Awaited<ReturnType<typeof createClient>>,
   args: {
     organizationId: string
     actorRole: string | null | undefined
@@ -82,7 +82,7 @@ export async function addOrganizationMember(
     throw new TeamAccessError('not authorized: admin cannot assign owner role')
   }
 
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from('organization_members')
     .insert({
       organization_id: args.organizationId,
@@ -94,11 +94,11 @@ export async function addOrganizationMember(
     .single()
 
   if (error) throw error
-  return data as TeamMember
+  return data as unknown as TeamMember
 }
 
 export async function updateMemberRole(
-  supabase: SupabaseClient | Awaited<ReturnType<typeof createClient>>,
+  db: DbClient | Awaited<ReturnType<typeof createClient>>,
   args: {
     organizationId: string
     actorRole: string | null | undefined
@@ -109,7 +109,7 @@ export async function updateMemberRole(
   ensureAdminRole(args.actorRole)
   ensureRoleChangeAllowed(args.actorRole, args.nextRole)
 
-  const { data: current, error: currentError } = await supabase
+  const { data: current, error: currentError } = await db
     .from('organization_members')
     .select('id, organization_id, user_id, role, is_active, created_at')
     .eq('organization_id', args.organizationId)
@@ -120,7 +120,7 @@ export async function updateMemberRole(
   if (!current) throw new TeamAccessError('member not found')
 
   if (current.role === 'owner' && args.nextRole !== 'owner') {
-    const { data: owners, error: ownersError } = await supabase
+    const { data: owners, error: ownersError } = await db
       .from('organization_members')
       .select('id')
       .eq('organization_id', args.organizationId)
@@ -136,7 +136,7 @@ export async function updateMemberRole(
     throw new TeamAccessError('not authorized: admin cannot change the owner role')
   }
 
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from('organization_members')
     .update({ role: args.nextRole })
     .eq('organization_id', args.organizationId)
@@ -145,11 +145,11 @@ export async function updateMemberRole(
     .single()
 
   if (error) throw error
-  return data as TeamMember
+  return data as unknown as TeamMember
 }
 
 export async function setMemberActive(
-  supabase: SupabaseClient | Awaited<ReturnType<typeof createClient>>,
+  db: DbClient | Awaited<ReturnType<typeof createClient>>,
   args: {
     organizationId: string
     actorRole: string | null | undefined
@@ -159,7 +159,7 @@ export async function setMemberActive(
 ): Promise<TeamMember> {
   ensureAdminRole(args.actorRole)
 
-  const { data: current, error: currentError } = await supabase
+  const { data: current, error: currentError } = await db
     .from('organization_members')
     .select('id, role')
     .eq('organization_id', args.organizationId)
@@ -170,7 +170,7 @@ export async function setMemberActive(
   if (!current) throw new TeamAccessError('member not found')
 
   if (!args.isActive && current.role === 'owner') {
-    const { data: owners, error: ownersError } = await supabase
+    const { data: owners, error: ownersError } = await db
       .from('organization_members')
       .select('id')
       .eq('organization_id', args.organizationId)
@@ -183,7 +183,7 @@ export async function setMemberActive(
     }
   }
 
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from('organization_members')
     .update({ is_active: args.isActive })
     .eq('organization_id', args.organizationId)
@@ -192,5 +192,5 @@ export async function setMemberActive(
     .single()
 
   if (error) throw error
-  return data as TeamMember
+  return data as unknown as TeamMember
 }

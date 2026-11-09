@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { isAuthorizedCronRequest } from '@/lib/cron/auth'
-import { createAdminClient } from '@/lib/supabase/admin'
+import { createAdminClient } from '@/lib/db/admin'
 import { deliverOutbound, recordDeliveredOutboundMessage } from '@/lib/runtime/outbound'
 import { publicWebhookError } from '@/lib/runtime/security'
 import {
@@ -15,12 +15,12 @@ export const dynamic = 'force-dynamic'
 async function handle(req: NextRequest) {
   if (!isAuthorizedCronRequest(req.headers.get('authorization'), process.env.CRON_SECRET)) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
 
-  const supabase = createAdminClient()
+  const db = createAdminClient()
   // Stale workers (crashed mid-send) leave rows in 'processing'; they become claimable
   // again after the lock window instead of being stuck forever.
   const staleBefore = new Date(Date.now() - OUTBOX_STALE_LOCK_MS).toISOString()
   const claimable = `status.in.(pending,failed),and(status.eq.processing,locked_at.lt.${staleBefore})`
-  const { data: events, error } = await supabase.from('outbox_events')
+  const { data: events, error } = await db.from('outbox_events')
     .select('id, organization_id, channel_id, recipient, payload, attempts, idempotency_key')
     .or(claimable)
     .lte('scheduled_at', new Date().toISOString())
@@ -31,7 +31,7 @@ async function handle(req: NextRequest) {
 
   let sent = 0
   for (const event of events ?? []) {
-    const claim = await supabase.from('outbox_events')
+    const claim = await db.from('outbox_events')
       .update({ status: 'processing', attempts: Number(event.attempts ?? 0) + 1, locked_at: new Date().toISOString() })
       .eq('id', event.id)
       .or(claimable)
@@ -40,7 +40,7 @@ async function handle(req: NextRequest) {
     if (!claim.data) continue
 
     try {
-      const { data: channel, error: channelError } = await supabase.from('channels')
+      const { data: channel, error: channelError } = await db.from('channels')
         .select('id, organization_id, business_id, channel_type, provider_account_id, external_identifier')
         .eq('id', event.channel_id)
         .maybeSingle()
@@ -51,7 +51,7 @@ async function handle(req: NextRequest) {
       const body = String(payload.body ?? '')
       // Same delivery path as the live routes; failures here are recorded by the
       // worker itself so retries and dead-letter stay authoritative.
-      await deliverOutbound(supabase, {
+      await deliverOutbound(db, {
         channel: {
           id: channel.id,
           organizationId: channel.organization_id,
@@ -68,7 +68,7 @@ async function handle(req: NextRequest) {
       })
 
       if (typeof payload.conversation_id === 'string' && payload.conversation_id) {
-        await recordDeliveredOutboundMessage(supabase, {
+        await recordDeliveredOutboundMessage(db, {
           organizationId: event.organization_id,
           conversationId: payload.conversation_id,
           body,
@@ -76,12 +76,12 @@ async function handle(req: NextRequest) {
         })
       }
 
-      await supabase.from('outbox_events').update({ status: 'sent', sent_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('id', event.id)
+      await db.from('outbox_events').update({ status: 'sent', sent_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('id', event.id)
       sent++
     } catch (error) {
       const message = error instanceof Error ? error.message : 'outbox delivery failed'
       const failure = nextOutboxFailureState(Number(event.attempts ?? 0) + 1)
-      await supabase.from('outbox_events').update({
+      await db.from('outbox_events').update({
         status: failure.status,
         last_error: message.slice(0, 500),
         scheduled_at: failure.nextAttemptAt,

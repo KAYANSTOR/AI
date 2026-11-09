@@ -1,5 +1,5 @@
 import { getDashboardContext } from '@/lib/dashboard/context'
-import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/db/server'
 import { redirect } from 'next/navigation'
 import { ContactForm } from './contact-form'
 import { ar } from '@/lib/i18n/ar'
@@ -9,8 +9,8 @@ export default async function ContactsPage() {
   const context = await getDashboardContext()
   if (!context) redirect('/login')
 
-  const supabase = await createClient()
-  const { data: contacts } = await supabase
+  const db = await createClient()
+  const { data: contacts } = await db
     .from('contacts')
     .select('id, full_name, phone, email, created_at')
     .eq('organization_id', context.organizationId)

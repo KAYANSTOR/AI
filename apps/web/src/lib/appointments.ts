@@ -1,5 +1,5 @@
-import type { SupabaseClient } from '@supabase/supabase-js'
-import type { createClient } from '@/lib/supabase/server'
+import type { DbClient } from '@/lib/db/client'
+import type { createClient } from '@/lib/db/server'
 
 export type AppointmentAvailability = {
   available: boolean
@@ -7,13 +7,13 @@ export type AppointmentAvailability = {
 }
 
 export async function checkAppointmentAvailability(
-  supabase: SupabaseClient | Awaited<ReturnType<typeof createClient>>,
+  db: DbClient | Awaited<ReturnType<typeof createClient>>,
   organizationId: string,
   serviceId: string,
   startsAt: string,
   endsAt: string
 ): Promise<AppointmentAvailability> {
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from('appointments')
     .select('id, starts_at, ends_at, status, service_id')
     .eq('organization_id', organizationId)

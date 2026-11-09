@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { isAuthorizedCronRequest } from '@/lib/cron/auth'
-import { createAdminClient } from '@/lib/supabase/admin'
+import { createAdminClient } from '@/lib/db/admin'
 import { publicWebhookError } from '@/lib/runtime/security'
 
 export const runtime = 'nodejs'
@@ -15,10 +15,10 @@ async function handle(req: NextRequest) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }
 
-  const supabase = createAdminClient()
+  const db = createAdminClient()
   const now = new Date().toISOString()
 
-  const { data: due, error } = await supabase
+  const { data: due, error } = await db
     .from('quotes')
     .select('id, organization_id')
     .eq('status', 'sent')
@@ -30,7 +30,7 @@ async function handle(req: NextRequest) {
 
   let expired = 0
   for (const row of due ?? []) {
-    const { data, error: updError } = await supabase
+    const { data, error: updError } = await db
       .from('quotes')
       .update({ status: 'expired' })
       .eq('id', row.id)
@@ -42,7 +42,7 @@ async function handle(req: NextRequest) {
     if (updError || !data) continue
     expired++
 
-    await supabase.from('audit_events').insert({
+    await db.from('audit_events').insert({
       organization_id: row.organization_id,
       actor_type: 'system',
       action: 'quote.expired',

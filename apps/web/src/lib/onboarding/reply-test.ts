@@ -6,7 +6,7 @@
  * credential is configured the test reports that it was skipped instead of pretending to
  * have answered — the required Go Live checks stay in smoke-test.ts and are unaffected.
  */
-import type { SupabaseClient } from '@supabase/supabase-js'
+import type { DbClient } from '@/lib/db/client'
 import { buildBusinessSystemPrompt } from '@/lib/ai/prompt'
 import { geminiProvider } from '@/lib/providers/gemini'
 
@@ -17,7 +17,7 @@ export type ReplyTestResult = {
 }
 
 export async function tryAgentReply(input: {
-  supabase: SupabaseClient
+  db: DbClient
   organizationId: string
   agentId: string | null
   message: string
@@ -36,7 +36,7 @@ export async function tryAgentReply(input: {
 
   try {
     const system = await buildBusinessSystemPrompt(
-      input.supabase,
+      input.db,
       input.organizationId,
       input.agentId
     )
@@ -52,7 +52,7 @@ export async function tryAgentReply(input: {
       .trim()
 
     if (!reply) return { status: 'failed', message: 'لم يصل رد من الوكيل. أعد المحاولة.' }
-    return { status: 'answered', reply, message: 'الرد تم بنجاح ✅' }
+    return { status: 'answered', reply, message: 'الرد تم بنجاح' }
   } catch (error) {
     console.error('Agent reply test failed', error)
     return {

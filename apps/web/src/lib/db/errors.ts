@@ -1,7 +1,7 @@
 /**
  * Turns Postgres / PostgREST failures into something a business owner can act on.
  *
- * docs/PLAN.md §8.3.10: a customer-facing error says what happened, why it matters and what
+ * A customer-facing error says what happened, why it matters and what
  * to do next. Codes, constraint names and "schema cache" wording are for the server log — they
  * are not actionable for a customer and they expose internals.
  */

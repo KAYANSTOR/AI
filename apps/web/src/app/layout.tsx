@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from 'next'
-import { Geist, Geist_Mono, IBM_Plex_Sans_Arabic } from 'next/font/google'
+import { IBM_Plex_Mono, IBM_Plex_Sans_Arabic, Inter } from 'next/font/google'
 import { siteDescription } from '@/lib/site-metadata'
 import './globals.css'
 
@@ -10,36 +10,33 @@ const plexArabic = IBM_Plex_Sans_Arabic({
   display: 'swap',
 })
 
-const geistSans = Geist({
-  variable: '--font-geist-sans',
+const inter = Inter({
+  variable: '--font-inter',
   subsets: ['latin'],
+  display: 'swap',
 })
 
-const geistMono = Geist_Mono({
-  variable: '--font-geist-mono',
+const plexMono = IBM_Plex_Mono({
+  variable: '--font-plex-mono',
   subsets: ['latin'],
+  weight: ['400', '500'],
+  display: 'swap',
 })
 
-/**
- * Absolute base URL for canonical / Open Graph metadata.
- * Set NEXT_PUBLIC_SITE_URL in production. NEXT_PUBLIC_APP_URL remains a compatibility
- * fallback for existing deployments until that alias is retired.
- */
+/** Absolute base URL for canonical and Open Graph metadata. */
 const siteUrl =
-  process.env.NEXT_PUBLIC_SITE_URL ??
-  process.env.NEXT_PUBLIC_APP_URL ??
-  'https://frontdesk-ai-eosin.vercel.app'
+  process.env.NEXT_PUBLIC_SITE_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
 
-const title = 'FrontDesk AI — موظّف استقبال بالذكاء الاصطناعي لشركتك'
+const title = 'KAYAN AI — موظّف استقبال بالذكاء الاصطناعي لشركتك'
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: {
     default: title,
-    template: '%s · FrontDesk AI',
+    template: '%s · KAYAN AI',
   },
   description: siteDescription,
-  applicationName: 'FrontDesk AI',
-  appleWebApp: { capable: true, title: 'FrontDesk', statusBarStyle: 'default' },
+  applicationName: 'KAYAN AI',
+  appleWebApp: { capable: true, title: 'KAYAN AI', statusBarStyle: 'default' },
   formatDetection: { telephone: false },
   keywords: [
     'موظف استقبال ذكاء اصطناعي',
@@ -49,12 +46,12 @@ export const metadata: Metadata = {
     'واتساب للأعمال',
     'AI receptionist',
   ],
-  authors: [{ name: 'FrontDesk AI' }],
+  authors: [{ name: 'KAYAN AI' }],
   alternates: { canonical: '/' },
   openGraph: {
     type: 'website',
     locale: 'ar_SA',
-    siteName: 'FrontDesk AI',
+    siteName: 'KAYAN AI',
     title,
     description: siteDescription,
     url: '/',
@@ -65,12 +62,10 @@ export const metadata: Metadata = {
     description: siteDescription,
   },
   robots: { index: true, follow: true },
-  // Brand mark icon is provided by src/app/icon.svg (Next.js file convention).
 }
 
 export const viewport: Viewport = {
-  // Primary brand token value — metadata requires a literal color.
-  themeColor: '#D97757',
+  themeColor: '#d97757',
   colorScheme: 'light',
   viewportFit: 'cover',
 }
@@ -80,7 +75,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html
       lang="ar"
       dir="rtl"
-      className={`${plexArabic.variable} ${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${plexArabic.variable} ${inter.variable} ${plexMono.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col bg-background text-text">{children}</body>
     </html>

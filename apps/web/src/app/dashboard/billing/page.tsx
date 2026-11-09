@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/db/server'
 import { getDashboardContext } from '@/lib/dashboard/context'
 import { CreditCard, Zap, Phone, Radio, Workflow, Megaphone } from 'lucide-react'
 import { formatNumber } from '@/lib/i18n/format'
@@ -8,9 +8,9 @@ import { loadBillingSnapshot } from '@/lib/billing/entitlements'
 export default async function BillingPage() {
   const context = await getDashboardContext()
   if (!context) redirect('/login')
-  const supabase = await createClient()
+  const db = await createClient()
 
-  const snapshot = await loadBillingSnapshot(supabase, context.organizationId)
+  const snapshot = await loadBillingSnapshot(db, context.organizationId)
 
   const meters = [
     {

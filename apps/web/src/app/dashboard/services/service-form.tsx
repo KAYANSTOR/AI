@@ -2,13 +2,12 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
+import { createServiceAction } from './actions'
 import { Loader2 } from 'lucide-react'
 import { ar } from '@/lib/i18n/ar'
 
-export function ServiceForm({ organizationId }: { organizationId: string }) {
+export function ServiceForm(_props: { organizationId: string }) {
   const router = useRouter()
-  const supabase = createClient()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [form, setForm] = useState({
@@ -25,18 +24,16 @@ export function ServiceForm({ organizationId }: { organizationId: string }) {
     setError(null)
 
     const price = form.price_amount === '' ? null : Number(form.price_amount)
-    const { error: insertError } = await supabase.from('services').insert({
-      organization_id: organizationId,
-      name: form.name.trim(),
-      description: form.description.trim() || null,
+    const result = await createServiceAction({
+      name: form.name,
+      description: form.description,
       duration_minutes: Number(form.duration_minutes),
       price_amount: price,
       price_currency: form.price_currency,
-      is_active: true,
     })
 
     setLoading(false)
-    if (insertError) {
+    if (!result.ok) {
       setError(ar.errors.save)
       return
     }

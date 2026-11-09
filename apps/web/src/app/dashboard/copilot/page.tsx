@@ -24,7 +24,7 @@ const WELCOME: UIMessage = {
   parts: [
     {
       type: 'text',
-      text: 'أهلاً بك! أنا مساعد الأعمال (Copilot) الخاص بك في FrontDesk AI. كيف يمكنني مساعدتك في إدارة عملياتك وتحليل بياناتك اليوم؟',
+      text: 'أهلًا بك. أنا مساعد الأعمال في KAYAN AI. كيف يمكنني مساعدتك في إدارة عملياتك وتحليل بياناتك اليوم؟',
     },
   ],
 }
@@ -103,7 +103,7 @@ export default function CopilotPage() {
                       className="mt-2 rounded border border-border bg-surface p-2 font-mono text-xs text-text-muted"
                     >
                       {done
-                        ? `✓ تم جلب البيانات (${getToolName(part)})`
+                        ? `تم جلب البيانات (${getToolName(part)})`
                         : `جارٍ جلب البيانات… (${getToolName(part)})`}
                     </div>
                   )

@@ -1,9 +1,9 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/db/server'
 import { getCurrentOrg, type OrgContext } from '@/lib/org'
-import { actionErrorMessage, supabaseActionError } from '@/lib/i18n/action-error'
+import { actionErrorMessage, dbActionError } from '@/lib/i18n/action-error'
 import { ar } from '@/lib/i18n/ar'
 import {
   getChannelSpec,
@@ -38,9 +38,9 @@ async function ensurePrimaryBusinessId(
   organizationId: string,
   organizationName?: string
 ): Promise<string | null> {
-  const supabase = await createClient()
+  const db = await createClient()
 
-  const { data: existing } = await supabase
+  const { data: existing } = await db
     .from('businesses')
     .select('id')
     .eq('organization_id', organizationId)
@@ -49,7 +49,7 @@ async function ensurePrimaryBusinessId(
     .maybeSingle()
   if (existing?.id) return existing.id as string
 
-  const { data: profile } = await supabase
+  const { data: profile } = await db
     .from('business_profiles')
     .select('business_id, display_name, name')
     .eq('organization_id', organizationId)
@@ -57,7 +57,7 @@ async function ensurePrimaryBusinessId(
 
   // If profile already points at a valid businesses row, use it.
   if (profile?.business_id) {
-    const { data: byId } = await supabase
+    const { data: byId } = await db
       .from('businesses')
       .select('id')
       .eq('id', profile.business_id)
@@ -71,7 +71,7 @@ async function ensurePrimaryBusinessId(
     organizationName ||
     'Business'
 
-  const { data: created, error: createError } = await supabase
+  const { data: created, error: createError } = await db
     .from('businesses')
     .insert({ organization_id: organizationId, name })
     .select('id')
@@ -84,7 +84,7 @@ async function ensurePrimaryBusinessId(
   }
 
   // Best-effort link profile → business
-  await supabase
+  await db
     .from('business_profiles')
     .update({ business_id: created.id })
     .eq('organization_id', organizationId)
@@ -100,8 +100,8 @@ async function audit(
   entityId: string | null,
   metadata: Record<string, unknown>
 ) {
-  const supabase = await createClient()
-  const { error } = await supabase.rpc('log_audit_event', {
+  const db = await createClient()
+  const { error } = await db.rpc('log_audit_event', {
     p_organization_id: organizationId,
     p_action: action,
     p_entity_type: entityType,
@@ -122,7 +122,7 @@ function describeWriteError(code: string | undefined, message: string): string {
     return 'مرجع النشاط غير صالح. أكمل إعداد النشاط من /dashboard/setup ثم أعد المحاولة.'
   }
   if (code === '42501') return 'لا تملك صلاحية تعديل قنوات هذه الشركة.'
-  return supabaseActionError({ code, message }, ar.errors.save)
+  return dbActionError({ code, message }, ar.errors.save)
 }
 
 export async function saveChannelAction(input: {
@@ -157,10 +157,10 @@ export async function saveChannelAction(input: {
       return { ok: false, error: 'أدخل رقم شركتك الحالي.' }
     }
 
-    const supabase = await createClient()
+    const db = await createClient()
     const businessId = await ensurePrimaryBusinessId(org.organizationId, org.organizationName)
 
-    const { data: existing, error: readError } = await supabase
+    const { data: existing, error: readError } = await db
       .from('channels')
       .select('id, is_active')
       .eq('organization_id', org.organizationId)
@@ -170,7 +170,7 @@ export async function saveChannelAction(input: {
 
     if (!existing) {
       try {
-        await assertWithinLimit(supabase, org.organizationId, 'channels', 1)
+        await assertWithinLimit(db, org.organizationId, 'channels', 1)
       } catch (err) {
         if (err instanceof EntitlementExceededError) {
           return {
@@ -196,8 +196,8 @@ export async function saveChannelAction(input: {
     }
 
     const written = existing
-      ? await supabase.from('channels').update(patch).eq('id', existing.id).select('id').single()
-      : await supabase
+      ? await db.from('channels').update(patch).eq('id', existing.id).select('id').single()
+      : await db
           .from('channels')
           .insert({ organization_id: org.organizationId, channel_type: spec.type, ...patch })
           .select('id')
@@ -230,11 +230,11 @@ export async function connectWhatsAppChannelAction(input: {
 }): Promise<ChannelActionResult & { status?: 'verified' | 'pending' }> {
   try {
     const org = await requireChannelAdmin()
-    const supabase = await createClient()
+    const db = await createClient()
     const businessId = await ensurePrimaryBusinessId(org.organizationId, org.organizationName)
 
     const result = await connectWhatsAppChannel({
-      supabase,
+      db,
       organizationId: org.organizationId,
       businessId,
       number: input.number,
@@ -242,7 +242,7 @@ export async function connectWhatsAppChannelAction(input: {
 
     if (!result.ok) return { ok: false, error: result.error }
 
-    const { data: channel } = await supabase
+    const { data: channel } = await db
       .from('channels')
       .select('id')
       .eq('organization_id', org.organizationId)
@@ -285,10 +285,10 @@ export async function setChannelActiveAction(input: {
     const spec = getChannelSpec(input.channelType)
     if (!spec) return { ok: false, error: 'نوع قناة غير معروف.' }
 
-    const supabase = await createClient()
+    const db = await createClient()
     const businessId = await ensurePrimaryBusinessId(org.organizationId, org.organizationName)
 
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('channels')
       .select('id, is_active')
       .eq('organization_id', org.organizationId)
@@ -299,7 +299,7 @@ export async function setChannelActiveAction(input: {
 
     if (input.active && !data.is_active) {
       try {
-        await assertWithinLimit(supabase, org.organizationId, 'channels', 1)
+        await assertWithinLimit(db, org.organizationId, 'channels', 1)
       } catch (err) {
         if (err instanceof EntitlementExceededError) {
           return {
@@ -311,7 +311,7 @@ export async function setChannelActiveAction(input: {
       }
     }
 
-    const { error: updateError } = await supabase
+    const { error: updateError } = await db
       .from('channels')
       .update({
         is_active: input.active,
@@ -349,8 +349,8 @@ export async function testChannelAction(input: {
     const spec = getChannelSpec(input.channelType)
     if (!spec) return { ok: false, error: 'نوع قناة غير معروف.' }
 
-    const supabase = await createClient()
-    const { data, error } = await supabase
+    const db = await createClient()
+    const { data, error } = await db
       .from('channels')
       .select(
         'id, channel_type, provider_account_id, external_identifier, verification_status, is_active, business_id, updated_at'
@@ -361,7 +361,7 @@ export async function testChannelAction(input: {
     if (error) throw new Error(error.message)
     if (!data) return { ok: false, error: 'القناة غير مربوطة بعد.' }
 
-    const result = await verifyChannelBinding(supabase, data as ChannelRow)
+    const result = await verifyChannelBinding(db, data as unknown as ChannelRow)
 
     await audit(org.organizationId, data.business_id, 'channel.tested', 'channel', data.id, {
       channel_type: spec.type,

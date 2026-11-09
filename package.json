@@ -1,17 +1,25 @@
 {
-  "name": "frontdesk-ai",
+  "name": "kayan-ai",
   "version": "1.0.0",
   "private": true,
   "type": "module",
   "workspaces": [
-    "apps/*",
-    "packages/*",
-    "tools/*"
+    "apps/web",
+    "packages/db"
   ],
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "npm run dev --workspace=apps/web",
     "build": "npm run build --workspace=apps/web",
     "start": "npm run start --workspace=apps/web",
-    "lint": "npm run lint --workspace=apps/web"
+    "lint": "npm run lint --workspace=apps/web",
+    "typecheck": "npm run typecheck --workspace=apps/web",
+    "test": "npm run test --workspace=apps/web",
+    "db:migrate": "node packages/db/scripts/migrate.mjs up",
+    "db:status": "node packages/db/scripts/migrate.mjs status",
+    "db:import": "node packages/db/scripts/import-from-postgres.mjs",
+    "db:reset-password": "node packages/db/scripts/reset-password.mjs"
   }
 }

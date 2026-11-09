@@ -1,8 +1,9 @@
 import { getDashboardContext } from '@/lib/dashboard/context'
-import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/db/server'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { CapabilityManager } from './capability-manager'
+import { PasswordForm } from './password-form'
 import { ar } from '@/lib/i18n/ar'
 import { businessTypeLabel, capabilityDescription, capabilityLabel, roleLabel } from '@/lib/i18n/labels'
 
@@ -10,9 +11,9 @@ export default async function SettingsPage() {
   const context = await getDashboardContext()
   if (!context) redirect('/login')
 
-  const supabase = await createClient()
+  const db = await createClient()
 
-  const { data: allCaps } = await supabase
+  const { data: allCaps } = await db
     .from('capabilities')
     .select('id, name, description')
     .order('name')
@@ -66,6 +67,16 @@ export default async function SettingsPage() {
         >
           {ar.settings.changeBusinessType}
         </Link>
+      </section>
+
+      <section id="security" className="scroll-mt-24 space-y-4 rounded-xl border border-border bg-surface p-5 sm:p-6">
+        <div>
+          <h2 className="text-sm font-semibold text-text">الأمان</h2>
+          <p className="mt-1 text-xs text-text-muted">
+            الحساب: <span dir="ltr">{context.email}</span>
+          </p>
+        </div>
+        <PasswordForm />
       </section>
 
       {isAdmin && (

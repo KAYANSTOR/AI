@@ -4,26 +4,17 @@ import { getDashboardContext } from '@/lib/dashboard/context'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 
-/**
- * Everything under /dashboard is per-session and per-tenant and must be rendered on every
- * request. Without this the segment is only dynamic by accident — while the Supabase env is
- * absent at build time getCurrentOrg() short-circuits before it reads cookies, so Next.js
- * prerenders the whole area into a static redirect that is then served to signed-in users.
- */
+/** Every dashboard page is per-session and per-tenant, so it must render on each request. */
 export const dynamic = 'force-dynamic'
 
-/**
- * During activation the wizard deep-links into operational surfaces
- * (channels, agent, hours, …). Those routes live under /dashboard, so a hard
- * redirect back to /onboarding would trap the user. Incomplete tenants can
- * use setup pages; the home page surfaces a resume banner instead.
- */
+/** Incomplete tenants may still open setup pages; a banner links back to onboarding. */
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const context = await getDashboardContext()
   if (!context) redirect('/login')
 
   return (
     <DashboardShell
+      userEmail={context.email}
       sidebar={
         <Sidebar
           orgName={context.organizationName}
@@ -33,11 +24,12 @@ export default async function DashboardLayout({ children }: { children: React.Re
       }
     >
       {!context.setupComplete && (
-        <div className="mb-4 rounded-xl border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-text">
-          <span className="font-medium">الإعداد غير مكتمل.</span>{' '}
-          أكمل معالج التفعيل قبل استقبال العملاء.
-          <Link href="/onboarding" className="ms-2 font-semibold text-primary-dark underline">
-            العودة للمعالج
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-accent/30 bg-accent-light/60 px-4 py-3 text-sm text-text">
+          <span>
+            <span className="font-semibold">الإعداد لم يكتمل بعد.</span> أكمل خطوات التفعيل حتى يبدأ الوكيل باستقبال العملاء.
+          </span>
+          <Link href="/onboarding" className="rounded-lg bg-text px-3 py-1.5 text-xs font-semibold text-surface hover:bg-dark-muted">
+            متابعة الإعداد
           </Link>
         </div>
       )}

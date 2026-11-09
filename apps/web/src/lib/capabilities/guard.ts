@@ -1,5 +1,5 @@
-import type { SupabaseClient } from '@supabase/supabase-js'
-import { createClient } from '@/lib/supabase/server'
+import type { DbClient } from '@/lib/db/client'
+import { createClient } from '@/lib/db/server'
 import { getDashboardContext, type DashboardContext } from '@/lib/dashboard/context'
 import { capabilityLabel } from '@/lib/i18n/labels'
 
@@ -26,14 +26,14 @@ export class NotAuthorizedError extends Error {
 }
 
 export type AuthorizedContext = DashboardContext & {
-  supabase: SupabaseClient
+  db: DbClient
 }
 
 /** Requires an authenticated member. Throws when there is no session. */
 export async function requireMember(): Promise<AuthorizedContext> {
   const context = await getDashboardContext()
   if (!context) throw new NotAuthorizedError('يجب تسجيل الدخول أولًا.')
-  return { ...context, supabase: await createClient() }
+  return { ...context, db: await createClient() }
 }
 
 /**
@@ -65,7 +65,7 @@ export async function audit(
   entityId: string | null,
   metadata: Record<string, unknown> = {}
 ): Promise<void> {
-  const { error } = await ctx.supabase.rpc('log_audit_event', {
+  const { error } = await ctx.db.rpc('log_audit_event', {
     p_organization_id: ctx.organizationId,
     p_action: action,
     p_entity_type: entityType,

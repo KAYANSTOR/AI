@@ -83,7 +83,7 @@ export function StageTest({
   return (
     <div className="space-y-6">
       <div className="space-y-1">
-        <h1 className="text-xl font-bold tracking-tight text-text sm:text-2xl">اختبر موظفك الجديد 🤖</h1>
+        <h1 className="text-xl font-bold tracking-tight text-text sm:text-2xl">اختبر موظفك الجديد</h1>
         <p className="text-sm leading-6 text-text-muted">
           اكتب رسالة كما لو كنت العميل، وسنجرب الرد ونفحص أن كل شيء جاهز.
         </p>

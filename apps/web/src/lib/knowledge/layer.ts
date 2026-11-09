@@ -1,4 +1,4 @@
-import type { SupabaseClient } from '@supabase/supabase-js'
+import type { DbClient } from '@/lib/db/client'
 import { searchKnowledge, type KnowledgeMatch } from './retrieval'
 
 export type ValidatedFact = {
@@ -30,7 +30,7 @@ export type ContextualKnowledgeResult = {
  * Strictly scoped to organizationId (multi-tenant isolation).
  */
 export async function retrieveContextualKnowledge(
-  supabase: SupabaseClient,
+  db: DbClient,
   organizationId: string,
   userQuery: string,
   options: { maxMatches?: number } = {}
@@ -38,7 +38,7 @@ export async function retrieveContextualKnowledge(
   const queryLower = (userQuery || '').toLowerCase()
 
   // 1. Semantic/Lexical retrieval from knowledge_base
-  const matches = await searchKnowledge(supabase, organizationId, userQuery, {
+  const matches = await searchKnowledge(db, organizationId, userQuery, {
     limit: options.maxMatches ?? 4,
   })
 
@@ -55,7 +55,7 @@ export async function retrieveContextualKnowledge(
 
   let relevantServices: Array<{ name: string; price: string; duration: number }> = []
   if (asksServices || matches.some((m) => m.category === 'service_info' || m.category === 'pricing')) {
-    const { data: svcRows } = await supabase
+    const { data: svcRows } = await db
       .from('services')
       .select('name, description, price_amount, price_currency, duration_minutes')
       .eq('organization_id', organizationId)
@@ -88,7 +88,7 @@ export async function retrieveContextualKnowledge(
 
   let relevantHours: string | undefined
   if (asksHours) {
-    const { data: hoursRows } = await supabase
+    const { data: hoursRows } = await db
       .from('business_hours')
       .select('day_of_week, open_time, close_time, is_closed')
       .eq('organization_id', organizationId)
@@ -139,7 +139,7 @@ export async function retrieveContextualKnowledge(
  * If an entry on the same topic exists, it updates it; otherwise it inserts a new validated entry.
  */
 export async function saveValidatedKnowledge(
-  supabase: SupabaseClient,
+  db: DbClient,
   organizationId: string,
   candidateFacts: ValidatedFact[]
 ): Promise<Array<{ title: string; category: string; action: 'inserted' | 'updated' }>> {
@@ -158,7 +158,7 @@ export async function saveValidatedKnowledge(
       : 'general'
 
     // Look for duplicate / overlapping entry
-    const { data: existing } = await supabase
+    const { data: existing } = await db
       .from('knowledge_base')
       .select('id, title, content')
       .eq('organization_id', organizationId)
@@ -166,7 +166,7 @@ export async function saveValidatedKnowledge(
       .maybeSingle()
 
     if (existing?.id) {
-      await supabase
+      await db
         .from('knowledge_base')
         .update({
           content,
@@ -177,7 +177,7 @@ export async function saveValidatedKnowledge(
         .eq('id', existing.id)
       results.push({ title, category, action: 'updated' })
     } else {
-      await supabase.from('knowledge_base').insert({
+      await db.from('knowledge_base').insert({
         organization_id: organizationId,
         title,
         content,
@@ -196,7 +196,7 @@ export async function saveValidatedKnowledge(
  * Validates and upserts new service offerings to the services table.
  */
 export async function saveValidatedServices(
-  supabase: SupabaseClient,
+  db: DbClient,
   organizationId: string,
   services: ValidatedServiceDraft[]
 ): Promise<Array<{ name: string; action: 'inserted' | 'updated' }>> {
@@ -206,7 +206,7 @@ export async function saveValidatedServices(
     if (!s.name || !s.name.trim()) continue
     const name = s.name.trim()
 
-    const { data: existing } = await supabase
+    const { data: existing } = await db
       .from('services')
       .select('id')
       .eq('organization_id', organizationId)
@@ -220,7 +220,7 @@ export async function saveValidatedServices(
         : 30
 
     if (existing?.id) {
-      await supabase
+      await db
         .from('services')
         .update({
           description: s.description || null,
@@ -232,7 +232,7 @@ export async function saveValidatedServices(
         .eq('id', existing.id)
       results.push({ name, action: 'updated' })
     } else {
-      await supabase.from('services').insert({
+      await db.from('services').insert({
         organization_id: organizationId,
         name,
         description: s.description || null,

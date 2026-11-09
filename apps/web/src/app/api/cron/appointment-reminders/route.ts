@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { isAuthorizedCronRequest } from '@/lib/cron/auth'
-import { createAdminClient } from '@/lib/supabase/admin'
+import { createAdminClient } from '@/lib/db/admin'
 import { assertMarketingAllowed, ConsentBlockedError } from '@/lib/channels/consent'
 import { enqueueOutbound } from '@/lib/channels/outbox'
 import { publicWebhookError } from '@/lib/runtime/security'
@@ -22,10 +22,10 @@ async function handle(req: NextRequest) {
     return NextResponse.json({ skipped: 'quiet_hours' })
   }
 
-  const supabase = createAdminClient()
+  const db = createAdminClient()
   const now = Date.now()
 
-  const { data: appointments, error } = await supabase
+  const { data: appointments, error } = await db
     .from('appointments')
     .select('id, organization_id, contact_id, starts_at, status, reminder_24h_sent_at, reminder_1h_sent_at')
     .in('status', ['pending', 'confirmed'])
@@ -54,7 +54,7 @@ async function handle(req: NextRequest) {
     const column = kind === '1h' ? 'reminder_1h_sent_at' : 'reminder_24h_sent_at'
 
     try {
-      await assertMarketingAllowed(supabase, {
+      await assertMarketingAllowed(db, {
         contactId: appt.contact_id,
         channel: 'whatsapp',
       })
@@ -66,14 +66,14 @@ async function handle(req: NextRequest) {
       throw err
     }
 
-    const { data: contact } = await supabase
+    const { data: contact } = await db
       .from('contacts')
       .select('id, phone, full_name')
       .eq('id', appt.contact_id)
       .eq('organization_id', appt.organization_id)
       .maybeSingle()
 
-    const { data: identity } = await supabase
+    const { data: identity } = await db
       .from('contact_identities')
       .select('external_user_id, external_phone, channel')
       .eq('contact_id', appt.contact_id)
@@ -90,7 +90,7 @@ async function handle(req: NextRequest) {
       continue
     }
 
-    const { data: channel } = await supabase
+    const { data: channel } = await db
       .from('channels')
       .select('id, business_id')
       .eq('organization_id', appt.organization_id)
@@ -111,7 +111,7 @@ async function handle(req: NextRequest) {
         : `تذكير: موعدك غداً في ${when}. للإلغاء أو التعديل رد على هذه الرسالة.`
 
     await enqueueOutbound({
-      supabase,
+      db,
       organizationId: appt.organization_id,
       businessId: channel.business_id,
       channelId: channel.id,
@@ -121,7 +121,7 @@ async function handle(req: NextRequest) {
       payload: { body, appointment_id: appt.id, kind },
     })
 
-    const { error: markError } = await supabase
+    const { error: markError } = await db
       .from('appointments')
       .update({ [column]: new Date().toISOString() })
       .eq('id', appt.id)
@@ -136,7 +136,7 @@ async function handle(req: NextRequest) {
     if (kind === '1h') sent1++
     else sent24++
 
-    await supabase.from('audit_events').insert({
+    await db.from('audit_events').insert({
       organization_id: appt.organization_id,
       actor_type: 'system',
       action: 'appointment.reminder_queued',

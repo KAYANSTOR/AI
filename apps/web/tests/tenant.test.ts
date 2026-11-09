@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
-import type { SupabaseClient } from '@supabase/supabase-js'
-import { createFakeSupabase, type FakeDb } from './support/fake-supabase'
+import type { DbClient } from '@/lib/db/client'
+import { createFakeDb, type FakeDb } from './support/fake-db'
 import { resolveBusinessAgent, resolveChannelExact } from '@/lib/runtime/tenant'
 
 const ORG_A = 'aaaaaaaa-0000-4000-8000-000000000001'
@@ -9,8 +9,8 @@ const BIZ_A = 'aaaaaaaa-0000-4000-8000-0000000000b1'
 const BIZ_B = 'bbbbbbbb-0000-4000-8000-0000000000b2'
 
 function setup(tables: FakeDb) {
-  const fake = createFakeSupabase(tables)
-  return { db: fake.db, supabase: fake.client as unknown as SupabaseClient }
+  const fake = createFakeDb(tables)
+  return { store: fake.store, db: fake.client as unknown as DbClient }
 }
 
 function channel(overrides: Record<string, unknown>) {
@@ -29,11 +29,11 @@ function channel(overrides: Record<string, unknown>) {
 
 describe('exact channel binding (ADR-0002)', () => {
   test('resolves the organization and business that own the binding', async () => {
-    const { supabase } = setup({
+    const { db } = setup({
       channels: { rows: [channel({ provider_account_id: 'pn_a', organization_id: ORG_A, business_id: BIZ_A })] },
     })
 
-    const resolved = await resolveChannelExact(supabase, {
+    const resolved = await resolveChannelExact(db, {
       channelType: 'whatsapp',
       providerAccountId: 'pn_a',
     })
@@ -44,40 +44,40 @@ describe('exact channel binding (ADR-0002)', () => {
   })
 
   test('an unknown identifier resolves to nothing and never to first-organization', async () => {
-    const { supabase } = setup({
+    const { db } = setup({
       channels: { rows: [channel({ provider_account_id: 'pn_a' })] },
     })
 
-    expect(await resolveChannelExact(supabase, { channelType: 'whatsapp', providerAccountId: 'pn_unknown' })).toBeNull()
-    expect(await resolveChannelExact(supabase, { channelType: 'whatsapp', providerAccountId: null })).toBeNull()
+    expect(await resolveChannelExact(db, { channelType: 'whatsapp', providerAccountId: 'pn_unknown' })).toBeNull()
+    expect(await resolveChannelExact(db, { channelType: 'whatsapp', providerAccountId: null })).toBeNull()
   })
 
   test('a disabled channel is rejected', async () => {
-    const { supabase } = setup({
+    const { db } = setup({
       channels: { rows: [channel({ provider_account_id: 'pn_off', is_active: false })] },
     })
 
-    expect(await resolveChannelExact(supabase, { channelType: 'whatsapp', providerAccountId: 'pn_off' })).toBeNull()
+    expect(await resolveChannelExact(db, { channelType: 'whatsapp', providerAccountId: 'pn_off' })).toBeNull()
   })
 
   test('a pending channel cannot route to a tenant', async () => {
-    const { supabase } = setup({
+    const { db } = setup({
       channels: { rows: [channel({ provider_account_id: 'pn_pending', verification_status: 'pending' })] },
     })
 
-    expect(await resolveChannelExact(supabase, { channelType: 'whatsapp', providerAccountId: 'pn_pending' })).toBeNull()
+    expect(await resolveChannelExact(db, { channelType: 'whatsapp', providerAccountId: 'pn_pending' })).toBeNull()
   })
 
   test('a channel without a business is rejected: runtime is business-specific', async () => {
-    const { supabase } = setup({
+    const { db } = setup({
       channels: { rows: [channel({ provider_account_id: 'pn_nobiz', business_id: null })] },
     })
 
-    expect(await resolveChannelExact(supabase, { channelType: 'whatsapp', providerAccountId: 'pn_nobiz' })).toBeNull()
+    expect(await resolveChannelExact(db, { channelType: 'whatsapp', providerAccountId: 'pn_nobiz' })).toBeNull()
   })
 
   test('channel_type is part of the key, so a same-shaped binding in another channel never matches', async () => {
-    const { supabase } = setup({
+    const { db } = setup({
       channels: {
         rows: [
           channel({ provider_account_id: 'shared_id', channel_type: 'phone' }),
@@ -86,22 +86,22 @@ describe('exact channel binding (ADR-0002)', () => {
       },
     })
 
-    const resolved = await resolveChannelExact(supabase, { channelType: 'whatsapp', providerAccountId: 'shared_id' })
+    const resolved = await resolveChannelExact(db, { channelType: 'whatsapp', providerAccountId: 'shared_id' })
     expect(resolved?.organizationId).toBe(ORG_B)
   })
 
   test('SMS resolves by the destination number (external_identifier)', async () => {
-    const { supabase } = setup({
+    const { db } = setup({
       channels: { rows: [channel({ channel_type: 'sms', external_identifier: '+15550002' })] },
     })
 
-    const resolved = await resolveChannelExact(supabase, { channelType: 'sms', externalIdentifier: '+15550002' })
+    const resolved = await resolveChannelExact(db, { channelType: 'sms', externalIdentifier: '+15550002' })
     expect(resolved?.organizationId).toBe(ORG_A)
-    expect(await resolveChannelExact(supabase, { channelType: 'sms', externalIdentifier: '+15559999' })).toBeNull()
+    expect(await resolveChannelExact(db, { channelType: 'sms', externalIdentifier: '+15559999' })).toBeNull()
   })
 
   test('two organizations keep separate identities for the same provider number shape', async () => {
-    const { supabase } = setup({
+    const { db } = setup({
       channels: {
         rows: [
           channel({ provider_account_id: 'pn_1', organization_id: ORG_A, business_id: BIZ_A }),
@@ -110,14 +110,14 @@ describe('exact channel binding (ADR-0002)', () => {
       },
     })
 
-    expect((await resolveChannelExact(supabase, { channelType: 'whatsapp', providerAccountId: 'pn_1' }))?.organizationId).toBe(ORG_A)
-    expect((await resolveChannelExact(supabase, { channelType: 'whatsapp', providerAccountId: 'pn_2' }))?.organizationId).toBe(ORG_B)
+    expect((await resolveChannelExact(db, { channelType: 'whatsapp', providerAccountId: 'pn_1' }))?.organizationId).toBe(ORG_A)
+    expect((await resolveChannelExact(db, { channelType: 'whatsapp', providerAccountId: 'pn_2' }))?.organizationId).toBe(ORG_B)
   })
 })
 
 describe('business agent resolution', () => {
   test('returns the active agent for the business', async () => {
-    const { supabase } = setup({
+    const { db } = setup({
       business_profiles: {
         rows: [{ id: 'profile-a', organization_id: ORG_A, business_id: BIZ_A, activation_state: 'active' }],
       },
@@ -129,31 +129,31 @@ describe('business agent resolution', () => {
       },
     })
 
-    expect((await resolveBusinessAgent(supabase, BIZ_A))?.id).toBe('agent-a')
+    expect((await resolveBusinessAgent(db, BIZ_A))?.id).toBe('agent-a')
   })
 
   test('never returns a suspended agent', async () => {
-    const { supabase } = setup({
+    const { db } = setup({
       ai_agents: {
         rows: [{ id: 'agent-x', business_id: BIZ_A, status: 'suspended', created_at: '2026-01-01T00:00:00Z' }],
       },
     })
 
-    expect(await resolveBusinessAgent(supabase, BIZ_A)).toBeNull()
+    expect(await resolveBusinessAgent(db, BIZ_A)).toBeNull()
   })
 
   test('never returns another business agent', async () => {
-    const { supabase } = setup({
+    const { db } = setup({
       ai_agents: {
         rows: [{ id: 'agent-b', business_id: BIZ_B, status: 'active', created_at: '2026-01-01T00:00:00Z' }],
       },
     })
 
-    expect(await resolveBusinessAgent(supabase, BIZ_A)).toBeNull()
+    expect(await resolveBusinessAgent(db, BIZ_A)).toBeNull()
   })
 
   test('an active agent is unavailable until the business profile is active', async () => {
-    const { supabase } = setup({
+    const { db } = setup({
       business_profiles: {
         rows: [{ id: 'profile-a', organization_id: ORG_A, business_id: BIZ_A, activation_state: 'ready_to_activate' }],
       },
@@ -162,6 +162,6 @@ describe('business agent resolution', () => {
       },
     })
 
-    expect(await resolveBusinessAgent(supabase, BIZ_A)).toBeNull()
+    expect(await resolveBusinessAgent(db, BIZ_A)).toBeNull()
   })
 })

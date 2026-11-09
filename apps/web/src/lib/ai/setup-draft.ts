@@ -1,5 +1,5 @@
 /**
- * AI-assisted setup (docs/PLAN.md §8.3.6).
+ * AI-assisted setup.
  *
  * The customer describes the business in their own words; the model turns that into a
  * controlled draft. The schema deliberately has no field for prices, hours, availability

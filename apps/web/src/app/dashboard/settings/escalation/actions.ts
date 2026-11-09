@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { requireAdminCapability, audit } from '@/lib/capabilities/guard'
-import { actionErrorMessage, supabaseActionError } from '@/lib/i18n/action-error'
+import { actionErrorMessage, dbActionError } from '@/lib/i18n/action-error'
 
 export type EscalationResult = { ok: true; id?: string } | { ok: false; error: string }
 
@@ -20,7 +20,7 @@ export async function createEscalationPolicyAction(input: {
     if (!name) return { ok: false, error: 'الاسم مطلوب.' }
     if (!TRIGGERS.has(input.triggerType)) return { ok: false, error: 'نوع محفّز غير صالح.' }
 
-    const { data, error } = await ctx.supabase
+    const { data, error } = await ctx.db
       .from('escalation_policies')
       .insert({
         organization_id: ctx.organizationId,
@@ -33,7 +33,7 @@ export async function createEscalationPolicyAction(input: {
       .select('id')
       .single()
 
-    if (error || !data) return { ok: false, error: supabaseActionError(error) }
+    if (error || !data) return { ok: false, error: dbActionError(error) }
     await audit(ctx, 'escalation_policy.created', 'escalation_policy', data.id)
     revalidatePath('/dashboard/settings/escalation')
     return { ok: true, id: data.id }
@@ -48,12 +48,12 @@ export async function setEscalationPolicyActiveAction(
 ): Promise<EscalationResult> {
   try {
     const ctx = await requireAdminCapability(null)
-    const { error } = await ctx.supabase
+    const { error } = await ctx.db
       .from('escalation_policies')
       .update({ is_active: active, updated_at: new Date().toISOString() })
       .eq('id', id)
       .eq('organization_id', ctx.organizationId)
-    if (error) return { ok: false, error: supabaseActionError(error) }
+    if (error) return { ok: false, error: dbActionError(error) }
     await audit(ctx, active ? 'escalation_policy.enabled' : 'escalation_policy.disabled', 'escalation_policy', id)
     revalidatePath('/dashboard/settings/escalation')
     return { ok: true, id }

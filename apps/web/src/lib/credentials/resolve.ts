@@ -7,7 +7,7 @@
  * With the flag off (the default), a channel without its own credentials fails closed
  * instead of silently sending one business's traffic with another business's token.
  */
-import type { SupabaseClient } from '@supabase/supabase-js'
+import type { DbClient } from '@/lib/db/client'
 import { PROVIDER_FOR_CHANNEL, loadChannelCredentials } from '@/lib/credentials/service'
 import type { ChannelType } from '@/lib/channels/management'
 
@@ -63,13 +63,13 @@ function compact(source: Record<string, string | undefined>): Record<string, str
  * just the parts it owns (for example its own app secret) and nothing else.
  */
 export async function resolveChannelProviderCredentials(
-  supabase: SupabaseClient,
+  db: DbClient,
   channel: CredentialTarget
 ): Promise<Record<string, string>> {
   const channelType = channel.channelType as ChannelType
   const provider = PROVIDER_FOR_CHANNEL[channelType]
   if (!provider) return {}
 
-  const stored = await loadChannelCredentials(supabase, channel.channelId)
+  const stored = await loadChannelCredentials(db, channel.channelId)
   return { ...platformCredentials(channelType), ...stored, __provider: provider }
 }

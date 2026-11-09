@@ -16,7 +16,7 @@
  *  - Values are never returned to a browser: the dashboard reads metadata only.
  */
 import { createCipheriv, createDecipheriv, randomBytes, timingSafeEqual } from 'node:crypto'
-import type { SupabaseClient } from '@supabase/supabase-js'
+import type { DbClient } from '@/lib/db/client'
 import { CREDENTIAL_KEY_ENV, type CredentialMetadata } from '@/lib/credentials/catalog'
 
 // The catalogue lives in catalog.ts so client components can render credential fields
@@ -125,10 +125,10 @@ export function redactSecret(value: string | null | undefined): string {
 
 /** Metadata only — deliberately never selects encrypted_value. */
 export async function listCredentialMetadata(
-  supabase: SupabaseClient,
+  db: DbClient,
   organizationId: string
 ): Promise<CredentialMetadata[]> {
-  const { data, error } = await supabase.rpc('list_channel_credential_metadata', {
+  const { data, error } = await db.rpc('list_channel_credential_metadata', {
     p_organization_id: organizationId,
   })
   if (error) throw new Error(error.message)
@@ -136,7 +136,7 @@ export async function listCredentialMetadata(
 }
 
 export async function saveChannelCredential(
-  supabase: SupabaseClient,
+  db: DbClient,
   input: {
     organizationId: string
     channelId: string
@@ -148,7 +148,7 @@ export async function saveChannelCredential(
 ): Promise<void> {
   // Encryption happens before the value reaches any storage layer.
   const encryptedValue = encryptSecret(input.value)
-  const { error } = await supabase.from('provider_credentials').upsert(
+  const { error } = await db.from('provider_credentials').upsert(
     {
       organization_id: input.organizationId,
       channel_id: input.channelId,
@@ -166,10 +166,10 @@ export async function saveChannelCredential(
 }
 
 export async function setChannelCredentialStatus(
-  supabase: SupabaseClient,
+  db: DbClient,
   input: { organizationId: string; channelId: string; provider: string; status: 'active' | 'disabled' }
 ): Promise<void> {
-  const { error } = await supabase.rpc('set_channel_credential_status', {
+  const { error } = await db.rpc('set_channel_credential_status', {
     p_organization_id: input.organizationId,
     p_channel_id: input.channelId,
     p_provider: input.provider,
@@ -179,10 +179,10 @@ export async function setChannelCredentialStatus(
 }
 
 export async function deleteChannelCredential(
-  supabase: SupabaseClient,
+  db: DbClient,
   input: { organizationId: string; channelId: string; provider: string; credentialType?: string }
 ): Promise<void> {
-  const { error } = await supabase.rpc('delete_channel_credential', {
+  const { error } = await db.rpc('delete_channel_credential', {
     p_organization_id: input.organizationId,
     p_channel_id: input.channelId,
     p_provider: input.provider,
@@ -198,10 +198,10 @@ export async function deleteChannelCredential(
  * callers that cannot proceed should raise CredentialMissingError via `requireCredential`.
  */
 export async function loadChannelCredentials(
-  supabase: SupabaseClient,
+  db: DbClient,
   channelId: string
 ): Promise<Record<string, string>> {
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from('provider_credentials')
     .select('credential_type, encrypted_value, status')
     .eq('channel_id', channelId)
