@@ -9,6 +9,7 @@ import { Briefcase, Building2, Stethoscope, UtensilsCrossed, Calendar } from 'lu
 
 export const metadata: Metadata = {
   title: 'الأنشطة والحلول المخصصة | KAYAN AI',
+  alternates: { canonical: '/services' },
   description: 'حلول ذكية مهيأة خصيصاً لقطاعك: العيادات الطبية، الشركات، المطاعم والفنادق، تنظيم الفعاليات، ومكاتب الخدمات المهنية.',
 }
 
