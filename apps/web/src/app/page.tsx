@@ -13,17 +13,43 @@ export const metadata: Metadata = {
   alternates: { canonical: '/' },
 }
 
+const siteUrl = 'https://kayan-ai.up.railway.app'
+const organizationId = `${siteUrl}/#organization`
+
 const structuredData = {
   '@context': 'https://schema.org',
   '@graph': [
     {
-      '@type': 'SoftwareApplication',
+      '@type': 'Organization',
+      '@id': organizationId,
       name: 'KAYAN AI',
+      url: siteUrl,
+      description:
+        'منصة عربية لموظف استقبال ذكي يساعد الشركات على استقبال استفسارات العملاء وتأهيلهم وحجز المواعيد وتنظيم المحادثات.',
+      logo: {
+        '@type': 'ImageObject',
+        url: `${siteUrl}/icons/icon-512.png`,
+      },
+    },
+    {
+      '@type': 'WebSite',
+      '@id': `${siteUrl}/#website`,
+      name: 'KAYAN AI',
+      url: siteUrl,
+      inLanguage: 'ar',
+      publisher: { '@id': organizationId },
+    },
+    {
+      '@type': 'SoftwareApplication',
+      '@id': `${siteUrl}/#software`,
+      name: 'KAYAN AI',
+      url: siteUrl,
       applicationCategory: 'BusinessApplication',
       operatingSystem: 'Web',
       inLanguage: 'ar',
       description:
         'منصة يستقبل بها الذكاء الاصطناعي عملاء الشركات على الهاتف وواتساب: يفهم الطلب، يؤهّل العميل، يحجز الموعد، ويسجّل كل محادثة وفرصة في لوحة واحدة.',
+      publisher: { '@id': organizationId },
       offers: [
         { '@type': 'Offer', name: 'Starter', price: '49', priceCurrency: 'USD' },
         { '@type': 'Offer', name: 'Growth', price: '99', priceCurrency: 'USD' },
