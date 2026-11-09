@@ -1,8 +1,8 @@
-import type { SupabaseClient } from '@supabase/supabase-js'
+import type { DbClient } from '@/lib/db/client'
 import { retrieveContextualKnowledge } from '@/lib/knowledge/layer'
 
 export async function buildBusinessSystemPrompt(
-  supabase: SupabaseClient,
+  db: DbClient,
   organizationId: string,
   agentId?: string | null,
   userQuery?: string
@@ -12,13 +12,13 @@ export async function buildBusinessSystemPrompt(
     { data: profile, error: profileError },
     { data: orgCaps, error: capsError },
   ] = await Promise.all([
-    supabase.from('organizations').select('name').eq('id', organizationId).maybeSingle(),
-    supabase
+    db.from('organizations').select('name').eq('id', organizationId).maybeSingle(),
+    db
       .from('business_profiles')
       .select('industry, timezone, system_prompt_addition, business_type_id, business_types(name)')
       .eq('organization_id', organizationId)
       .maybeSingle(),
-    supabase
+    db
       .from('organization_capabilities')
       .select('capability_id')
       .eq('organization_id', organizationId)
@@ -29,7 +29,7 @@ export async function buildBusinessSystemPrompt(
 
   let versionAddition = ''
   if (agentId) {
-    const { data } = await supabase
+    const { data } = await db
       .from('agent_prompt_versions')
       .select('system_prompt_addition')
       .eq('agent_id', agentId)
@@ -42,7 +42,7 @@ export async function buildBusinessSystemPrompt(
   let contextualKnowledgeSection = ''
   if (userQuery && userQuery.trim()) {
     try {
-      const contextual = await retrieveContextualKnowledge(supabase, organizationId, userQuery.trim())
+      const contextual = await retrieveContextualKnowledge(db, organizationId, userQuery.trim())
       if (contextual.compactContext) {
         contextualKnowledgeSection = `\nRELEVANT BUSINESS CONTEXT (Retrieved dynamically):\n${contextual.compactContext}`
       }
@@ -55,19 +55,19 @@ export async function buildBusinessSystemPrompt(
     // is immediately grounded from the very first spoken word.
     try {
       const [{ data: kbFacts }, { data: svcRows }, { data: hoursRows }] = await Promise.all([
-        supabase
+        db
           .from('knowledge_base')
           .select('title, category, content')
           .eq('organization_id', organizationId)
           .eq('is_active', true)
           .limit(15),
-        supabase
+        db
           .from('services')
           .select('name, price_amount, price_currency, duration_minutes')
           .eq('organization_id', organizationId)
           .eq('is_active', true)
           .limit(12),
-        supabase
+        db
           .from('business_hours')
           .select('day_of_week, open_time, close_time, is_closed')
           .eq('organization_id', organizationId)

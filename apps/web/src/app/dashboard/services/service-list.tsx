@@ -1,7 +1,7 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
+import { deleteServiceAction } from './actions'
 import { Trash2 } from 'lucide-react'
 import { ar } from '@/lib/i18n/ar'
 import { formatNumber } from '@/lib/i18n/format'
@@ -16,13 +16,12 @@ type Service = {
   is_active: boolean
 }
 
-export function ServiceList({ services, organizationId }: { services: Service[]; organizationId: string }) {
+export function ServiceList({ services }: { services: Service[]; organizationId: string }) {
   const router = useRouter()
-  const supabase = createClient()
 
   async function remove(id: string) {
     if (!confirm(ar.services.confirmDelete)) return
-    await supabase.from('services').delete().eq('id', id).eq('organization_id', organizationId)
+    await deleteServiceAction(id)
     router.refresh()
   }
 

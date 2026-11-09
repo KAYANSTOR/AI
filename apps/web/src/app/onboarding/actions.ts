@@ -1,10 +1,10 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { createClient } from '@/lib/supabase/server'
-import { createAdminClient } from '@/lib/supabase/admin'
+import { createClient } from '@/lib/db/server'
+import { createAdminClient } from '@/lib/db/admin'
 import { getCurrentOrg, type OrgContext } from '@/lib/org'
-import { actionErrorMessage, supabaseActionError } from '@/lib/i18n/action-error'
+import { actionErrorMessage, dbActionError } from '@/lib/i18n/action-error'
 import { isBusinessTypeId } from '@/lib/capabilities/business-types'
 import { applyBusinessType } from '@/lib/capabilities/profile'
 import {
@@ -37,12 +37,12 @@ async function requireOnboardingAdmin(): Promise<OrgContext> {
 }
 
 async function runActivationChecks(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  db: Awaited<ReturnType<typeof createClient>>,
   org: OrgContext,
   message: string
 ) {
-  const structuralOutcome = await evaluateSmokeTest(supabase, org)
-  const { data: profile, error: profileError } = await supabase
+  const structuralOutcome = await evaluateSmokeTest(db, org)
+  const { data: profile, error: profileError } = await db
     .from('business_profiles')
     .select('business_id, activation_state')
     .eq('organization_id', org.organizationId)
@@ -51,7 +51,7 @@ async function runActivationChecks(
 
   const businessId = (profile?.business_id as string | null) ?? null
   const { data: agent, error: agentError } = businessId
-    ? await supabase
+    ? await db
         .from('ai_agents')
         .select('id')
         .eq('organization_id', org.organizationId)
@@ -64,7 +64,7 @@ async function runActivationChecks(
   if (agentError) throw agentError
 
   const reply = await tryAgentReply({
-    supabase,
+    db,
     organizationId: org.organizationId,
     agentId: (agent?.id as string | undefined) ?? null,
     message,
@@ -98,8 +98,8 @@ async function auditSetup(
   metadata: Record<string, unknown>
 ) {
   try {
-    const supabase = await createClient()
-    const { error } = await supabase.rpc('log_audit_event', {
+    const db = await createClient()
+    const { error } = await db.rpc('log_audit_event', {
       p_organization_id: organizationId,
       p_action: action,
       p_entity_type: entityType,
@@ -148,13 +148,13 @@ export async function saveBasicsAction(input: {
       publicPhone = normalizeChannelNumber(phoneInput)
     }
     const timezone = validTimezone(input.timezone)
-    const supabase = await createClient()
-    const { data: profile, error: profileError } = await supabase
+    const db = await createClient()
+    const { data: profile, error: profileError } = await db
       .from('business_profiles')
       .select('business_id, business_type_id, timezone, public_phone_number')
       .eq('organization_id', org.organizationId)
       .maybeSingle()
-    if (profileError) return { ok: false, error: supabaseActionError(profileError) }
+    if (profileError) return { ok: false, error: dbActionError(profileError) }
     const businessId = (profile?.business_id as string | null) ?? null
     const profilePatch: Record<string, unknown> = {
       public_phone_number: publicPhone,
@@ -162,22 +162,22 @@ export async function saveBasicsAction(input: {
     }
     if (timezone && (!profile?.timezone || profile.timezone === 'UTC')) profilePatch.timezone = timezone
     if (businessTypeId && businessTypeId !== profile?.business_type_id) {
-      await applyBusinessType(supabase, org.organizationId, businessTypeId)
+      await applyBusinessType(db, org.organizationId, businessTypeId)
     }
-    const { error: profileUpdateError } = await supabase
+    const { error: profileUpdateError } = await db
       .from('business_profiles')
       .update(profilePatch)
       .eq('organization_id', org.organizationId)
-    if (profileUpdateError) return { ok: false, error: supabaseActionError(profileUpdateError) }
+    if (profileUpdateError) return { ok: false, error: dbActionError(profileUpdateError) }
     if (businessId) {
-      const { error: businessError } = await supabase
+      const { error: businessError } = await db
         .from('businesses')
         .update({ name, ...(timezone ? { timezone } : {}) })
         .eq('id', businessId)
-      if (businessError) return { ok: false, error: supabaseActionError(businessError) }
+      if (businessError) return { ok: false, error: dbActionError(businessError) }
     }
     if (name !== org.organizationName) {
-      const { error: orgError } = await supabase
+      const { error: orgError } = await db
         .from('organizations')
         .update({ name })
         .eq('id', org.organizationId)
@@ -195,13 +195,13 @@ export async function advanceStageAction(stage: number): Promise<OnboardingResul
   try {
     const org = await requireOnboardingAdmin()
     if (!isOnboardingStage(stage)) return { ok: false, error: 'مرحلة غير معروفة.' }
-    const supabase = await createClient()
-    const { data: profile, error: readError } = await supabase
+    const db = await createClient()
+    const { data: profile, error: readError } = await db
       .from('business_profiles')
       .select('activation_state, smoke_test_status')
       .eq('organization_id', org.organizationId)
       .maybeSingle()
-    if (readError) return { ok: false, error: supabaseActionError(readError) }
+    if (readError) return { ok: false, error: dbActionError(readError) }
     const step = stepForStage(stage as OnboardingStage)
     const nextState = activationStateForStep({
       step,
@@ -212,7 +212,7 @@ export async function advanceStageAction(stage: number): Promise<OnboardingResul
       .from('business_profiles')
       .update({ activation_step: step, activation_state: nextState })
       .eq('organization_id', org.organizationId)
-    if (error) return { ok: false, error: supabaseActionError(error) }
+    if (error) return { ok: false, error: dbActionError(error) }
     revalidatePath('/onboarding')
     revalidatePath('/dashboard')
     return { ok: true }
@@ -224,20 +224,20 @@ export async function advanceStageAction(stage: number): Promise<OnboardingResul
 export async function connectWhatsAppAction(input: { phoneNumber: string }): Promise<OnboardingResult> {
   try {
     const org = await requireOnboardingAdmin()
-    const supabase = await createClient()
-    const { data: profile } = await supabase
+    const db = await createClient()
+    const { data: profile } = await db
       .from('business_profiles')
       .select('business_id, public_phone_number')
       .eq('organization_id', org.organizationId)
       .maybeSingle()
-    const { data: existing } = await supabase
+    const { data: existing } = await db
       .from('channels')
       .select('id')
       .eq('organization_id', org.organizationId)
       .eq('channel_type', 'whatsapp')
       .maybeSingle()
     if (!existing) {
-      const { count } = await supabase
+      const { count } = await db
         .from('channels')
         .select('id', { count: 'exact', head: true })
         .eq('organization_id', org.organizationId)
@@ -249,14 +249,14 @@ export async function connectWhatsAppAction(input: { phoneNumber: string }): Pro
       }
     }
     const result = await connectWhatsAppChannel({
-      supabase,
+      db,
       organizationId: org.organizationId,
       businessId: (profile?.business_id as string | null) ?? null,
       number: input.phoneNumber,
     })
     if (!result.ok) return { ok: false, error: result.error }
     if (!profile?.public_phone_number) {
-      await supabase
+      await db
         .from('business_profiles')
         .update({ public_phone_number: normalizeChannelNumber(input.phoneNumber) })
         .eq('organization_id', org.organizationId)
@@ -311,12 +311,12 @@ export async function saveAgentSetupDescriptionAction(input: {
     if (description.length > 1400) {
       return { ok: false, error: 'الوصف طويل جدًا. اختصره في بضع جمل.' }
     }
-    const supabase = await createClient()
-    const { error } = await supabase
+    const db = await createClient()
+    const { error } = await db
       .from('business_profiles')
       .update({ setup_description: description })
       .eq('organization_id', org.organizationId)
-    if (error) return { ok: false, error: supabaseActionError(error) }
+    if (error) return { ok: false, error: dbActionError(error) }
     await auditSetup(
       org.organizationId,
       null,
@@ -337,15 +337,15 @@ export async function saveAgentSetupAction(input: {
 }): Promise<OnboardingResult> {
   try {
     const org = await requireOnboardingAdmin()
-    const supabase = await createClient()
-    const { data: profile } = await supabase
+    const db = await createClient()
+    const { data: profile } = await db
       .from('business_profiles')
       .select('business_id, setup_description')
       .eq('organization_id', org.organizationId)
       .maybeSingle()
     const { draft } = parseAgentSetupDraft(input.draft, org.organizationName + ' AI')
     const promptAddition = buildPromptAddition(draft, org.organizationName + ' AI')
-    const { data: agent, error: agentError } = await supabase
+    const { data: agent, error: agentError } = await db
       .from('ai_agents')
       .select('id, name')
       .eq('organization_id', org.organizationId)
@@ -353,9 +353,9 @@ export async function saveAgentSetupAction(input: {
       .order('created_at', { ascending: true })
       .limit(1)
       .maybeSingle()
-    if (agentError) return { ok: false, error: supabaseActionError(agentError) }
+    if (agentError) return { ok: false, error: dbActionError(agentError) }
     if (!agent) {
-      const { data: created, error: createError } = await supabase
+      const { data: created, error: createError } = await db
         .from('ai_agents')
         .insert({
           organization_id: org.organizationId,
@@ -369,25 +369,25 @@ export async function saveAgentSetupAction(input: {
         })
         .select('id')
         .single()
-      if (createError) return { ok: false, error: supabaseActionError(createError) }
-      const { error: publishError } = await supabase.rpc('publish_agent_prompt', {
+      if (createError) return { ok: false, error: dbActionError(createError) }
+      const { error: publishError } = await db.rpc('publish_agent_prompt', {
         p_agent_id: created.id,
         p_system_prompt_addition: promptAddition,
       })
-      if (publishError) return { ok: false, error: supabaseActionError(publishError) }
+      if (publishError) return { ok: false, error: dbActionError(publishError) }
     } else {
-      const { error: nameError } = await supabase
+      const { error: nameError } = await db
         .from('ai_agents')
         .update({ name: draft.agentName, temperature: 0.2, status: 'active' })
         .eq('id', agent.id)
-      if (nameError) return { ok: false, error: supabaseActionError(nameError) }
-      const { error: publishError } = await supabase.rpc('publish_agent_prompt', {
+      if (nameError) return { ok: false, error: dbActionError(nameError) }
+      const { error: publishError } = await db.rpc('publish_agent_prompt', {
         p_agent_id: agent.id,
         p_system_prompt_addition: promptAddition,
       })
-      if (publishError) return { ok: false, error: supabaseActionError(publishError) }
+      if (publishError) return { ok: false, error: dbActionError(publishError) }
     }
-    const { error: descriptionError } = await supabase
+    const { error: descriptionError } = await db
       .from('business_profiles')
       .update({
         setup_description: draft.summary,
@@ -395,7 +395,7 @@ export async function saveAgentSetupAction(input: {
         updated_at: new Date().toISOString(),
       })
       .eq('organization_id', org.organizationId)
-    if (descriptionError) return { ok: false, error: supabaseActionError(descriptionError) }
+    if (descriptionError) return { ok: false, error: dbActionError(descriptionError) }
     await auditSetup(
       org.organizationId,
       (profile?.business_id as string | null) ?? null,
@@ -419,10 +419,10 @@ export async function runActivationTestAction(input?: {
 > {
   try {
     const org = await requireOnboardingAdmin()
-    const supabase = await createClient()
+    const db = await createClient()
     const message = input?.message ?? 'السلام عليكم، أريد حجز موعد.'
     const { outcome, reply, activationState } = await runActivationChecks(
-      supabase,
+      db,
       org,
       message
     )
@@ -439,7 +439,7 @@ export async function runActivationTestAction(input?: {
         activation_step: stepAfterActivationTest({ currentState: activationState }),
       })
       .eq('organization_id', org.organizationId)
-    if (error) return { ok: false, error: supabaseActionError(error) }
+    if (error) return { ok: false, error: dbActionError(error) }
     revalidatePath('/onboarding')
     return { ok: true, outcome, reply }
   } catch (error) {
@@ -452,10 +452,10 @@ export async function activateAccountAction(): Promise<
 > {
   try {
     const org = await requireOnboardingAdmin()
-    const supabase = await createClient()
+    const db = await createClient()
     const message = 'السلام عليكم، أريد حجز موعد.'
     const { outcome, reply, activationState } = await runActivationChecks(
-      supabase,
+      db,
       org,
       message
     )
@@ -474,7 +474,7 @@ export async function activateAccountAction(): Promise<
           }),
         })
         .eq('organization_id', org.organizationId)
-      if (saveError) return { ok: false, error: supabaseActionError(saveError), outcome }
+      if (saveError) return { ok: false, error: dbActionError(saveError), outcome }
       return {
         ok: false,
         error: 'لم يكتمل الإعداد بعد. راجع الخطوات الناقصة ثم أعد الاختبار.',
@@ -482,7 +482,7 @@ export async function activateAccountAction(): Promise<
       }
     }
 
-    const { data: profile } = await supabase
+    const { data: profile } = await db
       .from('business_profiles')
       .select('business_id')
       .eq('organization_id', org.organizationId)
@@ -497,7 +497,7 @@ export async function activateAccountAction(): Promise<
         smoke_test_result: storedOutcome,
       })
       .eq('organization_id', org.organizationId)
-    if (error) return { ok: false, error: supabaseActionError(error) }
+    if (error) return { ok: false, error: dbActionError(error) }
 
     await auditSetup(
       org.organizationId,
@@ -510,7 +510,7 @@ export async function activateAccountAction(): Promise<
 
     revalidatePath('/dashboard')
     revalidatePath('/onboarding')
-    return { ok: true, message: 'تم تشغيل نشاطك 🎉' }
+    return { ok: true, message: 'تم تشغيل نشاطك' }
   } catch (error) {
     return { ok: false, error: actionErrorMessage(error, 'تعذّر تشغيل النشاط. حاول مرة أخرى.') }
   }

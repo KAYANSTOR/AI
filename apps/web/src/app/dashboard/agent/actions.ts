@@ -1,11 +1,11 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/db/server'
 import { getCurrentOrg, type OrgContext } from '@/lib/org'
 import { getToolPolicy } from '@/lib/ai/registry'
 import { applyBusinessType } from '@/lib/capabilities/profile'
-import { actionErrorMessage, supabaseActionError } from '@/lib/i18n/action-error'
+import { actionErrorMessage, dbActionError } from '@/lib/i18n/action-error'
 
 export type AgentActionResult = { ok: boolean; error?: string; message?: string; version?: number }
 
@@ -29,8 +29,8 @@ async function audit(
   entityId: string | null,
   metadata: Record<string, unknown>
 ) {
-  const supabase = await createClient()
-  const { error } = await supabase.rpc('log_audit_event', {
+  const db = await createClient()
+  const { error } = await db.rpc('log_audit_event', {
     p_organization_id: organizationId,
     p_action: action,
     p_entity_type: 'ai_agent',
@@ -46,8 +46,8 @@ async function audit(
 
 /** Confirms the agent belongs to the caller's organization before any write. */
 async function assertAgentInOrg(agentId: string, organizationId: string) {
-  const supabase = await createClient()
-  const { data, error } = await supabase
+  const db = await createClient()
+  const { data, error } = await db
     .from('ai_agents')
     .select('id, organization_id, business_id, status')
     .eq('id', agentId)
@@ -82,10 +82,10 @@ export async function saveAgentProfileAction(input: {
       return { ok: false, error: 'درجة الإبداع يجب أن تكون بين 0 و 1.' }
     }
 
-    const supabase = await createClient()
+    const db = await createClient()
     // ai_agents has an owner/admin UPDATE policy (aa_update), so the user's own session
     // performs the write and RLS is the tenant guard.
-    const { error } = await supabase
+    const { error } = await db
       .from('ai_agents')
       .update({
         name,
@@ -95,7 +95,7 @@ export async function saveAgentProfileAction(input: {
         updated_at: new Date().toISOString(),
       })
       .eq('id', agent.id)
-    if (error) return { ok: false, error: supabaseActionError(error) }
+    if (error) return { ok: false, error: dbActionError(error) }
 
     await audit(org.organizationId, agent.business_id, 'agent.updated', agent.id, {
       name,
@@ -119,12 +119,12 @@ export async function publishPromptAction(input: {
     const org = await requireAgentAdmin()
     const agent = await assertAgentInOrg(input.agentId, org.organizationId)
 
-    const supabase = await createClient()
-    const { data, error } = await supabase.rpc('publish_agent_prompt', {
+    const db = await createClient()
+    const { data, error } = await db.rpc('publish_agent_prompt', {
       p_agent_id: agent.id,
       p_system_prompt_addition: input.instructions,
     })
-    if (error) return { ok: false, error: supabaseActionError(error) }
+    if (error) return { ok: false, error: dbActionError(error) }
 
     const version = typeof data === 'number' ? data : undefined
     await audit(org.organizationId, agent.business_id, 'agent.prompt_published', agent.id, {
@@ -151,12 +151,12 @@ export async function rollbackPromptAction(input: {
       return { ok: false, error: 'رقم نسخة غير صالح.' }
     }
 
-    const supabase = await createClient()
-    const { data, error } = await supabase.rpc('rollback_agent_prompt', {
+    const db = await createClient()
+    const { data, error } = await db.rpc('rollback_agent_prompt', {
       p_agent_id: agent.id,
       p_version: input.version,
     })
-    if (error) return { ok: false, error: supabaseActionError(error) }
+    if (error) return { ok: false, error: dbActionError(error) }
 
     const version = typeof data === 'number' ? data : undefined
     await audit(org.organizationId, agent.business_id, 'agent.prompt_rolled_back', agent.id, {
@@ -189,14 +189,14 @@ export async function setToolPolicyAction(input: {
     // anyway, so refusing here avoids storing a policy that lies about behaviour.
     const requiresConfirmation = policy.risk === 'read' ? false : input.requiresConfirmation
 
-    const supabase = await createClient()
-    const { error } = await supabase.rpc('set_agent_tool_policy', {
+    const db = await createClient()
+    const { error } = await db.rpc('set_agent_tool_policy', {
       p_agent_id: agent.id,
       p_tool_name: input.toolName,
       p_is_allowed: input.isAllowed,
       p_requires_confirmation: requiresConfirmation,
     })
-    if (error) return { ok: false, error: supabaseActionError(error) }
+    if (error) return { ok: false, error: dbActionError(error) }
 
     await audit(org.organizationId, agent.business_id, 'agent.tool_policy_changed', agent.id, {
       tool: input.toolName,
@@ -224,9 +224,9 @@ export async function saveAgentKnowledgeItemAction(input: {
     if (!title) return { ok: false, error: 'عنوان المعلومة مطلوب.' }
     if (!content) return { ok: false, error: 'نص المعلومة مطلوب.' }
 
-    const supabase = await createClient()
+    const db = await createClient()
     if (input.id) {
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from('knowledge_base')
         .update({
           title,
@@ -239,13 +239,13 @@ export async function saveAgentKnowledgeItemAction(input: {
         .select('id')
         .maybeSingle()
 
-      if (error) return { ok: false, error: supabaseActionError(error) }
+      if (error) return { ok: false, error: dbActionError(error) }
       if (!data) return { ok: false, error: 'لم يتم العثور على المعلومة.' }
       revalidatePath('/dashboard/agent')
       return { ok: true, message: 'تم تحديث المعلومة بنجاح.', id: data.id }
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('knowledge_base')
       .insert({
         organization_id: org.organizationId,
@@ -258,7 +258,7 @@ export async function saveAgentKnowledgeItemAction(input: {
       .select('id')
       .single()
 
-    if (error) return { ok: false, error: supabaseActionError(error) }
+    if (error) return { ok: false, error: dbActionError(error) }
     revalidatePath('/dashboard/agent')
     return { ok: true, message: 'تمت إضافة المعلومة بنجاح.', id: data.id }
   } catch (error) {
@@ -269,14 +269,14 @@ export async function saveAgentKnowledgeItemAction(input: {
 export async function deleteAgentKnowledgeItemAction(id: string): Promise<AgentActionResult> {
   try {
     const org = await requireAgentAdmin()
-    const supabase = await createClient()
-    const { error } = await supabase
+    const db = await createClient()
+    const { error } = await db
       .from('knowledge_base')
       .delete()
       .eq('id', id)
       .eq('organization_id', org.organizationId)
 
-    if (error) return { ok: false, error: supabaseActionError(error) }
+    if (error) return { ok: false, error: dbActionError(error) }
     revalidatePath('/dashboard/agent')
     return { ok: true, message: 'تم حذف المعلومة من المعرفة.' }
   } catch (error) {
@@ -287,14 +287,14 @@ export async function deleteAgentKnowledgeItemAction(id: string): Promise<AgentA
 export async function toggleAgentKnowledgeItemAction(id: string, isActive: boolean): Promise<AgentActionResult> {
   try {
     const org = await requireAgentAdmin()
-    const supabase = await createClient()
-    const { error } = await supabase
+    const db = await createClient()
+    const { error } = await db
       .from('knowledge_base')
       .update({ is_active: isActive, updated_at: new Date().toISOString() })
       .eq('id', id)
       .eq('organization_id', org.organizationId)
 
-    if (error) return { ok: false, error: supabaseActionError(error) }
+    if (error) return { ok: false, error: dbActionError(error) }
     revalidatePath('/dashboard/agent')
     return { ok: true, message: isActive ? 'تم تفعيل المعلومة.' : 'تم تعطيل المعلومة.' }
   } catch (error) {
@@ -314,7 +314,7 @@ export async function updateBusinessTypeAndInstructionsAction(input: {
   try {
     const org = await requireAgentAdmin()
     const agent = await assertAgentInOrg(input.agentId, org.organizationId)
-    const supabase = await createClient()
+    const db = await createClient()
 
     const name = input.businessName.trim()
     if (!name) return { ok: false, error: 'اسم النشاط مطلوب.' }
@@ -322,7 +322,7 @@ export async function updateBusinessTypeAndInstructionsAction(input: {
 
     // 1. Update business name
     if (agent.business_id) {
-      await supabase
+      await db
         .from('businesses')
         .update({ name, updated_at: new Date().toISOString() })
         .eq('id', agent.business_id)
@@ -330,10 +330,10 @@ export async function updateBusinessTypeAndInstructionsAction(input: {
     }
 
     // 2. Apply business type (updates business_profiles.business_type_id and default capabilities)
-    await applyBusinessType(supabase, org.organizationId, input.businessTypeId)
+    await applyBusinessType(db, org.organizationId, input.businessTypeId)
 
     // 3. Update business profile details
-    const { error: profileError } = await supabase
+    const { error: profileError } = await db
       .from('business_profiles')
       .update({
         setup_description: input.setupDescription?.trim() || null,
@@ -344,12 +344,12 @@ export async function updateBusinessTypeAndInstructionsAction(input: {
       })
       .eq('organization_id', org.organizationId)
 
-    if (profileError) return { ok: false, error: supabaseActionError(profileError) }
+    if (profileError) return { ok: false, error: dbActionError(profileError) }
 
     // 4. Publish agent prompt version
     let version: number | undefined
     if (input.systemPromptAddition) {
-      const { data: pubData, error: pubErr } = await supabase.rpc('publish_agent_prompt', {
+      const { data: pubData, error: pubErr } = await db.rpc('publish_agent_prompt', {
         p_agent_id: agent.id,
         p_system_prompt_addition: input.systemPromptAddition.trim(),
       })
@@ -368,7 +368,7 @@ export async function updateBusinessTypeAndInstructionsAction(input: {
       .filter(Boolean)
       .join('\n')
 
-    const { data: existingKb } = await supabase
+    const { data: existingKb } = await db
       .from('knowledge_base')
       .select('id')
       .eq('organization_id', org.organizationId)
@@ -377,7 +377,7 @@ export async function updateBusinessTypeAndInstructionsAction(input: {
       .maybeSingle()
 
     if (existingKb?.id) {
-      await supabase
+      await db
         .from('knowledge_base')
         .update({
           content: summaryContent,
@@ -385,7 +385,7 @@ export async function updateBusinessTypeAndInstructionsAction(input: {
         })
         .eq('id', existingKb.id)
     } else {
-      await supabase.from('knowledge_base').insert({
+      await db.from('knowledge_base').insert({
         organization_id: org.organizationId,
         title: 'هوية ونشاط الشركة',
         content: summaryContent,

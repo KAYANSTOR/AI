@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { requireAdminCapability, audit, type AuthorizedContext } from '@/lib/capabilities/guard'
 import { normalizeChannelNumber } from '@/lib/channels/management'
-import { actionErrorMessage, supabaseActionError } from '@/lib/i18n/action-error'
+import { actionErrorMessage, dbActionError } from '@/lib/i18n/action-error'
 import { resolveChannelExact } from '@/lib/runtime/tenant'
 import { ar } from '@/lib/i18n/ar'
 import { forwardingStatusLabel } from '@/lib/i18n/labels'
@@ -45,14 +45,14 @@ export async function savePhoneConnectionAction(input: PhoneSetupInput): Promise
   }
 
   // Find or create phone channel
-  const { data: existingChannel } = await ctx.supabase
+  const { data: existingChannel } = await ctx.db
     .from('channels')
     .select('id, business_id, provider_account_id')
     .eq('organization_id', ctx.organizationId)
     .eq('channel_type', 'phone')
     .maybeSingle()
 
-  const { data: existingConnection } = await ctx.supabase
+  const { data: existingConnection } = await ctx.db
     .from('phone_connections')
     .select('id, internal_vapi_number')
     .eq('organization_id', ctx.organizationId)
@@ -69,14 +69,14 @@ export async function savePhoneConnectionAction(input: PhoneSetupInput): Promise
 
   let channelId = existingChannel?.id
   if (!existingChannel) {
-    const { data: bus } = await ctx.supabase
+    const { data: bus } = await ctx.db
       .from('businesses')
       .select('id')
       .eq('organization_id', ctx.organizationId)
       .limit(1)
       .maybeSingle()
 
-    const { data: created, error: createError } = await ctx.supabase
+    const { data: created, error: createError } = await ctx.db
       .from('channels')
       .insert({
         organization_id: ctx.organizationId,
@@ -89,10 +89,10 @@ export async function savePhoneConnectionAction(input: PhoneSetupInput): Promise
       .select('id')
       .single()
 
-    if (createError) return { ok: false, error: supabaseActionError(createError) }
+    if (createError) return { ok: false, error: dbActionError(createError) }
     channelId = created.id
   } else {
-    const { error: channelUpdateError } = await ctx.supabase
+    const { error: channelUpdateError } = await ctx.db
       .from('channels')
       .update({
         provider_account_id: vapiNumber,
@@ -102,7 +102,7 @@ export async function savePhoneConnectionAction(input: PhoneSetupInput): Promise
       })
       .eq('id', existingChannel.id)
       .eq('organization_id', ctx.organizationId)
-    if (channelUpdateError) return { ok: false, error: supabaseActionError(channelUpdateError) }
+    if (channelUpdateError) return { ok: false, error: dbActionError(channelUpdateError) }
   }
 
   const payload = {
@@ -115,16 +115,16 @@ export async function savePhoneConnectionAction(input: PhoneSetupInput): Promise
   }
 
   if (existingConnection) {
-    const { error } = await ctx.supabase
+    const { error } = await ctx.db
       .from('phone_connections')
       .update(payload)
       .eq('id', existingConnection.id)
-    if (error) return { ok: false, error: supabaseActionError(error) }
+    if (error) return { ok: false, error: dbActionError(error) }
   } else {
-    const { error } = await ctx.supabase
+    const { error } = await ctx.db
       .from('phone_connections')
       .insert({ ...payload, forwarding_status: 'pending_test' })
-    if (error) return { ok: false, error: supabaseActionError(error) }
+    if (error) return { ok: false, error: dbActionError(error) }
   }
 
   await audit(ctx, 'channel.phone_configured', 'channel', channelId ?? null, {
@@ -235,7 +235,7 @@ export async function autoProvisionPhoneChannelAction(): Promise<
     }
 
     // 3. Ensure primary business row
-    const { data: bus } = await ctx.supabase
+    const { data: bus } = await ctx.db
       .from('businesses')
       .select('id')
       .eq('organization_id', ctx.organizationId)
@@ -243,7 +243,7 @@ export async function autoProvisionPhoneChannelAction(): Promise<
       .maybeSingle()
 
     // 4. Upsert into channels table
-    const { data: existingChannel } = await ctx.supabase
+    const { data: existingChannel } = await ctx.db
       .from('channels')
       .select('id')
       .eq('organization_id', ctx.organizationId)
@@ -251,7 +251,7 @@ export async function autoProvisionPhoneChannelAction(): Promise<
       .maybeSingle()
 
     if (existingChannel) {
-      await ctx.supabase
+      await ctx.db
         .from('channels')
         .update({
           provider_account_id: assignedId,
@@ -262,7 +262,7 @@ export async function autoProvisionPhoneChannelAction(): Promise<
         })
         .eq('id', existingChannel.id)
     } else {
-      await ctx.supabase.from('channels').insert({
+      await ctx.db.from('channels').insert({
         organization_id: ctx.organizationId,
         business_id: bus?.id ?? null,
         channel_type: 'phone',
@@ -275,14 +275,14 @@ export async function autoProvisionPhoneChannelAction(): Promise<
 
     // 5. Upsert into phone_connections table
     const dialNumber = assignedNumber.replace(/^\+/, '00')
-    const { data: existingConn } = await ctx.supabase
+    const { data: existingConn } = await ctx.db
       .from('phone_connections')
       .select('id')
       .eq('organization_id', ctx.organizationId)
       .maybeSingle()
 
     if (existingConn) {
-      await ctx.supabase
+      await ctx.db
         .from('phone_connections')
         .update({
           internal_vapi_number: dialNumber,
@@ -292,7 +292,7 @@ export async function autoProvisionPhoneChannelAction(): Promise<
         })
         .eq('id', existingConn.id)
     } else {
-      await ctx.supabase.from('phone_connections').insert({
+      await ctx.db.from('phone_connections').insert({
         organization_id: ctx.organizationId,
         internal_vapi_number: dialNumber,
         forwarding_status: 'active',
@@ -342,13 +342,13 @@ export async function verifyPhoneSetupAction(): Promise<{
       { data: channel, error: channelError },
       { data: connection, error: connectionError },
     ] = await Promise.all([
-      ctx.supabase
+      ctx.db
         .from('channels')
         .select('id, is_active, provider_account_id, external_identifier, business_id')
         .eq('organization_id', ctx.organizationId)
         .eq('channel_type', 'phone')
         .maybeSingle(),
-      ctx.supabase
+      ctx.db
         .from('phone_connections')
         .select('existing_phone_number, internal_vapi_number, forwarding_status, last_verified_at')
         .eq('organization_id', ctx.organizationId)
@@ -376,7 +376,7 @@ export async function verifyPhoneSetupAction(): Promise<{
 
     // Reaches the caller's own channel only; the resolver applies the org scope.
     const resolved = channel
-      ? await resolveChannelExact(ctx.supabase, {
+      ? await resolveChannelExact(ctx.db, {
           channelType: 'phone',
           providerAccountId: channel.provider_account_id,
           externalIdentifier: channel.external_identifier,
@@ -418,14 +418,14 @@ export async function confirmForwardingAction(active: boolean): Promise<PhoneRes
     return { ok: false, error: actionErrorMessage(error, 'غير مصرح.') }
   }
 
-  const { data: connection } = await ctx.supabase
+  const { data: connection } = await ctx.db
     .from('phone_connections')
     .select('id')
     .eq('organization_id', ctx.organizationId)
     .maybeSingle()
   if (!connection) return { ok: false, error: 'احفظ إعداد الهاتف أولًا.' }
 
-  const { error } = await ctx.supabase
+  const { error } = await ctx.db
     .from('phone_connections')
     .update({
       forwarding_status: active ? 'active' : 'inactive',
@@ -434,7 +434,7 @@ export async function confirmForwardingAction(active: boolean): Promise<PhoneRes
     })
     .eq('id', connection.id)
     .eq('organization_id', ctx.organizationId)
-  if (error) return { ok: false, error: supabaseActionError(error) }
+  if (error) return { ok: false, error: dbActionError(error) }
 
   await audit(ctx, active ? 'channel.forwarding_confirmed' : 'channel.forwarding_disabled', 'channel', null, {
     attested_by: ctx.userId,

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/db/server'
 import { getDashboardContext } from '@/lib/dashboard/context'
 import { toCsv } from '@/lib/export/csv'
 
@@ -13,8 +13,8 @@ export async function GET() {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 })
   }
 
-  const supabase = await createClient()
-  const { data, error } = await supabase
+  const db = await createClient()
+  const { data, error } = await db
     .from('contacts')
     .select('id, full_name, phone, email, created_at')
     .eq('organization_id', context.organizationId)

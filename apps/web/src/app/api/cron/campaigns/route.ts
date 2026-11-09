@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { isAuthorizedCronRequest } from '@/lib/cron/auth'
-import { createAdminClient } from '@/lib/supabase/admin'
+import { createAdminClient } from '@/lib/db/admin'
 import { processCampaignBatch } from '@/lib/campaigns'
 import { DEFAULT_SEND_WINDOW, isInQuietHours } from '@/lib/channels/quiet-hours'
 import { publicWebhookError } from '@/lib/runtime/security'
@@ -17,17 +17,17 @@ async function handle(req: NextRequest) {
     return NextResponse.json({ skipped: 'quiet_hours' })
   }
 
-  const supabase = createAdminClient()
+  const db = createAdminClient()
   const now = new Date().toISOString()
 
   // Promote due scheduled campaigns
-  await supabase
+  await db
     .from('campaigns')
     .update({ status: 'running', started_at: now, updated_at: now })
     .eq('status', 'scheduled')
     .lte('scheduled_at', now)
 
-  const { data: running, error } = await supabase
+  const { data: running, error } = await db
     .from('campaigns')
     .select('id, organization_id')
     .eq('status', 'running')
@@ -41,7 +41,7 @@ async function handle(req: NextRequest) {
   let completed = 0
 
   for (const c of running ?? []) {
-    const result = await processCampaignBatch(supabase, {
+    const result = await processCampaignBatch(db, {
       organizationId: c.organization_id,
       campaignId: c.id,
     })

@@ -1,7 +1,7 @@
 import { ar } from '@/lib/i18n/ar'
 
 /**
- * Canonical business types (Adaptive Business Profile — docs/PLAN.md).
+ * Canonical business types (Adaptive Business Profile).
  *
  * الكيان المرجعي هو جدول `business_types` في قاعدة البيانات
  * (packages/db/migrations/0003_business_types_capabilities.sql)،

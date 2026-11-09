@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { requireCapability, audit } from '@/lib/capabilities/guard'
-import { actionErrorMessage, supabaseActionError } from '@/lib/i18n/action-error'
+import { actionErrorMessage, dbActionError } from '@/lib/i18n/action-error'
 import { enqueueOutbound } from '@/lib/channels/outbox'
 import { getConsentStatus } from '@/lib/channels/consent'
 
@@ -26,19 +26,19 @@ export async function scheduleOutboundMessageAction(input: {
       return { ok: false, error: 'يجب أن يكون الوقت في المستقبل.' }
     }
 
-    const { data: conversation, error: readError } = await ctx.supabase
+    const { data: conversation, error: readError } = await ctx.db
       .from('conversations')
       .select('id, contact_id, channel_id, status, business_id')
       .eq('id', input.conversationId)
       .eq('organization_id', ctx.organizationId)
       .maybeSingle()
 
-    if (readError) return { ok: false, error: supabaseActionError(readError) }
+    if (readError) return { ok: false, error: dbActionError(readError) }
     if (!conversation) return { ok: false, error: 'المحادثة غير موجودة.' }
     if (conversation.status === 'closed') return { ok: false, error: 'المحادثة مغلقة.' }
     if (!conversation.channel_id) return { ok: false, error: 'لا توجد قناة مرتبطة.' }
 
-    const { data: channel } = await ctx.supabase
+    const { data: channel } = await ctx.db
       .from('channels')
       .select('id, channel_type, business_id, is_active')
       .eq('id', conversation.channel_id)
@@ -48,19 +48,19 @@ export async function scheduleOutboundMessageAction(input: {
     if (!channel?.is_active) return { ok: false, error: 'القناة غير نشطة.' }
 
     const consent = await getConsentStatus(
-      ctx.supabase,
+      ctx.db,
       conversation.contact_id,
       channel.channel_type
     )
     if (consent === 'opted_out') return { ok: false, error: 'العميل ألغى الاشتراك.' }
 
-    const { data: contact } = await ctx.supabase
+    const { data: contact } = await ctx.db
       .from('contacts')
       .select('phone')
       .eq('id', conversation.contact_id)
       .maybeSingle()
 
-    const { data: identity } = await ctx.supabase
+    const { data: identity } = await ctx.db
       .from('contact_identities')
       .select('external_user_id, external_phone')
       .eq('contact_id', conversation.contact_id)
@@ -73,7 +73,7 @@ export async function scheduleOutboundMessageAction(input: {
     if (!recipient) return { ok: false, error: 'لا يوجد عنوان إرسال للعميل.' }
 
     const outboxId = await enqueueOutbound({
-      supabase: ctx.supabase,
+      db: ctx.db,
       organizationId: ctx.organizationId,
       businessId: channel.business_id ?? conversation.business_id,
       channelId: channel.id,

@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { requireCapability, audit, type AuthorizedContext } from '@/lib/capabilities/guard'
-import { actionErrorMessage, supabaseActionError } from '@/lib/i18n/action-error'
+import { actionErrorMessage, dbActionError } from '@/lib/i18n/action-error'
 import { assertMarketingAllowed, ConsentBlockedError } from '@/lib/channels/consent'
 import { enqueueOutbound } from '@/lib/channels/outbox'
 import { calculateQuoteTotals } from '@/lib/sales'
@@ -66,7 +66,7 @@ export async function createQuoteAction(input: CreateQuoteInput): Promise<QuoteR
   })
 
   try {
-    const { data: quote, error: quoteError } = await ctx.supabase
+    const { data: quote, error: quoteError } = await ctx.db
       .from('quotes')
       .insert({
         organization_id: ctx.organizationId,
@@ -82,16 +82,16 @@ export async function createQuoteAction(input: CreateQuoteInput): Promise<QuoteR
         total: totals.total,
         notes: input.notes,
         valid_until: input.valid_until || null,
-        created_by: (await ctx.supabase.auth.getUser()).data.user?.id,
+        created_by: (await ctx.db.auth.getUser()).data.user?.id,
       })
       .select('id')
       .single()
 
     if (quoteError || !quote) {
-      return { ok: false, error: supabaseActionError(quoteError) }
+      return { ok: false, error: dbActionError(quoteError) }
     }
 
-    const { error: itemsError } = await ctx.supabase.from('quote_items').insert(
+    const { error: itemsError } = await ctx.db.from('quote_items').insert(
       items.map((item) => ({
         ...item,
         quote_id: quote.id,
@@ -99,7 +99,7 @@ export async function createQuoteAction(input: CreateQuoteInput): Promise<QuoteR
     )
 
     if (itemsError) {
-      return { ok: false, error: supabaseActionError(itemsError) }
+      return { ok: false, error: dbActionError(itemsError) }
     }
 
     await audit(ctx, 'quote.created', 'quote', quote.id, { total: totals.total })
@@ -122,7 +122,7 @@ export async function changeQuoteStatusAction(
   }
 
   try {
-    const { data: currentQuote, error: fetchError } = await ctx.supabase
+    const { data: currentQuote, error: fetchError } = await ctx.db
       .from('quotes')
       .select('status, valid_until')
       .eq('id', quoteId)
@@ -156,14 +156,14 @@ export async function changeQuoteStatusAction(
       return { ok: false, error: 'لا يمكن تغيير الحالة المطلوبة من الحالة الحالية.' }
     }
 
-    const { error: updateError } = await ctx.supabase
+    const { error: updateError } = await ctx.db
       .from('quotes')
       .update({ status: newStatus })
       .eq('id', quoteId)
       .eq('organization_id', ctx.organizationId)
 
     if (updateError) {
-      return { ok: false, error: supabaseActionError(updateError) }
+      return { ok: false, error: dbActionError(updateError) }
     }
 
     await audit(ctx, 'quote.status_changed', 'quote', quoteId, {
@@ -192,7 +192,7 @@ export async function sendQuoteAction(quoteId: string): Promise<QuoteResult> {
   }
 
   try {
-    const { data: quote, error } = await ctx.supabase
+    const { data: quote, error } = await ctx.db
       .from('quotes')
       .select('id, status, contact_id, total, currency, valid_until, business_id')
       .eq('id', quoteId)
@@ -207,7 +207,7 @@ export async function sendQuoteAction(quoteId: string): Promise<QuoteResult> {
     }
 
     try {
-      await assertMarketingAllowed(ctx.supabase, {
+      await assertMarketingAllowed(ctx.db, {
         contactId: quote.contact_id,
         channel: 'whatsapp',
       })
@@ -218,14 +218,14 @@ export async function sendQuoteAction(quoteId: string): Promise<QuoteResult> {
       throw err
     }
 
-    const { data: contact } = await ctx.supabase
+    const { data: contact } = await ctx.db
       .from('contacts')
       .select('phone, full_name')
       .eq('id', quote.contact_id)
       .eq('organization_id', ctx.organizationId)
       .maybeSingle()
 
-    const { data: identity } = await ctx.supabase
+    const { data: identity } = await ctx.db
       .from('contact_identities')
       .select('external_user_id, external_phone, channel')
       .eq('contact_id', quote.contact_id)
@@ -237,7 +237,7 @@ export async function sendQuoteAction(quoteId: string): Promise<QuoteResult> {
     const recipient =
       identity?.external_user_id || identity?.external_phone || contact?.phone || ''
 
-    const { data: channel } = await ctx.supabase
+    const { data: channel } = await ctx.db
       .from('channels')
       .select('id, business_id')
       .eq('organization_id', ctx.organizationId)
@@ -246,19 +246,19 @@ export async function sendQuoteAction(quoteId: string): Promise<QuoteResult> {
       .limit(1)
       .maybeSingle()
 
-    const { error: statusError } = await ctx.supabase
+    const { error: statusError } = await ctx.db
       .from('quotes')
       .update({ status: 'sent' })
       .eq('id', quoteId)
       .eq('organization_id', ctx.organizationId)
       .eq('status', 'draft')
 
-    if (statusError) return { ok: false, error: supabaseActionError(statusError) }
+    if (statusError) return { ok: false, error: dbActionError(statusError) }
 
     if (channel && recipient) {
       const body = `عرض سعر بمبلغ ${quote.total} ${quote.currency || 'SAR'}. صالح حتى ${quote.valid_until || 'إشعار آخر'}. للتأكيد أو الاستفسار رد على هذه الرسالة.`
       await enqueueOutbound({
-        supabase: ctx.supabase,
+        db: ctx.db,
         organizationId: ctx.organizationId,
         businessId: channel.business_id ?? quote.business_id,
         channelId: channel.id,

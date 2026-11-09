@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { requireAdminCapability, audit } from '@/lib/capabilities/guard'
-import { actionErrorMessage, supabaseActionError } from '@/lib/i18n/action-error'
+import { actionErrorMessage, dbActionError } from '@/lib/i18n/action-error'
 import { createOrganizationApiKey, revokeOrganizationApiKey } from '@/lib/api-keys'
 
 export type ApiKeyResult =
@@ -15,7 +15,7 @@ export async function createApiKeyAction(name: string): Promise<ApiKeyResult> {
     const trimmed = name.trim()
     if (!trimmed) return { ok: false, error: 'الاسم مطلوب.' }
 
-    const created = await createOrganizationApiKey(ctx.supabase, {
+    const created = await createOrganizationApiKey(ctx.db, {
       organizationId: ctx.organizationId,
       name: trimmed,
       scopes: ['read'],
@@ -33,11 +33,11 @@ export async function createApiKeyAction(name: string): Promise<ApiKeyResult> {
 export async function revokeApiKeyAction(keyId: string): Promise<ApiKeyResult> {
   try {
     const ctx = await requireAdminCapability(null)
-    await revokeOrganizationApiKey(ctx.supabase, ctx.organizationId, keyId)
+    await revokeOrganizationApiKey(ctx.db, ctx.organizationId, keyId)
     await audit(ctx, 'api_key.revoked', 'api_key', keyId)
     revalidatePath('/dashboard/settings/api-keys')
     return { ok: true, id: keyId }
   } catch (error) {
-    return { ok: false, error: actionErrorMessage(error, supabaseActionError(error as never)) }
+    return { ok: false, error: actionErrorMessage(error, dbActionError(error as never)) }
   }
 }

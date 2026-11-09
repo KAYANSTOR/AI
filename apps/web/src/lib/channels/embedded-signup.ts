@@ -9,7 +9,7 @@
  *
  * All Graph calls are server-to-server. Nothing secret reaches the browser.
  */
-import { createAdminClient } from '@/lib/supabase/admin'
+import { createAdminClient } from '@/lib/db/admin'
 import { saveChannelCredential } from '@/lib/credentials/service'
 import { normalizeChannelNumber } from '@/lib/channels/management'
 

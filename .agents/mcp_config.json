@@ -1,8 +1,0 @@
-{
-  "mcpServers": {
-    "codecraft-api": {
-      "command": "node",
-      "args": ["index.js"]
-    }
-  }
-}

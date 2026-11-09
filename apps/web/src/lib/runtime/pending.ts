@@ -1,29 +1,29 @@
-import type { SupabaseClient } from '@supabase/supabase-js'
+import type { DbClient } from '@/lib/db/client'
 
 function normalizeConfirmationText(text:string){
   return text.trim().toLocaleLowerCase('ar').replace(/[.!؟?،]+$/g,'').trim()
 }
-export async function getPendingAction(supabase:SupabaseClient,conversationId:string){
-  const {data,error}=await supabase.from('pending_actions').select('id,tool_name,arguments,status,expires_at')
+export async function getPendingAction(db:DbClient,conversationId:string){
+  const {data,error}=await db.from('pending_actions').select('id,tool_name,arguments,status,expires_at')
     .eq('conversation_id',conversationId).eq('status','pending').gt('expires_at',new Date().toISOString())
     .order('created_at',{ascending:false}).limit(1).maybeSingle()
   if(error) throw new Error(error.message)
-  return data as {id:string;tool_name:string;arguments:Record<string,unknown>;status:string;expires_at:string}|null
+  return data as unknown as {id:string;tool_name:string;arguments:Record<string,unknown>;status:string;expires_at:string}|null
 }
-export async function createPendingAction(args:{supabase:SupabaseClient;organizationId:string;businessId:string;conversationId:string;contactId:string;toolName:string;toolArguments:Record<string,unknown>}){
-  const {data,error}=await args.supabase.from('pending_actions').insert({
+export async function createPendingAction(args:{db:DbClient;organizationId:string;businessId:string;conversationId:string;contactId:string;toolName:string;toolArguments:Record<string,unknown>}){
+  const {data,error}=await args.db.from('pending_actions').insert({
     organization_id:args.organizationId,business_id:args.businessId,conversation_id:args.conversationId,
     contact_id:args.contactId,tool_name:args.toolName,arguments:args.toolArguments,status:'pending',
   }).select('id').single()
   if(error || !data) throw new Error(error?.message ?? 'Failed to create pending action')
   return data.id as string
 }
-export async function markPendingAction(supabase:SupabaseClient,actionId:string,status:'confirmed'|'cancelled'|'expired'|'executed'|'failed',result?:unknown,expectedStatus:'pending'|'confirmed'='pending'){
+export async function markPendingAction(db:DbClient,actionId:string,status:'confirmed'|'cancelled'|'expired'|'executed'|'failed',result?:unknown,expectedStatus:'pending'|'confirmed'='pending'){
   const patch:Record<string,unknown>={status}
   if(status==='confirmed') patch.confirmed_at=new Date().toISOString()
   if(status==='executed') patch.executed_at=new Date().toISOString()
   if(result!==undefined) patch.result=result
-  const {data,error}=await supabase.from('pending_actions').update(patch).eq('id',actionId).eq('status',expectedStatus).select('id').maybeSingle()
+  const {data,error}=await db.from('pending_actions').update(patch).eq('id',actionId).eq('status',expectedStatus).select('id').maybeSingle()
   if(error) throw new Error(error.message)
   return Boolean(data?.id)
 }

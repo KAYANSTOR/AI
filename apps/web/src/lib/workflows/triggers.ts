@@ -1,4 +1,4 @@
-import type { SupabaseClient } from '@supabase/supabase-js'
+import type { DbClient } from '@/lib/db/client'
 import { startWorkflowRun } from '@/lib/workflows/engine'
 import {
   assertWithinLimit,
@@ -22,7 +22,7 @@ export type DomainTrigger =
  * Failures are isolated per workflow so one broken definition does not block others.
  */
 export async function dispatchWorkflowTrigger(
-  supabase: SupabaseClient,
+  db: DbClient,
   input: {
     organizationId: string
     triggerType: DomainTrigger | string
@@ -31,7 +31,7 @@ export async function dispatchWorkflowTrigger(
   }
 ): Promise<{ started: number; failed: number; skippedForEntitlement: boolean }> {
   try {
-    await assertWithinLimit(supabase, input.organizationId, 'automation_runs', 1)
+    await assertWithinLimit(db, input.organizationId, 'automation_runs', 1)
   } catch (err) {
     if (err instanceof EntitlementExceededError) {
       return { started: 0, failed: 0, skippedForEntitlement: true }
@@ -39,7 +39,7 @@ export async function dispatchWorkflowTrigger(
     throw err
   }
 
-  const { data: workflows, error } = await supabase
+  const { data: workflows, error } = await db
     .from('workflows')
     .select('id')
     .eq('organization_id', input.organizationId)
@@ -56,7 +56,7 @@ export async function dispatchWorkflowTrigger(
       ? `${input.idempotencyPrefix}:${wf.id}`
       : undefined
     try {
-      await startWorkflowRun(supabase, {
+      await startWorkflowRun(db, {
         organizationId: input.organizationId,
         workflowId: wf.id,
         triggerPayload: input.payload,
@@ -65,7 +65,7 @@ export async function dispatchWorkflowTrigger(
       })
       started++
       try {
-        await recordMeterUsage(supabase, input.organizationId, 'automation_runs', 1)
+        await recordMeterUsage(db, input.organizationId, 'automation_runs', 1)
       } catch {
         // meter table optional until migrations applied
       }

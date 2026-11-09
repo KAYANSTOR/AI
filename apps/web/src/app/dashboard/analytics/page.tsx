@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/db/server'
 import { getDashboardContext } from '@/lib/dashboard/context'
 import { formatNumber } from '@/lib/i18n/format'
 import {
@@ -14,7 +14,7 @@ import {
 export default async function AnalyticsPage() {
   const context = await getDashboardContext()
   if (!context) redirect('/login')
-  const supabase = await createClient()
+  const db = await createClient()
 
   // For the MVP, we aggregate everything from the current data if daily_analytics isn't fully populated.
   // In a real production scenario, daily_analytics table would be populated by a cron job.
@@ -24,10 +24,10 @@ export default async function AnalyticsPage() {
     { count: totalOrders },
     { data: ordersData },
   ] = await Promise.all([
-    supabase.from('conversations').select('id', { count: 'exact', head: true }).eq('organization_id', context.organizationId),
-    supabase.from('leads').select('id', { count: 'exact', head: true }).eq('organization_id', context.organizationId),
-    supabase.from('orders').select('id', { count: 'exact', head: true }).eq('organization_id', context.organizationId),
-    supabase.from('orders').select('total_amount').eq('organization_id', context.organizationId).eq('status', 'completed'),
+    db.from('conversations').select('id', { count: 'exact', head: true }).eq('organization_id', context.organizationId),
+    db.from('leads').select('id', { count: 'exact', head: true }).eq('organization_id', context.organizationId),
+    db.from('orders').select('id', { count: 'exact', head: true }).eq('organization_id', context.organizationId),
+    db.from('orders').select('total_amount').eq('organization_id', context.organizationId).eq('status', 'completed'),
   ])
 
   const revenue = ordersData?.reduce((sum, order) => sum + (Number(order.total_amount) || 0), 0) || 0

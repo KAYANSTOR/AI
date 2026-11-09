@@ -1,6 +1,6 @@
 import { Suspense } from 'react'
 import { getDashboardContext } from '@/lib/dashboard/context'
-import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/db/server'
 import { redirect } from 'next/navigation'
 import { AppointmentForm } from './appointment-form'
 import { ar } from '@/lib/i18n/ar'
@@ -44,14 +44,14 @@ export default async function AppointmentsPage() {
 }
 
 async function AppointmentFormSection({ organizationId }: { organizationId: string }) {
-  const supabase = await createClient()
+  const db = await createClient()
   const [{ data: services }, { data: contacts }] = await Promise.all([
-    supabase
+    db
       .from('services')
       .select('id, name, duration_minutes')
       .eq('organization_id', organizationId)
       .eq('is_active', true),
-    supabase
+    db
       .from('contacts')
       .select('id, full_name, phone')
       .eq('organization_id', organizationId)
@@ -86,8 +86,8 @@ async function AppointmentListSection({
   organizationId: string
   timezone: string
 }) {
-  const supabase = await createClient()
-  const { data: appointments } = await supabase
+  const db = await createClient()
+  const { data: appointments } = await db
     .from('appointments')
     .select('id, starts_at, status, contact_id, service_id, contacts(full_name, phone), services(name)')
     .eq('organization_id', organizationId)

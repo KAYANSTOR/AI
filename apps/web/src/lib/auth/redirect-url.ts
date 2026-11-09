@@ -20,8 +20,8 @@ function normalizeSiteOrigin(value: string): string {
  * Returns the canonical browser origin used by authentication redirects.
  *
  * Production must provide NEXT_PUBLIC_SITE_URL (or the existing compatibility
- * alias NEXT_PUBLIC_APP_URL). NEXT_PUBLIC_VERCEL_URL is accepted as a safe
- * fallback for preview deployments. localhost is only accepted locally.
+ * alias NEXT_PUBLIC_APP_URL). RAILWAY_PUBLIC_DOMAIN is accepted as a safe
+ * fallback for Railway deployments. localhost is only accepted locally.
  */
 export function getPublicSiteOrigin(): string {
   const configured =
@@ -31,9 +31,9 @@ export function getPublicSiteOrigin(): string {
     return normalizeSiteOrigin(configured)
   }
 
-  const vercelUrl = process.env.NEXT_PUBLIC_VERCEL_URL?.trim()
-  if (vercelUrl) {
-    return normalizeSiteOrigin(vercelUrl)
+  const railwayDomain = process.env.RAILWAY_PUBLIC_DOMAIN?.trim()
+  if (railwayDomain) {
+    return normalizeSiteOrigin(railwayDomain)
   }
 
   if (typeof window !== 'undefined' && LOCAL_HOSTS.has(window.location.hostname)) {

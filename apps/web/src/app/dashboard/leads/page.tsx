@@ -1,5 +1,5 @@
 import { getDashboardContext } from '@/lib/dashboard/context'
-import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/db/server'
 import { redirect } from 'next/navigation'
 import { ar } from '@/lib/i18n/ar'
 import { formatDate, formatNumber } from '@/lib/i18n/format'
@@ -10,8 +10,8 @@ export default async function LeadsPage() {
   if (!context) redirect('/login')
 
   const canEdit = context.role !== 'read_only'
-  const supabase = await createClient()
-  const { data: leads } = await supabase
+  const db = await createClient()
+  const { data: leads } = await db
     .from('leads')
     .select(
       'id, status, intent, estimated_value, created_at, next_action, source, source_channel, contact_id, contacts(full_name, phone)'

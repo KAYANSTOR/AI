@@ -1,30 +1,30 @@
+import { ArrowLeft } from 'lucide-react'
 import { Section } from './section'
-import { PrimaryCta, SecondaryCta } from './cta'
+import Link from 'next/link'
+import { PrimaryCta } from './cta'
 
 export function FinalCta() {
   return (
     <Section id="start" tone="background">
-      <div className="rounded-3xl bg-primary-dark px-6 py-12 text-center sm:px-10 sm:py-16">
-        <h2 className="text-2xl font-bold tracking-tight text-surface sm:text-3xl">
-          ابدأ باستقبال أول عميل عبر الوكيل الذكي
-        </h2>
-        <p className="mx-auto mt-4 max-w-2xl text-sm leading-8 text-surface/90 sm:text-base">
-          أنشئ حساب شركتك، اختر نوع نشاطك، واربط قنواتك — وبعدها تصلك المحادثات والمواعيد في لوحة
-          واحدة بدل أن تضيع في تطبيقات متفرقة.
-        </p>
-        <div className="mt-8 flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-center">
-          <PrimaryCta
-            href="/signup"
-            className="bg-surface text-primary-dark hover:bg-background hover:text-primary-dark"
-          >
-            إنشاء حساب للشركة
-          </PrimaryCta>
-          <SecondaryCta
-            href="/login"
-            className="border-surface/40 bg-transparent text-surface hover:border-surface hover:text-surface"
-          >
-            تسجيل الدخول
-          </SecondaryCta>
+      <div className="relative overflow-hidden rounded-3xl bg-dark px-6 py-14 text-center sm:px-12 sm:py-20">
+        <div className="bg-grid-dark absolute inset-0" aria-hidden="true" />
+        <div className="relative">
+          <h2 className="text-2xl font-bold text-surface sm:text-4xl">جهّز موظف الاستقبال لشركتك اليوم</h2>
+          <p className="mx-auto mt-4 max-w-xl text-sm leading-8 text-surface/70 sm:text-base">
+            أنشئ الحساب، أضف خدماتك وساعات العمل، واربط واتساب. يبدأ الرد على عملائك في نفس اليوم.
+          </p>
+          <div className="mt-9 flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-center">
+            <PrimaryCta href="/signup" className="min-h-12 px-7">
+              إنشاء حساب الشركة
+              <ArrowLeft size={16} aria-hidden="true" />
+            </PrimaryCta>
+            <Link
+              href="/pricing"
+              className="inline-flex min-h-12 items-center justify-center rounded-xl border border-surface/25 px-7 text-sm font-semibold text-surface transition-colors hover:border-surface/60"
+            >
+              عرض الأسعار
+            </Link>
+          </div>
         </div>
       </div>
     </Section>

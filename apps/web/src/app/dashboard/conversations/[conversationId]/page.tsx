@@ -22,7 +22,7 @@ export default async function ConversationThreadPage({
     redirect('/login')
   }
 
-  const { data: conversation } = await ctx.supabase
+  const { data: conversation } = await ctx.db
     .from('conversations')
     .select(
       'id, status, ai_enabled, state, handoff_reason, last_message_at, contacts(full_name, phone), channels(channel_type)'
@@ -34,14 +34,14 @@ export default async function ConversationThreadPage({
   if (!conversation) notFound()
 
   const [{ data: messages }, { data: notes }] = await Promise.all([
-    ctx.supabase
+    ctx.db
       .from('messages')
       .select('id, direction, content, message_type, created_at')
       .eq('conversation_id', conversationId)
       .eq('organization_id', ctx.organizationId)
       .order('created_at', { ascending: true })
       .limit(200),
-    ctx.supabase
+    ctx.db
       .from('conversation_notes')
       .select('id, body, created_at')
       .eq('conversation_id', conversationId)

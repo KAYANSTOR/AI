@@ -121,6 +121,8 @@ export const geminiProvider: AIProvider = {
     let response: Response | null = null
     let data: GeminiResponse | null = null
     let lastError: string | null = null
+    let lastStatus: number | null = null
+    let lastModel: string | null = null
 
     for (const model of candidateModels) {
       try {
@@ -138,7 +140,6 @@ export const geminiProvider: AIProvider = {
               tools,
               generationConfig: {
                 maxOutputTokens: 1024,
-                temperature: 0.3,
               },
             }),
           }
@@ -149,17 +150,24 @@ export const geminiProvider: AIProvider = {
           response = res
           data = json
           break
-        } else {
-          lastError = json.error?.message || res.statusText
-          continue
         }
+        lastError = json.error?.message || res.statusText
+        lastStatus = res.status
+        lastModel = model
+        // Only an unavailable model or a transient failure is worth trying the next model.
+        const retryable = res.status === 404 || res.status === 429 || res.status >= 500
+        if (!retryable) break
       } catch (err) {
         lastError = err instanceof Error ? err.message : String(err)
+        lastStatus = null
+        lastModel = model
       }
     }
 
     if (!response || !data) {
-      throw new Error(`Gemini API error: ${lastError ?? 'All candidate models failed'}`)
+      const status = lastStatus ? ` (${lastStatus})` : ''
+      const model = lastModel ? ` using ${lastModel}` : ''
+      throw new Error(`Gemini API error${status}${model}: ${lastError ?? 'All candidate models failed'}`)
     }
 
     const firstCandidate = data.candidates?.[0]

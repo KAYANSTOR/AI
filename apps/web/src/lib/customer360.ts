@@ -1,5 +1,5 @@
-import type { SupabaseClient } from '@supabase/supabase-js'
-import type { createClient } from '@/lib/supabase/server'
+import type { DbClient } from '@/lib/db/client'
+import type { createClient } from '@/lib/db/server'
 
 export type CustomerTimelineEvent = {
   id: string
@@ -10,30 +10,30 @@ export type CustomerTimelineEvent = {
 }
 
 export async function getCustomerTimeline(
-  supabase: SupabaseClient | Awaited<ReturnType<typeof createClient>>,
+  db: DbClient | Awaited<ReturnType<typeof createClient>>,
   organizationId: string,
   contactId: string
 ): Promise<CustomerTimelineEvent[]> {
   const [conversations, appointments, quotes, orders] = await Promise.all([
-    supabase
+    db
       .from('conversations')
       .select('id, created_at, status, summary')
       .eq('organization_id', organizationId)
       .eq('contact_id', contactId)
       .order('created_at', { ascending: false }),
-    supabase
+    db
       .from('appointments')
       .select('id, starts_at, status, notes')
       .eq('organization_id', organizationId)
       .eq('contact_id', contactId)
       .order('starts_at', { ascending: false }),
-    supabase
+    db
       .from('quotes')
       .select('id, created_at, status, total')
       .eq('organization_id', organizationId)
       .eq('contact_id', contactId)
       .order('created_at', { ascending: false }),
-    supabase
+    db
       .from('orders')
       .select('id, created_at, status, total')
       .eq('organization_id', organizationId)
@@ -87,15 +87,15 @@ export async function getCustomerTimeline(
 }
 
 export async function getCustomerSummary(
-  supabase: SupabaseClient | Awaited<ReturnType<typeof createClient>>,
+  db: DbClient | Awaited<ReturnType<typeof createClient>>,
   organizationId: string,
   contactId: string
 ): Promise<{ conversations: number; appointments: number; quotes: number; orders: number }> {
   const [conversations, appointments, quotes, orders] = await Promise.all([
-    supabase.from('conversations').select('id').eq('organization_id', organizationId).eq('contact_id', contactId),
-    supabase.from('appointments').select('id').eq('organization_id', organizationId).eq('contact_id', contactId),
-    supabase.from('quotes').select('id').eq('organization_id', organizationId).eq('contact_id', contactId),
-    supabase.from('orders').select('id').eq('organization_id', organizationId).eq('contact_id', contactId),
+    db.from('conversations').select('id').eq('organization_id', organizationId).eq('contact_id', contactId),
+    db.from('appointments').select('id').eq('organization_id', organizationId).eq('contact_id', contactId),
+    db.from('quotes').select('id').eq('organization_id', organizationId).eq('contact_id', contactId),
+    db.from('orders').select('id').eq('organization_id', organizationId).eq('contact_id', contactId),
   ])
 
   return {

@@ -7,9 +7,9 @@ import {
   setKnowledgeActiveAction,
   deleteKnowledgeAction,
   previewKnowledgeAction,
-  KNOWLEDGE_CATEGORIES,
   type KnowledgeResult,
 } from './actions'
+import { KNOWLEDGE_CATEGORIES } from './categories'
 import { ar } from '@/lib/i18n/ar'
 
 export type KnowledgeRow = {

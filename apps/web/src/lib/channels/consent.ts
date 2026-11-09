@@ -1,4 +1,4 @@
-import type { SupabaseClient } from '@supabase/supabase-js'
+import type { DbClient } from '@/lib/db/client'
 
 /**
  * Consent is a channel-level fact stored in `consents` (DB contract: consents).
@@ -27,11 +27,11 @@ export function isOptOutMessage(text: string): boolean {
 }
 
 export async function getConsentStatus(
-  supabase: SupabaseClient,
+  db: DbClient,
   contactId: string,
   channel: string
 ): Promise<'opted_in' | 'opted_out' | 'unknown' | null> {
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from('consents')
     .select('status')
     .eq('contact_id', contactId)
@@ -45,10 +45,10 @@ export async function getConsentStatus(
 }
 
 export async function recordOptOut(
-  supabase: SupabaseClient,
+  db: DbClient,
   input: { organizationId: string; contactId: string; channel: string; source: string }
 ): Promise<void> {
-  const { error } = await supabase.from('consents').insert({
+  const { error } = await db.from('consents').insert({
     organization_id: input.organizationId,
     contact_id: input.contactId,
     channel: input.channel,
@@ -74,10 +74,10 @@ export class ConsentBlockedError extends Error {
  * by the inbound runtime; this guard is for proactive outbound only.
  */
 export async function assertMarketingAllowed(
-  supabase: SupabaseClient,
+  db: DbClient,
   input: { contactId: string; channel: string }
 ): Promise<void> {
-  const status = await getConsentStatus(supabase, input.contactId, input.channel)
+  const status = await getConsentStatus(db, input.contactId, input.channel)
   if (status === 'opted_out') {
     throw new ConsentBlockedError('contact_opted_out')
   }

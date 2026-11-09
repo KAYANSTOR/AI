@@ -1,4 +1,4 @@
-import type { SupabaseClient } from '@supabase/supabase-js'
+import type { DbClient } from '@/lib/db/client'
 
 export type ChannelHealth = {
   id: string
@@ -13,10 +13,10 @@ export type ChannelHealth = {
 }
 
 export async function loadChannelHealth(
-  supabase: SupabaseClient,
+  db: DbClient,
   organizationId: string
 ): Promise<ChannelHealth[]> {
-  const { data: channels } = await supabase
+  const { data: channels } = await db
     .from('channels')
     .select(
       'id, channel_type, is_active, verification_status, provider_account_id, external_identifier'
@@ -24,12 +24,12 @@ export async function loadChannelHealth(
     .eq('organization_id', organizationId)
     .order('channel_type')
 
-  const { data: creds } = await supabase
+  const { data: creds } = await db
     .from('provider_credentials')
     .select('id, provider, status, channel_id')
     .eq('organization_id', organizationId)
 
-  const { data: recentFailures } = await supabase
+  const { data: recentFailures } = await db
     .from('outbox_events')
     .select('channel_id, last_error, status')
     .eq('organization_id', organizationId)

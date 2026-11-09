@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
-import type { SupabaseClient } from '@supabase/supabase-js'
-import { createFakeSupabase, holidayAwareHoursRpc, type FakeDb } from './support/fake-supabase'
+import type { DbClient } from '@/lib/db/client'
+import { createFakeDb, holidayAwareHoursRpc, type FakeDb } from './support/fake-db'
 import { TOOL_POLICIES, isActorAllowed, type ToolActor } from '@/lib/ai/registry'
 import { executeTool, getToolDefinitionsForAgent } from '@/lib/ai/tools'
 
@@ -33,16 +33,16 @@ function baseTables(overrides: FakeDb = {}): FakeDb {
 }
 
 function setup(tables: FakeDb) {
-  const fake = createFakeSupabase(tables, { holiday_aware_hours: (args) => holidayAwareHoursRpc(fake.db)(args) })
-  return { db: fake.db, supabase: fake.client as unknown as SupabaseClient }
+  const fake = createFakeDb(tables, { holiday_aware_hours: (args) => holidayAwareHoursRpc(fake.store)(args) })
+  return { store: fake.store, db: fake.client as unknown as DbClient }
 }
 
 function context(
-  supabase: SupabaseClient,
+  db: DbClient,
   extra: { conversationId?: string | null; agentId?: string | null; actor?: ToolActor } = {}
 ) {
   return {
-    supabase,
+    db,
     organizationId: ORG,
     businessId: BIZ,
     conversationId: extra.conversationId === undefined ? CONVERSATION : extra.conversationId,
@@ -75,8 +75,8 @@ describe('capability registry', () => {
 
 describe('tool exposure', () => {
   test('tools of a disabled capability are not exposed to the model', async () => {
-    const { supabase } = setup(baseTables())
-    const tools = await getToolDefinitionsForAgent(supabase, ORG, AGENT)
+    const { db } = setup(baseTables())
+    const tools = await getToolDefinitionsForAgent(db, ORG, AGENT)
     const names = tools.map((tool) => tool.name)
 
     expect(names).toContain('find_available_slots')
@@ -86,21 +86,21 @@ describe('tool exposure', () => {
   })
 
   test('with nothing enabled only the capability-free escape hatch remains', async () => {
-    const { supabase } = setup(baseTables({ organization_capabilities: { rows: [] } }))
-    const tools = await getToolDefinitionsForAgent(supabase, ORG, AGENT)
+    const { db } = setup(baseTables({ organization_capabilities: { rows: [] } }))
+    const tools = await getToolDefinitionsForAgent(db, ORG, AGENT)
 
     expect(tools.map((tool) => tool.name)).toEqual(['request_human_handoff'])
   })
 
   test('an agent policy can hide an otherwise enabled tool', async () => {
-    const { supabase } = setup(
+    const { db } = setup(
       baseTables({
         agent_tool_policies: {
           rows: [{ agent_id: AGENT, tool_name: 'create_appointment', is_allowed: false, requires_confirmation: true }],
         },
       })
     )
-    const tools = await getToolDefinitionsForAgent(supabase, ORG, AGENT)
+    const tools = await getToolDefinitionsForAgent(db, ORG, AGENT)
 
     expect(tools.map((tool) => tool.name)).not.toContain('create_appointment')
   })
@@ -108,17 +108,17 @@ describe('tool exposure', () => {
 
 describe('capability enforcement at execution time', () => {
   test('a disabled capability blocks the tool even if the model asks for it', async () => {
-    const { db, supabase } = setup(baseTables({ organization_capabilities: { rows: [] } }))
+    const { store, db } = setup(baseTables({ organization_capabilities: { rows: [] } }))
 
-    const result = await executeTool('find_available_slots', { date: '2026-03-02' }, context(supabase))
+    const result = await executeTool('find_available_slots', { date: '2026-03-02' }, context(db))
 
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.error).toContain('disabled')
-    expect(db.tool_executions.rows?.[0]?.status).toBe('blocked')
+    expect(store.tool_executions.rows?.[0]?.status).toBe('blocked')
   })
 
   test('a disabled capability blocks a write even when the agent policy allows it', async () => {
-    const { db, supabase } = setup(
+    const { store, db } = setup(
       baseTables({
         organization_capabilities: { rows: [capability('appointments', false)] },
         agent_tool_policies: {
@@ -130,17 +130,17 @@ describe('capability enforcement at execution time', () => {
     const result = await executeTool(
       'create_appointment',
       { phone: '+15550001', service_id: 'svc-1', starts_at: '2026-03-02T09:00:00.000Z' },
-      context(supabase),
+      context(db),
       { confirmed: true }
     )
 
     expect(result.ok).toBe(false)
-    expect(db.appointments.rows?.length).toBe(0)
-    expect(db.tool_executions.rows?.[0]?.status).toBe('blocked')
+    expect(store.appointments.rows?.length).toBe(0)
+    expect(store.tool_executions.rows?.[0]?.status).toBe('blocked')
   })
 
   test('an agent policy denial blocks the tool', async () => {
-    const { db, supabase } = setup(
+    const { store, db } = setup(
       baseTables({
         organization_capabilities: { rows: [capability('appointments')] },
         agent_tool_policies: {
@@ -149,21 +149,21 @@ describe('capability enforcement at execution time', () => {
       })
     )
 
-    const result = await executeTool('find_available_slots', { date: '2026-03-02' }, context(supabase))
+    const result = await executeTool('find_available_slots', { date: '2026-03-02' }, context(db))
 
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.error).toContain('not allowed')
-    expect(db.tool_executions.rows?.[0]?.status).toBe('blocked')
+    expect(store.tool_executions.rows?.[0]?.status).toBe('blocked')
   })
 
   test('an unknown tool is rejected outright', async () => {
-    const { db, supabase } = setup(baseTables())
+    const { store, db } = setup(baseTables())
 
-    const result = await executeTool('delete_everything', {}, context(supabase))
+    const result = await executeTool('delete_everything', {}, context(db))
 
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.error).toContain('Unknown tool')
-    expect(db.tool_executions.rows?.length).toBe(0)
+    expect(store.tool_executions.rows?.length).toBe(0)
   })
 })
 
@@ -171,44 +171,44 @@ describe('confirmation-gated writes', () => {
   const args = { phone: '+15550001', service_id: 'svc-1', starts_at: '2026-03-02T09:00:00.000Z' }
 
   test('a sensitive write waits for confirmation and does not execute', async () => {
-    const { db, supabase } = setup(baseTables())
+    const { store, db } = setup(baseTables())
 
-    const result = await executeTool('create_appointment', args, context(supabase))
+    const result = await executeTool('create_appointment', args, context(db))
 
     expect(result.ok).toBe(true)
     if (result.ok) expect((result.result as { confirmationRequired?: boolean }).confirmationRequired).toBe(true)
-    expect(db.appointments.rows?.length).toBe(0)
-    expect(db.tool_executions.rows?.[0]?.status).toBe('confirmation_required')
+    expect(store.appointments.rows?.length).toBe(0)
+    expect(store.tool_executions.rows?.[0]?.status).toBe('confirmation_required')
   })
 
   test('the pending action is stored server-side with the arguments to replay', async () => {
-    const { db, supabase } = setup(baseTables())
+    const { store, db } = setup(baseTables())
 
-    await executeTool('create_appointment', args, context(supabase))
+    await executeTool('create_appointment', args, context(db))
 
-    const pending = db.pending_actions.rows?.[0]
+    const pending = store.pending_actions.rows?.[0]
     expect(pending?.status).toBe('pending')
     expect(pending?.tool_name).toBe('create_appointment')
     expect(pending?.arguments).toEqual(args)
     expect(pending?.conversation_id).toBe(CONVERSATION)
-    expect(db.conversations.rows?.[0]?.state).toBe('action_pending')
+    expect(store.conversations.rows?.[0]?.state).toBe('action_pending')
   })
 
   test('the stored action executes exactly once when the customer confirms', async () => {
-    const { db, supabase } = setup(baseTables())
-    const ctx = context(supabase)
+    const { store, db } = setup(baseTables())
+    const ctx = context(db)
 
     await executeTool('create_appointment', args, ctx)
     const executed = await executeTool('create_appointment', args, ctx, { confirmed: true })
 
     expect(executed.ok).toBe(true)
-    expect(db.appointments.rows?.length).toBe(1)
-    expect(db.appointments.rows?.[0]?.status).toBe('confirmed')
-    expect(db.leads.rows?.[0]?.status).toBe('booked')
+    expect(store.appointments.rows?.length).toBe(1)
+    expect(store.appointments.rows?.[0]?.status).toBe('confirmed')
+    expect(store.leads.rows?.[0]?.status).toBe('booked')
   })
 
   test('an agent policy can raise confirmation for a tool the registry lets through', async () => {
-    const { db, supabase } = setup(
+    const { store, db } = setup(
       baseTables({
         organization_capabilities: { rows: [capability('lead_capture')] },
         agent_tool_policies: {
@@ -217,42 +217,42 @@ describe('confirmation-gated writes', () => {
       })
     )
 
-    const result = await executeTool('get_customer', { phone: '+15550001' }, context(supabase))
+    const result = await executeTool('get_customer', { phone: '+15550001' }, context(db))
 
     expect(result.ok).toBe(true)
     if (result.ok) expect((result.result as { confirmationRequired?: boolean }).confirmationRequired).toBe(true)
-    expect(db.pending_actions.rows?.length).toBe(1)
+    expect(store.pending_actions.rows?.length).toBe(1)
   })
 
   test('a confirmation-gated write refuses without conversation context', async () => {
-    const { db, supabase } = setup(baseTables())
+    const { store, db } = setup(baseTables())
 
-    const result = await executeTool('create_appointment', args, context(supabase, { conversationId: null }))
+    const result = await executeTool('create_appointment', args, context(db, { conversationId: null }))
 
     expect(result.ok).toBe(false)
-    expect(db.pending_actions.rows?.length).toBe(0)
+    expect(store.pending_actions.rows?.length).toBe(0)
   })
 })
 
 describe('human handoff tool', () => {
   test('pausing AI is recorded on the conversation and in the audit ledger', async () => {
-    const { db, supabase } = setup(baseTables({ organization_capabilities: { rows: [] } }))
+    const { store, db } = setup(baseTables({ organization_capabilities: { rows: [] } }))
 
-    const result = await executeTool('request_human_handoff', { reason: 'pricing_question' }, context(supabase))
+    const result = await executeTool('request_human_handoff', { reason: 'pricing_question' }, context(db))
 
     expect(result.ok).toBe(true)
-    const conversation = db.conversations.rows?.[0]
+    const conversation = store.conversations.rows?.[0]
     expect(conversation?.ai_enabled).toBe(false)
     expect(conversation?.status).toBe('handed_off')
     expect(conversation?.state).toBe('human_handoff')
     expect(conversation?.handoff_reason).toBe('pricing_question')
-    expect(db.audit_events.rows?.[0]?.action).toBe('conversation.handoff_requested')
+    expect(store.audit_events.rows?.[0]?.action).toBe('conversation.handoff_requested')
   })
 
   test('handoff requires an existing conversation', async () => {
-    const { supabase } = setup(baseTables())
+    const { db } = setup(baseTables())
 
-    const result = await executeTool('request_human_handoff', {}, context(supabase, { conversationId: null }))
+    const result = await executeTool('request_human_handoff', {}, context(db, { conversationId: null }))
 
     expect(result.ok).toBe(false)
   })
@@ -266,27 +266,27 @@ describe('actor authorisation', () => {
       expect(isActorAllowed(TOOL_POLICIES[name], 'system')).toBe(false)
     }
 
-    const { supabase } = setup(baseTables())
+    const { db } = setup(baseTables())
     const result = await executeTool('create_appointment', {
       phone: '+15550001', service_id: 'svc-1', starts_at: '2026-03-02T09:00:00.000Z',
-    }, context(supabase, { actor: 'system' }))
+    }, context(db, { actor: 'system' }))
 
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.error).toContain('not allowed')
   })
 
   test('an actor refusal is recorded before any capability or confirmation work', async () => {
-    const { supabase, db } = setup(baseTables())
+    const { db, store } = setup(baseTables())
 
     await executeTool('create_appointment', {
       phone: '+15550001', service_id: 'svc-1', starts_at: '2026-03-02T09:00:00.000Z',
-    }, context(supabase, { actor: 'system' }))
+    }, context(db, { actor: 'system' }))
 
-    const executions = db.tool_executions.rows ?? []
+    const executions = store.tool_executions.rows ?? []
     expect(executions.length).toBe(1)
     expect(executions[0]?.status).toBe('blocked')
     // A refused call must not have queued anything for confirmation.
-    expect(db.pending_actions.rows?.length ?? 0).toBe(0)
+    expect(store.pending_actions.rows?.length ?? 0).toBe(0)
   })
 
   test('the agent is allowed to invoke its declared tools', () => {
@@ -298,13 +298,13 @@ describe('actor authorisation', () => {
 
 describe('slot lookup', () => {
   test('never invents availability when the business is closed that day', async () => {
-    const { supabase } = setup(
+    const { db } = setup(
       baseTables({
         business_hours: { rows: [{ organization_id: ORG, day_of_week: 1, open_time: '09:00', close_time: '17:00', is_closed: true }] },
       })
     )
 
-    const result = await executeTool('find_available_slots', { date: '2026-03-02', service_id: 'svc-1' }, context(supabase))
+    const result = await executeTool('find_available_slots', { date: '2026-03-02', service_id: 'svc-1' }, context(db))
 
     expect(result.ok).toBe(true)
     if (result.ok) expect((result.result as { slots: unknown[] }).slots).toEqual([])

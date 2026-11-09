@@ -2,14 +2,14 @@
 
 import { revalidatePath } from 'next/cache'
 import { requireCapability, audit, type AuthorizedContext } from '@/lib/capabilities/guard'
-import { actionErrorMessage, supabaseActionError } from '@/lib/i18n/action-error'
+import { actionErrorMessage, dbActionError } from '@/lib/i18n/action-error'
 import { createNotification } from '@/lib/notifications'
 import { dispatchWorkflowTrigger } from '@/lib/workflows/triggers'
 
 export type InboxResult = { ok: boolean; error?: string; message?: string }
 
 async function loadConversation(ctx: AuthorizedContext, conversationId: string) {
-  const { data, error } = await ctx.supabase
+  const { data, error } = await ctx.db
     .from('conversations')
     .select('id, organization_id, contact_id, channel_id, status, ai_enabled, state, human_assignee_id')
     .eq('id', conversationId)
@@ -21,7 +21,7 @@ async function loadConversation(ctx: AuthorizedContext, conversationId: string) 
 }
 
 async function currentMemberId(ctx: AuthorizedContext): Promise<string | null> {
-  const { data } = await ctx.supabase
+  const { data } = await ctx.db
     .from('organization_members')
     .select('id')
     .eq('organization_id', ctx.organizationId)
@@ -45,7 +45,7 @@ export async function takeOverAction(conversationId: string, reason?: string): P
     }
 
     const memberId = await currentMemberId(ctx)
-    const { error } = await ctx.supabase
+    const { error } = await ctx.db
       .from('conversations')
       .update({
         status: 'handed_off',
@@ -58,10 +58,10 @@ export async function takeOverAction(conversationId: string, reason?: string): P
       })
       .eq('id', conversationId)
       .eq('organization_id', ctx.organizationId)
-    if (error) return { ok: false, error: supabaseActionError(error) }
+    if (error) return { ok: false, error: dbActionError(error) }
 
     if (memberId) {
-      await createNotification(ctx.supabase, {
+      await createNotification(ctx.db, {
         organizationId: ctx.organizationId,
         memberId,
         entityType: 'conversation',
@@ -74,7 +74,7 @@ export async function takeOverAction(conversationId: string, reason?: string): P
     }
 
     try {
-      await dispatchWorkflowTrigger(ctx.supabase, {
+      await dispatchWorkflowTrigger(ctx.db, {
         organizationId: ctx.organizationId,
         triggerType: 'conversation.handoff',
         payload: {
@@ -121,19 +121,19 @@ export async function assignConversationAction(
       return { ok: false, error: 'لا يمكن تعيين محادثة مغلقة.' }
     }
 
-    const { data: member, error: memberError } = await ctx.supabase
+    const { data: member, error: memberError } = await ctx.db
       .from('organization_members')
       .select('id, is_active')
       .eq('organization_id', ctx.organizationId)
       .eq('id', memberId)
       .maybeSingle()
 
-    if (memberError) return { ok: false, error: supabaseActionError(memberError) }
+    if (memberError) return { ok: false, error: dbActionError(memberError) }
     if (!member || member.is_active === false) {
       return { ok: false, error: 'العضو غير موجود أو غير نشط.' }
     }
 
-    const { error } = await ctx.supabase
+    const { error } = await ctx.db
       .from('conversations')
       .update({
         human_assignee_id: memberId,
@@ -145,9 +145,9 @@ export async function assignConversationAction(
       .eq('id', conversationId)
       .eq('organization_id', ctx.organizationId)
 
-    if (error) return { ok: false, error: supabaseActionError(error) }
+    if (error) return { ok: false, error: dbActionError(error) }
 
-    await createNotification(ctx.supabase, {
+    await createNotification(ctx.db, {
       organizationId: ctx.organizationId,
       memberId,
       entityType: 'conversation',
@@ -181,7 +181,7 @@ export async function resumeAiAction(conversationId: string): Promise<InboxResul
       return { ok: false, error: 'المحادثة مغلقة.' }
     }
 
-    const { error } = await ctx.supabase
+    const { error } = await ctx.db
       .from('conversations')
       .update({
         status: 'active',
@@ -194,7 +194,7 @@ export async function resumeAiAction(conversationId: string): Promise<InboxResul
       })
       .eq('id', conversationId)
       .eq('organization_id', ctx.organizationId)
-    if (error) return { ok: false, error: supabaseActionError(error) }
+    if (error) return { ok: false, error: dbActionError(error) }
 
     await audit(ctx, 'conversation.ai_resumed', 'conversation', conversationId)
     revalidatePath('/dashboard/conversations')
@@ -215,7 +215,7 @@ export async function closeConversationAction(conversationId: string): Promise<I
 
   try {
     await loadConversation(ctx, conversationId)
-    const { error } = await ctx.supabase
+    const { error } = await ctx.db
       .from('conversations')
       .update({
         status: 'closed',
@@ -228,7 +228,7 @@ export async function closeConversationAction(conversationId: string): Promise<I
       })
       .eq('id', conversationId)
       .eq('organization_id', ctx.organizationId)
-    if (error) return { ok: false, error: supabaseActionError(error) }
+    if (error) return { ok: false, error: dbActionError(error) }
 
     await audit(ctx, 'conversation.closed', 'conversation', conversationId)
     revalidatePath('/dashboard/conversations')
@@ -249,7 +249,7 @@ export async function reopenConversationAction(conversationId: string): Promise<
 
   try {
     await loadConversation(ctx, conversationId)
-    const { error } = await ctx.supabase
+    const { error } = await ctx.db
       .from('conversations')
       .update({
         status: 'handed_off',
@@ -261,7 +261,7 @@ export async function reopenConversationAction(conversationId: string): Promise<
       })
       .eq('id', conversationId)
       .eq('organization_id', ctx.organizationId)
-    if (error) return { ok: false, error: supabaseActionError(error) }
+    if (error) return { ok: false, error: dbActionError(error) }
 
     await audit(ctx, 'conversation.reopened', 'conversation', conversationId)
     revalidatePath('/dashboard/conversations')
@@ -288,13 +288,13 @@ export async function addNoteAction(conversationId: string, body: string): Promi
     const memberId = await currentMemberId(ctx)
     if (!memberId) return { ok: false, error: 'تعذّر تحديد عضو الفريق الحالي.' }
 
-    const { error } = await ctx.supabase.from('conversation_notes').insert({
+    const { error } = await ctx.db.from('conversation_notes').insert({
       organization_id: ctx.organizationId,
       conversation_id: conversation.id,
       author_id: memberId,
       body: note,
     })
-    if (error) return { ok: false, error: supabaseActionError(error) }
+    if (error) return { ok: false, error: dbActionError(error) }
 
     await audit(ctx, 'conversation.note_added', 'conversation', conversationId)
     revalidatePath(`/dashboard/conversations/${conversationId}`)
@@ -313,7 +313,7 @@ export async function markAsReadAction(conversationId: string): Promise<InboxRes
   }
 
   try {
-    const { error: msgError } = await ctx.supabase
+    const { error: msgError } = await ctx.db
       .from('messages')
       .update({ is_read: true })
       .eq('conversation_id', conversationId)
@@ -321,7 +321,7 @@ export async function markAsReadAction(conversationId: string): Promise<InboxRes
       .eq('direction', 'inbound')
       .eq('is_read', false)
 
-    if (msgError) return { ok: false, error: supabaseActionError(msgError) }
+    if (msgError) return { ok: false, error: dbActionError(msgError) }
 
     revalidatePath('/dashboard/conversations')
     revalidatePath(`/dashboard/conversations/${conversationId}`)

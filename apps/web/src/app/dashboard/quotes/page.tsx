@@ -14,7 +14,7 @@ export default async function QuotesPage() {
     redirect('/login')
   }
 
-  const { data: quotes } = await ctx.supabase
+  const { data: quotes } = await ctx.db
     .from('quotes')
     .select('id, quote_number, status, total, currency, created_at, valid_until, contacts(full_name, phone)')
     .eq('organization_id', ctx.organizationId)

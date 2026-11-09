@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from 'crypto'
-import type { SupabaseClient } from '@supabase/supabase-js'
+import type { DbClient } from '@/lib/db/client'
 
 const PREFIX = 'fdk_'
 
@@ -15,7 +15,7 @@ export function generateApiKeyMaterial(): { raw: string; prefix: string; hash: s
 }
 
 export async function createOrganizationApiKey(
-  supabase: SupabaseClient,
+  db: DbClient,
   input: {
     organizationId: string
     name: string
@@ -24,7 +24,7 @@ export async function createOrganizationApiKey(
   }
 ): Promise<{ id: string; rawKey: string; prefix: string }> {
   const material = generateApiKeyMaterial()
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from('organization_api_keys')
     .insert({
       organization_id: input.organizationId,
@@ -42,11 +42,11 @@ export async function createOrganizationApiKey(
 }
 
 export async function revokeOrganizationApiKey(
-  supabase: SupabaseClient,
+  db: DbClient,
   organizationId: string,
   keyId: string
 ): Promise<void> {
-  const { error } = await supabase
+  const { error } = await db
     .from('organization_api_keys')
     .update({ revoked_at: new Date().toISOString() })
     .eq('id', keyId)
@@ -57,14 +57,14 @@ export async function revokeOrganizationApiKey(
 
 /** Resolve org from Bearer key. Never returns the hash. */
 export async function resolveApiKeyOrganization(
-  supabase: SupabaseClient,
+  db: DbClient,
   rawKey: string
 ): Promise<{ organizationId: string; keyId: string; scopes: string[] } | null> {
   if (!rawKey.startsWith(PREFIX)) return null
   const hash = hashApiKey(rawKey)
   const prefix = rawKey.slice(0, 12)
 
-  const { data } = await supabase
+  const { data } = await db
     .from('organization_api_keys')
     .select('id, organization_id, scopes, key_hash')
     .eq('key_prefix', prefix)
@@ -73,7 +73,7 @@ export async function resolveApiKeyOrganization(
 
   if (!data || data.key_hash !== hash) return null
 
-  await supabase
+  await db
     .from('organization_api_keys')
     .update({ last_used_at: new Date().toISOString() })
     .eq('id', data.id)

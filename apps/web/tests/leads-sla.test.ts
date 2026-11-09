@@ -2,8 +2,8 @@ import { describe, expect, test } from 'bun:test'
 import { canTransitionLead, isLeadStatus } from '@/lib/leads'
 import { evaluateSlaState, computeDueAt, DEFAULT_SLA_POLICY } from '@/lib/sla'
 import { assertMarketingAllowed, ConsentBlockedError } from '@/lib/channels/consent'
-import type { SupabaseClient } from '@supabase/supabase-js'
-import { createFakeSupabase } from './support/fake-supabase'
+import type { DbClient } from '@/lib/db/client'
+import { createFakeDb } from './support/fake-db'
 
 describe('lead transitions', () => {
   test('allows legal pipeline moves and rejects illegal ones', () => {
@@ -111,7 +111,7 @@ describe('SLA evaluation', () => {
 
 describe('marketing consent guard', () => {
   test('blocks opted-out contacts', async () => {
-    const fake = createFakeSupabase({
+    const fake = createFakeDb({
       consents: {
         rows: [
           {
@@ -125,7 +125,7 @@ describe('marketing consent guard', () => {
     })
 
     await expect(
-      assertMarketingAllowed(fake.client as unknown as SupabaseClient, {
+      assertMarketingAllowed(fake.client as unknown as DbClient, {
         contactId: 'c1',
         channel: 'whatsapp',
       })

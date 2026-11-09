@@ -8,7 +8,7 @@ export default async function LocationsPage() {
   if (!ctx) redirect('/login')
 
   const { data } = ctx.businessId
-    ? await ctx.supabase
+    ? await ctx.db
         .from('business_locations')
         .select('id, name, address, timezone, is_active, metadata')
         .eq('business_id', ctx.businessId)

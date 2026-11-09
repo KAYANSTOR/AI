@@ -2,13 +2,12 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
+import { createContactAction } from './actions'
 import { Loader2 } from 'lucide-react'
 import { ar } from '@/lib/i18n/ar'
 
-export function ContactForm({ organizationId }: { organizationId: string }) {
+export function ContactForm(_props: { organizationId: string }) {
   const router = useRouter()
-  const supabase = createClient()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [form, setForm] = useState({ full_name: '', phone: '', email: '' })
@@ -18,15 +17,10 @@ export function ContactForm({ organizationId }: { organizationId: string }) {
     setLoading(true)
     setError(null)
 
-    const { error: insertError } = await supabase.from('contacts').insert({
-      organization_id: organizationId,
-      full_name: form.full_name.trim() || null,
-      phone: form.phone.trim() || null,
-      email: form.email.trim() || null,
-    })
+    const result = await createContactAction(form)
 
     setLoading(false)
-    if (insertError) {
+    if (!result.ok) {
       setError(ar.errors.save)
       return
     }

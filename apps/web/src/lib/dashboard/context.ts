@@ -1,5 +1,5 @@
 import { cache } from 'react'
-import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/db/server'
 import { getCurrentOrg, type OrgContext } from '@/lib/org'
 
 export type DashboardContext = OrgContext & {
@@ -18,15 +18,15 @@ export const getDashboardContext = cache(
     const org = await getCurrentOrg()
     if (!org) return null
 
-    const supabase = await createClient()
+    const db = await createClient()
     const [{ data: profile, error: profileError }, { data: capabilities, error: capabilitiesError }] =
       await Promise.all([
-        supabase
+        db
           .from('business_profiles')
           .select('business_id, business_type_id, timezone, activation_state, activation_step, smoke_test_status')
           .eq('organization_id', org.organizationId)
           .maybeSingle(),
-        supabase
+        db
           .from('organization_capabilities')
           .select('capability_id')
           .eq('organization_id', org.organizationId)

@@ -1,4 +1,4 @@
-import type { SupabaseClient } from '@supabase/supabase-js'
+import type { DbClient } from '@/lib/db/client'
 
 export type SlaState = 'normal' | 'at_risk' | 'breached' | 'resolved'
 
@@ -81,10 +81,10 @@ function clampWarningRatio(value: number | undefined): number {
 }
 
 export async function loadDefaultSlaPolicy(
-  supabase: SupabaseClient,
+  db: DbClient,
   organizationId: string
 ): Promise<SlaPolicy> {
-  const { data } = await supabase
+  const { data } = await db
     .from('sla_policies')
     .select('first_response_minutes, resolution_minutes, warning_ratio')
     .eq('organization_id', organizationId)
@@ -102,13 +102,13 @@ export async function loadDefaultSlaPolicy(
 
 /** Seed first-response / resolution deadlines when an inbound opens a conversation. */
 export async function armConversationSla(
-  supabase: SupabaseClient,
+  db: DbClient,
   input: { organizationId: string; conversationId: string; inboundAt?: Date }
 ): Promise<void> {
-  const policy = await loadDefaultSlaPolicy(supabase, input.organizationId)
+  const policy = await loadDefaultSlaPolicy(db, input.organizationId)
   const from = input.inboundAt ?? new Date()
 
-  const { data: existing } = await supabase
+  const { data: existing } = await db
     .from('conversations')
     .select('first_response_due_at, first_responded_at')
     .eq('id', input.conversationId)
@@ -116,7 +116,7 @@ export async function armConversationSla(
 
   if (existing?.first_response_due_at || existing?.first_responded_at) return
 
-  await supabase
+  await db
     .from('conversations')
     .update({
       first_response_due_at: computeDueAt(from, policy.firstResponseMinutes),
@@ -128,11 +128,11 @@ export async function armConversationSla(
 }
 
 export async function markFirstResponse(
-  supabase: SupabaseClient,
+  db: DbClient,
   input: { organizationId: string; conversationId: string; at?: Date }
 ): Promise<void> {
   const at = (input.at ?? new Date()).toISOString()
-  const { data } = await supabase
+  const { data } = await db
     .from('conversations')
     .select('first_responded_at, first_response_due_at, resolution_due_at, resolved_at')
     .eq('id', input.conversationId)
@@ -141,7 +141,7 @@ export async function markFirstResponse(
 
   if (!data || data.first_responded_at) return
 
-  const policy = await loadDefaultSlaPolicy(supabase, input.organizationId)
+  const policy = await loadDefaultSlaPolicy(db, input.organizationId)
   const sla_state = evaluateSlaState({
     firstResponseDueAt: data.first_response_due_at,
     resolutionDueAt: data.resolution_due_at,
@@ -152,7 +152,7 @@ export async function markFirstResponse(
     warningRatio: policy.warningRatio,
   })
 
-  await supabase
+  await db
     .from('conversations')
     .update({ first_responded_at: at, sla_state })
     .eq('id', input.conversationId)
@@ -160,10 +160,10 @@ export async function markFirstResponse(
 }
 
 export async function refreshConversationSla(
-  supabase: SupabaseClient,
+  db: DbClient,
   input: { organizationId: string; conversationId: string }
 ): Promise<SlaState> {
-  const { data } = await supabase
+  const { data } = await db
     .from('conversations')
     .select('first_response_due_at, resolution_due_at, first_responded_at, resolved_at, sla_state')
     .eq('id', input.conversationId)
@@ -172,7 +172,7 @@ export async function refreshConversationSla(
 
   if (!data) return 'normal'
 
-  const policy = await loadDefaultSlaPolicy(supabase, input.organizationId)
+  const policy = await loadDefaultSlaPolicy(db, input.organizationId)
   const next = evaluateSlaState({
     firstResponseDueAt: data.first_response_due_at,
     resolutionDueAt: data.resolution_due_at,
@@ -186,7 +186,7 @@ export async function refreshConversationSla(
   if (next !== data.sla_state) {
     const patch: Record<string, unknown> = { sla_state: next }
     if (next === 'breached') patch.sla_breached_at = new Date().toISOString()
-    await supabase
+    await db
       .from('conversations')
       .update(patch)
       .eq('id', input.conversationId)

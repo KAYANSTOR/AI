@@ -1,4 +1,4 @@
-import type { SupabaseClient } from '@supabase/supabase-js'
+import type { DbClient } from '@/lib/db/client'
 import { createNotification } from '@/lib/notifications'
 
 export type EscalationTrigger = 'sla_breach' | 'sla_warning' | 'handoff' | 'high_priority'
@@ -8,7 +8,7 @@ export type EscalationTrigger = 'sla_breach' | 'sla_warning' | 'handoff' | 'high
  * Idempotent per (conversation, policy, trigger) via notification keys.
  */
 export async function runEscalationPolicies(
-  supabase: SupabaseClient,
+  db: DbClient,
   input: {
     organizationId: string
     conversationId: string
@@ -16,7 +16,7 @@ export async function runEscalationPolicies(
     assigneeMemberId?: string | null
   }
 ): Promise<{ notified: number }> {
-  const { data: policies } = await supabase
+  const { data: policies } = await db
     .from('escalation_policies')
     .select('id, name, notify_roles, escalate_after_minutes')
     .eq('organization_id', input.organizationId)
@@ -26,7 +26,7 @@ export async function runEscalationPolicies(
   if (!policies?.length) {
     // Fallback: single org-wide notification when no policies defined yet
     if (input.trigger === 'sla_breach' || input.trigger === 'sla_warning') {
-      await createNotification(supabase, {
+      await createNotification(db, {
         organizationId: input.organizationId,
         memberId: input.assigneeMemberId ?? null,
         entityType: 'conversation',
@@ -49,7 +49,7 @@ export async function runEscalationPolicies(
   for (const policy of policies) {
     const roles = (policy.notify_roles as string[]) ?? ['admin', 'manager']
 
-    const { data: members } = await supabase
+    const { data: members } = await db
       .from('organization_members')
       .select('id, role')
       .eq('organization_id', input.organizationId)
@@ -58,7 +58,7 @@ export async function runEscalationPolicies(
 
     const targets = members ?? []
     if (!targets.length) {
-      await createNotification(supabase, {
+      await createNotification(db, {
         organizationId: input.organizationId,
         memberId: null,
         entityType: 'conversation',
@@ -73,7 +73,7 @@ export async function runEscalationPolicies(
     }
 
     for (const m of targets) {
-      await createNotification(supabase, {
+      await createNotification(db, {
         organizationId: input.organizationId,
         memberId: m.id,
         entityType: 'conversation',
@@ -87,7 +87,7 @@ export async function runEscalationPolicies(
     }
   }
 
-  await supabase.from('audit_events').insert({
+  await db.from('audit_events').insert({
     organization_id: input.organizationId,
     actor_type: 'system',
     action: 'escalation.triggered',

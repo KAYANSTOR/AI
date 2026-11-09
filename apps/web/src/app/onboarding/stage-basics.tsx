@@ -86,7 +86,7 @@ export function StageBasics({
   return (
     <div className="space-y-6">
       <div className="space-y-1">
-        <h1 className="text-xl font-bold tracking-tight text-text sm:text-2xl">مرحباً بك 👋</h1>
+        <h1 className="text-xl font-bold tracking-tight text-text sm:text-2xl">مرحباً بك</h1>
         <p className="text-sm leading-6 text-text-muted">
           عرّفنا بنشاطك، وسنجهّز الباقي. كل ما تكتبه هنا يُحفظ تلقائياً.
         </p>

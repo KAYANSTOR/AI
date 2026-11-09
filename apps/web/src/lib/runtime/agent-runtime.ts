@@ -1,4 +1,4 @@
-import type { SupabaseClient } from '@supabase/supabase-js'
+import type { DbClient } from '@/lib/db/client'
 import { buildBusinessSystemPrompt } from '@/lib/ai/prompt'
 import { executeTool, getToolDefinitionsForAgent } from '@/lib/ai/tools'
 import { evaluateReplyGovernance, staffHandoffNotice, type GovernanceDecision } from '@/lib/ai/governance'
@@ -15,7 +15,7 @@ export type AgentToolTrace = {
 }
 
 type AgentLoopArgs = {
-  supabase: SupabaseClient
+  db: DbClient
   organizationId: string
   businessId: string
   conversationId?: string | null
@@ -116,7 +116,7 @@ async function executeAgentTool(
       businessId: args.businessId,
       conversationId: args.conversationId ?? null,
       contactId: args.contactId ?? null,
-      supabase: args.supabase,
+      db: args.db,
       agentId: args.agentId ?? null,
       actor: 'agent',
     }
@@ -203,7 +203,7 @@ async function runAgentLoop(args: AgentLoopArgs): Promise<AgentLoopResult> {
 }
 
 export async function runAgentTurn(args: {
-  supabase: SupabaseClient
+  db: DbClient
   organizationId: string
   businessId: string
   conversationId: string
@@ -214,15 +214,15 @@ export async function runAgentTurn(args: {
   serverActionResult?: unknown
 }) {
   const [{ data: history, error: historyError }, prompt, toolSet] = await Promise.all([
-    args.supabase
+    args.db
       .from('messages')
       .select('direction,content,created_at')
       .eq('organization_id', args.organizationId)
       .eq('conversation_id', args.conversationId)
       .order('created_at', { ascending: false })
       .limit(20),
-    buildBusinessSystemPrompt(args.supabase, args.organizationId, args.agentId, args.userText),
-    getToolDefinitionsForAgent(args.supabase, args.organizationId, args.agentId),
+    buildBusinessSystemPrompt(args.db, args.organizationId, args.agentId, args.userText),
+    getToolDefinitionsForAgent(args.db, args.organizationId, args.agentId),
   ])
   if (historyError) throw new Error(historyError.message)
 
@@ -244,7 +244,7 @@ export async function runAgentTurn(args: {
   const agent = args.agentId
     ? { id: args.agentId }
     : (
-        await args.supabase
+        await args.db
           .from('ai_agents')
           .select('id')
           .eq('business_id', args.businessId)
@@ -255,7 +255,7 @@ export async function runAgentTurn(args: {
       ).data
   const promptVersion = agent?.id
     ? (
-        await args.supabase
+        await args.db
           .from('agent_prompt_versions')
           .select('id')
           .eq('agent_id', agent.id)
@@ -264,7 +264,7 @@ export async function runAgentTurn(args: {
       ).data
     : null
 
-  const run = await args.supabase
+  const run = await args.db
     .from('agent_runs')
     .insert({
       organization_id: args.organizationId,
@@ -297,7 +297,7 @@ export async function runAgentTurn(args: {
       toolSet,
       simulation: false,
       onGovernanceEscalation: async (decision) => {
-        await args.supabase
+        await args.db
           .from('conversations')
           .update({
             status: 'handed_off',
@@ -310,7 +310,7 @@ export async function runAgentTurn(args: {
           .eq('id', args.conversationId)
           .eq('organization_id', args.organizationId)
 
-        await createNotification(args.supabase, {
+        await createNotification(args.db, {
           organizationId: args.organizationId,
           entityType: 'conversation',
           entityId: args.conversationId,
@@ -320,7 +320,7 @@ export async function runAgentTurn(args: {
           idempotencyKey: `gov-escalate:${args.conversationId}:${runId}`,
         })
 
-        await args.supabase.from('audit_events').insert({
+        await args.db.from('audit_events').insert({
           organization_id: args.organizationId,
           business_id: args.businessId,
           actor_type: 'system',
@@ -339,7 +339,7 @@ export async function runAgentTurn(args: {
     inputTokens = loop.inputTokens
     outputTokens = loop.outputTokens
 
-    await args.supabase
+    await args.db
       .from('agent_runs')
       .update({
         status: 'completed',
@@ -350,7 +350,7 @@ export async function runAgentTurn(args: {
       })
       .eq('id', runId)
 
-    await args.supabase.from('usage_ledger').insert({
+    await args.db.from('usage_ledger').insert({
       organization_id: args.organizationId,
       business_id: args.businessId,
       event_type: 'ai_tokens',
@@ -366,7 +366,7 @@ export async function runAgentTurn(args: {
 
     return loop.reply
   } catch (error) {
-    await args.supabase
+    await args.db
       .from('agent_runs')
       .update({
         status: 'failed',
@@ -379,7 +379,7 @@ export async function runAgentTurn(args: {
       .eq('id', runId)
 
     if (inputTokens + outputTokens > 0) {
-      await args.supabase.from('usage_ledger').insert({
+      await args.db.from('usage_ledger').insert({
         organization_id: args.organizationId,
         business_id: args.businessId,
         event_type: 'ai_tokens',
@@ -400,7 +400,7 @@ export async function runAgentTurn(args: {
 }
 
 export async function runAgentPreviewTurn(args: {
-  supabase: SupabaseClient
+  db: DbClient
   organizationId: string
   businessId: string
   agentId: string
@@ -413,16 +413,16 @@ export async function runAgentPreviewTurn(args: {
 
   const [systemPrompt, toolSet] = await Promise.all([
     buildBusinessSystemPrompt(
-      args.supabase,
+      args.db,
       args.organizationId,
       args.agentId,
       String(lastUser.content)
     ),
-    getToolDefinitionsForAgent(args.supabase, args.organizationId, args.agentId),
+    getToolDefinitionsForAgent(args.db, args.organizationId, args.agentId),
   ])
 
   const loop = await runAgentLoop({
-    supabase: args.supabase,
+    db: args.db,
     organizationId: args.organizationId,
     businessId: args.businessId,
     channel: 'preview',

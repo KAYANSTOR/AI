@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createAdminClient } from '@/lib/supabase/admin'
+import { createAdminClient } from '@/lib/db/admin'
 import { applySubscriptionEvent, type SubscriptionStatus } from '@/lib/billing/stripe'
 import { createHmac, timingSafeEqual } from 'crypto'
 import { acquireWebhookEvent, markWebhookProcessed } from '@/lib/channels/idempotency'
@@ -94,14 +94,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, skipped: 'no_organization' })
   }
 
-  const supabase = createAdminClient()
-  const acquired = await acquireWebhookEvent(supabase, 'stripe', eventId, event)
+  const db = createAdminClient()
+  const acquired = await acquireWebhookEvent(db, 'stripe', eventId, event)
   if (acquired.status === 'duplicate') return NextResponse.json({ ok: true, duplicate: true })
   if (acquired.status === 'error') return NextResponse.json({ error: publicWebhookError() }, { status: 500 })
   const eventRowId = acquired.eventRowId
 
   try {
-    await supabase.from('webhook_events').update({
+    await db.from('webhook_events').update({
       organization_id: organizationId,
       event_type: event.type,
       signature_verified: true,
@@ -113,14 +113,14 @@ export async function POST(req: NextRequest) {
     ) {
       const status = mapStripeStatus(String(obj.status ?? ''))
       if (!status) {
-        await markWebhookProcessed(supabase, eventRowId, 'failed', 'unknown_stripe_subscription_status')
+        await markWebhookProcessed(db, eventRowId, 'failed', 'unknown_stripe_subscription_status')
         return NextResponse.json({ error: 'unsupported_subscription_status' }, { status: 400 })
       }
       const periodEnd = obj.current_period_end
         ? new Date(Number(obj.current_period_end) * 1000).toISOString()
         : null
 
-      await applySubscriptionEvent(supabase, {
+      await applySubscriptionEvent(db, {
         organizationId,
         status: event.type === 'customer.subscription.deleted' ? 'cancelled' : status,
         stripeCustomerId: (obj.customer as string) ?? null,
@@ -130,16 +130,16 @@ export async function POST(req: NextRequest) {
     }
 
     if (event.type === 'checkout.session.completed') {
-      await applySubscriptionEvent(supabase, {
+      await applySubscriptionEvent(db, {
         organizationId,
         status: 'active',
         stripeCustomerId: (obj.customer as string) ?? null,
         stripeSubscriptionId: (obj.subscription as string) ?? null,
       })
     }
-    await markWebhookProcessed(supabase, eventRowId, 'processed')
+    await markWebhookProcessed(db, eventRowId, 'processed')
   } catch (err) {
-    await markWebhookProcessed(supabase, eventRowId, 'failed', err instanceof Error ? err.message : 'handler_failed')
+    await markWebhookProcessed(db, eventRowId, 'failed', err instanceof Error ? err.message : 'handler_failed')
     return NextResponse.json({ error: publicWebhookError() }, { status: 500 })
   }
 

@@ -1,19 +1,19 @@
 import { describe, expect, test } from 'bun:test'
-import type { SupabaseClient } from '@supabase/supabase-js'
-import { createFakeSupabase, type FakeDb } from './support/fake-supabase'
+import type { DbClient } from '@/lib/db/client'
+import { createFakeDb, type FakeDb } from './support/fake-db'
 import { evaluateSmokeTest, withReplyTestCheck } from '@/lib/onboarding/smoke-test'
 
 const ORG = 'aaaaaaaa-0000-4000-8000-000000000001'
 const BIZ = 'aaaaaaaa-0000-4000-8000-0000000000b1'
 
 function setup(tables: FakeDb) {
-  const fake = createFakeSupabase(tables)
-  return { supabase: fake.client as unknown as SupabaseClient }
+  const fake = createFakeDb(tables)
+  return { db: fake.client as unknown as DbClient }
 }
 
 describe('onboarding smoke test', () => {
   test('passes only when the org has a real business profile, active channel, and active agent', async () => {
-    const { supabase } = setup({
+    const { db } = setup({
       business_profiles: {
         rows: [{
           organization_id: ORG,
@@ -40,7 +40,7 @@ describe('onboarding smoke test', () => {
       },
     })
 
-    const outcome = await evaluateSmokeTest(supabase, { organizationId: ORG })
+    const outcome = await evaluateSmokeTest(db, { organizationId: ORG })
 
     expect(outcome.passed).toBe(true)
     expect(outcome.status).toBe('passed')
@@ -48,7 +48,7 @@ describe('onboarding smoke test', () => {
   })
 
   test('fails when an active channel or active agent is missing', async () => {
-    const { supabase } = setup({
+    const { db } = setup({
       business_profiles: {
         rows: [{
           organization_id: ORG,
@@ -75,7 +75,7 @@ describe('onboarding smoke test', () => {
       },
     })
 
-    const outcome = await evaluateSmokeTest(supabase, { organizationId: ORG })
+    const outcome = await evaluateSmokeTest(db, { organizationId: ORG })
 
     expect(outcome.passed).toBe(false)
     expect(outcome.status).toBe('failed')
@@ -86,7 +86,7 @@ describe('onboarding smoke test', () => {
     // FastPath: one intended channel is enough to start, but it must have completed
     // provider verification. Otherwise activation would promise a channel that cannot
     // deliver a customer message.
-    const { supabase } = setup({
+    const { db } = setup({
       business_profiles: {
         rows: [{
           organization_id: ORG,
@@ -113,14 +113,14 @@ describe('onboarding smoke test', () => {
       },
     })
 
-    const outcome = await evaluateSmokeTest(supabase, { organizationId: ORG })
+    const outcome = await evaluateSmokeTest(db, { organizationId: ORG })
 
     expect(outcome.passed).toBe(false)
     expect(outcome.checks.find((check) => check.name === 'verified_channel')?.ok).toBe(false)
   })
 
   test('a real answered reply is required while failed and skipped replies fail the stable check', async () => {
-    const { supabase } = setup({
+    const { db } = setup({
       business_profiles: {
         rows: [{
           organization_id: ORG,
@@ -144,7 +144,7 @@ describe('onboarding smoke test', () => {
         rows: [{ id: 'agent-1', organization_id: ORG, business_id: BIZ, status: 'active' }],
       },
     })
-    const structuralOutcome = await evaluateSmokeTest(supabase, { organizationId: ORG })
+    const structuralOutcome = await evaluateSmokeTest(db, { organizationId: ORG })
 
     const answered = withReplyTestCheck(structuralOutcome, 'answered')
     expect(answered.passed).toBe(true)
@@ -161,7 +161,7 @@ describe('onboarding smoke test', () => {
   })
 
   test('channel and agent readiness must belong to the profile business', async () => {
-    const { supabase } = setup({
+    const { db } = setup({
       business_profiles: {
         rows: [{
           organization_id: ORG,
@@ -190,7 +190,7 @@ describe('onboarding smoke test', () => {
       },
     })
 
-    const outcome = await evaluateSmokeTest(supabase, { organizationId: ORG })
+    const outcome = await evaluateSmokeTest(db, { organizationId: ORG })
 
     expect(outcome.passed).toBe(false)
     expect(outcome.checks.find((check) => check.name === 'verified_channel')?.ok).toBe(false)

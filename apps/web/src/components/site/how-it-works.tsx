@@ -56,10 +56,7 @@ export function HowItWorks() {
 
       <div className="mt-12 flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-center">
         <PrimaryCta href="/signup">إنشاء حساب للشركة</PrimaryCta>
-        <SecondaryCta
-          href="/#pricing"
-          className="border-white/20 bg-transparent text-white hover:border-primary-light hover:text-primary-light"
-        >
+        <SecondaryCta href="/pricing" onDark>
           اطّلع على الأسعار
         </SecondaryCta>
       </div>

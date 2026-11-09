@@ -5,7 +5,7 @@ import { ProblemSolution } from '@/components/site/problem-solution'
 import { FinalCta } from '@/components/site/final-cta'
 import { SiteFooter } from '@/components/site/site-footer'
 import { Section } from '@/components/site/section'
-import { Workflow, ArrowDown, CheckCircle2 } from 'lucide-react'
+import { Workflow } from 'lucide-react'
 
 export const metadata: Metadata = {
   title: 'طريقة العمل | FrontDesk AI',

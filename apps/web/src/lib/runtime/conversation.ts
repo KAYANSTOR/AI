@@ -1,4 +1,4 @@
-import type { SupabaseClient } from '@supabase/supabase-js'
+import type { DbClient } from '@/lib/db/client'
 
 export type ConversationRef = {
   id: string
@@ -25,7 +25,7 @@ export type ConversationRef = {
  * silently undid the handoff.
  */
 export async function ensureOpenConversation(
-  supabase: SupabaseClient,
+  db: DbClient,
   input: {
     organizationId: string
     businessId: string | null
@@ -33,7 +33,7 @@ export async function ensureOpenConversation(
     channelId: string
   }
 ): Promise<string> {
-  const existing = await supabase
+  const existing = await db
     .from('conversations')
     .select('id')
     .eq('organization_id', input.organizationId)
@@ -45,7 +45,7 @@ export async function ensureOpenConversation(
   if (existing.error) throw new Error(existing.error.message)
   if (existing.data?.id) return existing.data.id
 
-  const created = await supabase
+  const created = await db
     .from('conversations')
     .insert({
       organization_id: input.organizationId,
@@ -65,7 +65,7 @@ export async function ensureOpenConversation(
   // Concurrent webhook deliveries can insert at the same time; the unique index
   // wins and the loser re-reads the winner's row.
   if (created.error?.code === '23505') {
-    const retry = await supabase
+    const retry = await db
       .from('conversations')
       .select('id')
       .eq('organization_id', input.organizationId)
@@ -81,11 +81,11 @@ export async function ensureOpenConversation(
 }
 
 export async function getConversationRef(
-  supabase: SupabaseClient,
+  db: DbClient,
   conversationId: string,
   organizationId?: string
 ): Promise<ConversationRef | null> {
-  let query = supabase
+  let query = db
     .from('conversations')
     .select('id, organization_id, business_id, contact_id, channel_id, state, status, ai_enabled')
     .eq('id', conversationId)

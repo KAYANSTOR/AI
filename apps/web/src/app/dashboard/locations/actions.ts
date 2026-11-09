@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { requireAdminCapability, audit, type AuthorizedContext } from '@/lib/capabilities/guard'
-import { actionErrorMessage, supabaseActionError } from '@/lib/i18n/action-error'
+import { actionErrorMessage, dbActionError } from '@/lib/i18n/action-error'
 
 export type LocationResult = { ok: boolean; error?: string; message?: string; locationId?: string }
 
@@ -51,26 +51,26 @@ export async function saveLocationAction(input: LocationInput): Promise<Location
   }
 
   if (input.id) {
-    const { data, error } = await ctx.supabase
+    const { data, error } = await ctx.db
       .from('business_locations')
       .update(payload)
       .eq('id', input.id)
       .eq('business_id', businessId)
       .select('id')
       .maybeSingle()
-    if (error) return { ok: false, error: supabaseActionError(error) }
+    if (error) return { ok: false, error: dbActionError(error) }
     if (!data) return { ok: false, error: 'لم يتم العثور على الفرع.' }
     await audit(ctx, 'location.updated', 'business_location', data.id, { name })
     revalidatePath('/dashboard/locations')
     return { ok: true, message: 'تم تحديث الفرع.', locationId: data.id }
   }
 
-  const { data, error } = await ctx.supabase
+  const { data, error } = await ctx.db
     .from('business_locations')
     .insert(payload)
     .select('id')
     .single()
-  if (error) return { ok: false, error: supabaseActionError(error) }
+  if (error) return { ok: false, error: dbActionError(error) }
 
   await audit(ctx, 'location.created', 'business_location', data.id, { name })
   revalidatePath('/dashboard/locations')
@@ -91,14 +91,14 @@ export async function setLocationActiveAction(id: string, isActive: boolean): Pr
 
   if (!ctx.businessId) return { ok: false, error: 'أكمل إعداد النشاط أولًا.' }
 
-  const { data, error } = await ctx.supabase
+  const { data, error } = await ctx.db
     .from('business_locations')
     .update({ is_active: isActive, updated_at: new Date().toISOString() })
     .eq('id', id)
     .eq('business_id', ctx.businessId)
     .select('id')
     .maybeSingle()
-  if (error) return { ok: false, error: supabaseActionError(error) }
+  if (error) return { ok: false, error: dbActionError(error) }
   if (!data) return { ok: false, error: 'لم يتم العثور على الفرع.' }
 
   await audit(ctx, isActive ? 'location.activated' : 'location.deactivated', 'business_location', id)

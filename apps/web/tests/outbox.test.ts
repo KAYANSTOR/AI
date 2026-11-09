@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
-import type { SupabaseClient } from '@supabase/supabase-js'
-import { createFakeSupabase } from './support/fake-supabase'
+import type { DbClient } from '@/lib/db/client'
+import { createFakeDb } from './support/fake-db'
 import { OUTBOX_MAX_ATTEMPTS, enqueueOutbound, nextOutboxFailureState } from '@/lib/channels/outbox'
 
 describe('outbox retry policy', () => {
@@ -42,11 +42,11 @@ describe('outbox retry policy', () => {
 
 describe('outbox enqueue', () => {
   test('queues a pending event', async () => {
-    const fake = createFakeSupabase({ outbox_events: { unique: [['organization_id', 'idempotency_key']] } })
-    const supabase = fake.client as unknown as SupabaseClient
+    const fake = createFakeDb({ outbox_events: { unique: [['organization_id', 'idempotency_key']] } })
+    const db = fake.client as unknown as DbClient
 
     const id = await enqueueOutbound({
-      supabase,
+      db,
       organizationId: 'org-1',
       businessId: 'biz-1',
       channelId: 'chan-1',
@@ -57,14 +57,14 @@ describe('outbox enqueue', () => {
     })
 
     expect(id).toBeTruthy()
-    expect(fake.db.outbox_events.rows?.[0]?.status).toBe('pending')
+    expect(fake.store.outbox_events.rows?.[0]?.status).toBe('pending')
   })
 
   test('re-queueing the same idempotency key does not create a second send', async () => {
-    const fake = createFakeSupabase({ outbox_events: { unique: [['organization_id', 'idempotency_key']] } })
-    const supabase = fake.client as unknown as SupabaseClient
+    const fake = createFakeDb({ outbox_events: { unique: [['organization_id', 'idempotency_key']] } })
+    const db = fake.client as unknown as DbClient
     const args = {
-      supabase,
+      db,
       organizationId: 'org-1',
       businessId: 'biz-1',
       channelId: 'chan-1',
@@ -76,6 +76,6 @@ describe('outbox enqueue', () => {
 
     expect(await enqueueOutbound(args)).toBeTruthy()
     expect(await enqueueOutbound(args)).toBe('')
-    expect(fake.db.outbox_events.rows?.length).toBe(1)
+    expect(fake.store.outbox_events.rows?.length).toBe(1)
   })
 })

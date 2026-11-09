@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import { AuthShell } from '@/components/auth/auth-shell'
-import { isSupabaseConfigured } from '@/lib/supabase/env'
+import { isAuthConfigured } from '@/lib/auth/config'
 import { LoginForm } from './login-form'
 
 export const metadata: Metadata = {
@@ -26,24 +26,12 @@ export default async function LoginPage({
 }) {
   const params = await searchParams
   const returnTo = sanitizeReturnTo(params.returnTo)
-  // يُقرأ وقت الطلب من بيئة التشغيل، لا وقت البناء.
-  const authConfigured = isSupabaseConfigured()
+  const authConfigured = isAuthConfigured()
 
   return (
     <AuthShell
       title="تسجيل الدخول"
-      subtitle="ادخل إلى لوحة شركتك لمتابعة المحادثات والعملاء والمواعيد."
-      footer={
-        <p className="text-center text-xs leading-6 text-text-muted">
-          لا تملك حسابًا بعد؟{' '}
-          <a
-            href="/signup"
-            className="font-semibold text-primary-dark underline decoration-primary-light decoration-2 underline-offset-4"
-          >
-            أنشئ حساب شركتك
-          </a>
-        </p>
-      }
+      subtitle="أهلًا بعودتك. ادخل إلى لوحة شركتك لمتابعة المحادثات والعملاء والمواعيد."
     >
       <LoginForm returnTo={returnTo} authConfigured={authConfigured} />
     </AuthShell>

@@ -1,4 +1,4 @@
-import type { createClient } from '@/lib/supabase/server'
+import type { createClient } from '@/lib/db/server'
 
 export type SmokeTestCheck = {
   name: string
@@ -48,12 +48,12 @@ export function withReplyTestCheck(
  * A saved active WhatsApp number is enough to start. Meta phone_number_id upgrades routing later.
  */
 export async function evaluateSmokeTest(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  db: Awaited<ReturnType<typeof createClient>>,
   org: { organizationId: string }
 ): Promise<SmokeTestOutcome> {
   const checks: SmokeTestCheck[] = []
 
-  const { data: profile, error: profileError } = await supabase
+  const { data: profile, error: profileError } = await db
     .from('business_profiles')
     .select('business_id, business_type_id, timezone, activation_state')
     .eq('organization_id', org.organizationId)
@@ -87,7 +87,7 @@ export async function evaluateSmokeTest(
     message: hasTimezone ? 'Timezone is configured.' : 'Timezone must be configured before activation.',
   })
 
-  const { data: channels, error: channelsError } = await supabase
+  const { data: channels, error: channelsError } = await db
     .from('channels')
     .select('id, is_active, verification_status, external_identifier, business_id')
     .eq('organization_id', org.organizationId)
@@ -125,7 +125,7 @@ export async function evaluateSmokeTest(
   })
 
   const { data: activeAgents, error: agentsError } = businessId
-    ? await supabase
+    ? await db
         .from('ai_agents')
         .select('id')
         .eq('organization_id', org.organizationId)

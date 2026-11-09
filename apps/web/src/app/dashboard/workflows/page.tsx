@@ -1,14 +1,14 @@
 import { redirect } from 'next/navigation'
 import { getDashboardContext } from '@/lib/dashboard/context'
-import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/db/server'
 import { formatDate } from '@/lib/i18n/format'
 
 export default async function WorkflowsPage() {
   const context = await getDashboardContext()
   if (!context) redirect('/login')
 
-  const supabase = await createClient()
-  const { data: workflows } = await supabase
+  const db = await createClient()
+  const { data: workflows } = await db
     .from('workflows')
     .select('id, name, status, trigger_type, version, updated_at, published_at')
     .eq('organization_id', context.organizationId)

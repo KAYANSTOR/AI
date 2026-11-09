@@ -1,11 +1,11 @@
-import type { SupabaseClient } from '@supabase/supabase-js'
+import type { DbClient } from '@/lib/db/client'
 import { getConsentStatus } from '@/lib/channels/consent'
 import { enqueueOutbound } from '@/lib/channels/outbox'
 import { resolveSegmentContactIds, type SegmentCriteria } from '@/lib/segments'
 import { recordMeterUsage } from '@/lib/billing/entitlements'
 
 export async function materializeCampaignAudience(
-  supabase: SupabaseClient,
+  db: DbClient,
   input: {
     organizationId: string
     campaignId: string
@@ -16,7 +16,7 @@ export async function materializeCampaignAudience(
   let contactIds: string[] = []
 
   if (input.segmentId) {
-    const { data: segment } = await supabase
+    const { data: segment } = await db
       .from('segments')
       .select('criteria')
       .eq('id', input.segmentId)
@@ -24,9 +24,9 @@ export async function materializeCampaignAudience(
       .maybeSingle()
 
     const criteria = (segment?.criteria ?? input.criteria ?? {}) as SegmentCriteria
-    contactIds = await resolveSegmentContactIds(supabase, input.organizationId, criteria, 2000)
+    contactIds = await resolveSegmentContactIds(db, input.organizationId, criteria, 2000)
   } else if (input.criteria) {
-    contactIds = await resolveSegmentContactIds(supabase, input.organizationId, input.criteria, 2000)
+    contactIds = await resolveSegmentContactIds(db, input.organizationId, input.criteria, 2000)
   }
 
   if (!contactIds.length) return 0
@@ -38,17 +38,17 @@ export async function materializeCampaignAudience(
     status: 'pending',
   }))
 
-  const { error } = await supabase.from('campaign_recipients').insert(rows)
+  const { error } = await db.from('campaign_recipients').insert(rows)
   if (error && error.code !== '23505') throw error
 
   return contactIds.length
 }
 
 export async function processCampaignBatch(
-  supabase: SupabaseClient,
+  db: DbClient,
   input: { organizationId: string; campaignId: string; limit?: number }
 ): Promise<{ queued: number; skipped: number; failed: number; completed: boolean }> {
-  const { data: campaign, error } = await supabase
+  const { data: campaign, error } = await db
     .from('campaigns')
     .select(
       'id, organization_id, business_id, channel, status, template_body, rate_limit_per_minute, require_consent'
@@ -67,7 +67,7 @@ export async function processCampaignBatch(
     Math.max(1, campaign.rate_limit_per_minute ?? 30)
   )
 
-  const { data: recipients } = await supabase
+  const { data: recipients } = await db
     .from('campaign_recipients')
     .select('id, contact_id')
     .eq('campaign_id', campaign.id)
@@ -75,7 +75,7 @@ export async function processCampaignBatch(
     .eq('status', 'pending')
     .limit(limit)
 
-  const { data: channel } = await supabase
+  const { data: channel } = await db
     .from('channels')
     .select('id, business_id')
     .eq('organization_id', input.organizationId)
@@ -90,9 +90,9 @@ export async function processCampaignBatch(
 
   for (const row of recipients ?? []) {
     if (campaign.require_consent) {
-      const consent = await getConsentStatus(supabase, row.contact_id, campaign.channel)
+      const consent = await getConsentStatus(db, row.contact_id, campaign.channel)
       if (consent === 'opted_out') {
-        await supabase
+        await db
           .from('campaign_recipients')
           .update({ status: 'skipped', skip_reason: 'opted_out' })
           .eq('id', row.id)
@@ -102,7 +102,7 @@ export async function processCampaignBatch(
     }
 
     if (!channel) {
-      await supabase
+      await db
         .from('campaign_recipients')
         .update({ status: 'failed', error: 'channel_unavailable' })
         .eq('id', row.id)
@@ -110,14 +110,14 @@ export async function processCampaignBatch(
       continue
     }
 
-    const { data: contact } = await supabase
+    const { data: contact } = await db
       .from('contacts')
       .select('phone')
       .eq('id', row.contact_id)
       .eq('organization_id', input.organizationId)
       .maybeSingle()
 
-    const { data: identity } = await supabase
+    const { data: identity } = await db
       .from('contact_identities')
       .select('external_user_id, external_phone')
       .eq('contact_id', row.contact_id)
@@ -129,7 +129,7 @@ export async function processCampaignBatch(
       identity?.external_user_id || identity?.external_phone || contact?.phone || ''
 
     if (!recipient) {
-      await supabase
+      await db
         .from('campaign_recipients')
         .update({ status: 'skipped', skip_reason: 'missing_recipient' })
         .eq('id', row.id)
@@ -139,7 +139,7 @@ export async function processCampaignBatch(
 
     try {
       await enqueueOutbound({
-        supabase,
+        db,
         organizationId: input.organizationId,
         businessId: channel.business_id ?? campaign.business_id,
         channelId: channel.id,
@@ -149,7 +149,7 @@ export async function processCampaignBatch(
         payload: { body: campaign.template_body, campaign_id: campaign.id },
       })
 
-      await supabase
+      await db
         .from('campaign_recipients')
         .update({
           status: 'queued',
@@ -161,12 +161,12 @@ export async function processCampaignBatch(
 
       queued++
       try {
-        await recordMeterUsage(supabase, input.organizationId, 'campaign_sends', 1)
+        await recordMeterUsage(db, input.organizationId, 'campaign_sends', 1)
       } catch {
         // meter optional until migration applied
       }
     } catch (err) {
-      await supabase
+      await db
         .from('campaign_recipients')
         .update({
           status: 'failed',
@@ -177,7 +177,7 @@ export async function processCampaignBatch(
     }
   }
 
-  const { count: remaining } = await supabase
+  const { count: remaining } = await db
     .from('campaign_recipients')
     .select('id', { count: 'exact', head: true })
     .eq('campaign_id', campaign.id)
@@ -185,7 +185,7 @@ export async function processCampaignBatch(
 
   const completed = (remaining ?? 0) === 0
   if (completed) {
-    await supabase
+    await db
       .from('campaigns')
       .update({
         status: 'completed',

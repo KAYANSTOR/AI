@@ -1,9 +1,9 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/db/server'
 import { getCurrentOrg, type OrgContext } from '@/lib/org'
-import { actionErrorMessage, supabaseActionError } from '@/lib/i18n/action-error'
+import { actionErrorMessage, dbActionError } from '@/lib/i18n/action-error'
 import {
   credentialsStorageConfigured,
   deleteChannelCredential,
@@ -31,9 +31,9 @@ async function audit(
   channelId: string | null,
   metadata: Record<string, unknown>
 ) {
-  const supabase = await createClient()
+  const db = await createClient()
   // Metadata only: a credential value must never reach the audit ledger.
-  const { error } = await supabase.rpc('log_audit_event', {
+  const { error } = await db.rpc('log_audit_event', {
     p_organization_id: organizationId,
     p_action: action,
     p_entity_type: 'channel_credential',
@@ -49,8 +49,8 @@ async function audit(
 
 /** Resolves the tenant's channel row for a channel type, or explains why it cannot. */
 async function loadChannel(organizationId: string, channelType: string) {
-  const supabase = await createClient()
-  const { data, error } = await supabase
+  const db = await createClient()
+  const { data, error } = await db
     .from('channels')
     .select('id, business_id')
     .eq('organization_id', organizationId)
@@ -91,10 +91,10 @@ export async function saveChannelCredentialAction(input: {
     if (!channel) return { ok: false, error: 'اربط القناة أولًا قبل إضافة بيانات الاعتماد.' }
 
     const provider = PROVIDER_FOR_CHANNEL[channelType]
-    const supabase = await createClient()
+    const db = await createClient()
 
     // Encrypted here, on the server, with the platform key; only ciphertext is stored.
-    const { error } = await supabase.rpc('put_channel_credential', {
+    const { error } = await db.rpc('put_channel_credential', {
       p_organization_id: org.organizationId,
       p_channel_id: channel.id,
       p_provider: provider,
@@ -102,7 +102,7 @@ export async function saveChannelCredentialAction(input: {
       p_encrypted_value: encryptSecret(value),
       p_status: 'active',
     })
-    if (error) return { ok: false, error: supabaseActionError(error) }
+    if (error) return { ok: false, error: dbActionError(error) }
 
     await audit(org.organizationId, channel.business_id, 'channel.credential_saved', channel.id, {
       channel_type: spec.type,
@@ -130,10 +130,10 @@ export async function setChannelCredentialStatusAction(input: {
     if (!channel) return { ok: false, error: 'القناة غير مربوطة بعد.' }
 
     const provider = PROVIDER_FOR_CHANNEL[spec.type as ChannelType]
-    const supabase = await createClient()
+    const db = await createClient()
 
     // Delegates to the guarded function so the status change stays inside RLS policy.
-    await setChannelCredentialStatus(supabase, {
+    await setChannelCredentialStatus(db, {
       organizationId: org.organizationId,
       channelId: channel.id,
       provider,
@@ -173,8 +173,8 @@ export async function deleteChannelCredentialAction(input: {
     if (!channel) return { ok: false, error: 'القناة غير مربوطة بعد.' }
 
     const provider = PROVIDER_FOR_CHANNEL[channelType]
-    const supabase = await createClient()
-    await deleteChannelCredential(supabase, {
+    const db = await createClient()
+    await deleteChannelCredential(db, {
       organizationId: org.organizationId,
       channelId: channel.id,
       provider,

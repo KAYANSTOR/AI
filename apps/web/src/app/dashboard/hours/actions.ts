@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { requireAdminCapability, audit, type AuthorizedContext } from '@/lib/capabilities/guard'
-import { actionErrorMessage, supabaseActionError } from '@/lib/i18n/action-error'
+import { actionErrorMessage, dbActionError } from '@/lib/i18n/action-error'
 import { ar } from '@/lib/i18n/ar'
 
 export type HoursResult = { ok: boolean; error?: string; message?: string }
@@ -65,11 +65,11 @@ export async function saveWeeklyHoursAction(days: DayInput[]): Promise<HoursResu
     updated_at: new Date().toISOString(),
   }))
 
-  const { error } = await ctx.supabase
+  const { error } = await ctx.db
     .from('business_hours')
     .upsert(payload, { onConflict: 'organization_id,day_of_week' })
 
-  if (error) return { ok: false, error: supabaseActionError(error) }
+  if (error) return { ok: false, error: dbActionError(error) }
 
   await audit(ctx, 'business_hours.updated', 'business_hours', null, {
     closed_days: payload.filter((row) => row.is_closed).map((row) => row.day_of_week),
@@ -115,15 +115,15 @@ export async function saveExceptionAction(input: ExceptionInput): Promise<HoursR
 
   // The organisation-wide row has a NULL location, which cannot be targeted by ON CONFLICT,
   // so replace it explicitly rather than relying on conflict inference.
-  const { error: deleteError } = await ctx.supabase
+  const { error: deleteError } = await ctx.db
     .from('business_hour_exceptions')
     .delete()
     .eq('organization_id', ctx.organizationId)
     .eq('exception_date', input.exceptionDate)
     .is('location_id', null)
-  if (deleteError) return { ok: false, error: supabaseActionError(deleteError) }
+  if (deleteError) return { ok: false, error: dbActionError(deleteError) }
 
-  const { error } = await ctx.supabase.from('business_hour_exceptions').insert({
+  const { error } = await ctx.db.from('business_hour_exceptions').insert({
     organization_id: ctx.organizationId,
     location_id: null,
     exception_date: input.exceptionDate,
@@ -132,7 +132,7 @@ export async function saveExceptionAction(input: ExceptionInput): Promise<HoursR
     close_time: closeTime,
     reason,
   })
-  if (error) return { ok: false, error: supabaseActionError(error) }
+  if (error) return { ok: false, error: dbActionError(error) }
 
   await audit(ctx, 'business_hours.exception_saved', 'business_hour_exception', null, {
     exception_date: input.exceptionDate,
@@ -151,12 +151,12 @@ export async function deleteExceptionAction(id: string): Promise<HoursResult> {
     return { ok: false, error: actionErrorMessage(error, 'غير مصرح.') }
   }
 
-  const { error } = await ctx.supabase
+  const { error } = await ctx.db
     .from('business_hour_exceptions')
     .delete()
     .eq('id', id)
     .eq('organization_id', ctx.organizationId)
-  if (error) return { ok: false, error: supabaseActionError(error, 'تعذّر حذف الاستثناء. حاول مرة أخرى.') }
+  if (error) return { ok: false, error: dbActionError(error, 'تعذّر حذف الاستثناء. حاول مرة أخرى.') }
 
   await audit(ctx, 'business_hours.exception_deleted', 'business_hour_exception', id)
   revalidatePath('/dashboard/hours')

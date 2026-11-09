@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { Calendar, MessageSquare, Phone, Globe, ArrowLeft, User } from 'lucide-react'
-import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/db/server'
 import { formatDateTime } from '@/lib/i18n/format'
 
 export async function DashboardActivitySection({
@@ -10,16 +10,16 @@ export async function DashboardActivitySection({
   organizationId: string
   timezone: string
 }) {
-  const supabase = await createClient()
+  const db = await createClient()
 
   const [conversationsResult, appointmentsResult] = await Promise.all([
-    supabase
+    db
       .from('conversations')
       .select('id, status, channel_type, updated_at, contacts(full_name, phone)')
       .eq('organization_id', organizationId)
       .order('updated_at', { ascending: false })
       .limit(5),
-    supabase
+    db
       .from('appointments')
       .select('id, starts_at, status, contacts(full_name, phone), services(name)')
       .eq('organization_id', organizationId)

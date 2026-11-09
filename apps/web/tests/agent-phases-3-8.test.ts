@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
-import type { SupabaseClient } from '@supabase/supabase-js'
-import type { FakeDb } from './support/fake-supabase'
-import { createFakeSupabase } from './support/fake-supabase'
+import type { DbClient } from '@/lib/db/client'
+import type { FakeDb } from './support/fake-db'
+import { createFakeDb } from './support/fake-db'
 import { createNotification, listNotifications, markNotificationRead } from '@/lib/notifications'
 import { getCustomerSummary, getCustomerTimeline } from '@/lib/customer360'
 import { getNextFollowUpStep, markFollowUpAsSent } from '@/lib/followup'
@@ -14,13 +14,13 @@ const CONTACT = 'aaaaaaaa-0000-4000-8000-000000000202'
 const MEMBER = 'aaaaaaaa-0000-4000-8000-000000000203'
 
 function setup(tables: FakeDb) {
-  const fake = createFakeSupabase(tables)
-  return { supabase: fake.client as unknown as SupabaseClient }
+  const fake = createFakeDb(tables)
+  return { db: fake.client as unknown as DbClient }
 }
 
 describe('agent phase 3-8', () => {
   test('notifications are created, listed, and marked read by org/member scope', async () => {
-    const { supabase } = setup({
+    const { db } = setup({
       notifications: {
         rows: [
           { id: 'n-1', organization_id: ORG, member_id: MEMBER, entity_type: 'conversation', entity_id: 'c-1', notification_type: 'handoff', title: 'Handoff', body: 'Review this customer', is_read: false, created_at: '2026-01-01T00:00:00Z' },
@@ -29,7 +29,7 @@ describe('agent phase 3-8', () => {
       },
     })
 
-    const created = await createNotification(supabase, {
+    const created = await createNotification(db, {
       organizationId: ORG,
       memberId: MEMBER,
       entityType: 'conversation',
@@ -41,15 +41,15 @@ describe('agent phase 3-8', () => {
 
     if (!created) throw new Error('Expected notification to be created')
     expect(created.title).toBe('Assigned')
-    const list = await listNotifications(supabase, ORG, MEMBER)
+    const list = await listNotifications(db, ORG, MEMBER)
     expect(list.some((n) => n.id === created.id)).toBe(true)
 
-    const updated = await markNotificationRead(supabase, ORG, created.id)
+    const updated = await markNotificationRead(db, ORG, created.id)
     expect(updated.is_read).toBe(true)
   })
 
   test('customer 360 timeline and summary aggregate by contact and tenant', async () => {
-    const { supabase } = setup({
+    const { db } = setup({
       conversations: {
         rows: [
           { id: 'conv-1', organization_id: ORG, contact_id: CONTACT, status: 'active', created_at: '2026-01-01T00:00:00Z', summary: 'Inbound lead' },
@@ -73,19 +73,19 @@ describe('agent phase 3-8', () => {
       },
     })
 
-    const summary = await getCustomerSummary(supabase, ORG, CONTACT)
+    const summary = await getCustomerSummary(db, ORG, CONTACT)
     expect(summary.conversations).toBe(1)
     expect(summary.appointments).toBe(1)
     expect(summary.quotes).toBe(1)
     expect(summary.orders).toBe(1)
 
-    const timeline = await getCustomerTimeline(supabase, ORG, CONTACT)
+    const timeline = await getCustomerTimeline(db, ORG, CONTACT)
     expect(timeline.length > 3).toBe(true)
     expect(timeline.some((event) => event.type === 'appointment')).toBe(true)
   })
 
   test('follow-up engine picks the next scheduled step and records it as sent', async () => {
-    const { supabase } = setup({
+    const { db } = setup({
       followup_enrollments: {
         rows: [
           { id: 'en-1', organization_id: ORG, contact_id: CONTACT, sequence_id: 'seq-1', current_step_id: 'step-1', status: 'scheduled', next_send_at: '2026-01-06T00:00:00Z' },
@@ -99,17 +99,17 @@ describe('agent phase 3-8', () => {
       },
     })
 
-    const next = await getNextFollowUpStep(supabase, ORG, CONTACT)
+    const next = await getNextFollowUpStep(db, ORG, CONTACT)
     expect(next?.channel).toBe('sms')
     expect(next?.templateContent).toContain('Thanks')
 
-    await markFollowUpAsSent(supabase, ORG, 'en-1')
-    const after = await getNextFollowUpStep(supabase, ORG, CONTACT)
+    await markFollowUpAsSent(db, ORG, 'en-1')
+    const after = await getNextFollowUpStep(db, ORG, CONTACT)
     expect(after).toBeNull()
   })
 
   test('segment evaluator filters contacts by tenant rules', async () => {
-    const { supabase } = setup({
+    const { db } = setup({
       contacts: {
         rows: [
           { id: CONTACT, organization_id: ORG, first_name: 'Ali', last_name: 'Saleh', stage: 'qualified', score: 93 },
@@ -118,15 +118,15 @@ describe('agent phase 3-8', () => {
       },
     })
 
-    const match = await evaluateSegment(supabase, ORG, CONTACT, [{ field: 'stage', op: 'eq', value: 'qualified' }, { field: 'score', op: 'gt', value: 80 }])
+    const match = await evaluateSegment(db, ORG, CONTACT, [{ field: 'stage', op: 'eq', value: 'qualified' }, { field: 'score', op: 'gt', value: 80 }])
     expect(match.matches).toBe(true)
 
-    const noMatch = await evaluateSegment(supabase, ORG, CONTACT, [{ field: 'stage', op: 'eq', value: 'new' }])
+    const noMatch = await evaluateSegment(db, ORG, CONTACT, [{ field: 'stage', op: 'eq', value: 'new' }])
     expect(noMatch.matches).toBe(false)
   })
 
   test('appointment availability blocks overlapping service slot', async () => {
-    const { supabase } = setup({
+    const { db } = setup({
       appointments: {
         rows: [
           { id: 'appt-1', organization_id: ORG, service_id: 'svc-1', starts_at: '2026-02-10T10:00:00Z', ends_at: '2026-02-10T11:00:00Z', status: 'confirmed' },
@@ -135,11 +135,11 @@ describe('agent phase 3-8', () => {
       },
     })
 
-    const free = await checkAppointmentAvailability(supabase, ORG, 'svc-1', '2026-02-10T10:30:00Z', '2026-02-10T11:30:00Z')
+    const free = await checkAppointmentAvailability(db, ORG, 'svc-1', '2026-02-10T10:30:00Z', '2026-02-10T11:30:00Z')
     expect(free.available).toBe(false)
     expect(free.conflict?.id).toBe('appt-1')
 
-    const open = await checkAppointmentAvailability(supabase, ORG, 'svc-1', '2026-02-10T13:30:00Z', '2026-02-10T14:00:00Z')
+    const open = await checkAppointmentAvailability(db, ORG, 'svc-1', '2026-02-10T13:30:00Z', '2026-02-10T14:00:00Z')
     expect(open.available).toBe(true)
   })
 

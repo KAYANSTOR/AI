@@ -1,4 +1,4 @@
-import type { SupabaseClient } from '@supabase/supabase-js'
+import type { DbClient } from '@/lib/db/client'
 import { createAppointmentRecord, findAvailableSlots } from '@/lib/calendar/slots'
 import { resolveContactByPhone } from '@/lib/channels/contacts'
 import { getToolPolicy, isActorAllowed, type ToolActor } from '@/lib/ai/registry'
@@ -16,7 +16,7 @@ export type ToolContext = {
   /** Absent only when the channel has no conversation context yet (e.g. a voice call with no caller identity). */
   conversationId?:string|null
   contactId?:string|null
-  supabase:SupabaseClient
+  db:DbClient
   agentId?:string|null
   /**
    * Who is invoking the tool. Every call site states this explicitly so a tool can
@@ -35,8 +35,8 @@ type StoredQuoteItem = {
   line_total: number
 }
 
-export async function getToolDefinitionsForAgent(supabase:SupabaseClient,organizationId:string,agentId?:string|null,actor:ToolActor='agent'){
-  const enabled=await getEnabledCapabilities(supabase,organizationId)
+export async function getToolDefinitionsForAgent(db:DbClient,organizationId:string,agentId?:string|null,actor:ToolActor='agent'){
+  const enabled=await getEnabledCapabilities(db,organizationId)
   const definitions:Array<{name:string,description:string,input_schema:Record<string,unknown>}>=[]
 
   for(const name of Object.keys(TOOL_POLICIES)){
@@ -45,7 +45,7 @@ export async function getToolDefinitionsForAgent(supabase:SupabaseClient,organiz
     if(!isActorAllowed(policy,actor)) continue
     let allowed=policy.capability ? enabled.has(policy.capability) : true
     if(agentId){
-      const {data}=await supabase.from('agent_tool_policies').select('is_allowed').eq('agent_id',agentId).eq('tool_name',name).maybeSingle()
+      const {data}=await db.from('agent_tool_policies').select('is_allowed').eq('agent_id',agentId).eq('tool_name',name).maybeSingle()
       if(data) allowed=allowed && Boolean(data.is_allowed)
     }
     if(!allowed) continue
@@ -66,7 +66,7 @@ export async function executeTool(name:string,rawArgs:Record<string,unknown>,ctx
       return {ok:false as const,error:'This actor is not allowed to invoke '+name+'.'}
     }
 
-    const enabled=await getEnabledCapabilities(ctx.supabase,ctx.organizationId)
+    const enabled=await getEnabledCapabilities(ctx.db,ctx.organizationId)
     if(policy.capability && !enabled.has(policy.capability)){
       await recordToolExecution(ctx,name,'blocked',rawArgs,{error:'capability_disabled'},policy.requiresConfirmation,started)
       return {ok:false as const,error:'Capability is disabled for this business.'}
@@ -74,7 +74,7 @@ export async function executeTool(name:string,rawArgs:Record<string,unknown>,ctx
 
     let requiresConfirmation=policy.requiresConfirmation
     if(ctx.agentId){
-      const {data:agentPolicy}=await ctx.supabase.from('agent_tool_policies').select('is_allowed,requires_confirmation').eq('agent_id',ctx.agentId).eq('tool_name',name).maybeSingle()
+      const {data:agentPolicy}=await ctx.db.from('agent_tool_policies').select('is_allowed,requires_confirmation').eq('agent_id',ctx.agentId).eq('tool_name',name).maybeSingle()
       if(agentPolicy && !agentPolicy.is_allowed){
         await recordToolExecution(ctx,name,'blocked',rawArgs,{error:'agent_policy_denied'},requiresConfirmation,started)
         return {ok:false as const,error:'This action is not allowed for the active agent.'}
@@ -85,11 +85,11 @@ export async function executeTool(name:string,rawArgs:Record<string,unknown>,ctx
     if(requiresConfirmation && !options.confirmed){
       if(!ctx.conversationId || !ctx.contactId) return {ok:false as const,error:'Conversation context is required before a confirmed write action.'}
       const actionId=await createPendingAction({
-        supabase:ctx.supabase,organizationId:ctx.organizationId,businessId:ctx.businessId,
+        db:ctx.db,organizationId:ctx.organizationId,businessId:ctx.businessId,
         conversationId:ctx.conversationId,contactId:ctx.contactId,toolName:name,toolArguments:rawArgs,
       })
       const result={confirmationRequired:true,actionId,tool:name}
-      await ctx.supabase.from('conversations').update({state:'action_pending'}).eq('id',ctx.conversationId)
+      await ctx.db.from('conversations').update({state:'action_pending'}).eq('id',ctx.conversationId)
       await recordToolExecution(ctx,name,'confirmation_required',rawArgs,result,true,started)
       return {ok:true as const,result}
     }
@@ -120,8 +120,8 @@ export async function executeTool(name:string,rawArgs:Record<string,unknown>,ctx
 async function toolGetCustomer(ctx:ToolContext,args:Record<string,unknown>){
   const phone=String(args.phone ?? '').trim()
   if(!phone) throw new Error('phone is required')
-  const contact=await resolveContactByPhone(ctx.supabase,ctx.organizationId,phone)
-  const {data:upcoming,error}=await ctx.supabase.from('appointments')
+  const contact=await resolveContactByPhone(ctx.db,ctx.organizationId,phone)
+  const {data:upcoming,error}=await ctx.db.from('appointments')
     .select('id,starts_at,status,services(name)')
     .eq('organization_id',ctx.organizationId).eq('contact_id',contact.contactId)
     .gte('starts_at',new Date().toISOString()).order('starts_at').limit(3)
@@ -136,12 +136,12 @@ async function toolFindSlots(ctx:ToolContext,args:Record<string,unknown>){
   let serviceId=args.service_id ? String(args.service_id).trim() : ''
   if(!serviceId){
     if(!serviceName) throw new Error('service_name or service_id is required')
-    const {data:svc,error}=await ctx.supabase.from('services').select('id').eq('organization_id',ctx.organizationId).eq('is_active',true).ilike('name','%'+serviceName+'%').limit(1).maybeSingle()
+    const {data:svc,error}=await ctx.db.from('services').select('id').eq('organization_id',ctx.organizationId).eq('is_active',true).ilike('name','%'+serviceName+'%').limit(1).maybeSingle()
     if(error) throw new Error(error.message)
     if(!svc) return {slots:[],message:'No active service matches the request.'}
     serviceId=svc.id
   }
-  return {serviceId,date,slots:await findAvailableSlots(ctx.supabase,ctx.organizationId,serviceId,date)}
+  return {serviceId,date,slots:await findAvailableSlots(ctx.db,ctx.organizationId,serviceId,date)}
 }
 
 async function toolCreateAppointment(ctx:ToolContext,args:Record<string,unknown>){
@@ -150,15 +150,15 @@ async function toolCreateAppointment(ctx:ToolContext,args:Record<string,unknown>
   const startsAt=String(args.starts_at ?? '').trim()
   const name=args.name ? String(args.name).trim() : null
   if(!phone || !serviceId || !startsAt) throw new Error('phone, service_id, and starts_at are required')
-  const contact=await resolveContactByPhone(ctx.supabase,ctx.organizationId,phone,name)
-  const {data:service,error}=await ctx.supabase.from('services').select('id,duration_minutes,name').eq('id',serviceId).eq('organization_id',ctx.organizationId).maybeSingle()
+  const contact=await resolveContactByPhone(ctx.db,ctx.organizationId,phone,name)
+  const {data:service,error}=await ctx.db.from('services').select('id,duration_minutes,name').eq('id',serviceId).eq('organization_id',ctx.organizationId).maybeSingle()
   if(error) throw new Error(error.message)
   if(!service) throw new Error('Service not found')
   const start=new Date(startsAt)
   if(Number.isNaN(start.getTime())) throw new Error('Invalid starts_at')
   const end=new Date(start.getTime()+Number(service.duration_minutes ?? 60)*60000)
-  const appointment=await createAppointmentRecord(ctx.supabase,{organizationId:ctx.organizationId,contactId:contact.contactId,serviceId:service.id,startsAt:start.toISOString(),endsAt:end.toISOString()})
-  const {error:leadError}=await ctx.supabase.from('leads').insert({organization_id:ctx.organizationId,contact_id:contact.contactId,status:'booked',intent:service.name})
+  const appointment=await createAppointmentRecord(ctx.db,{organizationId:ctx.organizationId,contactId:contact.contactId,serviceId:service.id,startsAt:start.toISOString(),endsAt:end.toISOString()})
+  const {error:leadError}=await ctx.db.from('leads').insert({organization_id:ctx.organizationId,contact_id:contact.contactId,status:'booked',intent:service.name})
   if(leadError && leadError.code!=='23505') throw new Error(leadError.message)
   return {appointmentId:appointment.id,service:service.name,startsAt:appointment.starts_at,status:appointment.status,contactId:contact.contactId}
 }
@@ -172,8 +172,8 @@ async function toolCreateLead(ctx:ToolContext,args:Record<string,unknown>){
   const estimated=args.estimated_value == null ? null : Number(args.estimated_value)
   if(estimated != null && (!Number.isFinite(estimated) || estimated < 0)) throw new Error('estimated_value must be a positive number')
 
-  const contact=await resolveContactByPhone(ctx.supabase,ctx.organizationId,phone,name)
-  const {data,error}=await ctx.supabase.from('leads').insert({
+  const contact=await resolveContactByPhone(ctx.db,ctx.organizationId,phone,name)
+  const {data,error}=await ctx.db.from('leads').insert({
     organization_id:ctx.organizationId,contact_id:contact.contactId,status:'new',intent,notes,
     estimated_value:estimated,source:ctx.agentId ? 'ai_agent' : 'staff',
   }).select('id,status,intent').single()
@@ -185,7 +185,7 @@ async function toolSearchKnowledge(ctx:ToolContext,args:Record<string,unknown>){
   const query=String(args.query ?? '').trim()
   if(query.length < 2) throw new Error('query is required')
   const category=args.category ? String(args.category).trim() : null
-  const matches=await searchKnowledge(ctx.supabase,ctx.organizationId,query,{category})
+  const matches=await searchKnowledge(ctx.db,ctx.organizationId,query,{category})
   if(matches.length===0){
     // Never fabricate: an unmatched question must be reported as uncovered.
     return {found:false,matches:[],message:'No knowledge base entry covers this question. Do not guess; offer a human handoff.'}
@@ -195,7 +195,7 @@ async function toolSearchKnowledge(ctx:ToolContext,args:Record<string,unknown>){
 
 /** Audit trail for tool writes, written through the membership-guarded path. */
 async function writeToolAudit(ctx:ToolContext,name:string,capability:string|null,result:unknown){
-  await ctx.supabase.rpc('log_audit_event',{
+  await ctx.db.rpc('log_audit_event',{
     p_organization_id:ctx.organizationId,
     p_action:'tool.'+name,
     p_entity_type:'conversation',
@@ -208,9 +208,9 @@ async function writeToolAudit(ctx:ToolContext,name:string,capability:string|null
 async function toolHandoff(ctx:ToolContext,args:Record<string,unknown>){
   if(!ctx.conversationId) throw new Error('conversation_id is required for handoff')
   const reason=String(args.reason ?? 'customer_requested').trim() || 'customer_requested'
-  const {error}=await ctx.supabase.from('conversations').update({status:'handed_off',state:'human_handoff',ai_enabled:false,ai_paused_at:new Date().toISOString(),handoff_reason:reason}).eq('id',ctx.conversationId)
+  const {error}=await ctx.db.from('conversations').update({status:'handed_off',state:'human_handoff',ai_enabled:false,ai_paused_at:new Date().toISOString(),handoff_reason:reason}).eq('id',ctx.conversationId)
   if(error) throw new Error(error.message)
-  const {error:auditError}=await ctx.supabase.from('audit_events').insert({
+  const {error:auditError}=await ctx.db.from('audit_events').insert({
     organization_id:ctx.organizationId,business_id:ctx.businessId,actor_type:'agent',actor_id:ctx.agentId ?? null,
     action:'conversation.handoff_requested',entity_type:'conversation',entity_id:ctx.conversationId,metadata:{reason},
   })
@@ -219,7 +219,7 @@ async function toolHandoff(ctx:ToolContext,args:Record<string,unknown>){
 }
 
 async function recordToolExecution(ctx:ToolContext,name:string,status:'succeeded'|'failed'|'blocked'|'confirmation_required',args:Record<string,unknown>,result:unknown,requiresConfirmation:boolean,started:number){
-  await ctx.supabase.from('tool_executions').insert({
+  await ctx.db.from('tool_executions').insert({
     organization_id:ctx.organizationId,conversation_id:ctx.conversationId || null,tool_name:name,status,
     arguments:args,result,error_message:status==='failed' ? JSON.stringify(result).slice(0,500) : null,
     requires_confirmation:requiresConfirmation,latency_ms:Date.now()-started,
@@ -233,7 +233,7 @@ async function toolCreateQuote(ctx: ToolContext, args: Record<string, unknown>) 
     }
     const { processedItems, subtotal, discount, total } = parseCommerceItems(args.items)
 
-    const { data: quote, error } = await ctx.supabase.from('quotes').insert({
+    const { data: quote, error } = await ctx.db.from('quotes').insert({
         organization_id: ctx.organizationId,
         business_id: ctx.businessId,
         contact_id: ctx.contactId,
@@ -246,11 +246,11 @@ async function toolCreateQuote(ctx: ToolContext, args: Record<string, unknown>) 
 
     if (error || !quote) throw new Error('Database error creating quote.')
 
-    const { error: itemError } = await ctx.supabase.from('quote_items').insert(
+    const { error: itemError } = await ctx.db.from('quote_items').insert(
       processedItems.map(item => ({ ...item, quote_id: quote.id }))
     )
     if (itemError) {
-      await ctx.supabase.from('quotes').delete().eq('id', quote.id).eq('organization_id', ctx.organizationId)
+      await ctx.db.from('quotes').delete().eq('id', quote.id).eq('organization_id', ctx.organizationId)
       throw new Error('Database error creating quote items.')
     }
 
@@ -263,7 +263,7 @@ async function toolCreateOrder(ctx: ToolContext, args: Record<string, unknown>) 
     }
     const { processedItems, subtotal, discount, total } = parseCommerceItems(args.items)
 
-    const { data: order, error } = await ctx.supabase.from('orders').insert({
+    const { data: order, error } = await ctx.db.from('orders').insert({
         organization_id: ctx.organizationId,
         business_id: ctx.businessId,
         contact_id: ctx.contactId,
@@ -276,11 +276,11 @@ async function toolCreateOrder(ctx: ToolContext, args: Record<string, unknown>) 
 
     if (error || !order) throw new Error('Database error creating order.')
 
-    const { error: itemError } = await ctx.supabase.from('order_items').insert(
+    const { error: itemError } = await ctx.db.from('order_items').insert(
       processedItems.map(item => ({ ...item, order_id: order.id }))
     )
     if (itemError) {
-      await ctx.supabase.from('orders').delete().eq('id', order.id).eq('organization_id', ctx.organizationId)
+      await ctx.db.from('orders').delete().eq('id', order.id).eq('organization_id', ctx.organizationId)
       throw new Error('Database error creating order items.')
     }
 
@@ -296,17 +296,17 @@ async function toolConvertQuoteToOrder(ctx: ToolContext, args: Record<string, un
     const quoteId = typeof args.quote_id === 'string' ? args.quote_id.trim() : ''
     if (!quoteId) throw new Error('quote_id is required.')
 
-    const { data: quote, error: quoteError } = await ctx.supabase.from('quotes')
+    const { data: quote, error: quoteError } = await ctx.db.from('quotes')
         .select('*, quote_items(*)')
         .eq('id', quoteId).eq('organization_id', ctx.organizationId).eq('business_id', ctx.businessId).single()
     if (quoteError || !quote) throw new Error('Quote not found.')
     if (quote.status !== 'accepted') throw new Error('Quote must be accepted before converting to order.')
 
-    const { data: existingOrder } = await ctx.supabase.from('orders')
+    const { data: existingOrder } = await ctx.db.from('orders')
         .select('id').eq('quote_id', quoteId).maybeSingle()
     if (existingOrder) throw new Error('An order has already been created from this quote.')
 
-    const { data: order, error } = await ctx.supabase.from('orders').insert({
+    const { data: order, error } = await ctx.db.from('orders').insert({
         organization_id: ctx.organizationId,
         business_id: ctx.businessId,
         contact_id: quote.contact_id,
@@ -331,9 +331,9 @@ async function toolConvertQuoteToOrder(ctx: ToolContext, args: Record<string, un
         discount: i.discount,
         line_total: i.line_total
     }))
-    const { error: itemError } = await ctx.supabase.from('order_items').insert(itemsToInsert)
+    const { error: itemError } = await ctx.db.from('order_items').insert(itemsToInsert)
     if (itemError) {
-      await ctx.supabase.from('orders').delete().eq('id', order.id).eq('organization_id', ctx.organizationId)
+      await ctx.db.from('orders').delete().eq('id', order.id).eq('organization_id', ctx.organizationId)
       throw new Error('Database error creating order items.')
     }
 

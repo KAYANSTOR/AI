@@ -2,7 +2,7 @@ import { Suspense } from 'react'
 import { redirect } from 'next/navigation'
 import { Bot } from 'lucide-react'
 import Link from 'next/link'
-import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/db/server'
 import { getDashboardContext } from '@/lib/dashboard/context'
 import { TOOL_POLICIES } from '@/lib/ai/registry'
 import type { AgentConsoleData } from './agent-console'
@@ -16,7 +16,7 @@ export default async function AgentPage() {
   const context = await getDashboardContext()
   if (!context) redirect('/login')
 
-  const supabase = await createClient()
+  const db = await createClient()
 
   if (!context.businessId) {
     return (
@@ -33,7 +33,7 @@ export default async function AgentPage() {
     )
   }
 
-  const { data: business } = await supabase
+  const { data: business } = await db
     .from('businesses')
     .select('id, name')
     .eq('id', context.businessId)
@@ -51,7 +51,7 @@ export default async function AgentPage() {
     )
   }
 
-  const { data: agent, error: agentError } = await supabase
+  const { data: agent, error: agentError } = await db
     .from('ai_agents')
     .select('id, name, locale, temperature, status, business_id')
     .eq('business_id', business.id)
@@ -125,22 +125,22 @@ async function AgentTrainerSection({
   agentTemperature: number | null
   agentStatus: string | null
 }) {
-  const supabase = await createClient()
+  const db = await createClient()
   const enabled = new Set(enabledCapabilities)
 
   const [readiness, { data: profile }, { data: versions }, { data: policies }] = await Promise.all([
-    calculateAgentReadiness(supabase, organizationId),
-    supabase
+    calculateAgentReadiness(db, organizationId),
+    db
       .from('business_profiles')
       .select('business_type_id, industry, setup_description, public_phone_number, system_prompt_addition')
       .eq('organization_id', organizationId)
       .maybeSingle(),
-    supabase
+    db
       .from('agent_prompt_versions')
       .select('version, status, published_at, system_prompt_addition')
       .eq('agent_id', agentId)
       .order('version', { ascending: false }),
-    supabase
+    db
       .from('agent_tool_policies')
       .select('tool_name, is_allowed, requires_confirmation')
       .eq('agent_id', agentId),

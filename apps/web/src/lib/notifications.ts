@@ -1,5 +1,5 @@
-import type { SupabaseClient } from '@supabase/supabase-js'
-import type { createClient } from '@/lib/supabase/server'
+import type { DbClient } from '@/lib/db/client'
+import type { createClient } from '@/lib/db/server'
 
 export type NotificationType =
   | 'assignment'
@@ -22,7 +22,7 @@ export type NotificationRow = {
 }
 
 export async function createNotification(
-  supabase: SupabaseClient | Awaited<ReturnType<typeof createClient>>,
+  db: DbClient | Awaited<ReturnType<typeof createClient>>,
   args: {
     organizationId: string
     memberId?: string | null
@@ -47,7 +47,7 @@ export async function createNotification(
     created_at: new Date().toISOString(),
   }
 
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from('notifications')
     .insert(payload)
     .select(
@@ -59,15 +59,15 @@ export async function createNotification(
     if (error.code === '23505') return null
     throw error
   }
-  return data as NotificationRow
+  return data as unknown as NotificationRow
 }
 
 export async function listNotifications(
-  supabase: SupabaseClient | Awaited<ReturnType<typeof createClient>>,
+  db: DbClient | Awaited<ReturnType<typeof createClient>>,
   organizationId: string,
   memberId?: string | null
 ): Promise<NotificationRow[]> {
-  let query = supabase
+  let query = db
     .from('notifications')
     .select(
       'id, organization_id, member_id, entity_type, entity_id, notification_type, title, body, is_read, created_at'
@@ -83,11 +83,11 @@ export async function listNotifications(
 }
 
 export async function markNotificationRead(
-  supabase: SupabaseClient | Awaited<ReturnType<typeof createClient>>,
+  db: DbClient | Awaited<ReturnType<typeof createClient>>,
   organizationId: string,
   notificationId: string
 ): Promise<NotificationRow> {
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from('notifications')
     .update({ is_read: true })
     .eq('organization_id', organizationId)
@@ -98,5 +98,5 @@ export async function markNotificationRead(
     .single()
 
   if (error) throw error
-  return data as NotificationRow
+  return data as unknown as NotificationRow
 }

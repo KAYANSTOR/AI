@@ -1,23 +1,15 @@
 {
-  "name": "frontdesk-db",
+  "name": "@frontdesk/db",
   "version": "1.0.0",
   "private": true,
-  "description": "FrontDesk AI runtime database: migrations, drizzle config and migration runner.",
+  "description": "FrontDesk database: SQL migrations, bootstrap and data tooling.",
   "type": "module",
   "license": "UNLICENSED",
   "scripts": {
-    "migrate": "npx tsx ../../scripts/db/migrate.ts",
-    "migrate:up": "npx tsx ../../scripts/db/migrate.ts up",
-    "migrate:down": "npx tsx ../../scripts/db/migrate.ts down",
-    "drizzle:generate": "drizzle-kit generate",
-    "drizzle:migrate": "drizzle-kit migrate",
-    "drizzle:studio": "drizzle-kit studio"
+    "migrate": "node scripts/migrate.mjs up",
+    "migrate:status": "node scripts/migrate.mjs status"
   },
   "dependencies": {
-    "drizzle-orm": "^0.44.0",
     "postgres": "^3.4.9"
-  },
-  "devDependencies": {
-    "drizzle-kit": "^0.31.11"
   }
 }

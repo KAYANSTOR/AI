@@ -46,7 +46,7 @@ const COUNTRY_NAMES: Record<string, { label: string; flag: string }> = {
   AE: { label: 'الإمارات العربية المتحدة', flag: '🇦🇪' },
   KW: { label: 'الكويت', flag: '🇰🇼' },
   QA: { label: 'قطر', flag: '🇶🇦' },
-  GLOBAL: { label: 'المعيار العالمي العام', flag: '🌐' },
+  GLOBAL: { label: 'المعيار العالمي العام', flag: '' },
 }
 
 export function PhonePanel({
@@ -253,8 +253,8 @@ export function PhonePanel({
                 )}
                 <span>
                   {form.vapiNumber && form.vapiNumber.length > 5
-                    ? '⚡ تحديث أو فحص الرقم'
-                    : '⚡ تفعيل وإنشاء رقم خاص لشركتي الآن'}
+                    ? 'تحديث أو فحص الرقم'
+                    : 'تفعيل وإنشاء رقم خاص لشركتي الآن'}
                 </span>
               </button>
             )}
@@ -309,7 +309,7 @@ export function PhonePanel({
             </div>
           ) : (
             <div className="rounded-xl border border-warning/30 bg-warning/5 p-3.5 text-xs text-text-muted leading-relaxed">
-              💡 اضغط على زر <strong>«تفعيل وإنشاء رقم خاص لشركتي الآن»</strong> بالأعلى، وسيقوم النظام فوراً في الخلفية بإنشاء وتجهيز رقم دولي خاص بنشاطك وربطه بموظف الاستقبال بالذكاء الاصطناعي دون أي خطوات تقنية.
+              اضغط على زر <strong>«تفعيل وإنشاء رقم خاص لشركتي الآن»</strong> بالأعلى، وسيقوم النظام فوراً في الخلفية بإنشاء وتجهيز رقم دولي خاص بنشاطك وربطه بموظف الاستقبال بالذكاء الاصطناعي دون أي خطوات تقنية.
             </div>
           )}
         </div>

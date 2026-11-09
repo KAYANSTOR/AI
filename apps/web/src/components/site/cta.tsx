@@ -1,26 +1,16 @@
 import Link from 'next/link'
 import type { ReactNode } from 'react'
 
-/**
- * Brand CTA buttons.
- * Primary uses Primary Dark as the resting color so white label text keeps
- * accessible contrast; Primary itself is the hover/active step (PLAN brand rules).
- */
 const BASE =
-  'inline-flex items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-dark focus-visible:ring-offset-2 sm:text-base'
+  'inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-5 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/20'
 
-const PRIMARY = `${BASE} bg-primary-dark text-surface shadow-sm hover:bg-primary`
-const SECONDARY = `${BASE} border border-border bg-surface text-text hover:border-primary-dark hover:text-primary-dark`
+const PRIMARY = `${BASE} bg-primary text-primary-foreground hover:bg-primary-dark`
+const SECONDARY = `${BASE} border border-border-strong/70 bg-surface text-text hover:border-text/40`
+const SECONDARY_ON_DARK = `${BASE} border border-surface/25 text-surface hover:border-surface/60`
 
-export function PrimaryCta({
-  href,
-  children,
-  className = '',
-}: {
-  href: string
-  children: ReactNode
-  className?: string
-}) {
+type CtaProps = { href: string; children: ReactNode; className?: string }
+
+export function PrimaryCta({ href, children, className = '' }: CtaProps) {
   return (
     <Link href={href} className={`${PRIMARY} ${className}`}>
       {children}
@@ -32,13 +22,10 @@ export function SecondaryCta({
   href,
   children,
   className = '',
-}: {
-  href: string
-  children: ReactNode
-  className?: string
-}) {
+  onDark = false,
+}: CtaProps & { onDark?: boolean }) {
   return (
-    <Link href={href} className={`${SECONDARY} ${className}`}>
+    <Link href={href} className={`${onDark ? SECONDARY_ON_DARK : SECONDARY} ${className}`}>
       {children}
     </Link>
   )

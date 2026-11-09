@@ -1,14 +1,14 @@
 import { describe, expect, test } from 'bun:test'
-import type { SupabaseClient } from '@supabase/supabase-js'
-import { createFakeSupabase, type FakeDb } from './support/fake-supabase'
+import type { DbClient } from '@/lib/db/client'
+import { createFakeDb, type FakeDb } from './support/fake-db'
 import { normalizeE164, normalizePhone, resolveContactIdentity } from '@/lib/channels/contacts'
 
 const ORG_A = 'aaaaaaaa-0000-4000-8000-000000000001'
 const ORG_B = 'bbbbbbbb-0000-4000-8000-000000000002'
 
 function setup(tables: FakeDb) {
-  const fake = createFakeSupabase(tables)
-  return { db: fake.db, supabase: fake.client as unknown as SupabaseClient }
+  const fake = createFakeDb(tables)
+  return { store: fake.store, db: fake.client as unknown as DbClient }
 }
 
 describe('phone normalisation', () => {
@@ -30,7 +30,7 @@ describe('phone normalisation', () => {
 
 describe('contact identity resolution', () => {
   test('an exact provider identity resolves to its existing contact', async () => {
-    const { supabase } = setup({
+    const { db } = setup({
       contact_identities: {
         rows: [
           {
@@ -43,7 +43,7 @@ describe('contact identity resolution', () => {
       },
     })
 
-    const result = await resolveContactIdentity(supabase, ORG_A, { channel: 'whatsapp', externalUserId: 'wa-1' })
+    const result = await resolveContactIdentity(db, ORG_A, { channel: 'whatsapp', externalUserId: 'wa-1' })
 
     expect(result.contactId).toBe('contact-1')
     expect(result.isNew).toBe(false)
@@ -51,7 +51,7 @@ describe('contact identity resolution', () => {
   })
 
   test('an identity owned by another organization is never reused', async () => {
-    const { db, supabase } = setup({
+    const { store, db } = setup({
       contacts: { rows: [] },
       contact_identities: {
         rows: [
@@ -65,47 +65,47 @@ describe('contact identity resolution', () => {
       },
     })
 
-    const result = await resolveContactIdentity(supabase, ORG_B, { channel: 'instagram', externalUserId: 'ig-shared' })
+    const result = await resolveContactIdentity(db, ORG_B, { channel: 'instagram', externalUserId: 'ig-shared' })
 
     expect(result.contactId).not.toBe('contact-a')
     expect(result.isNew).toBe(true)
     expect(result.organizationId).toBe(ORG_B)
-    expect(db.contacts.rows?.[0]?.organization_id).toBe(ORG_B)
+    expect(store.contacts.rows?.[0]?.organization_id).toBe(ORG_B)
   })
 
   test('an exact phone match inside the tenant reuses the contact and adds the identity', async () => {
-    const { db, supabase } = setup({
+    const { store, db } = setup({
       contacts: { rows: [{ id: 'contact-1', organization_id: ORG_A, phone: '+966500000001', full_name: 'Noura' }] },
       contact_identities: { rows: [] },
     })
 
-    const result = await resolveContactIdentity(supabase, ORG_A, {
+    const result = await resolveContactIdentity(db, ORG_A, {
       channel: 'sms',
       externalUserId: '+966500000001',
       phone: '00966500000001',
     })
 
     expect(result.contactId).toBe('contact-1')
-    expect(db.contacts.rows?.length).toBe(1)
-    expect(db.contact_identities.rows?.[0]?.external_user_id).toBe('+966500000001')
+    expect(store.contacts.rows?.length).toBe(1)
+    expect(store.contact_identities.rows?.[0]?.external_user_id).toBe('+966500000001')
   })
 
   test('a same phone in another organization does not match', async () => {
-    const { supabase } = setup({
+    const { db } = setup({
       contacts: { rows: [{ id: 'contact-a', organization_id: ORG_A, phone: '+966500000001', full_name: 'A' }] },
       contact_identities: { rows: [] },
     })
 
-    const result = await resolveContactIdentity(supabase, ORG_B, { channel: 'sms', phone: '+966500000001' })
+    const result = await resolveContactIdentity(db, ORG_B, { channel: 'sms', phone: '+966500000001' })
 
     expect(result.contactId).not.toBe('contact-a')
     expect(result.isNew).toBe(true)
   })
 
   test('a new customer is created with an identity row', async () => {
-    const { db, supabase } = setup({ contacts: { rows: [] }, contact_identities: { rows: [] } })
+    const { store, db } = setup({ contacts: { rows: [] }, contact_identities: { rows: [] } })
 
-    const result = await resolveContactIdentity(supabase, ORG_A, {
+    const result = await resolveContactIdentity(db, ORG_A, {
       channel: 'whatsapp',
       externalUserId: 'wa-new',
       phone: '+966500000002',
@@ -113,23 +113,23 @@ describe('contact identity resolution', () => {
     })
 
     expect(result.isNew).toBe(true)
-    expect(db.contacts.rows?.[0]?.full_name).toBe('Faisal')
-    expect(db.contact_identities.rows?.[0]?.channel).toBe('whatsapp')
+    expect(store.contacts.rows?.[0]?.full_name).toBe('Faisal')
+    expect(store.contact_identities.rows?.[0]?.channel).toBe('whatsapp')
   })
 
   test('a similar name alone never merges two customers', async () => {
-    const { db, supabase } = setup({
+    const { store, db } = setup({
       contacts: { rows: [{ id: 'contact-1', organization_id: ORG_A, phone: '+966500000001', full_name: 'محمد علي' }] },
       contact_identities: { rows: [] },
     })
 
-    const result = await resolveContactIdentity(supabase, ORG_A, {
+    const result = await resolveContactIdentity(db, ORG_A, {
       channel: 'instagram',
       externalUserId: 'ig-different-person',
       displayName: 'محمد على',
     })
 
     expect(result.contactId).not.toBe('contact-1')
-    expect(db.contacts.rows?.length).toBe(2)
+    expect(store.contacts.rows?.length).toBe(2)
   })
 })

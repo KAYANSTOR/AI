@@ -1,6 +1,6 @@
 import Link from 'next/link'
-import { Bot, RadioTower, CheckCircle2, ArrowLeft, Cpu, Sliders } from 'lucide-react'
-import { createClient } from '@/lib/supabase/server'
+import { Bot, RadioTower, CheckCircle2, ArrowLeft, Sliders } from 'lucide-react'
+import { createClient } from '@/lib/db/server'
 import { capabilityLabel } from '@/lib/i18n/labels'
 
 export async function DashboardAgentHealthSection({
@@ -10,61 +10,48 @@ export async function DashboardAgentHealthSection({
   organizationId: string
   enabledCapabilities: string[]
 }) {
-  const supabase = await createClient()
+  const db = await createClient()
 
-  const [channelResult, businessProfileResult] = await Promise.all([
-    supabase
+  const [channelResult] = await Promise.all([
+    db
       .from('channels')
       .select('id, channel_type, is_active, verification_status')
       .eq('organization_id', organizationId),
-    supabase
-      .from('business_profiles')
-      .select('business_type_id, industry, setup_description')
-      .eq('organization_id', organizationId)
-      .maybeSingle(),
   ])
 
   const channels = channelResult.data ?? []
-  const _profile = businessProfileResult.data
-
+  
   const channelMap = {
     whatsapp: channels.find((c) => c.channel_type === 'whatsapp'),
     phone: channels.find((c) => c.channel_type === 'phone'),
-    web: channels.find((c) => c.channel_type === 'web') || { is_active: true, verification_status: 'verified' },
   }
+  const agentReady = enabledCapabilities.length > 0 && channels.some((c) => c.is_active)
 
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
       {/* Agent Status & Brain */}
-      <section className="rounded-2xl border border-border bg-surface p-5 shadow-2xs">
+      <section className="rounded-2xl border border-border bg-surface p-5 shadow-[var(--shadow-card)]">
         <div className="flex items-center justify-between border-b border-border/70 pb-4">
           <div className="flex items-center gap-2.5">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary-light/40 text-primary-dark">
               <Bot size={20} />
             </div>
             <div>
-              <h2 className="text-base font-bold text-text">كفاءة وجاهزية الوكيل الذكي</h2>
-              <p className="text-xs text-text-muted">النموذج النشط والقدرات التشغيلية</p>
+              <h2 className="text-base font-bold text-text">جاهزية الوكيل</h2>
+              <p className="text-xs text-text-muted">الوحدات المفعّلة وإعدادات الرد</p>
             </div>
           </div>
-          <span className="flex items-center gap-1.5 rounded-full bg-success/15 px-3 py-1 text-xs font-bold text-success">
-            <CheckCircle2 size={13} />
-            <span>جاهز 100%</span>
+          <span
+            className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ${
+              agentReady ? 'bg-success/10 text-success' : 'bg-warning/10 text-warning'
+            }`}
+          >
+            <CheckCircle2 size={13} aria-hidden="true" />
+            <span>{agentReady ? 'جاهز للرد' : 'يحتاج إعدادًا'}</span>
           </span>
         </div>
 
         <div className="mt-4 space-y-3.5">
-          <div className="flex items-center justify-between rounded-xl bg-background/60 p-3.5">
-            <div className="flex items-center gap-2.5">
-              <Cpu size={18} className="text-primary" />
-              <div>
-                <span className="block text-xs font-bold text-text">النموذج الذكي الحالي</span>
-                <span className="text-[11px] text-text-muted">Gemini 3 Flash Preview (استجابة فائقة السرعة)</span>
-              </div>
-            </div>
-            <span className="font-mono text-xs font-bold text-success">~800ms</span>
-          </div>
-
           <div>
             <span className="block text-xs font-semibold text-text mb-2">الوحدات والمهام المفعّلة:</span>
             <div className="flex flex-wrap gap-2">
@@ -103,7 +90,7 @@ export async function DashboardAgentHealthSection({
       </section>
 
       {/* Connected Communication Channels */}
-      <section className="rounded-2xl border border-border bg-surface p-5 shadow-2xs">
+      <section className="rounded-2xl border border-border bg-surface p-5 shadow-[var(--shadow-card)]">
         <div className="flex items-center justify-between border-b border-border/70 pb-4">
           <div className="flex items-center gap-2.5">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary-light/40 text-primary-dark">
@@ -131,7 +118,7 @@ export async function DashboardAgentHealthSection({
                 WA
               </div>
               <div>
-                <span className="block text-xs font-bold text-text">واتساب للأعمال (WhatsApp Business)</span>
+                <span className="block text-xs font-bold text-text">واتساب للأعمال</span>
                 <span className="text-[11px] text-text-muted">الاستقبال والرد الفوري الآلي على الرسائل</span>
               </div>
             </div>
@@ -153,7 +140,7 @@ export async function DashboardAgentHealthSection({
                 TEL
               </div>
               <div>
-                <span className="block text-xs font-bold text-text">الهاتف الصوتي التفاعلي (IVR & Voice)</span>
+                <span className="block text-xs font-bold text-text">المكالمات الهاتفية</span>
                 <span className="text-[11px] text-text-muted">الرد على المكالمات بصوت طبيعي وحجز المواعيد</span>
               </div>
             </div>
@@ -168,21 +155,6 @@ export async function DashboardAgentHealthSection({
             </span>
           </div>
 
-          {/* Web Widget */}
-          <div className="flex items-center justify-between rounded-xl border border-border/70 p-3">
-            <div className="flex items-center gap-3">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-info/15 text-info font-bold text-xs">
-                WEB
-              </div>
-              <div>
-                <span className="block text-xs font-bold text-text">الدردشة الحية على الموقع (Web Chat)</span>
-                <span className="text-[11px] text-text-muted">محادثة مدمجة تظهر لزوار موقعك الإلكتروني</span>
-              </div>
-            </div>
-            <span className="rounded-full bg-success/15 px-2.5 py-0.5 text-[10px] font-bold text-success">
-              مفعّل
-            </span>
-          </div>
         </div>
 
         <div className="mt-4 border-t border-border/60 pt-3 text-center">

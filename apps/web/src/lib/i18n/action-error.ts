@@ -24,9 +24,9 @@ export function actionErrorMessage(error: unknown, fallback: string = ar.errors.
  * Maps a database failure onto customer-facing Arabic.
  *
  * The codes, constraint names and schema-cache wording behind the failure stay in the log:
- * they give a business owner no way to act and they expose internals (docs/PLAN.md §8.3.10).
+ * they give a business owner no way to act and they expose internals.
  */
-export function supabaseActionError(error: unknown, fallback: string = ar.errors.generic) {
+export function dbActionError(error: unknown, fallback: string = ar.errors.generic) {
   logDatabaseError('server action', error)
   const code = databaseErrorCode(error)
   const message = messageFrom(error)

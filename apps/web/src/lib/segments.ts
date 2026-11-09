@@ -1,5 +1,5 @@
-import type { SupabaseClient } from '@supabase/supabase-js'
-import type { createClient } from '@/lib/supabase/server'
+import type { DbClient } from '@/lib/db/client'
+import type { createClient } from '@/lib/db/server'
 
 export type SegmentRule = {
   field: string
@@ -44,7 +44,7 @@ function matchesRule(record: Record<string, unknown>, rule: SegmentRule): boolea
 }
 
 export async function evaluateSegment(
-  supabase: SupabaseClient | Awaited<ReturnType<typeof createClient>>,
+  db: DbClient | Awaited<ReturnType<typeof createClient>>,
   organizationId: string,
   contactId: string,
   rules: SegmentRule[]
@@ -53,7 +53,7 @@ export async function evaluateSegment(
     return { contactId, matches: true, reason: ['segment has no rules'] }
   }
 
-  const { data: contact, error } = await supabase
+  const { data: contact, error } = await db
     .from('contacts')
     .select('*')
     .eq('organization_id', organizationId)
@@ -76,7 +76,7 @@ export async function evaluateSegment(
 }
 
 export async function createSegment(
-  supabase: SupabaseClient,
+  db: DbClient,
   input: {
     organizationId: string
     businessId?: string | null
@@ -86,7 +86,7 @@ export async function createSegment(
     createdBy?: string | null
   }
 ) {
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from('segments')
     .insert({
       organization_id: input.organizationId,
@@ -105,12 +105,12 @@ export async function createSegment(
 
 /** Resolve contact IDs for simple tag/status/phone criteria (AND). */
 export async function resolveSegmentContactIds(
-  supabase: SupabaseClient,
+  db: DbClient,
   organizationId: string,
   criteria: SegmentCriteria,
   limit = 500
 ): Promise<string[]> {
-  let query = supabase
+  let query = db
     .from('contacts')
     .select('id, phone, tags')
     .eq('organization_id', organizationId)
@@ -137,7 +137,7 @@ export async function resolveSegmentContactIds(
   let ids = rows.map((c) => c.id as string)
 
   if (criteria.leadStatuses?.length && ids.length) {
-    const { data: leads } = await supabase
+    const { data: leads } = await db
       .from('leads')
       .select('contact_id')
       .eq('organization_id', organizationId)
@@ -151,7 +151,7 @@ export async function resolveSegmentContactIds(
   if (criteria.rules?.length) {
     const filtered: string[] = []
     for (const id of ids) {
-      const result = await evaluateSegment(supabase, organizationId, id, criteria.rules)
+      const result = await evaluateSegment(db, organizationId, id, criteria.rules)
       if (result.matches) filtered.push(id)
     }
     ids = filtered

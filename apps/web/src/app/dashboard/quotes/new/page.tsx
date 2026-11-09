@@ -14,7 +14,7 @@ export default async function NewQuotePage() {
   }
 
   // Fetch recent contacts to populate the dropdown
-  const { data: contacts } = await ctx.supabase
+  const { data: contacts } = await ctx.db
     .from('contacts')
     .select('id, full_name, phone')
     .eq('organization_id', ctx.organizationId)

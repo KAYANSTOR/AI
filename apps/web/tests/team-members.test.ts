@@ -1,25 +1,25 @@
 import { describe, expect, test } from 'bun:test'
-import type { SupabaseClient } from '@supabase/supabase-js'
-import { createFakeSupabase } from './support/fake-supabase'
+import type { DbClient } from '@/lib/db/client'
+import { createFakeDb } from './support/fake-db'
 import { addOrganizationMember, listOrganizationMembers, updateMemberRole } from '@/lib/team'
 
 const ORG = 'aaaaaaaa-0000-4000-8000-000000000101'
 
 function setup(rows: Record<string, unknown>[]) {
-  const fake = createFakeSupabase({
+  const fake = createFakeDb({
     organization_members: { rows },
   })
-  return { supabase: fake.client as unknown as SupabaseClient }
+  return { db: fake.client as unknown as DbClient }
 }
 
 describe('team members', () => {
   test('owner can promote a member to admin, and member cannot', async () => {
-    const { supabase } = setup([
+    const { db } = setup([
       { id: 'm-owner', organization_id: ORG, user_id: 'u-owner', role: 'owner', is_active: true },
       { id: 'm-user', organization_id: ORG, user_id: 'u-user', role: 'member', is_active: true },
     ])
 
-    const updated = await updateMemberRole(supabase, {
+    const updated = await updateMemberRole(db, {
       organizationId: ORG,
       actorRole: 'owner',
       memberId: 'm-user',
@@ -29,7 +29,7 @@ describe('team members', () => {
     expect(updated.role).toBe('admin')
 
     await expect(
-      updateMemberRole(supabase, {
+      updateMemberRole(db, {
         organizationId: ORG,
         actorRole: 'member',
         memberId: 'm-owner',
@@ -39,12 +39,12 @@ describe('team members', () => {
   })
 
   test('the last owner cannot be demoted and new members are validated', async () => {
-    const { supabase } = setup([
+    const { db } = setup([
       { id: 'm-owner', organization_id: ORG, user_id: 'u-owner', role: 'owner', is_active: true },
     ])
 
     await expect(
-      updateMemberRole(supabase, {
+      updateMemberRole(db, {
         organizationId: ORG,
         actorRole: 'owner',
         memberId: 'm-owner',
@@ -53,7 +53,7 @@ describe('team members', () => {
     ).rejects.toThrow(/last owner|owner/i)
 
     await expect(
-      addOrganizationMember(supabase, {
+      addOrganizationMember(db, {
         organizationId: ORG,
         actorRole: 'owner',
         userId: 'u-new',
@@ -61,7 +61,7 @@ describe('team members', () => {
       })
     ).rejects.toThrow(/invalid role/i)
 
-    const members = await listOrganizationMembers(supabase, ORG)
+    const members = await listOrganizationMembers(db, ORG)
     expect(members.length).toBe(1)
   })
 })

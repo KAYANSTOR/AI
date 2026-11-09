@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { getDashboardContext } from '@/lib/dashboard/context'
-import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/db/server'
 import { loadChannelHealth } from '@/lib/integrations/health'
 
 const STATUS_STYLE: Record<string, string> = {
@@ -22,8 +22,8 @@ export default async function IntegrationsPage() {
   const context = await getDashboardContext()
   if (!context) redirect('/login')
 
-  const supabase = await createClient()
-  const health = await loadChannelHealth(supabase, context.organizationId)
+  const db = await createClient()
+  const health = await loadChannelHealth(db, context.organizationId)
 
   return (
     <div className="space-y-6">

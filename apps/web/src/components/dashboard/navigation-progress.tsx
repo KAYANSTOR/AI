@@ -1,20 +1,17 @@
 'use client'
 
-import { useEffect, useState, useTransition } from 'react'
+import { useEffect, useState } from 'react'
 import { usePathname, useSearchParams } from 'next/navigation'
 
 export function NavigationProgress() {
   const pathname = usePathname()
   const searchParams = useSearchParams()
-  const [isNavigating, setIsNavigating] = useState(false)
-  const [, startTransition] = useTransition()
+  const currentKey = `${pathname}?${searchParams.toString()}`
+  // The location a navigation started from; the bar hides once the location changes.
+  const [startedFrom, setStartedFrom] = useState<string | null>(null)
+  const isNavigating = startedFrom !== null && startedFrom === currentKey
 
-  // Reset when path or search params change
-  useEffect(() => {
-    setIsNavigating(false)
-  }, [pathname, searchParams])
-
-  // Listen to internal link clicks to give instant 0ms feedback
+  // Show feedback immediately when an internal link is clicked.
   useEffect(() => {
     function handleAnchorClick(event: MouseEvent) {
       const target = (event.target as HTMLElement)?.closest('a')
@@ -37,13 +34,10 @@ export function NavigationProgress() {
         return
       }
 
-      // Check if it's the exact same url
       const currentUrl = window.location.pathname + window.location.search
       if (href === currentUrl) return
 
-      startTransition(() => {
-        setIsNavigating(true)
-      })
+      setStartedFrom(`${window.location.pathname}?${new URLSearchParams(window.location.search).toString()}`)
     }
 
     document.addEventListener('click', handleAnchorClick, { capture: true })
@@ -59,7 +53,7 @@ export function NavigationProgress() {
       aria-hidden="true"
       className="fixed inset-x-0 top-0 z-[100] h-[2.5px] overflow-hidden bg-transparent pointer-events-none"
     >
-      <div className="h-full bg-gradient-to-r from-primary via-primary-dark to-primary-light animate-progress-indeterminate shadow-[0_0_8px_rgba(217,119,87,0.6)]" />
+      <div className="h-full bg-gradient-to-r from-primary via-primary-dark to-primary-light animate-progress-indeterminate shadow-[0_0_8px_rgba(15,122,99,0.45)]" />
     </div>
   )
 }

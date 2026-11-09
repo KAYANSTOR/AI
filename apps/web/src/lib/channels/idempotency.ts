@@ -1,4 +1,4 @@
-import type { SupabaseClient } from '@supabase/supabase-js'
+import type { DbClient } from '@/lib/db/client'
 
 export type IdempotencyResult =
   | { status: 'duplicate' }
@@ -10,14 +10,14 @@ export type IdempotencyResult =
  * First writer wins; duplicates are ignored safely.
  */
 export async function acquireWebhookEvent(
-  supabase: SupabaseClient,
+  db: DbClient,
   provider: string,
   externalEventId: string,
   payload: unknown
 ): Promise<IdempotencyResult> {
   const normalizedEventId = externalEventId.trim()
   if (!normalizedEventId) return { status: 'error', message: 'missing_provider_event_id' }
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from('webhook_events')
     .insert({
       provider,
@@ -43,12 +43,12 @@ export async function acquireWebhookEvent(
 }
 
 export async function markWebhookProcessed(
-  supabase: SupabaseClient,
+  db: DbClient,
   eventRowId: string,
   status: 'processed' | 'failed',
   errorMessage?: string
 ): Promise<void> {
-  await supabase
+  await db
     .from('webhook_events')
     .update({
       processing_status: status,

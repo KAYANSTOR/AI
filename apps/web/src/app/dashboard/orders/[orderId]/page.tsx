@@ -21,14 +21,14 @@ export default async function OrderDetailsPage({
   }
 
   const [{ data: order }, { data: items }] = await Promise.all([
-    ctx.supabase
+    ctx.db
       .from('orders')
       .select('*, contacts(full_name, phone, email), quotes(quote_number)')
       .eq('id', orderId)
       .eq('organization_id', ctx.organizationId)
       .eq('business_id', ctx.businessId)
       .maybeSingle(),
-    ctx.supabase
+    ctx.db
       .from('order_items')
       .select('*')
       .eq('order_id', orderId)

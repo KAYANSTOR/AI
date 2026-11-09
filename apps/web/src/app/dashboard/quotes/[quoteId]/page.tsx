@@ -21,14 +21,14 @@ export default async function QuoteDetailsPage({
   }
 
   const [{ data: quote }, { data: items }] = await Promise.all([
-    ctx.supabase
+    ctx.db
       .from('quotes')
       .select('*, contacts(full_name, phone, email)')
       .eq('id', quoteId)
       .eq('organization_id', ctx.organizationId)
       .eq('business_id', ctx.businessId)
       .maybeSingle(),
-    ctx.supabase
+    ctx.db
       .from('quote_items')
       .select('*')
       .eq('quote_id', quoteId)

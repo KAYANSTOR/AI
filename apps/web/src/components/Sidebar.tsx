@@ -16,9 +16,8 @@ import {
   Clock,
   BookOpen,
   X,
-  Sparkles,
 } from 'lucide-react'
-import { useEffect, useRef, useState, useTransition } from 'react'
+import { useEffect, useRef } from 'react'
 import { BrandMark } from '@/components/site/brand'
 import { useDashboardShell } from '@/components/dashboard/dashboard-shell'
 import { ar } from '@/lib/i18n/ar'
@@ -231,18 +230,12 @@ function NavLink({
     pathname === item.href ||
     (item.href !== '/dashboard' && pathname.startsWith(`${item.href}/`))
 
-  const [isPending, startTransition] = useTransition()
 
   return (
     <Link
       href={item.href}
       prefetch={true}
-      onClick={(e) => {
-        onClick()
-        startTransition(() => {
-          // Trigger optimistic navigation
-        })
-      }}
+      onClick={onClick}
       onMouseEnter={() => {
         router.prefetch(item.href)
       }}
@@ -250,7 +243,7 @@ function NavLink({
         active
           ? 'bg-primary text-white shadow-xs font-bold'
           : 'text-white/70 hover:bg-white/10 hover:text-white'
-      } ${isPending ? 'opacity-70 scale-[0.99]' : ''}`}
+      }`}
       aria-current={active ? 'page' : undefined}
     >
       <div className="flex items-center gap-2.5 min-w-0">

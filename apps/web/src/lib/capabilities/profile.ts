@@ -1,5 +1,5 @@
-import { createClient } from '@/lib/supabase/server'
-import type { SupabaseClient } from '@supabase/supabase-js'
+import { createClient } from '@/lib/db/server'
+import type { DbClient } from '@/lib/db/client'
 
 export type BusinessType = {
   id: string
@@ -32,8 +32,8 @@ export const NAV_CAPABILITY: Record<string, string | null> = {
 }
 
 export async function listBusinessTypes(): Promise<BusinessType[]> {
-  const supabase = await createClient()
-  const { data } = await supabase
+  const db = await createClient()
+  const { data } = await db
     .from('business_types')
     .select('id, name, description')
     .order('name')
@@ -41,12 +41,12 @@ export async function listBusinessTypes(): Promise<BusinessType[]> {
 }
 
 export async function applyBusinessType(
-  supabase: SupabaseClient,
+  db: DbClient,
   organizationId: string,
   businessTypeId: string,
   enabledIds?: string[]
 ): Promise<void> {
-  const { error: pErr } = await supabase
+  const { error: pErr } = await db
     .from('business_profiles')
     .update({ business_type_id: businessTypeId })
     .eq('organization_id', organizationId)
@@ -55,7 +55,7 @@ export async function applyBusinessType(
 
   let ids = enabledIds
   if (!ids) {
-    const { data: defaults } = await supabase
+    const { data: defaults } = await db
       .from('business_type_capabilities')
       .select('capability_id')
       .eq('business_type_id', businessTypeId)
@@ -63,10 +63,10 @@ export async function applyBusinessType(
     ids = (defaults ?? []).map((d) => d.capability_id as string)
   }
 
-  await supabase.from('organization_capabilities').delete().eq('organization_id', organizationId)
+  await db.from('organization_capabilities').delete().eq('organization_id', organizationId)
 
   if (ids.length) {
-    const { error } = await supabase.from('organization_capabilities').insert(
+    const { error } = await db.from('organization_capabilities').insert(
       ids.map((capability_id) => ({
         organization_id: organizationId,
         capability_id,
@@ -78,13 +78,13 @@ export async function applyBusinessType(
 }
 
 export async function setCapabilityEnabled(
-  supabase: SupabaseClient,
+  db: DbClient,
   organizationId: string,
   capabilityId: string,
   enabled: boolean
 ): Promise<void> {
   if (enabled) {
-    const { error } = await supabase.from('organization_capabilities').upsert(
+    const { error } = await db.from('organization_capabilities').upsert(
       {
         organization_id: organizationId,
         capability_id: capabilityId,
@@ -94,7 +94,7 @@ export async function setCapabilityEnabled(
     )
     if (error) throw new Error(error.message)
   } else {
-    const { error } = await supabase
+    const { error } = await db
       .from('organization_capabilities')
       .update({ is_enabled: false })
       .eq('organization_id', organizationId)

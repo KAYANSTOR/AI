@@ -1,5 +1,5 @@
 /**
- * The four stages of the FastPath onboarding (docs/PLAN.md §8.3.2).
+ * The four stages of the FastPath onboarding.
  *
  * The database still stores `activation_step` in its original 1..11 space, so the two
  * systems are kept apart here: a stage maps onto the step that represents it, and any
@@ -23,7 +23,7 @@ export const STAGE_DEFINITIONS: Record<OnboardingStage, StageDefinition> = {
   1: {
     stage: 1,
     name: 'ابدأ',
-    title: 'مرحباً بك 👋',
+    title: 'مرحباً بك',
     description: 'عرّفنا بنشاطك في سطرين، وسنجهّز كل شيء بعدها.',
   },
   2: {
@@ -41,7 +41,7 @@ export const STAGE_DEFINITIONS: Record<OnboardingStage, StageDefinition> = {
   4: {
     stage: 4,
     name: 'جرّب ثم شغّل',
-    title: 'جرّب موظفك الجديد 🤖',
+    title: 'جرّب موظفك الجديد',
     description: 'تأكد أن كل شيء يعمل، ثم شغّل نشاطك ليبدأ استقبال العملاء.',
   },
 }

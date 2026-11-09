@@ -1,5 +1,5 @@
-import type { SupabaseClient } from '@supabase/supabase-js'
-import type { createClient } from '@/lib/supabase/server'
+import type { DbClient } from '@/lib/db/client'
+import type { createClient } from '@/lib/db/server'
 
 export type FollowUpState = {
   enrollmentId: string
@@ -26,11 +26,11 @@ export type FollowUpAdvanceResult =
   | { status: 'completed'; enrollmentId: string }
 
 export async function getNextFollowUpStep(
-  supabase: SupabaseClient | Awaited<ReturnType<typeof createClient>>,
+  db: DbClient | Awaited<ReturnType<typeof createClient>>,
   organizationId: string,
   contactId: string
 ): Promise<FollowUpState | null> {
-  const { data: enrollment, error } = await supabase
+  const { data: enrollment, error } = await db
     .from('followup_enrollments')
     .select('id, sequence_id, current_step_id, next_send_at, status')
     .eq('organization_id', organizationId)
@@ -43,7 +43,7 @@ export async function getNextFollowUpStep(
   if (error) throw error
   if (!enrollment) return null
 
-  const { data: steps } = await supabase
+  const { data: steps } = await db
     .from('followup_steps')
     .select('id, channel, template_content, delay_minutes, step_order')
     .eq('sequence_id', enrollment.sequence_id)
@@ -68,13 +68,13 @@ export async function getNextFollowUpStep(
  * from delivering the same step (duplicate prevention).
  */
 export async function claimDueEnrollment(
-  supabase: SupabaseClient | Awaited<ReturnType<typeof createClient>>,
+  db: DbClient | Awaited<ReturnType<typeof createClient>>,
   enrollmentId: string,
   organizationId: string
 ): Promise<FollowUpAdvanceResult> {
   const now = new Date().toISOString()
 
-  const { data: claimed, error: claimError } = await supabase
+  const { data: claimed, error: claimError } = await db
     .from('followup_enrollments')
     .update({
       status: 'sending',
@@ -93,7 +93,7 @@ export async function claimDueEnrollment(
   if (!claimed) return { status: 'skipped', reason: 'not_claimable' }
 
   // Re-read attempt_count correctly: bump via RPC-less pattern
-  await supabase
+  await db
     .from('followup_enrollments')
     .update({
       attempt_count: Number(claimed.attempt_count ?? 0) + 1,
@@ -101,7 +101,7 @@ export async function claimDueEnrollment(
     .eq('id', claimed.id)
     .eq('organization_id', organizationId)
 
-  const { data: steps, error: stepsError } = await supabase
+  const { data: steps, error: stepsError } = await db
     .from('followup_steps')
     .select('id, channel, template_content, delay_minutes, step_order')
     .eq('sequence_id', claimed.sequence_id)
@@ -114,7 +114,7 @@ export async function claimDueEnrollment(
     ordered.find((s) => s.id === claimed.current_step_id) ?? ordered[0] ?? null
 
   if (!current) {
-    await supabase
+    await db
       .from('followup_enrollments')
       .update({
         status: 'completed',
@@ -143,7 +143,7 @@ export async function claimDueEnrollment(
  * Idempotent relative to status: only rows in `sending` move forward.
  */
 export async function completeFollowUpStep(
-  supabase: SupabaseClient | Awaited<ReturnType<typeof createClient>>,
+  db: DbClient | Awaited<ReturnType<typeof createClient>>,
   args: {
     organizationId: string
     enrollmentId: string
@@ -151,7 +151,7 @@ export async function completeFollowUpStep(
     completedStepId: string
   }
 ): Promise<{ status: 'advanced' | 'completed'; nextSendAt: string | null }> {
-  const { data: steps, error } = await supabase
+  const { data: steps, error } = await db
     .from('followup_steps')
     .select('id, delay_minutes, step_order')
     .eq('sequence_id', args.sequenceId)
@@ -165,7 +165,7 @@ export async function completeFollowUpStep(
   const now = new Date()
 
   if (!next) {
-    const { error: doneError } = await supabase
+    const { error: doneError } = await db
       .from('followup_enrollments')
       .update({
         status: 'completed',
@@ -185,7 +185,7 @@ export async function completeFollowUpStep(
   const delayMs = Math.max(0, Number(next.delay_minutes ?? 0)) * 60_000
   const nextSendAt = new Date(now.getTime() + delayMs).toISOString()
 
-  const { error: advError } = await supabase
+  const { error: advError } = await db
     .from('followup_enrollments')
     .update({
       status: 'scheduled',
@@ -202,11 +202,11 @@ export async function completeFollowUpStep(
 }
 
 export async function markFollowUpAsSent(
-  supabase: SupabaseClient | Awaited<ReturnType<typeof createClient>>,
+  db: DbClient | Awaited<ReturnType<typeof createClient>>,
   organizationId: string,
   enrollmentId: string
 ): Promise<void> {
-  const { error } = await supabase
+  const { error } = await db
     .from('followup_enrollments')
     .update({ status: 'sent', updated_at: new Date().toISOString() })
     .eq('organization_id', organizationId)
@@ -216,10 +216,10 @@ export async function markFollowUpAsSent(
 }
 
 export async function exitFollowUp(
-  supabase: SupabaseClient | Awaited<ReturnType<typeof createClient>>,
+  db: DbClient | Awaited<ReturnType<typeof createClient>>,
   args: { organizationId: string; enrollmentId: string; reason: string }
 ): Promise<void> {
-  const { error } = await supabase
+  const { error } = await db
     .from('followup_enrollments')
     .update({
       status: 'exited',

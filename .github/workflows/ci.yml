@@ -1,4 +1,4 @@
-name: FrontDesk AI CI
+name: CI
 
 on:
   push:
@@ -9,24 +9,12 @@ on:
 jobs:
   web:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: apps/web
     env:
-      NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
-      NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder
-      SUPABASE_SERVICE_ROLE_KEY: ci-placeholder
+      DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/frontdesk_ci
+      AUTH_SECRET: ci-auth-secret-ci-auth-secret-ci-auth-secret
+      CREDENTIAL_ENCRYPTION_KEY: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
+      NEXT_PUBLIC_SITE_URL: http://localhost:3000
       GEMINI_API_KEY: ci-placeholder
-      GEMINI_MODEL: gemini-3.8-flash
-      VAPI_WEBHOOK_SECRET: ci-placeholder
-      META_APP_SECRET: ci-placeholder
-      META_GRAPH_BASE_URL: https://graph.facebook.com/vXX.X
-      WHATSAPP_VERIFY_TOKEN: ci-placeholder
-      WHATSAPP_ACCESS_TOKEN: ci-placeholder
-      INSTAGRAM_VERIFY_TOKEN: ci-placeholder
-      INSTAGRAM_ACCESS_TOKEN: ci-placeholder
-      TWILIO_ACCOUNT_SID: ci-placeholder
-      TWILIO_AUTH_TOKEN: ci-placeholder
       CRON_SECRET: ci-placeholder
     steps:
       - uses: actions/checkout@v4
@@ -34,22 +22,15 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: apps/web/package-lock.json
       - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: "1.4.2"
       - name: Install
         run: npm ci
       - name: Lint
         run: npm run lint
       - name: Typecheck
         run: npm run typecheck
-      # The runner and the tests are executed with Bun. Bun is a runtime here, not a
-      # dependency: nothing is added to package.json, so `npm ci` stays authoritative.
       - name: Unit tests
-        run: bun test
-      # Production build gate: Next.js compilation must succeed with CI placeholder env.
-      # Required by Phase 0 exit (BUILD = GREEN) and README canonical path.
+        run: npm test
       - name: Build
         run: npm run build
 
@@ -57,7 +38,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:14
+        image: postgres:17
         env:
           POSTGRES_PASSWORD: postgres
           POSTGRES_DB: frontdesk_ci
@@ -72,19 +53,13 @@ jobs:
       DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/frontdesk_ci
     steps:
       - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
+      - uses: actions/setup-node@v4
         with:
-          bun-version: "1.4.2"
-      - name: Install migration runner dependencies
-        working-directory: packages/db
-        run: bun install --frozen-lockfile
-      # The migrations depend on objects Supabase provisions (the `auth` schema,
-      # auth.uid() and the PostgREST roles). This shim reproduces them so the
-      # migrations are actually executed instead of only being parsed.
-      - name: Provision Supabase-compatible shim
-        working-directory: packages/db
-        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f scripts/supabase-shim.sql
+          node-version: 22
+          cache: npm
+      - name: Install
+        run: npm ci
       - name: Apply migrations
-        run: DATABASE_URL="$DATABASE_URL" bun run scripts/db/migrate.ts up
-      - name: Verify migrations are all applied
-        run: DATABASE_URL="$DATABASE_URL" bun run scripts/db/migrate.ts status
+        run: npm run db:migrate
+      - name: Verify migrations
+        run: npm run db:status

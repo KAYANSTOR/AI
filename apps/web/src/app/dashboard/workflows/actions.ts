@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { requireAdminCapability, audit } from '@/lib/capabilities/guard'
-import { actionErrorMessage, supabaseActionError } from '@/lib/i18n/action-error'
+import { actionErrorMessage, dbActionError } from '@/lib/i18n/action-error'
 import type { WorkflowDefinition } from '@/lib/workflows/engine'
 import { startWorkflowRun } from '@/lib/workflows/engine'
 import { getWorkflowTemplate } from '@/lib/workflows/templates'
@@ -38,7 +38,7 @@ export async function createWorkflowAction(input: {
     const defError = validateDefinition(input.definition)
     if (defError) return { ok: false, error: defError }
 
-    const { data, error } = await ctx.supabase
+    const { data, error } = await ctx.db
       .from('workflows')
       .insert({
         organization_id: ctx.organizationId,
@@ -54,7 +54,7 @@ export async function createWorkflowAction(input: {
       .select('id')
       .single()
 
-    if (error || !data) return { ok: false, error: supabaseActionError(error) }
+    if (error || !data) return { ok: false, error: dbActionError(error) }
 
     await audit(ctx, 'workflow.created', 'workflow', data.id, {
       trigger_type: input.triggerType,
@@ -97,14 +97,14 @@ export async function updateWorkflowDraftAction(input: {
   try {
     const ctx = await requireAdminCapability(null)
 
-    const { data: current, error: readError } = await ctx.supabase
+    const { data: current, error: readError } = await ctx.db
       .from('workflows')
       .select('id, status')
       .eq('id', input.workflowId)
       .eq('organization_id', ctx.organizationId)
       .maybeSingle()
 
-    if (readError) return { ok: false, error: supabaseActionError(readError) }
+    if (readError) return { ok: false, error: dbActionError(readError) }
     if (!current) return { ok: false, error: 'السير غير موجود.' }
     if (current.status === 'published' || current.status === 'retired') {
       return { ok: false, error: 'النسخة المنشورة غير قابلة للتعديل؛ أنشئ نسخة جديدة.' }
@@ -121,13 +121,13 @@ export async function updateWorkflowDraftAction(input: {
     if (input.triggerType !== undefined) patch.trigger_type = input.triggerType.trim()
     if (input.definition !== undefined) patch.definition = input.definition
 
-    const { error } = await ctx.supabase
+    const { error } = await ctx.db
       .from('workflows')
       .update(patch)
       .eq('id', input.workflowId)
       .eq('organization_id', ctx.organizationId)
 
-    if (error) return { ok: false, error: supabaseActionError(error) }
+    if (error) return { ok: false, error: dbActionError(error) }
 
     await audit(ctx, 'workflow.updated', 'workflow', input.workflowId)
     revalidatePath('/dashboard/workflows')
@@ -140,7 +140,7 @@ export async function updateWorkflowDraftAction(input: {
 export async function markWorkflowTestedAction(workflowId: string): Promise<WorkflowActionResult> {
   try {
     const ctx = await requireAdminCapability(null)
-    const { data, error } = await ctx.supabase
+    const { data, error } = await ctx.db
       .from('workflows')
       .update({ status: 'tested', updated_at: new Date().toISOString() })
       .eq('id', workflowId)
@@ -149,7 +149,7 @@ export async function markWorkflowTestedAction(workflowId: string): Promise<Work
       .select('id')
       .maybeSingle()
 
-    if (error) return { ok: false, error: supabaseActionError(error) }
+    if (error) return { ok: false, error: dbActionError(error) }
     if (!data) return { ok: false, error: 'لا يمكن تعليم السير كمُختبر من حالته الحالية.' }
 
     await audit(ctx, 'workflow.tested', 'workflow', workflowId)
@@ -164,14 +164,14 @@ export async function publishWorkflowAction(workflowId: string): Promise<Workflo
   try {
     const ctx = await requireAdminCapability(null)
 
-    const { data: current, error: readError } = await ctx.supabase
+    const { data: current, error: readError } = await ctx.db
       .from('workflows')
       .select('id, status, definition, version')
       .eq('id', workflowId)
       .eq('organization_id', ctx.organizationId)
       .maybeSingle()
 
-    if (readError) return { ok: false, error: supabaseActionError(readError) }
+    if (readError) return { ok: false, error: dbActionError(readError) }
     if (!current) return { ok: false, error: 'السير غير موجود.' }
     if (current.status !== 'tested' && current.status !== 'draft') {
       return { ok: false, error: 'النشر مسموح من draft/tested فقط.' }
@@ -180,7 +180,7 @@ export async function publishWorkflowAction(workflowId: string): Promise<Workflo
     const defError = validateDefinition(current.definition as WorkflowDefinition)
     if (defError) return { ok: false, error: defError }
 
-    const { error } = await ctx.supabase
+    const { error } = await ctx.db
       .from('workflows')
       .update({
         status: 'published',
@@ -191,7 +191,7 @@ export async function publishWorkflowAction(workflowId: string): Promise<Workflo
       .eq('id', workflowId)
       .eq('organization_id', ctx.organizationId)
 
-    if (error) return { ok: false, error: supabaseActionError(error) }
+    if (error) return { ok: false, error: dbActionError(error) }
 
     await audit(ctx, 'workflow.published', 'workflow', workflowId, {
       version: current.version,
@@ -206,7 +206,7 @@ export async function publishWorkflowAction(workflowId: string): Promise<Workflo
 export async function retireWorkflowAction(workflowId: string): Promise<WorkflowActionResult> {
   try {
     const ctx = await requireAdminCapability(null)
-    const { data, error } = await ctx.supabase
+    const { data, error } = await ctx.db
       .from('workflows')
       .update({ status: 'retired', updated_at: new Date().toISOString() })
       .eq('id', workflowId)
@@ -215,7 +215,7 @@ export async function retireWorkflowAction(workflowId: string): Promise<Workflow
       .select('id')
       .maybeSingle()
 
-    if (error) return { ok: false, error: supabaseActionError(error) }
+    if (error) return { ok: false, error: dbActionError(error) }
     if (!data) return { ok: false, error: 'يمكن إيقاف النسخ المنشورة فقط.' }
 
     await audit(ctx, 'workflow.retired', 'workflow', workflowId)
@@ -233,7 +233,7 @@ export async function testRunWorkflowAction(
   try {
     const ctx = await requireAdminCapability(null)
     try {
-      await assertWithinLimit(ctx.supabase, ctx.organizationId, 'automation_runs', 1)
+      await assertWithinLimit(ctx.db, ctx.organizationId, 'automation_runs', 1)
     } catch (err) {
       if (err instanceof EntitlementExceededError) {
         return { ok: false, error: 'تجاوزت حد تشغيل الأتمتة في خطتك.' }
@@ -241,7 +241,7 @@ export async function testRunWorkflowAction(
       throw err
     }
 
-    const result = await startWorkflowRun(ctx.supabase, {
+    const result = await startWorkflowRun(ctx.db, {
       organizationId: ctx.organizationId,
       workflowId,
       triggerPayload: payload,

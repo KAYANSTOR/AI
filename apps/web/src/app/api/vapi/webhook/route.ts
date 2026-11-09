@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createAdminClient } from '@/lib/supabase/admin'
+import { createAdminClient } from '@/lib/db/admin'
 import { acquireWebhookEvent, markWebhookProcessed } from '@/lib/channels/idempotency'
 import { resolveContactIdentity, normalizeE164 } from '@/lib/channels/contacts'
 import { executeTool, getToolDefinitionsForAgent } from '@/lib/ai/tools'
@@ -55,14 +55,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ status: 'ok', note: 'acknowledged' })
   }
 
-  const supabase = createAdminClient()
+  const db = createAdminClient()
   let eventRowId: string | null = null
 
   try {
     const explicitEventId = String(message.id ?? body.eventId ?? '').trim()
     const externalEventId = explicitEventId || stablePayloadEventId('vapi', { type, callId, message })
 
-    const acquired = await acquireWebhookEvent(supabase, 'vapi', externalEventId, body)
+    const acquired = await acquireWebhookEvent(db, 'vapi', externalEventId, body)
     if (acquired.status === 'duplicate') {
       return NextResponse.json({ status: 'duplicate' })
     }
@@ -73,20 +73,20 @@ export async function POST(req: NextRequest) {
 
     const phoneNumberId = extractPhoneNumberId(call, message, body)
     if (!phoneNumberId) {
-      await markWebhookProcessed(supabase, eventRowId, 'failed', 'missing_vapi_phone_number_id')
+      await markWebhookProcessed(db, eventRowId, 'failed', 'missing_vapi_phone_number_id')
       return NextResponse.json({ error: 'missing_vapi_phone_number_id' }, { status: 400 })
     }
 
-    const channel = await resolveChannelExact(supabase, {
+    const channel = await resolveChannelExact(db, {
       channelType: 'phone',
       providerAccountId: phoneNumberId,
     })
     if (!channel) {
-      await markWebhookProcessed(supabase, eventRowId, 'failed', 'unmapped_vapi_number')
+      await markWebhookProcessed(db, eventRowId, 'failed', 'unmapped_vapi_number')
       return NextResponse.json({ status: 'unmapped_vapi_number' })
     }
 
-    await supabase
+    await db
       .from('webhook_events')
       .update({
         organization_id: channel.organizationId,
@@ -98,7 +98,7 @@ export async function POST(req: NextRequest) {
 
     const callerNumber = extractCallerNumber(call, message)
     const contact = callerNumber
-      ? await resolveContactIdentity(supabase, channel.organizationId, {
+      ? await resolveContactIdentity(db, channel.organizationId, {
           channel: 'phone',
           phone: normalizeE164(callerNumber),
           externalUserId: normalizeE164(callerNumber),
@@ -106,7 +106,7 @@ export async function POST(req: NextRequest) {
       : null
 
     const conversationId = contact
-      ? await ensureOpenConversation(supabase, {
+      ? await ensureOpenConversation(db, {
           organizationId: channel.organizationId,
           businessId: channel.businessId,
           contactId: contact.contactId,
@@ -114,19 +114,19 @@ export async function POST(req: NextRequest) {
         })
       : null
 
-    const agent = await resolveBusinessAgent(supabase, channel.businessId)
+    const agent = await resolveBusinessAgent(db, channel.businessId)
 
     if (type === 'assistant-request') {
       if (!agent) {
-        await markWebhookProcessed(supabase, eventRowId, 'failed', 'business_inactive_or_agent_unavailable')
+        await markWebhookProcessed(db, eventRowId, 'failed', 'business_inactive_or_agent_unavailable')
         return NextResponse.json({ error: 'assistant_unavailable' }, { status: 409 })
       }
 
       const [prompt, tools] = await Promise.all([
-        buildBusinessSystemPrompt(supabase, channel.organizationId, agent.id),
-        getToolDefinitionsForAgent(supabase, channel.organizationId, agent.id),
+        buildBusinessSystemPrompt(db, channel.organizationId, agent.id),
+        getToolDefinitionsForAgent(db, channel.organizationId, agent.id),
       ])
-      await markWebhookProcessed(supabase, eventRowId, 'processed')
+      await markWebhookProcessed(db, eventRowId, 'processed')
       return NextResponse.json(
         {
           assistant: {
@@ -149,11 +149,11 @@ export async function POST(req: NextRequest) {
 
     if (isToolCallEvent(type, message)) {
       if (!agent) {
-        await markWebhookProcessed(supabase, eventRowId, 'failed', 'business_inactive_or_agent_unavailable')
+        await markWebhookProcessed(db, eventRowId, 'failed', 'business_inactive_or_agent_unavailable')
         return NextResponse.json({ error: 'assistant_unavailable' }, { status: 409 })
       }
 
-      const results = await handleToolCalls(supabase, {
+      const results = await handleToolCalls(db, {
         organizationId: channel.organizationId,
         businessId: channel.businessId,
         conversationId,
@@ -161,13 +161,13 @@ export async function POST(req: NextRequest) {
         agentId: agent.id,
         message,
       })
-      await markWebhookProcessed(supabase, eventRowId, 'processed')
+      await markWebhookProcessed(db, eventRowId, 'processed')
       return NextResponse.json({ results }, { headers: timingHeader(started) })
     }
 
     // Call lifecycle events (status-update, end-of-call-report, …) are recorded as
     // audit evidence — the database is the source of truth for call outcomes.
-    await recordCallLifecycle(supabase, {
+    await recordCallLifecycle(db, {
       organizationId: channel.organizationId,
       businessId: channel.businessId,
       callId,
@@ -175,11 +175,11 @@ export async function POST(req: NextRequest) {
       message,
       call,
     })
-    await markWebhookProcessed(supabase, eventRowId, 'processed')
+    await markWebhookProcessed(db, eventRowId, 'processed')
     return NextResponse.json({ ok: true }, { headers: timingHeader(started) })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'vapi webhook error'
-    if (eventRowId) await markWebhookProcessed(supabase, eventRowId, 'failed', message)
+    if (eventRowId) await markWebhookProcessed(db, eventRowId, 'failed', message)
     return NextResponse.json({ error: publicWebhookError() }, { status: 500 })
   }
 }
@@ -234,7 +234,7 @@ function isToolCallEvent(type: string, message: Record<string, unknown>) {
 }
 
 async function handleToolCalls(
-  supabase: ReturnType<typeof createAdminClient>,
+  db: ReturnType<typeof createAdminClient>,
   context: {
     organizationId: string
     businessId: string
@@ -278,7 +278,7 @@ async function handleToolCalls(
       conversationId: context.conversationId,
       contactId: context.contactId,
       agentId: context.agentId,
-      supabase,
+      db,
       actor: 'agent',
     })
     results.push({ toolCallId: call.id, result: out.ok ? out.result : { error: out.error } })
@@ -299,7 +299,7 @@ function parseArguments(raw: unknown): Record<string, unknown> {
 }
 
 async function recordCallLifecycle(
-  supabase: ReturnType<typeof createAdminClient>,
+  db: ReturnType<typeof createAdminClient>,
   input: {
     organizationId: string
     businessId: string
@@ -317,7 +317,7 @@ async function recordCallLifecycle(
   )
   const summary = readString(input.message.summary)
 
-  const { error } = await supabase.from('audit_events').insert({
+  const { error } = await db.from('audit_events').insert({
     organization_id: input.organizationId,
     business_id: input.businessId,
     actor_type: 'provider',

@@ -1,4 +1,4 @@
-import type { SupabaseClient } from '@supabase/supabase-js'
+import type { DbClient } from '@/lib/db/client'
 
 export type PlanLimits = {
   channels?: number
@@ -35,10 +35,10 @@ function periodBounds(now = new Date()) {
 }
 
 export async function getOrganizationPlanLimits(
-  supabase: SupabaseClient,
+  db: DbClient,
   organizationId: string
 ): Promise<{ status: string; limits: PlanLimits; planCode: string }> {
-  const { data: sub } = await supabase
+  const { data: sub } = await db
     .from('subscriptions')
     .select('status, plan_id, plan_tier, plans(limits, code)')
     .eq('organization_id', organizationId)
@@ -74,23 +74,23 @@ export async function getOrganizationPlanLimits(
 }
 
 export async function assertSubscriptionActive(
-  supabase: SupabaseClient,
+  db: DbClient,
   organizationId: string
 ): Promise<void> {
-  const { status } = await getOrganizationPlanLimits(supabase, organizationId)
+  const { status } = await getOrganizationPlanLimits(db, organizationId)
   if (status === 'suspended' || status === 'cancelled') {
     throw new EntitlementExceededError('subscription', 0, 0)
   }
 }
 
 export async function getMeterUsage(
-  supabase: SupabaseClient,
+  db: DbClient,
   organizationId: string,
   meterKey: string
 ): Promise<number> {
   const { start } = periodBounds()
 
-  const { data, error: meterError } = await supabase
+  const { data, error: meterError } = await db
     .from('usage_meters')
     .select('consumed_value')
     .eq('organization_id', organizationId)
@@ -112,7 +112,7 @@ export async function getMeterUsage(
         ? 'message_outbound'
         : meterKey
 
-  const { data: ledger, error: ledgerError } = await supabase
+  const { data: ledger, error: ledgerError } = await db
     .from('usage_ledger')
     .select('units')
     .eq('organization_id', organizationId)
@@ -131,13 +131,13 @@ export async function getMeterUsage(
 
 /** Upsert monthly meter row (best-effort; ledger remains source of truth fallback). */
 export async function recordMeterUsage(
-  supabase: SupabaseClient,
+  db: DbClient,
   organizationId: string,
   meterKey: string,
   units = 1
 ): Promise<void> {
   const { start, end } = periodBounds()
-  const { data: existing } = await supabase
+  const { data: existing } = await db
     .from('usage_meters')
     .select('id, consumed_value')
     .eq('organization_id', organizationId)
@@ -146,7 +146,7 @@ export async function recordMeterUsage(
     .maybeSingle()
 
   if (existing) {
-    await supabase
+    await db
       .from('usage_meters')
       .update({
         consumed_value: Number(existing.consumed_value || 0) + units,
@@ -156,7 +156,7 @@ export async function recordMeterUsage(
     return
   }
 
-  await supabase.from('usage_meters').insert({
+  await db.from('usage_meters').insert({
     organization_id: organizationId,
     period_start: start.toISOString(),
     period_end: end.toISOString(),
@@ -166,27 +166,27 @@ export async function recordMeterUsage(
 }
 
 export async function assertWithinLimit(
-  supabase: SupabaseClient,
+  db: DbClient,
   organizationId: string,
   meter: keyof PlanLimits,
   increment = 1
 ): Promise<void> {
-  await assertSubscriptionActive(supabase, organizationId)
-  const { limits } = await getOrganizationPlanLimits(supabase, organizationId)
+  await assertSubscriptionActive(db, organizationId)
+  const { limits } = await getOrganizationPlanLimits(db, organizationId)
   const limit = limits[meter]
   if (limit == null) return
 
-  const used = await getMeterUsage(supabase, organizationId, meter)
+  const used = await getMeterUsage(db, organizationId, meter)
   if (used + increment > limit) {
     throw new EntitlementExceededError(meter, limit, used)
   }
 }
 
 export async function loadBillingSnapshot(
-  supabase: SupabaseClient,
+  db: DbClient,
   organizationId: string
 ) {
-  const plan = await getOrganizationPlanLimits(supabase, organizationId)
+  const plan = await getOrganizationPlanLimits(db, organizationId)
   const meters: (keyof PlanLimits)[] = [
     'ai_messages',
     'voice_minutes',
@@ -197,14 +197,14 @@ export async function loadBillingSnapshot(
   const usage: Record<string, number> = {}
   for (const m of meters) {
     if (m === 'channels') {
-      const { count } = await supabase
+      const { count } = await db
         .from('channels')
         .select('id', { count: 'exact', head: true })
         .eq('organization_id', organizationId)
         .eq('is_active', true)
       usage.channels = count ?? 0
     } else {
-      usage[m] = await getMeterUsage(supabase, organizationId, m)
+      usage[m] = await getMeterUsage(db, organizationId, m)
     }
   }
   return { ...plan, usage }

@@ -46,7 +46,7 @@ export default async function ConversationsPage({
   const unreadOnly = params.unread === '1'
   const filter = STATUS_FILTERS.find((f) => f.id === view) ?? STATUS_FILTERS[0]
 
-  const { data: savedViews } = await ctx.supabase
+  const { data: savedViews } = await ctx.db
     .from('saved_inbox_views')
     .select('id, name, filters, is_shared')
     .eq('organization_id', ctx.organizationId)
@@ -65,7 +65,7 @@ export default async function ConversationsPage({
   const effectiveQ = savedFilter?.q ?? q
   const effectiveUnread = savedFilter?.unreadOnly ?? unreadOnly
 
-  let query = ctx.supabase
+  let query = ctx.db
     .from('conversations')
     .select(
       'id, status, ai_enabled, state, last_message_at, unread_count, contacts(full_name, phone), channels(channel_type)'

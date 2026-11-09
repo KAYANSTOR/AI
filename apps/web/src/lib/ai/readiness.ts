@@ -1,4 +1,4 @@
-import type { SupabaseClient } from '@supabase/supabase-js'
+import type { DbClient } from '@/lib/db/client'
 
 export type KnowledgeCategoryGroup = {
   id: string
@@ -33,7 +33,7 @@ export type ReadinessResult = {
 }
 
 export async function calculateAgentReadiness(
-  supabase: SupabaseClient,
+  db: DbClient,
   organizationId: string
 ): Promise<ReadinessResult> {
   const [
@@ -43,27 +43,27 @@ export async function calculateAgentReadiness(
     { data: profile },
     { data: business },
   ] = await Promise.all([
-    supabase
+    db
       .from('knowledge_base')
       .select('id, title, content, category, is_active, updated_at')
       .eq('organization_id', organizationId)
       .order('updated_at', { ascending: false }),
-    supabase
+    db
       .from('services')
       .select('id, name, price_amount, is_active')
       .eq('organization_id', organizationId)
       .eq('is_active', true),
-    supabase
+    db
       .from('business_hours')
       .select('day_of_week, is_closed, open_time, close_time')
       .eq('organization_id', organizationId)
       .eq('is_closed', false),
-    supabase
+    db
       .from('business_profiles')
       .select('setup_description, system_prompt_addition, public_phone_number, industry')
       .eq('organization_id', organizationId)
       .maybeSingle(),
-    supabase
+    db
       .from('businesses')
       .select('name')
       .eq('organization_id', organizationId)

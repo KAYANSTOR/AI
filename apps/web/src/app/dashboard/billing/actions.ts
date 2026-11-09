@@ -21,7 +21,7 @@ export async function startCheckoutAction(): Promise<BillingActionResult> {
       }
     }
 
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://frontdesk-ai-eosin.vercel.app'
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'
     const url = await createCheckoutSessionUrl({
       organizationId: ctx.organizationId,
       successUrl: `${appUrl}/dashboard/billing?checkout=success`,

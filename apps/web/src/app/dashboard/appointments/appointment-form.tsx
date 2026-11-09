@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
+import { createAppointmentAction } from './actions'
 import { Loader2 } from 'lucide-react'
 import { ar } from '@/lib/i18n/ar'
 import { formatNumber } from '@/lib/i18n/format'
@@ -10,9 +10,8 @@ import { formatNumber } from '@/lib/i18n/format'
 type Service = { id: string; name: string; duration_minutes: number }
 type Contact = { id: string; full_name: string | null; phone: string | null }
 
-export function AppointmentForm({ organizationId, services, contacts }: { organizationId: string; services: Service[]; contacts: Contact[] }) {
+export function AppointmentForm({ services, contacts }: { organizationId: string; services: Service[]; contacts: Contact[] }) {
   const router = useRouter()
-  const supabase = createClient()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [contactId, setContactId] = useState('')
@@ -27,16 +26,14 @@ export function AppointmentForm({ organizationId, services, contacts }: { organi
     const service = services.find((s) => s.id === serviceId)
     const start = new Date(startsAt)
     const end = new Date(start.getTime() + (service?.duration_minutes ?? 60) * 60_000)
-    const { error: insertError } = await supabase.from('appointments').insert({
-      organization_id: organizationId,
-      contact_id: contactId,
-      service_id: serviceId,
-      starts_at: start.toISOString(),
-      ends_at: end.toISOString(),
-      status: 'confirmed',
+    const result = await createAppointmentAction({
+      contactId,
+      serviceId,
+      startsAt: start.toISOString(),
+      endsAt: end.toISOString(),
     })
     setLoading(false)
-    if (insertError) {
+    if (!result.ok) {
       setError(ar.errors.save)
       return
     }

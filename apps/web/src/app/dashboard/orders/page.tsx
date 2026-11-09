@@ -14,7 +14,7 @@ export default async function OrdersPage() {
     redirect('/login')
   }
 
-  const { data: orders } = await ctx.supabase
+  const { data: orders } = await ctx.db
     .from('orders')
     .select('id, order_number, status, total, currency, created_at, contacts(full_name, phone)')
     .eq('organization_id', ctx.organizationId)
