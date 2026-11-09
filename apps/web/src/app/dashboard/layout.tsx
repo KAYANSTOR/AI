@@ -1,8 +1,13 @@
+import type { Metadata } from 'next'
 import { Sidebar } from '@/components/Sidebar'
 import { DashboardShell } from '@/components/dashboard/dashboard-shell'
 import { getDashboardContext } from '@/lib/dashboard/context'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
+
+export const metadata: Metadata = {
+  robots: { index: false, follow: false, noarchive: true, nosnippet: true },
+}
 
 /** Every dashboard page is per-session and per-tenant, so it must render on each request. */
 export const dynamic = 'force-dynamic'
