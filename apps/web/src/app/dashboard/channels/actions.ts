@@ -14,6 +14,7 @@ import {
 } from '@/lib/channels/management'
 import { assertWithinLimit, EntitlementExceededError } from '@/lib/billing/entitlements'
 import { connectWhatsAppChannel } from '@/lib/channels/connect-service'
+import { verifyMetaChannelConnection } from '@/lib/channels/meta-verification'
 
 export type ChannelActionResult = {
   ok: boolean
@@ -362,6 +363,15 @@ export async function testChannelAction(input: {
     if (!data) return { ok: false, error: 'القناة غير مربوطة بعد.' }
 
     const result = await verifyChannelBinding(db, data as unknown as ChannelRow)
+    if (spec.type === 'whatsapp') {
+      const liveChecks = await verifyMetaChannelConnection({
+        organizationId: org.organizationId,
+        channelId: data.id,
+        phoneNumberId: data.provider_account_id,
+      })
+      result.checks.push(...liveChecks)
+      result.ok = result.checks.every((check) => check.ok)
+    }
 
     await audit(org.organizationId, data.business_id, 'channel.tested', 'channel', data.id, {
       channel_type: spec.type,
