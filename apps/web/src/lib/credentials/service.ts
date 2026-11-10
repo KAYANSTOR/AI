@@ -197,13 +197,16 @@ export async function deleteChannelCredential(
  */
 export async function loadChannelCredentials(
   db: DbClient,
-  channelId: string
+  channelId: string,
+  provider?: string
 ): Promise<Record<string, string>> {
-  const { data, error } = await db
+  let query = db
     .from('provider_credentials')
     .select('credential_type, encrypted_value, status')
     .eq('channel_id', channelId)
     .eq('status', 'active')
+  if (provider) query = query.eq('provider', provider)
+  const { data, error } = await query
   if (error) throw new Error(error.message)
 
   const credentials: Record<string, string> = {}
