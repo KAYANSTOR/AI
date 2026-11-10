@@ -15,7 +15,7 @@ import { normalizeChannelNumber } from '@/lib/channels/management'
 
 const GRAPH_VERSION = 'v26.0'
 
-function graphBase(): string {
+export function getMetaGraphBaseUrl(): string {
   const configured = process.env.META_GRAPH_BASE_URL?.trim()
   if (configured) {
     const normalized = configured.replace(/\/+$/, '')
@@ -59,7 +59,7 @@ export type EmbeddedSignupResult =
 async function exchangeCodeForBusinessToken(code: string): Promise<string> {
   const appId = requireEnv('NEXT_PUBLIC_META_APP_ID')
   const appSecret = requireEnv('META_APP_SECRET')
-  const url = new URL(`${graphBase()}/oauth/access_token`)
+  const url = new URL(`${getMetaGraphBaseUrl()}/oauth/access_token`)
   url.searchParams.set('client_id', appId)
   url.searchParams.set('client_secret', appSecret)
   url.searchParams.set('code', code)
@@ -97,7 +97,7 @@ async function exchangeCodeForBusinessToken(code: string): Promise<string> {
 }
 
 async function subscribeAppToWaba(wabaId: string, businessToken: string): Promise<void> {
-  const response = await fetch(`${graphBase()}/${encodeURIComponent(wabaId)}/subscribed_apps`, {
+  const response = await fetch(`${getMetaGraphBaseUrl()}/${encodeURIComponent(wabaId)}/subscribed_apps`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${businessToken}` },
   })
@@ -115,7 +115,7 @@ async function fetchVerifiedPhoneNumber(
   phoneNumberId: string,
   businessToken: string
 ): Promise<string | null> {
-  const url = new URL(`${graphBase()}/${encodeURIComponent(phoneNumberId)}`)
+  const url = new URL(`${getMetaGraphBaseUrl()}/${encodeURIComponent(phoneNumberId)}`)
   url.searchParams.set('fields', 'id,display_phone_number,verified_name')
   const response = await fetch(url.toString(), {
     headers: { Authorization: `Bearer ${businessToken}` },
@@ -140,7 +140,7 @@ async function verifyPhoneBelongsToWaba(
   phoneNumberId: string,
   businessToken: string
 ): Promise<void> {
-  const url = new URL(`${graphBase()}/${encodeURIComponent(wabaId)}/phone_numbers`)
+  const url = new URL(`${getMetaGraphBaseUrl()}/${encodeURIComponent(wabaId)}/phone_numbers`)
   url.searchParams.set('fields', 'id')
   url.searchParams.set('limit', '100')
   const response = await fetch(url.toString(), {
