@@ -93,12 +93,14 @@ export function WhatsAppEmbeddedSignupButton({
   const [sdkReady, setSdkReady] = useState(false)
   const sessionRef = useRef<SessionPayload | null>(null)
   const codeRef = useRef<string | null>(null)
+  const completionStartedRef = useRef(false)
 
   const tryComplete = useCallback(async () => {
     const code = codeRef.current
     const session = sessionRef.current
-    if (!code || !session?.phone_number_id || !session?.waba_id) return
+    if (!code || !session?.phone_number_id || !session?.waba_id || completionStartedRef.current) return
 
+    completionStartedRef.current = true
     setBusy(true)
     try {
       const result = await completeWhatsAppEmbeddedSignupAction({
@@ -117,6 +119,7 @@ export function WhatsAppEmbeddedSignupButton({
       onError?.('تعذّر إتمام الربط. حاول مرة أخرى.')
     } finally {
       setBusy(false)
+      completionStartedRef.current = false
       codeRef.current = null
       sessionRef.current = null
     }
@@ -140,6 +143,14 @@ export function WhatsAppEmbeddedSignupButton({
       try {
         const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data
         if (data?.type !== 'WA_EMBEDDED_SIGNUP') return
+        if (data.event === 'CANCEL' || data.event === 'ERROR') {
+          completionStartedRef.current = false
+          codeRef.current = null
+          sessionRef.current = null
+          setBusy(false)
+          onError?.(data.event === 'CANCEL' ? 'ألغيت عملية الربط من Meta.' : 'أبلغت Meta عن خطأ أثناء إعداد واتساب. أعد المحاولة.')
+          return
+        }
         if (data.data?.phone_number_id && data.data?.waba_id) {
           sessionRef.current = {
             phone_number_id: String(data.data.phone_number_id),
@@ -173,6 +184,7 @@ export function WhatsAppEmbeddedSignupButton({
     setBusy(true)
     codeRef.current = null
     sessionRef.current = null
+    completionStartedRef.current = false
 
     window.FB.login(
       (response) => {
