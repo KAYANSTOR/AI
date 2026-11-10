@@ -5,12 +5,16 @@ import { getMetaGraphBaseUrl } from '@/lib/channels/embedded-signup'
 type MetaCheck = { label: string; ok: boolean; detail?: string }
 
 async function graphGet<T>(path: string, token: string): Promise<{ ok: boolean; body: T | null; status: number }> {
-  const response = await fetch(`${getMetaGraphBaseUrl()}/${path}`, {
-    headers: { Authorization: `Bearer ${token}` },
-    cache: 'no-store',
-  })
-  const body = await response.json().catch(() => null) as T | null
-  return { ok: response.ok, body, status: response.status }
+  try {
+    const response = await fetch(`${getMetaGraphBaseUrl()}/${path}`, {
+      headers: { Authorization: `Bearer ${token}` },
+      cache: 'no-store',
+    })
+    const body = await response.json().catch(() => null) as T | null
+    return { ok: response.ok, body, status: response.status }
+  } catch {
+    return { ok: false, body: null, status: 0 }
+  }
 }
 
 /**
