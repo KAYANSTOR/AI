@@ -24,6 +24,8 @@ async function handle(req: NextRequest) {
     .eq('status', 'sent')
     .not('valid_until', 'is', null)
     .lt('valid_until', now)
+    .order('valid_until', { ascending: true })
+    .order('id', { ascending: true })
     .limit(100)
 
   if (error) return NextResponse.json({ error: publicWebhookError() }, { status: 500 })

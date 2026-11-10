@@ -31,6 +31,9 @@ async function handle(req: NextRequest) {
     .in('status', ['pending', 'confirmed'])
     .gte('starts_at', new Date(now).toISOString())
     .lte('starts_at', new Date(now + WINDOW_24H_MS + SKEW_MS).toISOString())
+    // Deterministic page: soonest appointments first, id as tie-breaker.
+    .order('starts_at', { ascending: true })
+    .order('id', { ascending: true })
     .limit(80)
 
   if (error) return NextResponse.json({ error: publicWebhookError() }, { status: 500 })
@@ -40,15 +43,69 @@ async function handle(req: NextRequest) {
   let blocked = 0
   let failed = 0
 
-  for (const appt of appointments ?? []) {
-    const starts = new Date(appt.starts_at).getTime()
-    const delta = starts - now
-
+  // Decide which appointments actually need a reminder first, so the lookups below can be
+  // batched (3 queries total) instead of repeated per appointment.
+  const due = (appointments ?? []).filter((appt) => {
+    const delta = new Date(appt.starts_at).getTime() - now
     const needs24 =
       !appt.reminder_24h_sent_at && delta <= WINDOW_24H_MS + SKEW_MS && delta > WINDOW_1H_MS
     const needs1 = !appt.reminder_1h_sent_at && delta <= WINDOW_1H_MS + SKEW_MS && delta > 0
+    return needs24 || needs1
+  })
 
-    if (!needs24 && !needs1) continue
+  const contactIds = [...new Set(due.map((appt) => appt.contact_id as string))]
+  const organizationIds = [...new Set(due.map((appt) => appt.organization_id as string))]
+
+  const [contactsResult, identitiesResult, channelsResult] = due.length
+    ? await Promise.all([
+        db.from('contacts').select('id, organization_id, phone, full_name').in('id', contactIds),
+        db
+          .from('contact_identities')
+          .select('contact_id, external_user_id, external_phone, channel')
+          .in('contact_id', contactIds)
+          .in('channel', ['whatsapp', 'sms']),
+        db
+          .from('channels')
+          .select('id, organization_id, business_id, channel_type')
+          .in('organization_id', organizationIds)
+          .in('channel_type', ['whatsapp', 'sms'])
+          .eq('is_active', true),
+      ])
+    : [null, null, null]
+
+  // A failed lookup must not turn into "no recipient" for every appointment (the old
+  // per-row code treated a failed lookup the same way, but only for that one row).
+  if (contactsResult?.error || identitiesResult?.error || channelsResult?.error) {
+    return NextResponse.json({ error: publicWebhookError() }, { status: 500 })
+  }
+
+  const contactById = new Map<string, { organization_id: string; phone: string | null }>()
+  for (const row of contactsResult?.data ?? []) {
+    contactById.set(row.id as string, { organization_id: row.organization_id as string, phone: row.phone as string | null })
+  }
+  const identityByContact = new Map<string, { channel: string; external_user_id: string | null; external_phone: string | null }>()
+  for (const row of identitiesResult?.data ?? []) {
+    if (!identityByContact.has(row.contact_id as string)) {
+      identityByContact.set(row.contact_id as string, {
+        channel: row.channel as string,
+        external_user_id: row.external_user_id as string | null,
+        external_phone: row.external_phone as string | null,
+      })
+    }
+  }
+  const channelByOrgAndType = new Map<string, { id: string; business_id: string | null }>()
+  for (const row of channelsResult?.data ?? []) {
+    const key = `${row.organization_id}:${row.channel_type}`
+    if (!channelByOrgAndType.has(key)) {
+      channelByOrgAndType.set(key, { id: row.id as string, business_id: row.business_id as string | null })
+    }
+  }
+
+  for (const appt of due) {
+    const starts = new Date(appt.starts_at).getTime()
+    const delta = starts - now
+
+    const needs1 = !appt.reminder_1h_sent_at && delta <= WINDOW_1H_MS + SKEW_MS && delta > 0
 
     const kind = needs1 ? '1h' : '24h'
     const column = kind === '1h' ? 'reminder_1h_sent_at' : 'reminder_24h_sent_at'
@@ -66,20 +123,10 @@ async function handle(req: NextRequest) {
       throw err
     }
 
-    const { data: contact } = await db
-      .from('contacts')
-      .select('id, phone, full_name')
-      .eq('id', appt.contact_id)
-      .eq('organization_id', appt.organization_id)
-      .maybeSingle()
-
-    const { data: identity } = await db
-      .from('contact_identities')
-      .select('external_user_id, external_phone, channel')
-      .eq('contact_id', appt.contact_id)
-      .in('channel', ['whatsapp', 'sms'])
-      .limit(1)
-      .maybeSingle()
+    // Same tenant guard as the former per-row query (id AND organization_id).
+    const stored = contactById.get(appt.contact_id as string)
+    const contact = stored && stored.organization_id === appt.organization_id ? stored : null
+    const identity = identityByContact.get(appt.contact_id as string) ?? null
 
     const channelType = identity?.channel === 'sms' ? 'sms' : 'whatsapp'
     const recipient =
@@ -90,14 +137,7 @@ async function handle(req: NextRequest) {
       continue
     }
 
-    const { data: channel } = await db
-      .from('channels')
-      .select('id, business_id')
-      .eq('organization_id', appt.organization_id)
-      .eq('channel_type', channelType)
-      .eq('is_active', true)
-      .limit(1)
-      .maybeSingle()
+    const channel = channelByOrgAndType.get(`${appt.organization_id}:${channelType}`)
 
     if (!channel) {
       failed++

@@ -15,9 +15,11 @@ export async function DashboardActivitySection({
   const [conversationsResult, appointmentsResult] = await Promise.all([
     db
       .from('conversations')
-      .select('id, status, channel_type, updated_at, contacts(full_name, phone)')
+      .select('id, status, updated_at, last_message_at, contacts(full_name, phone), channels(channel_type)')
       .eq('organization_id', organizationId)
-      .order('updated_at', { ascending: false })
+      // Same ordering as the Conversations page: matches idx (organization_id, last_message_at DESC).
+      .order('last_message_at', { ascending: false })
+      .order('id', { ascending: false })
       .limit(5),
     db
       .from('appointments')
@@ -77,6 +79,8 @@ export async function DashboardActivitySection({
                 const contact = conv.contacts as unknown as { full_name: string | null; phone: string | null } | null
                 const name = contact?.full_name || 'عميل غير مسجل'
                 const phone = contact?.phone
+                const channelType =
+                  (conv.channels as unknown as { channel_type: string | null } | null)?.channel_type ?? null
 
                 return (
                   <Link
@@ -94,8 +98,8 @@ export async function DashboardActivitySection({
                             {name}
                           </span>
                           <span className="flex items-center gap-1 rounded-md bg-background px-1.5 py-0.5 text-[10px] font-medium text-text-muted">
-                            {getChannelIcon(conv.channel_type)}
-                            <span>{conv.channel_type === 'whatsapp' ? 'واتساب' : conv.channel_type === 'phone' ? 'هاتف' : 'ويب'}</span>
+                            {getChannelIcon(channelType)}
+                            <span>{channelType === 'whatsapp' ? 'واتساب' : channelType === 'phone' ? 'هاتف' : 'ويب'}</span>
                           </span>
                         </div>
                         {phone && (
@@ -108,7 +112,7 @@ export async function DashboardActivitySection({
 
                     <div className="flex items-center gap-3 shrink-0">
                       <span className="text-[11px] text-text-muted">
-                        {formatDateTime(conv.updated_at, timezone)}
+                        {formatDateTime(conv.last_message_at ?? conv.updated_at, timezone)}
                       </span>
                       <span
                         className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${

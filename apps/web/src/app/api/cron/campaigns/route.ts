@@ -31,6 +31,8 @@ async function handle(req: NextRequest) {
     .from('campaigns')
     .select('id, organization_id')
     .eq('status', 'running')
+    .order('created_at', { ascending: true })
+    .order('id', { ascending: true })
     .limit(20)
 
   if (error) return NextResponse.json({ error: publicWebhookError() }, { status: 500 })
