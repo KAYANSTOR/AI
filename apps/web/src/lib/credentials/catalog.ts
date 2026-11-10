@@ -29,7 +29,8 @@ export const PROVIDER_FOR_CHANNEL: Record<ChannelType, string> = {
 export const CHANNEL_CREDENTIAL_FIELDS: Record<ChannelType, readonly CredentialField[]> = {
   whatsapp: [
     { type: 'access_token', label: 'Access Token', secret: true, required: true },
-    { type: 'phone_number_id', label: 'Phone Number ID', secret: false, required: false },
+    { type: 'business_account_id', label: 'WhatsApp Business Account ID', secret: false, required: true },
+    { type: 'phone_number_id', label: 'Phone Number ID', secret: false, required: true },
     { type: 'app_secret', label: 'App Secret', secret: true, required: false, hint: 'للتحقق من توقيع Webhook' },
     { type: 'verify_token', label: 'Verify Token', secret: true, required: false },
   ],
