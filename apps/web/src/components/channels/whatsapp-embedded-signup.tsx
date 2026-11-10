@@ -39,7 +39,7 @@ type Props = {
   className?: string
 }
 
-const GRAPH_SDK_VERSION = 'v21.0'
+const GRAPH_SDK_VERSION = 'v26.0'
 
 function loadFacebookSdk(appId: string): Promise<void> {
   return new Promise((resolve, reject) => {
