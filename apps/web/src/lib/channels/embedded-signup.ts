@@ -17,7 +17,15 @@ const GRAPH_VERSION = 'v26.0'
 
 function graphBase(): string {
   const configured = process.env.META_GRAPH_BASE_URL?.trim()
-  if (configured) return configured.replace(/\/+$/, '')
+  if (configured) {
+    const normalized = configured.replace(/\/+$/, '')
+    // Keep custom Graph hosts, but do not let a stale version in the configured
+    // production URL silently override the version selected by this integration.
+    if (/^https:\/\/graph\.facebook\.com(?:\/v\d+\.\d+)?$/i.test(normalized)) {
+      return normalized.replace(/\/v\d+\.\d+$/i, '') + `/${GRAPH_VERSION}`
+    }
+    return normalized
+  }
   return `https://graph.facebook.com/${GRAPH_VERSION}`
 }
 
