@@ -132,28 +132,47 @@ async function ensureBusinessId(
   suppliedBusinessId: string | null,
   organizationName?: string | null
 ): Promise<string> {
-  if (suppliedBusinessId) {
-    const { data, error } = await admin.from('businesses').select('id')
-      .eq('id', suppliedBusinessId).eq('organization_id', organizationId).maybeSingle()
-    if (error) throw new Error('تعذّر التحقق من مرجع النشاط.')
-    if (data?.id) return data.id as string
-  }
-
-  const { data: existing, error: existingError } = await admin.from('businesses').select('id')
-    .eq('organization_id', organizationId).order('created_at', { ascending: true }).limit(1).maybeSingle()
-  if (existingError) throw new Error('تعذّر قراءة بيانات النشاط.')
-  if (existing?.id) return existing.id as string
-
   const { data: profile, error: profileError } = await admin.from('business_profiles')
     .select('business_id, display_name, name, business_type_id, timezone')
     .eq('organization_id', organizationId).maybeSingle()
   if (profileError) throw new Error('تعذّر قراءة ملف النشاط.')
 
+  const linkProfile = async (businessId: string) => {
+    const result = profile
+      ? await admin.from('business_profiles')
+          .update({ business_id: businessId, updated_at: new Date().toISOString() })
+          .eq('organization_id', organizationId)
+      : await admin.from('business_profiles')
+          .insert({ organization_id: organizationId, business_id: businessId })
+    if (result.error) throw new Error('تعذّر ربط ملف النشاط بسجل النشاط.')
+  }
+
+  if (suppliedBusinessId) {
+    const { data, error } = await admin.from('businesses').select('id')
+      .eq('id', suppliedBusinessId).eq('organization_id', organizationId).maybeSingle()
+    if (error) throw new Error('تعذّر التحقق من مرجع النشاط.')
+    if (data?.id) {
+      await linkProfile(data.id as string)
+      return data.id as string
+    }
+  }
+
   if (profile?.business_id) {
     const { data: linked, error: linkedError } = await admin.from('businesses').select('id')
       .eq('id', profile.business_id).eq('organization_id', organizationId).maybeSingle()
     if (linkedError) throw new Error('تعذّر التحقق من النشاط المرتبط.')
-    if (linked?.id) return linked.id as string
+    if (linked?.id) {
+      await linkProfile(linked.id as string)
+      return linked.id as string
+    }
+  }
+
+  const { data: existing, error: existingError } = await admin.from('businesses').select('id')
+    .eq('organization_id', organizationId).order('created_at', { ascending: true }).limit(1).maybeSingle()
+  if (existingError) throw new Error('تعذّر قراءة بيانات النشاط.')
+  if (existing?.id) {
+    await linkProfile(existing.id as string)
+    return existing.id as string
   }
 
   let name = (profile?.display_name as string | null) || (profile?.name as string | null) || organizationName?.trim() || ''
@@ -179,11 +198,7 @@ async function ensureBusinessId(
   }
 
   const businessId = created.data.id as string
-  const profileWrite = profile
-    ? await admin.from('business_profiles').update({ business_id: businessId, updated_at: new Date().toISOString() })
-        .eq('organization_id', organizationId)
-    : await admin.from('business_profiles').insert({ organization_id: organizationId, business_id: businessId })
-  if (profileWrite.error) throw new Error('تم إنشاء النشاط لكن تعذّر ربط ملف النشاط به.')
+  await linkProfile(businessId)
   return businessId
 }
 
