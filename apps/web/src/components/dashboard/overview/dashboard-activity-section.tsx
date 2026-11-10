@@ -34,7 +34,7 @@ export async function DashboardActivitySection({
   const appointments = appointmentsResult.data ?? []
 
   function getChannelIcon(channelType: string | null) {
-    if (channelType === 'phone') return <Phone size={14} className="text-primary-dark" />
+    if (channelType === 'phone') return <Phone size={14} className="text-secondary" />
     if (channelType === 'whatsapp') return <MessageSquare size={14} className="text-success" />
     return <Globe size={14} className="text-info" />
   }
@@ -51,7 +51,7 @@ export async function DashboardActivitySection({
             </div>
             <Link
               href="/dashboard/conversations"
-              className="inline-flex items-center gap-1 text-xs font-bold text-primary-dark hover:underline"
+              className="inline-flex items-center gap-1 text-xs font-bold text-secondary hover:underline"
             >
               <span>فتح صندوق المحادثات</span>
               <span aria-hidden="true" className="rtl:rotate-180">→</span>
@@ -68,7 +68,7 @@ export async function DashboardActivitySection({
                 </p>
                 <Link
                   href="/dashboard/agent"
-                  className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-primary/10 px-3.5 py-2 text-xs font-bold text-primary-dark hover:bg-primary/20 transition-colors"
+                  className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-primary/10 px-3.5 py-2 text-xs font-bold text-secondary hover:bg-primary/20 transition-colors"
                 >
                   <span>اختبار الوكيل الآن</span>
                   <ArrowLeft size={13} />
@@ -89,12 +89,12 @@ export async function DashboardActivitySection({
                     className="group -mx-2 flex items-center justify-between rounded-xl p-3 transition-colors hover:bg-background/80"
                   >
                     <div className="flex items-center gap-3 min-w-0">
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-light/40 font-bold text-primary-dark">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-light/40 font-bold text-secondary">
                         {name[0] ?? <User size={16} />}
                       </div>
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
-                          <span className="truncate text-sm font-semibold text-text group-hover:text-primary-dark">
+                          <span className="truncate text-sm font-semibold text-text group-hover:text-secondary">
                             {name}
                           </span>
                           <span className="flex items-center gap-1 rounded-md bg-background px-1.5 py-0.5 text-[10px] font-medium text-text-muted">
@@ -135,7 +135,7 @@ export async function DashboardActivitySection({
 
         <div className="mt-4 border-t border-border/60 pt-3 flex items-center justify-between text-xs text-text-muted">
           <span>تزامن لحظي عبر السحابة مع قاعدة البيانات</span>
-          <Link href="/dashboard/channels" className="text-primary-dark font-medium hover:underline">
+          <Link href="/dashboard/channels" className="text-secondary font-medium hover:underline">
             إعداد قنوات أخرى
           </Link>
         </div>
@@ -151,7 +151,7 @@ export async function DashboardActivitySection({
             </div>
             <Link
               href="/dashboard/appointments"
-              className="text-xs font-bold text-primary-dark hover:underline"
+              className="text-xs font-bold text-secondary hover:underline"
             >
               عرض الكل
             </Link>
@@ -167,7 +167,7 @@ export async function DashboardActivitySection({
                 </p>
                 <Link
                   href="/dashboard/appointments"
-                  className="mt-3 inline-flex items-center gap-1 rounded-xl border border-border bg-surface px-3 py-1.5 text-xs font-semibold text-text hover:border-primary-dark hover:text-primary-dark transition-colors"
+                  className="mt-3 inline-flex items-center gap-1 rounded-xl border border-border bg-surface px-3 py-1.5 text-xs font-semibold text-text hover:border-secondary hover:text-secondary transition-colors"
                 >
                   <span>إضافة موعد يدوياً</span>
                 </Link>
@@ -192,7 +192,7 @@ export async function DashboardActivitySection({
                     </div>
 
                     <div className="text-end shrink-0">
-                      <span className="block text-xs font-semibold text-primary-dark">
+                      <span className="block text-xs font-semibold text-secondary">
                         {formatDateTime(apt.starts_at, timezone)}
                       </span>
                       <span className="mt-0.5 inline-block text-[10px] text-success font-medium">
@@ -208,7 +208,7 @@ export async function DashboardActivitySection({
 
         <Link
           href="/dashboard/appointments"
-          className="mt-4 block rounded-xl bg-background py-2 text-center text-xs font-semibold text-text transition-colors hover:bg-primary-light/30 hover:text-primary-dark"
+          className="mt-4 block rounded-xl bg-background py-2 text-center text-xs font-semibold text-text transition-colors hover:bg-primary-light/30 hover:text-secondary"
         >
           فتح التقويم الكامل
         </Link>

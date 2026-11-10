@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next'
 import { IBM_Plex_Mono, IBM_Plex_Sans_Arabic, Inter, Noto_Kufi_Arabic } from 'next/font/google'
 import { siteDescription } from '@/lib/site-metadata'
+import { themeBootScript } from '@/components/theme/theme-script'
 import './globals.css'
 
 const plexArabic = IBM_Plex_Sans_Arabic({
@@ -71,8 +72,11 @@ export const metadata: Metadata = {
 }
 
 export const viewport: Viewport = {
-  themeColor: '#0b6b5d',
-  colorScheme: 'light',
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#f4efe5' },
+    { media: '(prefers-color-scheme: dark)', color: '#0b0f0d' },
+  ],
+  colorScheme: 'light dark',
   viewportFit: 'cover',
 }
 
@@ -81,8 +85,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html
       lang="ar"
       dir="rtl"
+      suppressHydrationWarning
       className={`${plexArabic.variable} ${kufi.variable} ${inter.variable} ${plexMono.variable} h-full antialiased`}
     >
+      <head>
+        {/* Applies the saved or system theme before first paint. */}
+        <script dangerouslySetInnerHTML={{ __html: themeBootScript }} />
+      </head>
       <body className="flex min-h-full flex-col bg-background text-text">{children}</body>
     </html>
   )

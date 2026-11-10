@@ -16,7 +16,7 @@ export function AuthProviderNotice() {
       </div>
       <Link
         href="/"
-        className="inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-border bg-surface px-4 text-sm font-semibold text-text transition-colors hover:border-primary hover:text-primary"
+        className="inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-border bg-surface px-4 text-sm font-semibold text-text transition-colors hover:border-primary hover:text-secondary"
       >
         العودة إلى الصفحة الرئيسية
       </Link>

@@ -52,7 +52,7 @@ export function AppointmentForm({ services, contacts }: { organizationId: string
       {error && <div className="rounded-lg border border-error/40 bg-error/10 p-3 text-sm text-text">{error}</div>}
       <div>
         <label className="mb-1 block text-sm font-medium text-text">{ar.appointments.contact}</label>
-        <select required value={contactId} onChange={(e) => setContactId(e.target.value)} className="min-h-11 w-full rounded-lg border border-border bg-surface px-3 py-2 text-base text-text focus:outline-none focus:ring-2 focus:ring-primary/30 md:text-sm">
+        <select required value={contactId} onChange={(e) => setContactId(e.target.value)} className="min-h-11 w-full rounded-lg border border-border bg-surface px-3 py-2 text-base text-text focus:outline-none focus:ring-2 focus:ring-accent/30 md:text-sm">
           <option value="">{ar.appointments.choose}</option>
           {contacts.map((c) => (
             <option key={c.id} value={c.id}>{c.full_name || c.phone || c.id.slice(0, 8)}</option>
@@ -61,7 +61,7 @@ export function AppointmentForm({ services, contacts }: { organizationId: string
       </div>
       <div>
         <label className="mb-1 block text-sm font-medium text-text">{ar.appointments.service}</label>
-        <select required value={serviceId} onChange={(e) => setServiceId(e.target.value)} className="min-h-11 w-full rounded-lg border border-border bg-surface px-3 py-2 text-base text-text focus:outline-none focus:ring-2 focus:ring-primary/30 md:text-sm">
+        <select required value={serviceId} onChange={(e) => setServiceId(e.target.value)} className="min-h-11 w-full rounded-lg border border-border bg-surface px-3 py-2 text-base text-text focus:outline-none focus:ring-2 focus:ring-accent/30 md:text-sm">
           <option value="">{ar.appointments.choose}</option>
           {services.map((s) => (
             <option key={s.id} value={s.id}>{s.name} ({formatNumber(s.duration_minutes)} {ar.services.minutes})</option>
@@ -70,9 +70,9 @@ export function AppointmentForm({ services, contacts }: { organizationId: string
       </div>
       <div>
         <label className="mb-1 block text-sm font-medium text-text">{ar.appointments.startsAt}</label>
-        <input dir="ltr" type="datetime-local" required value={startsAt} onChange={(e) => setStartsAt(e.target.value)} className="min-h-11 w-full rounded-lg border border-border bg-surface px-3 py-2 text-base text-text focus:outline-none focus:ring-2 focus:ring-primary/30 md:text-sm" />
+        <input dir="ltr" type="datetime-local" required value={startsAt} onChange={(e) => setStartsAt(e.target.value)} className="min-h-11 w-full rounded-lg border border-border bg-surface px-3 py-2 text-base text-text focus:outline-none focus:ring-2 focus:ring-accent/30 md:text-sm" />
       </div>
-      <button type="submit" disabled={loading} className="flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary-dark py-2.5 text-base font-medium text-surface transition-colors hover:bg-primary disabled:opacity-60 md:text-sm">
+      <button type="submit" disabled={loading} className="flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary-dark py-2.5 text-base font-medium text-primary-foreground transition-colors hover:bg-primary disabled:opacity-60 md:text-sm">
         {loading ? <Loader2 className="animate-spin" size={16} /> : ar.appointments.confirm}
       </button>
     </form>

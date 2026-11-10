@@ -153,7 +153,7 @@ export function StageAgent({
               rows={5}
               disabled={!canManage}
               placeholder={EXAMPLE}
-              className="mt-1.5 w-full rounded-xl border border-border bg-background p-3 text-base leading-7 text-text outline-none transition-colors focus:border-primary-dark focus:ring-2 focus:ring-primary-light disabled:opacity-60"
+              className="mt-1.5 w-full rounded-xl border border-border bg-background p-3 text-base leading-7 text-text outline-none transition-colors focus:border-secondary focus:ring-2 focus:ring-accent/40 disabled:opacity-60"
             />
           </label>
 
@@ -183,7 +183,7 @@ export function StageAgent({
             type="button"
             onClick={handleGenerate}
             disabled={busy || !canManage || description.trim().length < 10}
-            className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary-dark px-6 text-base font-semibold text-white transition-colors hover:bg-primary disabled:opacity-60 sm:w-auto"
+            className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary-dark px-6 text-base font-semibold text-primary-foreground transition-colors hover:bg-primary disabled:opacity-60 sm:w-auto"
           >
             {busy ? (
               <Loader2 size={18} className="animate-spin" aria-hidden="true" />
@@ -219,7 +219,7 @@ export function StageAgent({
                 <input
                   value={draft.agentName}
                   onChange={(event) => setDraft({ ...draft, agentName: event.target.value })}
-                  className="mt-1.5 min-h-12 w-full rounded-xl border border-border bg-surface px-3 text-base text-text outline-none focus:border-primary-dark focus:ring-2 focus:ring-primary-light"
+                  className="mt-1.5 min-h-12 w-full rounded-xl border border-border bg-surface px-3 text-base text-text outline-none focus:border-secondary focus:ring-2 focus:ring-accent/40"
                 />
               </label>
 
@@ -231,7 +231,7 @@ export function StageAgent({
                     onChange={(event) =>
                       setDraft({ ...draft, replyStyle: event.target.value as ReplyStyleId })
                     }
-                    className="mt-1.5 min-h-12 w-full rounded-xl border border-border bg-surface px-3 text-base text-text outline-none focus:border-primary-dark focus:ring-2 focus:ring-primary-light"
+                    className="mt-1.5 min-h-12 w-full rounded-xl border border-border bg-surface px-3 text-base text-text outline-none focus:border-secondary focus:ring-2 focus:ring-accent/40"
                   >
                     {Object.entries(REPLY_STYLE_LABELS).map(([value, label]) => (
                       <option key={value} value={value}>
@@ -248,7 +248,7 @@ export function StageAgent({
                     onChange={(event) =>
                       setDraft({ ...draft, handoff: event.target.value as HandoffId })
                     }
-                    className="mt-1.5 min-h-12 w-full rounded-xl border border-border bg-surface px-3 text-base text-text outline-none focus:border-primary-dark focus:ring-2 focus:ring-primary-light"
+                    className="mt-1.5 min-h-12 w-full rounded-xl border border-border bg-surface px-3 text-base text-text outline-none focus:border-secondary focus:ring-2 focus:ring-accent/40"
                   >
                     {Object.entries(HANDOFF_LABELS).map(([value, label]) => (
                       <option key={value} value={value}>
@@ -265,7 +265,7 @@ export function StageAgent({
                   value={draft.summary}
                   onChange={(event) => setDraft({ ...draft, summary: event.target.value })}
                   rows={4}
-                  className="mt-1.5 w-full rounded-xl border border-border bg-surface p-3 text-sm leading-7 text-text outline-none focus:border-primary-dark focus:ring-2 focus:ring-primary-light"
+                  className="mt-1.5 w-full rounded-xl border border-border bg-surface p-3 text-sm leading-7 text-text outline-none focus:border-secondary focus:ring-2 focus:ring-accent/40"
                 />
               </label>
 
@@ -284,7 +284,7 @@ export function StageAgent({
                   }
                   rows={3}
                   placeholder={'اسم خدمة في كل سطر\nمثال: تصوير الأعراس'}
-                  className="mt-1.5 w-full rounded-xl border border-border bg-surface p-3 text-sm leading-7 text-text outline-none focus:border-primary-dark focus:ring-2 focus:ring-primary-light"
+                  className="mt-1.5 w-full rounded-xl border border-border bg-surface p-3 text-sm leading-7 text-text outline-none focus:border-secondary focus:ring-2 focus:ring-accent/40"
                 />
               </label>
             </div>
@@ -303,7 +303,7 @@ export function StageAgent({
                 setMode('describe')
                 setError(null)
               }}
-            className="inline-flex min-h-12 items-center justify-center rounded-xl border border-border bg-background px-5 text-sm font-medium text-text transition-colors hover:border-primary-dark hover:text-primary-dark"
+            className="inline-flex min-h-12 items-center justify-center rounded-xl border border-border bg-background px-5 text-sm font-medium text-text transition-colors hover:border-secondary hover:text-secondary"
           >
             تعديل الوصف
             </button>
@@ -311,7 +311,7 @@ export function StageAgent({
               type="button"
               onClick={handleSave}
               disabled={busy || !canManage}
-              className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-primary-dark px-6 text-base font-semibold text-white transition-colors hover:bg-primary disabled:opacity-60"
+              className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-primary-dark px-6 text-base font-semibold text-primary-foreground transition-colors hover:bg-primary disabled:opacity-60"
             >
               {busy ? <Loader2 size={18} className="animate-spin" aria-hidden="true" /> : null}
               اعتماد الإعداد

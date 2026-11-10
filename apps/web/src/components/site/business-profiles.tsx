@@ -127,7 +127,7 @@ export function BusinessProfiles() {
                 onKeyDown={(event) => onKeyDown(event, index)}
                 className={`shrink-0 whitespace-nowrap rounded-xl border px-4 py-3 text-start text-sm font-semibold transition-colors lg:w-full lg:whitespace-normal ${
                   active
-                    ? 'border-primary-dark bg-primary-light/25 text-text'
+                    ? 'border-secondary bg-primary-light/25 text-text'
                     : 'border-border bg-background text-text-muted hover:border-primary-light hover:text-text'
                 }`}
               >
@@ -179,7 +179,7 @@ export function BusinessProfiles() {
                 {profile.modules.map((module) => (
                   <li
                     key={module}
-                    className="inline-flex rounded-full border border-primary-light bg-primary-light/25 px-3 py-1.5 text-xs font-semibold text-primary-dark"
+                    className="inline-flex rounded-full border border-primary-light bg-primary-light/25 px-3 py-1.5 text-xs font-semibold text-secondary"
                   >
                     {capabilityLabel(module)}
                   </li>

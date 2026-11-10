@@ -52,7 +52,7 @@ export default async function AnalyticsPage() {
         <section className="rounded-xl border border-border bg-surface p-6 shadow-sm">
           <div className="mb-4 flex items-center gap-3 border-b border-border pb-4">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary-light/40">
-              <BrainCircuit className="text-primary-dark" size={20} />
+              <BrainCircuit className="text-secondary" size={20} />
             </div>
             <div>
               <h2 className="text-lg font-semibold text-text">أداء الذكاء الاصطناعي</h2>
@@ -77,8 +77,8 @@ export default async function AnalyticsPage() {
 
         <section className="rounded-xl border border-border bg-surface p-6 shadow-sm">
           <div className="mb-4 flex items-center gap-3 border-b border-border pb-4">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-green-100 dark:bg-green-900/30">
-              <Clock className="text-green-700 dark:text-green-400" size={20} />
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-success/15">
+              <Clock className="text-success" size={20} />
             </div>
             <div>
               <h2 className="text-lg font-semibold text-text">سرعة الاستجابة والدعم (SLA)</h2>
@@ -123,7 +123,7 @@ function StatCard({
       <div className="mb-4 flex items-center justify-between gap-3">
         <h3 className="text-sm font-medium text-text-muted">{title}</h3>
         <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary-light/40">
-          <Icon size={20} className="text-primary-dark" />
+          <Icon size={20} className="text-secondary" />
         </div>
       </div>
       <div className="flex items-end justify-between">
@@ -132,7 +132,7 @@ function StatCard({
           {formatNumber(value)}
         </h4>
         {trend && (
-          <span className="text-xs font-semibold text-green-600 dark:text-green-400 bg-green-100 dark:bg-green-900/30 px-2 py-1 rounded-full mb-1">
+          <span className="text-xs font-semibold text-success bg-success/15 px-2 py-1 rounded-full mb-1">
             {trend}
           </span>
         )}

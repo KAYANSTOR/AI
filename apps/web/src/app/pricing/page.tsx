@@ -46,7 +46,7 @@ export default function PricingPage() {
         {/* Pricing Page Hero Banner */}
         <Section tone="background" className="border-b border-border py-12 lg:py-16">
           <div className="mx-auto max-w-3xl text-center space-y-4">
-            <div className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary-light/20 px-3.5 py-1 text-xs font-bold text-primary-dark">
+            <div className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary-light/20 px-3.5 py-1 text-xs font-bold text-secondary">
               <CreditCard size={14} />
               <span>أسعار واضحة بدون رسوم خفية</span>
             </div>

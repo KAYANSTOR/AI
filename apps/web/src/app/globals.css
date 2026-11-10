@@ -1,43 +1,126 @@
 @import "tailwindcss";
 
-/* Design tokens. Components use these names only — never raw hex values. */
-@theme static {
-  /* KAYAN identity: jade on cool paper, navy ink, saffron reserved for confirmed outcomes. */
-  --color-primary: #0b6b5d;
-  --color-primary-dark: #08524a;
-  --color-primary-light: #cfe8e2;
-  --color-primary-foreground: #ffffff;
+/*
+ * Design tokens. Components use these names only — never raw hex values.
+ *
+ * KAYAN palette and roles:
+ *   #3E5A3F forest  — identity and primary buttons
+ *   #8CA98C sage    — interactive elements and highlights
+ *   #D9C7A3 sand    — light surfaces and featured text
+ *   #B08D57 ochre   — gold touches and premium details
+ *   #0B0F0D / #1F2A1F — dark base and deep surface
+ *
+ * Tokens resolve through the --k-* variables below, so one set of utility classes
+ * serves both themes. `@theme inline` keeps the variable reference in each utility,
+ * which lets `.theme-dark` re-scope a panel (sidebar, brand blocks) inside light mode.
+ * Light-mode text shades of sage and ochre are deepened mixes of the same hues so
+ * they meet WCAG AA on sand backgrounds. --k-error is the single functional
+ * exception so destructive states stay distinguishable from warnings.
+ */
+@theme inline {
+  --color-primary: var(--k-primary);
+  --color-primary-dark: var(--k-primary-dark);
+  --color-primary-light: var(--k-primary-light);
+  --color-primary-foreground: var(--k-primary-foreground);
 
-  --color-accent: #9a6a1f;
-  --color-accent-light: #f6ecd8;
+  --color-secondary: var(--k-secondary);
 
-  --color-background: #f5f7f8;
-  --color-surface: #ffffff;
-  --color-surface-muted: #f0f3f5;
+  --color-accent: var(--k-accent);
+  --color-accent-light: var(--k-accent-light);
+  --color-accent-foreground: var(--k-accent-foreground);
+  --color-accent-text: var(--k-accent-text);
 
-  --color-text: #0e1a2b;
-  --color-text-muted: #556274;
-  --color-border: #e1e6eb;
-  --color-border-strong: #c9d1d9;
+  --color-background: var(--k-background);
+  --color-surface: var(--k-surface);
+  --color-surface-muted: var(--k-surface-muted);
 
-  --color-success: #1f7a4d;
-  --color-warning: #9a6a1f;
-  --color-error: #b42318;
-  --color-info: #3b5b8c;
+  --color-text: var(--k-text);
+  --color-text-muted: var(--k-text-muted);
+  --color-border: var(--k-border);
+  --color-border-strong: var(--k-border-strong);
 
-  --color-dark: #0e1a2b;
-  --color-dark-muted: #18263a;
+  --color-success: var(--k-success);
+  --color-warning: var(--k-warning);
+  --color-error: var(--k-error);
+  --color-info: var(--k-success);
 
-  --radius-xl: 0.625rem;
-  --radius-2xl: 0.875rem;
-  --radius-card: 0.875rem;
+  --color-dark: var(--k-dark);
+  --color-dark-muted: var(--k-dark-muted);
 
-  --shadow-card: 0 1px 2px rgb(14 26 43 / 0.05);
-  --shadow-raised: 0 24px 48px -24px rgb(14 26 43 / 0.28), 0 2px 6px rgb(14 26 43 / 0.06);
+  --shadow-card: var(--k-shadow-card);
+  --shadow-raised: var(--k-shadow-raised);
 
   --font-sans: var(--font-plex-arabic), var(--font-inter), ui-sans-serif, system-ui, "Segoe UI", sans-serif;
   --font-display: var(--font-kufi), var(--font-plex-arabic), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-plex-mono), ui-monospace, monospace;
+}
+
+@theme static {
+  --radius-xl: 0.625rem;
+  --radius-2xl: 0.875rem;
+  --radius-card: 0.875rem;
+}
+
+/* Light theme (default). Sand-based surfaces, forest identity. */
+:root {
+  color-scheme: light;
+  --k-primary: #3e5a3f;
+  --k-primary-dark: color-mix(in oklab, #3e5a3f 84%, #0b0f0d);
+  --k-primary-light: color-mix(in oklab, #3e5a3f 14%, #fcfbf8);
+  --k-primary-foreground: #faf8f4;
+  --k-secondary: color-mix(in srgb, #8ca98c 50%, #1f2a1f);
+  --k-accent: #b08d57;
+  --k-accent-light: color-mix(in oklab, #b08d57 16%, #fcfbf8);
+  --k-accent-foreground: #0b0f0d;
+  --k-accent-text: color-mix(in srgb, #b08d57 68%, #0b0f0d);
+  --k-background: color-mix(in srgb, #d9c7a3 28%, #ffffff);
+  --k-surface: color-mix(in srgb, #d9c7a3 8%, #ffffff);
+  --k-surface-muted: color-mix(in srgb, #d9c7a3 45%, #ffffff);
+  --k-text: #1f2a1f;
+  --k-text-muted: color-mix(in srgb, #1f2a1f 78%, #ffffff);
+  --k-border: color-mix(in oklab, #d9c7a3 62%, #ffffff);
+  --k-border-strong: color-mix(in oklab, #b08d57 45%, #d9c7a3);
+  --k-success: color-mix(in srgb, #8ca98c 45%, #1f2a1f);
+  --k-warning: color-mix(in srgb, #b08d57 68%, #0b0f0d);
+  --k-error: #a8402f;
+  --k-dark: #1f2a1f;
+  --k-dark-muted: color-mix(in oklab, #3e5a3f 50%, #1f2a1f);
+  --k-shadow-card: 0 1px 2px rgb(31 42 31 / 0.06), 0 1px 1px rgb(31 42 31 / 0.04);
+  --k-shadow-raised: 0 24px 48px -24px rgb(31 42 31 / 0.28), 0 2px 6px rgb(31 42 31 / 0.08);
+}
+
+/* Dark theme. Applied to <html> by the theme script, or to a single panel. */
+:root.dark,
+.theme-dark {
+  color-scheme: dark;
+  --k-primary: #3e5a3f;
+  --k-primary-dark: color-mix(in oklab, #3e5a3f 82%, #0b0f0d);
+  --k-primary-light: color-mix(in oklab, #3e5a3f 42%, #1f2a1f);
+  --k-primary-foreground: #d9c7a3;
+  --k-secondary: #8ca98c;
+  --k-accent: #b08d57;
+  --k-accent-light: color-mix(in oklab, #b08d57 16%, #1f2a1f);
+  --k-accent-foreground: #0b0f0d;
+  --k-accent-text: #b08d57;
+  --k-background: #0b0f0d;
+  --k-surface: #1f2a1f;
+  --k-surface-muted: color-mix(in oklab, #1f2a1f 55%, #0b0f0d);
+  --k-text: #d9c7a3;
+  --k-text-muted: #8ca98c;
+  --k-border: color-mix(in oklab, #8ca98c 16%, #1f2a1f);
+  --k-border-strong: color-mix(in oklab, #8ca98c 32%, #1f2a1f);
+  --k-success: #8ca98c;
+  --k-warning: #b08d57;
+  --k-error: #e08a7a;
+  --k-dark: #1f2a1f;
+  --k-dark-muted: color-mix(in oklab, #3e5a3f 50%, #1f2a1f);
+  --k-shadow-card: 0 1px 2px rgb(0 0 0 / 0.35);
+  --k-shadow-raised: 0 24px 48px -24px rgb(0 0 0 / 0.7), 0 2px 6px rgb(0 0 0 / 0.35);
+}
+
+/* Inverse panels need their own text colour once the tokens are re-scoped. */
+.theme-dark {
+  color: var(--k-text);
 }
 
 @layer base {
@@ -73,7 +156,7 @@
   }
 
   :focus-visible {
-    outline: 2px solid var(--color-primary-dark);
+    outline: 2px solid var(--color-accent);
     outline-offset: 2px;
   }
 }
@@ -120,11 +203,11 @@
 
 /* Subtle dotted texture for dark brand panels. */
 .bg-grid-dark {
-  background-image: radial-gradient(rgb(255 255 255 / 0.07) 1px, transparent 1px);
+  background-image: radial-gradient(rgb(217 199 163 / 0.06) 1px, transparent 1px);
   background-size: 22px 22px;
 }
 
 .bg-grid-light {
-  background-image: radial-gradient(rgb(14 26 43 / 0.05) 1px, transparent 1px);
+  background-image: radial-gradient(rgb(62 90 63 / 0.07) 1px, transparent 1px);
   background-size: 24px 24px;
 }

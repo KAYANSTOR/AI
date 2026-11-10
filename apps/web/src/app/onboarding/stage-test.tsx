@@ -100,7 +100,7 @@ export function StageTest({
             }}
             rows={3}
             disabled={!canManage}
-            className="mt-1.5 w-full rounded-xl border border-border bg-surface p-3 text-base leading-7 text-text outline-none focus:border-primary-dark focus:ring-2 focus:ring-primary-light disabled:opacity-60"
+            className="mt-1.5 w-full rounded-xl border border-border bg-surface p-3 text-base leading-7 text-text outline-none focus:border-secondary focus:ring-2 focus:ring-accent/40 disabled:opacity-60"
           />
         </label>
 
@@ -136,7 +136,7 @@ export function StageTest({
           type="button"
           onClick={handleTest}
           disabled={busy || !canManage}
-          className="mt-4 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary-dark px-6 text-base font-semibold text-white transition-colors hover:bg-primary disabled:opacity-60 sm:w-auto"
+          className="mt-4 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary-dark px-6 text-base font-semibold text-primary-foreground transition-colors hover:bg-primary disabled:opacity-60 sm:w-auto"
         >
           {busy ? (
             <Loader2 size={18} className="animate-spin" aria-hidden="true" />
@@ -205,7 +205,7 @@ export function StageTest({
           type="button"
           onClick={handleActivate}
           disabled={busy || !passed || !canManage}
-          className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-success px-6 text-base font-semibold text-white transition-colors hover:opacity-90 disabled:opacity-50"
+          className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-success px-6 text-base font-semibold text-background transition-colors hover:opacity-90 disabled:opacity-50"
         >
           {busy ? (
             <Loader2 size={18} className="animate-spin" aria-hidden="true" />

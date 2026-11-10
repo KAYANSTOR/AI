@@ -55,7 +55,7 @@ export function InboxControls({
             type="button"
             disabled={pending}
             onClick={() => run(() => takeOverAction(conversationId))}
-            className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-primary px-3 py-2 text-base font-medium text-surface transition-colors hover:bg-primary-dark disabled:opacity-60 md:text-sm"
+            className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-primary px-3 py-2 text-base font-medium text-primary-foreground transition-colors hover:bg-primary-dark disabled:opacity-60 md:text-sm"
           >
             {pending ? <Loader2 className="animate-spin" size={14} /> : <UserCheck size={14} />}
             استلام المحادثة
@@ -67,7 +67,7 @@ export function InboxControls({
             type="button"
             disabled={pending}
             onClick={() => run(() => resumeAiAction(conversationId))}
-            className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-primary px-3 py-2 text-base font-medium text-surface transition-colors hover:bg-primary-dark disabled:opacity-60 md:text-sm"
+            className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-primary px-3 py-2 text-base font-medium text-primary-foreground transition-colors hover:bg-primary-dark disabled:opacity-60 md:text-sm"
           >
             {pending ? <Loader2 className="animate-spin" size={14} /> : <Bot size={14} />}
             إعادة الوكيل
@@ -114,7 +114,7 @@ export function InboxControls({
           type="button"
           disabled={pending || !note.trim()}
           onClick={() => run(() => addNoteAction(conversationId, note), true)}
-          className="mt-2 inline-flex min-h-11 items-center gap-2 rounded-lg border border-primary px-3 py-1.5 text-base font-medium text-primary-dark transition-colors hover:bg-primary/10 disabled:opacity-60 md:text-sm"
+          className="mt-2 inline-flex min-h-11 items-center gap-2 rounded-lg border border-secondary px-3 py-1.5 text-base font-medium text-secondary transition-colors hover:bg-primary/10 disabled:opacity-60 md:text-sm"
         >
           {pending ? <Loader2 className="animate-spin" size={14} /> : <MessageSquarePlus size={14} />}
           إضافة ملاحظة

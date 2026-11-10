@@ -79,12 +79,12 @@ export function Pricing() {
           <article
             key={plan.id}
             className={`flex flex-col rounded-2xl border bg-surface p-6 sm:p-8 ${
-              plan.featured ? 'border-primary-dark shadow-md' : 'border-border shadow-sm'
+              plan.featured ? 'border-accent/60 shadow-md' : 'border-border shadow-sm'
             }`}
           >
             <div className="flex items-center justify-between gap-3">
               <h3 className="text-lg font-bold text-text">{plan.name}</h3>
-              {plan.featured ? <Chip tone="brand">الأكثر مناسبة</Chip> : null}
+              {plan.featured ? <Chip tone="gold">الأكثر مناسبة</Chip> : null}
             </div>
             <p className="mt-3 flex items-baseline gap-2">
               <span className="text-3xl font-bold tracking-tight text-text">{plan.price}</span>

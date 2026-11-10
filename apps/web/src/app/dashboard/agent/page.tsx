@@ -79,7 +79,7 @@ export default async function AgentPage() {
       {/* 0ms Instant Header */}
       <header className="flex items-start gap-3">
         <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary-light/40">
-          <Bot size={22} className="text-primary-dark" aria-hidden="true" />
+          <Bot size={22} className="text-secondary" aria-hidden="true" />
         </span>
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-text">وكيل الذكاء الاصطناعي</h1>

@@ -93,7 +93,7 @@ export function AgentPlayground({ agentId }: { agentId: string }) {
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="flex items-start gap-3">
             <span className="flex h-11 w-11 items-center justify-center rounded-lg bg-primary-light/40">
-              <Play size={21} className="text-primary-dark" aria-hidden="true" />
+              <Play size={21} className="text-secondary" aria-hidden="true" />
             </span>
             <div>
               <h2 className="text-base font-bold text-text">تجربة الوكيل كعميل</h2>
@@ -134,7 +134,7 @@ export function AgentPlayground({ agentId }: { agentId: string }) {
         {messages.length === 0 && (
           <div className="flex min-h-[290px] items-center justify-center">
             <div className="max-w-md text-center">
-              <Sparkles size={26} className="mx-auto text-primary-dark" aria-hidden="true" />
+              <Sparkles size={26} className="mx-auto text-secondary" aria-hidden="true" />
               <p className="mt-3 text-sm font-medium text-text">ابدأ برسالة من العميل</p>
               <p className="mt-1 text-xs leading-relaxed text-text-muted">
                 جرّب: «أريد حجز موعد غداً» ثم تابع الحوار كما لو كنت عميلًا حقيقيًا.
@@ -150,14 +150,14 @@ export function AgentPlayground({ agentId }: { agentId: string }) {
           >
             {message.role === 'assistant' && (
               <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary-light/50">
-                <Bot size={15} className="text-primary-dark" aria-hidden="true" />
+                <Bot size={15} className="text-secondary" aria-hidden="true" />
               </div>
             )}
 
             <div
               className={`max-w-[82%] rounded-2xl px-4 py-2.5 ${
                 message.role === 'user'
-                  ? 'bg-primary text-surface'
+                  ? 'bg-primary text-primary-foreground'
                   : 'border border-border bg-surface text-text'
               }`}
             >
@@ -200,7 +200,7 @@ export function AgentPlayground({ agentId }: { agentId: string }) {
           onChange={(event) => setInput(event.target.value)}
           placeholder="اكتب كأنك عميل: أريد حجز موعد غداً…"
           disabled={busy}
-          className="min-h-11 flex-1 rounded-xl border border-border bg-background px-4 py-2.5 text-sm text-text placeholder:text-text-muted focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+          className="min-h-11 flex-1 rounded-xl border border-border bg-background px-4 py-2.5 text-sm text-text placeholder:text-text-muted focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
           dir="auto"
           aria-label="رسالة العميل التجريبية"
         />
@@ -208,7 +208,7 @@ export function AgentPlayground({ agentId }: { agentId: string }) {
           type="submit"
           disabled={busy || !input.trim()}
           aria-label="إرسال"
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary text-surface hover:bg-primary-dark disabled:opacity-50"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground hover:bg-primary-dark disabled:opacity-50"
         >
           <Send size={17} className="rtl:rotate-180" aria-hidden="true" />
         </button>

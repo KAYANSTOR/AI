@@ -22,7 +22,7 @@ export default function AboutPage() {
         {/* About Page Hero Banner */}
         <Section tone="background" className="border-b border-border py-12 lg:py-16">
           <div className="mx-auto max-w-3xl text-center space-y-4">
-            <div className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary-light/20 px-3.5 py-1 text-xs font-bold text-primary-dark">
+            <div className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary-light/20 px-3.5 py-1 text-xs font-bold text-secondary">
               <Eye size={14} />
               <span>رؤيتنا ورسالتنا</span>
             </div>
@@ -36,7 +36,7 @@ export default function AboutPage() {
 
           <div className="mt-10 grid grid-cols-1 gap-4 sm:grid-cols-3 max-w-4xl mx-auto">
             <div className="rounded-2xl border border-border bg-surface p-5 text-center space-y-2 shadow-2xs">
-              <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-xl bg-primary-light/30 text-primary-dark">
+              <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-xl bg-primary-light/30 text-secondary">
                 <HeartHandshake size={20} />
               </div>
               <h3 className="text-sm font-bold text-text">عربية أولاً (RTL Native)</h3>
@@ -46,7 +46,7 @@ export default function AboutPage() {
             </div>
 
             <div className="rounded-2xl border border-border bg-surface p-5 text-center space-y-2 shadow-2xs">
-              <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-xl bg-primary-light/30 text-primary-dark">
+              <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-xl bg-primary-light/30 text-secondary">
                 <ShieldCheck size={20} />
               </div>
               <h3 className="text-sm font-bold text-text">أمان وخصوصية تامة</h3>
@@ -56,7 +56,7 @@ export default function AboutPage() {
             </div>
 
             <div className="rounded-2xl border border-border bg-surface p-5 text-center space-y-2 shadow-2xs">
-              <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-xl bg-primary-light/30 text-primary-dark">
+              <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-xl bg-primary-light/30 text-secondary">
                 <Eye size={20} />
               </div>
               <h3 className="text-sm font-bold text-text">تحكم بشري كامل</h3>

@@ -44,34 +44,34 @@ export function AuthShell({
             {footer ? <div className="mt-8">{footer}</div> : null}
 
             <p className="mt-10 flex items-start gap-2 border-t border-border pt-5 text-xs leading-6 text-text-muted">
-              <ShieldCheck size={15} aria-hidden="true" className="mt-0.5 shrink-0 text-primary" />
+              <ShieldCheck size={15} aria-hidden="true" className="mt-0.5 shrink-0 text-secondary" />
               <span>اتصال مشفّر، وبيانات كل شركة معزولة عن غيرها على مستوى قاعدة البيانات.</span>
             </p>
           </div>
         </main>
       </div>
 
-      <aside className="relative hidden overflow-hidden bg-dark text-surface lg:flex lg:flex-col lg:justify-between">
+      <aside className="relative hidden theme-dark overflow-hidden bg-dark text-text lg:flex lg:flex-col lg:justify-between">
         <div className="relative px-14 pt-20">
-          <p className="text-sm font-semibold text-primary-light">لوحة تشغيل واحدة لفريقك</p>
+          <p className="text-sm font-semibold text-secondary">لوحة تشغيل واحدة لفريقك</p>
           <h2 className="mt-5 max-w-md text-[2rem] leading-[1.5]">
             كل عميل يتواصل معك يجد ردًا فوريًا، وكل طلب يصل إلى فريقك مرتبًا.
           </h2>
         </div>
 
-        <ul className="relative mx-14 divide-y divide-surface/10 border-y border-surface/10">
+        <ul className="relative mx-14 divide-y divide-text/10 border-y border-text/10">
           {HIGHLIGHTS.map(({ icon: Icon, title, text }) => (
             <li key={title} className="flex items-start gap-4 py-5">
-              <Icon size={20} aria-hidden="true" className="mt-0.5 shrink-0 text-primary-light" />
+              <Icon size={20} aria-hidden="true" className="mt-0.5 shrink-0 text-secondary" />
               <span>
                 <span className="block text-sm font-semibold">{title}</span>
-                <span className="mt-1 block text-sm leading-6 text-surface/65">{text}</span>
+                <span className="mt-1 block text-sm leading-6 text-text/65">{text}</span>
               </span>
             </li>
           ))}
         </ul>
 
-        <p className="relative px-14 pb-10 text-xs text-surface/50">© {new Date().getFullYear()} KAYAN AI</p>
+        <p className="relative px-14 pb-10 text-xs text-text/50">© {new Date().getFullYear()} KAYAN AI</p>
       </aside>
     </div>
   )

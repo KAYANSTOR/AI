@@ -31,7 +31,7 @@ export default async function OrdersPage() {
         </div>
         <Link
           href="/dashboard/orders/new"
-          className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary-dark"
+          className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary-dark"
         >
           <Plus size={16} />
           إنشاء طلب جديد
@@ -61,7 +61,7 @@ export default async function OrdersPage() {
                   const contact = order.contacts as unknown as { full_name: string | null; phone: string | null } | null
                   const statusColors: Record<string, string> = {
                     draft: 'bg-background text-text-muted',
-                    confirmation: 'bg-primary/15 text-primary-dark',
+                    confirmation: 'bg-primary/15 text-secondary',
                     processing: 'bg-warning/15 text-warning-dark',
                     completed: 'bg-success/15 text-success',
                     cancelled: 'bg-error/15 text-error'
@@ -77,7 +77,7 @@ export default async function OrdersPage() {
                   return (
                     <tr key={order.id} className="transition-colors hover:bg-background/50">
                       <td className="px-4 py-3">
-                        <Link href={`/dashboard/orders/${order.id}`} className="font-medium text-primary hover:underline">
+                        <Link href={`/dashboard/orders/${order.id}`} className="font-medium text-secondary hover:underline">
                           {order.order_number}
                         </Link>
                       </td>

@@ -31,7 +31,7 @@ export default async function QuotesPage() {
         </div>
         <Link
           href="/dashboard/quotes/new"
-          className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary-dark"
+          className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary-dark"
         >
           <Plus size={16} />
           إنشاء عرض سعر
@@ -61,7 +61,7 @@ export default async function QuotesPage() {
                   const contact = quote.contacts as unknown as { full_name: string | null; phone: string | null } | null
                   const statusColors: Record<string, string> = {
                     draft: 'bg-background text-text-muted',
-                    sent: 'bg-primary/15 text-primary-dark',
+                    sent: 'bg-primary/15 text-secondary',
                     accepted: 'bg-success/15 text-success',
                     rejected: 'bg-error/15 text-error',
                     expired: 'bg-warning/15 text-warning',
@@ -79,7 +79,7 @@ export default async function QuotesPage() {
                   return (
                     <tr key={quote.id} className="transition-colors hover:bg-background/50">
                       <td className="px-4 py-3">
-                        <Link href={`/dashboard/quotes/${quote.id}`} className="font-medium text-primary hover:underline">
+                        <Link href={`/dashboard/quotes/${quote.id}`} className="font-medium text-secondary hover:underline">
                           {quote.quote_number}
                         </Link>
                       </td>

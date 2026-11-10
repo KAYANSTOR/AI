@@ -22,7 +22,7 @@ export default function FeaturesPage() {
         {/* Features Page Hero Banner */}
         <Section tone="background" className="border-b border-border py-12 lg:py-16">
           <div className="mx-auto max-w-3xl text-center space-y-4">
-            <div className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary-light/20 px-3.5 py-1 text-xs font-bold text-primary-dark">
+            <div className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary-light/20 px-3.5 py-1 text-xs font-bold text-secondary">
               <Sparkles size={14} />
               <span>إمكانيات وتقنيات الذكاء الاصطناعي</span>
             </div>
@@ -44,7 +44,7 @@ export default function FeaturesPage() {
               const Icon = f.icon
               return (
                 <div key={f.title} className="rounded-2xl border border-border bg-surface p-4 text-center space-y-1.5 shadow-2xs">
-                  <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-xl bg-primary-light/30 text-primary-dark">
+                  <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-xl bg-primary-light/30 text-secondary">
                     <Icon size={20} />
                   </div>
                   <h3 className="text-sm font-bold text-text">{f.title}</h3>

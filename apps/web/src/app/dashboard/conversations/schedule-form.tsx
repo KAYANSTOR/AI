@@ -49,7 +49,7 @@ export function ScheduleMessageForm({ conversationId }: { conversationId: string
       <button
         type="submit"
         disabled={pending}
-        className="rounded-lg border border-primary px-3 py-1.5 text-sm font-medium text-primary-dark disabled:opacity-60"
+        className="rounded-lg border border-secondary px-3 py-1.5 text-sm font-medium text-secondary disabled:opacity-60"
       >
         {pending ? '…' : 'جدولة الإرسال'}
       </button>

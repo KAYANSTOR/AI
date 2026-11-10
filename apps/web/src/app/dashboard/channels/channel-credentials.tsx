@@ -154,13 +154,13 @@ export function ChannelCredentials({ data }: { data: CredentialPanelData }) {
                   disabled={isDisabled || pending}
                   autoComplete="off"
                   dir="ltr"
-                  className="min-h-11 min-w-0 flex-1 rounded-lg border border-border bg-background px-3 py-1.5 text-base text-text focus:border-primary-dark focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-60 md:text-sm"
+                  className="min-h-11 min-w-0 flex-1 rounded-lg border border-border bg-background px-3 py-1.5 text-base text-text focus:border-secondary focus:outline-none focus:ring-2 focus:ring-accent/20 disabled:opacity-60 md:text-sm"
                 />
                 <button
                   type="button"
                   onClick={() => save(field.type)}
                   disabled={isDisabled || pending || !(drafts[field.type] ?? '').trim()}
-                  className="inline-flex min-h-11 items-center gap-1.5 rounded-lg bg-primary-dark px-3 py-1.5 text-base font-medium text-surface transition-colors hover:bg-primary disabled:opacity-50 md:text-sm"
+                  className="inline-flex min-h-11 items-center gap-1.5 rounded-lg bg-primary-dark px-3 py-1.5 text-base font-medium text-primary-foreground transition-colors hover:bg-primary disabled:opacity-50 md:text-sm"
                 >
                   {pending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save size={12} aria-hidden="true" />}
                   {entry ? 'استبدال' : 'حفظ'}

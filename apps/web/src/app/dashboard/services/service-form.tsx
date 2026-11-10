@@ -55,23 +55,23 @@ export function ServiceForm(_props: { organizationId: string }) {
       )}
       <div>
         <label className="mb-1 block text-sm font-medium text-text">{ar.services.name}</label>
-        <input required value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} className="min-h-11 w-full rounded-lg border border-border bg-surface px-3 py-2 text-base text-text focus:outline-none focus:ring-2 focus:ring-primary/30 md:text-sm" />
+        <input required value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} className="min-h-11 w-full rounded-lg border border-border bg-surface px-3 py-2 text-base text-text focus:outline-none focus:ring-2 focus:ring-accent/30 md:text-sm" />
       </div>
       <div>
         <label className="mb-1 block text-sm font-medium text-text">{ar.services.descriptionLabel}</label>
-        <textarea value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} rows={2} className="min-h-11 w-full rounded-lg border border-border bg-surface px-3 py-2 text-base text-text focus:outline-none focus:ring-2 focus:ring-primary/30 md:text-sm" placeholder={ar.services.optionalDetails} />
+        <textarea value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} rows={2} className="min-h-11 w-full rounded-lg border border-border bg-surface px-3 py-2 text-base text-text focus:outline-none focus:ring-2 focus:ring-accent/30 md:text-sm" placeholder={ar.services.optionalDetails} />
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className="mb-1 block text-sm font-medium text-text">{ar.services.duration}</label>
-          <input type="number" min={5} required value={form.duration_minutes} onChange={(e) => setForm((f) => ({ ...f, duration_minutes: Number(e.target.value) }))} className="min-h-11 w-full rounded-lg border border-border bg-surface px-3 py-2 text-base text-text focus:outline-none focus:ring-2 focus:ring-primary/30 md:text-sm" />
+          <input type="number" min={5} required value={form.duration_minutes} onChange={(e) => setForm((f) => ({ ...f, duration_minutes: Number(e.target.value) }))} className="min-h-11 w-full rounded-lg border border-border bg-surface px-3 py-2 text-base text-text focus:outline-none focus:ring-2 focus:ring-accent/30 md:text-sm" />
         </div>
         <div>
           <label className="mb-1 block text-sm font-medium text-text">{ar.services.price}</label>
-          <input type="number" min={0} step="0.01" value={form.price_amount} onChange={(e) => setForm((f) => ({ ...f, price_amount: e.target.value }))} className="min-h-11 w-full rounded-lg border border-border bg-surface px-3 py-2 text-base text-text focus:outline-none focus:ring-2 focus:ring-primary/30 md:text-sm" placeholder="150" dir="ltr" />
+          <input type="number" min={0} step="0.01" value={form.price_amount} onChange={(e) => setForm((f) => ({ ...f, price_amount: e.target.value }))} className="min-h-11 w-full rounded-lg border border-border bg-surface px-3 py-2 text-base text-text focus:outline-none focus:ring-2 focus:ring-accent/30 md:text-sm" placeholder="150" dir="ltr" />
         </div>
       </div>
-      <button type="submit" disabled={loading} className="flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary-dark py-2.5 text-base font-medium text-surface transition-colors hover:bg-primary disabled:opacity-60 md:text-sm">
+      <button type="submit" disabled={loading} className="flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary-dark py-2.5 text-base font-medium text-primary-foreground transition-colors hover:bg-primary disabled:opacity-60 md:text-sm">
         {loading ? <Loader2 className="animate-spin" size={16} /> : ar.services.save}
       </button>
     </form>

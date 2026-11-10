@@ -174,7 +174,7 @@ export function PhonePanel({
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-border pb-5">
         <div>
           <h2 className="flex items-center gap-2.5 text-base font-bold text-text">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary-light/40 text-primary-dark">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary-light/40 text-secondary">
               <PhoneForwarded size={18} />
             </div>
             <span>تحويل المكالمات والرد الصوتي الذكي (AI Voice Receptionist)</span>
@@ -226,7 +226,7 @@ export function PhonePanel({
         <div className="rounded-2xl border border-primary/40 bg-gradient-to-br from-primary/10 via-surface to-background p-5 shadow-xs space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div className="flex items-center gap-3">
-              <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary text-white shadow-xs">
+              <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-xs">
                 <Sparkles size={22} />
               </span>
               <div>
@@ -244,7 +244,7 @@ export function PhonePanel({
                 type="button"
                 disabled={pending}
                 onClick={runAutoProvision}
-                className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs sm:text-sm font-bold text-white hover:bg-primary-dark transition-all shadow-xs shrink-0 disabled:opacity-60"
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs sm:text-sm font-bold text-primary-foreground hover:bg-primary-dark transition-all shadow-xs shrink-0 disabled:opacity-60"
               >
                 {pending ? (
                   <Loader2 size={16} className="animate-spin" />
@@ -331,7 +331,7 @@ export function PhonePanel({
                 }
                 placeholder="77xxxxxxx أو 73xxxxxxx أو 71xxxxxxx أو +967xxxxxxxxx"
                 dir="ltr"
-                className="w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-sm text-text text-start placeholder:text-text-muted focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-60"
+                className="w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-sm text-text text-start placeholder:text-text-muted focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent disabled:opacity-60"
               />
             </div>
             <p className="text-[11px] text-text-muted">
@@ -343,7 +343,7 @@ export function PhonePanel({
           <div className="space-y-1.5">
             <label className="block text-xs font-bold text-text flex items-center justify-between">
               <span>٢. شركة ومزوّد الاتصالات لشريحتك</span>
-              <span className="text-[11px] font-semibold text-primary-dark">🇾🇪 شبكات اليمن</span>
+              <span className="text-[11px] font-semibold text-secondary">🇾🇪 شبكات اليمن</span>
             </label>
             <select
               value={form.carrierProfileId ?? ''}
@@ -351,7 +351,7 @@ export function PhonePanel({
               onChange={(event) =>
                 setForm({ ...form, carrierProfileId: event.target.value || null })
               }
-              className="w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-sm text-text focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-60"
+              className="w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-sm text-text focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent disabled:opacity-60"
             >
               {displayCarriers.length === 0 ? (
                 <option value="">يمن موبايل (Yemen Mobile)</option>
@@ -418,14 +418,14 @@ export function PhonePanel({
                   }
                   className={`text-start p-3 rounded-xl border transition-all relative ${
                     selected
-                      ? 'border-primary bg-primary/5 ring-1 ring-primary'
+                      ? 'border-secondary bg-primary/5 ring-1 ring-primary'
                       : 'border-border bg-background hover:bg-background/80'
                   }`}
                 >
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-xs font-bold text-text">{option.title}</span>
                     {option.badge && (
-                      <span className="text-[10px] font-extrabold px-1.5 py-0.5 rounded-full bg-primary-light/40 text-primary-dark">
+                      <span className="text-[10px] font-extrabold px-1.5 py-0.5 rounded-full bg-primary-light/40 text-secondary">
                         {option.badge}
                       </span>
                     )}
@@ -441,7 +441,7 @@ export function PhonePanel({
         <div className="rounded-2xl border border-primary/30 bg-primary-light/15 p-5 space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
             <div className="flex items-center gap-2">
-              <Sparkles size={18} className="text-primary-dark" />
+              <Sparkles size={18} className="text-secondary" />
               <h3 className="text-sm font-bold text-text">
                 كود تفعيل التحويل السريع (مخصص لخطك):
               </h3>
@@ -453,7 +453,7 @@ export function PhonePanel({
 
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
             <div className="flex-1 flex items-center justify-between bg-surface border border-border rounded-xl px-4 py-3 shadow-2xs">
-              <span className="font-mono text-base sm:text-lg font-bold text-primary-dark tracking-wider select-all" dir="ltr">
+              <span className="font-mono text-base sm:text-lg font-bold text-secondary tracking-wider select-all" dir="ltr">
                 {generatedCode}
               </span>
               <button
@@ -478,7 +478,7 @@ export function PhonePanel({
             {/* Direct Dial Link for Mobile */}
             <a
               href={`tel:${encodeURIComponent(generatedCode)}`}
-              className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-bold text-white hover:bg-primary-dark transition-all shadow-xs shrink-0"
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-bold text-primary-foreground hover:bg-primary-dark transition-all shadow-xs shrink-0"
             >
               <PhoneCall size={16} />
               <span>اتصال وتفعيل الكود فوراً</span>
@@ -497,7 +497,7 @@ export function PhonePanel({
               <button
                 type="button"
                 onClick={() => handleCopy(alternativeVoLTECode, 'volte')}
-                className="text-[11px] font-bold text-primary-dark hover:underline self-end sm:self-auto"
+                className="text-[11px] font-bold text-secondary hover:underline self-end sm:self-auto"
               >
                 {copiedCode === 'volte' ? 'تم نسخ كود 4G' : 'نسخ كود 4G'}
               </button>
@@ -507,7 +507,7 @@ export function PhonePanel({
           {/* Instructions and Cancellation Code */}
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-text-muted pt-2 border-t border-primary/20">
             <div className="flex items-center gap-1.5">
-              <Info size={14} className="text-primary-dark shrink-0" />
+              <Info size={14} className="text-secondary shrink-0" />
               <span>
                 اطلب الكود من شريحة هاتف شركتك، وسيرد المشغل برسالة «تم تفعيل تحويل المكالمات».
               </span>
@@ -542,7 +542,7 @@ export function PhonePanel({
                 type="button"
                 disabled={pending}
                 onClick={() => run(() => savePhoneConnectionAction(form))}
-                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-primary px-6 py-2.5 text-sm font-bold text-white hover:bg-primary-dark disabled:opacity-60 transition-all shadow-xs"
+                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-primary px-6 py-2.5 text-sm font-bold text-primary-foreground hover:bg-primary-dark disabled:opacity-60 transition-all shadow-xs"
               >
                 {pending && <Loader2 className="animate-spin" size={15} />}
                 <span>حفظ الإعدادات</span>
@@ -620,7 +620,7 @@ export function PhonePanel({
                 <Settings2 size={15} />
                 <span>إعدادات فنية متقدمة (معرّف التوجيه السحابي الداخلي Vapi/SIP)</span>
               </span>
-              <span className="text-[11px] text-primary-dark">تعديل اختياري</span>
+              <span className="text-[11px] text-secondary">تعديل اختياري</span>
             </summary>
             <div className="space-y-4 pt-4 mt-3 border-t border-border">
               <label className="block text-xs text-text-muted">
@@ -631,7 +631,7 @@ export function PhonePanel({
                   onChange={(event) => setForm({ ...form, vapiNumber: event.target.value })}
                   placeholder="frontdesk_xxxx أو معرّف هاتف Vapi"
                   dir="ltr"
-                  className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm text-text font-mono focus:border-primary focus:outline-none"
+                  className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm text-text font-mono focus:border-accent focus:outline-none"
                 />
               </label>
               <p className="text-[11px] text-text-muted leading-relaxed">

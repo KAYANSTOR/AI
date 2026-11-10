@@ -5,6 +5,7 @@ import { SITE_NAV } from './nav'
 const ACCOUNT_LINKS = [
   { label: 'تسجيل الدخول', href: '/login' },
   { label: 'إنشاء حساب للشركة', href: '/signup' },
+  { label: 'سياسة الخصوصية', href: '/privacy' },
 ] as const
 
 export function SiteFooter() {
@@ -27,7 +28,7 @@ export function SiteFooter() {
                 <li key={item.href}>
                   <Link
                     href={item.href}
-                    className="text-sm text-text-muted transition-colors hover:text-primary-dark"
+                    className="text-sm text-text-muted transition-colors hover:text-secondary"
                   >
                     {item.label}
                   </Link>
@@ -43,7 +44,7 @@ export function SiteFooter() {
                 <li key={item.href}>
                   <Link
                     href={item.href}
-                    className="text-sm text-text-muted transition-colors hover:text-primary-dark"
+                    className="text-sm text-text-muted transition-colors hover:text-secondary"
                   >
                     {item.label}
                   </Link>
@@ -61,7 +62,7 @@ export function SiteFooter() {
               href="https://kayan-soft.online"
               target="_blank"
               rel="noopener noreferrer"
-              className="font-bold text-primary-dark underline decoration-primary-light decoration-2 underline-offset-4 transition-colors hover:decoration-primary-dark hover:text-primary"
+              className="font-bold text-secondary underline decoration-primary-light decoration-2 underline-offset-4 transition-colors hover:decoration-primary-dark hover:text-secondary"
             >
               شركة كيان سوفت
             </a>

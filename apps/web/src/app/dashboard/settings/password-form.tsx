@@ -60,7 +60,7 @@ export function PasswordForm() {
         <button
           type="submit"
           disabled={pending}
-          className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-text px-4 text-sm font-semibold text-surface transition-colors hover:bg-dark-muted disabled:opacity-60"
+          className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary-dark disabled:opacity-60"
         >
           {pending ? <Loader2 size={15} className="animate-spin" aria-hidden="true" /> : null}
           تحديث كلمة المرور

@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
 import { InstallAppButton } from '@/components/pwa/install-app-button'
+import { ThemeToggle } from '@/components/theme/theme-toggle'
 import { useDashboardShell } from '@/components/dashboard/dashboard-shell'
 import { signOutAction } from '@/lib/auth/actions'
 import { ar } from '@/lib/i18n/ar'
@@ -35,7 +36,7 @@ function SearchForm({ autoFocus = false }: { autoFocus?: boolean }) {
         placeholder={ar.header.searchPlaceholder}
         aria-label={ar.header.searchPlaceholder}
         autoFocus={autoFocus}
-        className="min-h-10 w-full rounded-lg border border-border bg-background py-2 pe-3 ps-9 text-base transition focus:border-primary focus:bg-surface focus:outline-none focus:ring-4 focus:ring-primary/10 md:text-sm"
+        className="min-h-10 w-full rounded-lg border border-border bg-background py-2 pe-3 ps-9 text-base transition focus:border-accent focus:bg-surface focus:outline-none focus:ring-4 focus:ring-accent/10 md:text-sm"
       />
     </form>
   )
@@ -67,7 +68,7 @@ function AccountMenu({ email }: { email: string }) {
         aria-expanded={open}
         aria-haspopup="menu"
         aria-label="قائمة الحساب"
-        className="flex h-10 w-10 items-center justify-center rounded-full bg-dark text-sm font-semibold uppercase text-surface transition hover:ring-4 hover:ring-primary/15"
+        className="flex h-10 w-10 items-center justify-center theme-dark rounded-full bg-dark text-sm font-semibold uppercase text-text transition hover:ring-4 hover:ring-primary/15"
       >
         {email.slice(0, 1)}
       </button>
@@ -144,6 +145,7 @@ export function Header({ userEmail }: { userEmail: string }) {
             {searchOpen ? <X size={19} aria-hidden="true" /> : <Search size={19} aria-hidden="true" />}
           </button>
           <InstallAppButton compact />
+          <ThemeToggle />
           <AccountMenu email={userEmail} />
         </div>
       </div>

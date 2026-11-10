@@ -32,7 +32,7 @@ export function OrderActions({ orderId, currentStatus }: { orderId: string, curr
             <button
               onClick={() => handleStatusChange('confirmation')}
               disabled={loading !== null}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-dark disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary-dark disabled:opacity-50"
             >
               {loading === 'confirmation' ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
               طلب تأكيد
@@ -40,7 +40,7 @@ export function OrderActions({ orderId, currentStatus }: { orderId: string, curr
             <button
               onClick={() => handleStatusChange('processing')}
               disabled={loading !== null}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-primary bg-primary/10 px-3 py-1.5 text-sm font-medium text-primary hover:bg-primary/20 disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-secondary bg-primary/10 px-3 py-1.5 text-sm font-medium text-secondary hover:bg-primary/20 disabled:opacity-50"
             >
               {loading === 'processing' ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
               تأكيد وبدء المعالجة
@@ -61,7 +61,7 @@ export function OrderActions({ orderId, currentStatus }: { orderId: string, curr
             <button
               onClick={() => handleStatusChange('processing')}
               disabled={loading !== null}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-dark disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary-dark disabled:opacity-50"
             >
               {loading === 'processing' ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
               تأكيد وبدء المعالجة
@@ -82,7 +82,7 @@ export function OrderActions({ orderId, currentStatus }: { orderId: string, curr
             <button
               onClick={() => handleStatusChange('completed')}
               disabled={loading !== null}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-success px-3 py-1.5 text-sm font-medium text-white hover:bg-success/80 disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-success px-3 py-1.5 text-sm font-medium text-background hover:bg-success/80 disabled:opacity-50"
             >
               {loading === 'completed' ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
               اكتمال الطلب

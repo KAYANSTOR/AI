@@ -5,7 +5,7 @@ type Tone = 'background' | 'surface' | 'dark'
 const TONE_CLASS: Record<Tone, string> = {
   background: 'bg-background text-text',
   surface: 'bg-surface text-text',
-  dark: 'bg-dark text-white',
+  dark: 'theme-dark bg-dark text-text',
 }
 
 /** Page section with consistent vertical rhythm and a stable anchor target. */
@@ -57,7 +57,7 @@ export function SectionHeading({
       {eyebrow ? (
         <p
           className={`text-xs font-semibold tracking-[0.16em] ${
-            isDark ? 'text-primary-light' : 'text-primary-dark'
+            isDark ? 'text-accent-text' : 'text-accent-text'
           }`}
         >
           {eyebrow}
@@ -66,7 +66,7 @@ export function SectionHeading({
       <h2
         id={id}
         className={`mt-3 text-2xl font-bold tracking-tight sm:text-3xl lg:text-4xl ${
-          isDark ? 'text-white' : 'text-text'
+          isDark ? 'text-text' : 'text-text'
         }`}
       >
         {title}
@@ -74,7 +74,7 @@ export function SectionHeading({
       {description ? (
         <p
           className={`mt-4 text-sm leading-8 sm:text-base ${
-            isDark ? 'text-white/75' : 'text-text-muted'
+            isDark ? 'text-text/75' : 'text-text-muted'
           }`}
         >
           {description}
@@ -91,12 +91,13 @@ export function Chip({
   className = '',
 }: {
   children: ReactNode
-  tone?: 'neutral' | 'brand' | 'soon'
+  tone?: 'neutral' | 'brand' | 'gold' | 'soon'
   className?: string
 }) {
   const tones = {
     neutral: 'border-border bg-background text-text-muted',
-    brand: 'border-primary-light bg-primary-light/30 text-primary-dark',
+    brand: 'border-primary-light bg-primary-light/30 text-secondary',
+    gold: 'border-accent/40 bg-accent-light text-accent-text',
     soon: 'border-border bg-surface text-text-muted',
   }
 

@@ -94,7 +94,7 @@ export function Features() {
             className="flex flex-col rounded-2xl border border-border bg-surface p-6 transition-shadow hover:shadow-md"
           >
             <div className="flex items-start justify-between gap-3">
-              <span className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-primary-light/35 text-primary-dark">
+              <span className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-primary-light/35 text-secondary">
                 <feature.icon size={22} aria-hidden="true" />
               </span>
               {feature.status === 'live' ? (

@@ -16,22 +16,26 @@ import {
 
 export type RuntimeChannel = 'sms' | 'whatsapp' | 'instagram' | 'phone'
 
-export async function processInboundMessage(
+export type InboundMessageType = 'text' | 'image' | 'audio' | 'video' | 'file'
+
+type InboundIdentity = {
+  organizationId: string
+  businessId: string
+  channelId: string
+  channelType: RuntimeChannel
+  provider: string
+  externalEventId: string
+  externalUserId?: string | null
+  senderPhone?: string | null
+  senderUsername?: string | null
+  displayName?: string | null
+}
+
+/** Resolve the contact and conversation, then persist the inbound message for the inbox. */
+async function storeInboundMessage(
   db: DbClient,
-  input: {
-    organizationId: string
-    businessId: string
-    channelId: string
-    channelType: RuntimeChannel
-    provider: string
-    externalEventId: string
-    externalUserId?: string | null
-    senderPhone?: string | null
-    senderUsername?: string | null
-    displayName?: string | null
-    text: string
-  }
-): Promise<{ reply: string | null; conversationId: string; contactId: string }> {
+  input: InboundIdentity & { messageType: InboundMessageType; content: string }
+): Promise<{ conversationId: string; contactId: string }> {
   const contact = await resolveContactIdentity(db, input.organizationId, {
     channel: input.channelType,
     externalUserId: input.externalUserId,
@@ -51,8 +55,8 @@ export async function processInboundMessage(
     organization_id: input.organizationId,
     conversation_id: conversationId,
     direction: 'inbound',
-    message_type: 'text',
-    content: input.text,
+    message_type: input.messageType,
+    content: input.content,
     external_message_id: input.externalEventId,
   })
   if (stored.error && stored.error.code !== '23505') throw new Error(stored.error.message)
@@ -66,6 +70,29 @@ export async function processInboundMessage(
     organizationId: input.organizationId,
     conversationId,
   })
+
+  return { conversationId, contactId: contact.contactId }
+}
+
+/**
+ * Non-text inbound (image, voice note, video, document, location…). The agent
+ * cannot read media, so the message is recorded in the inbox and the SLA is
+ * armed for a human to follow up; no automated reply is produced.
+ */
+export async function recordInboundMediaMessage(
+  db: DbClient,
+  input: InboundIdentity & { messageType: Exclude<InboundMessageType, 'text'>; content: string }
+): Promise<{ conversationId: string; contactId: string }> {
+  return storeInboundMessage(db, input)
+}
+
+export async function processInboundMessage(
+  db: DbClient,
+  input: InboundIdentity & { text: string }
+): Promise<{ reply: string | null; conversationId: string; contactId: string }> {
+  const stored = await storeInboundMessage(db, { ...input, messageType: 'text', content: input.text })
+  const conversationId = stored.conversationId
+  const contact = { contactId: stored.contactId }
 
   const conversation = await getConversationRef(db, conversationId, input.organizationId)
   if (!conversation || !conversation.aiEnabled || conversation.status === 'handed_off') {

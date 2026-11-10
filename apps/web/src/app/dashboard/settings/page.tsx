@@ -63,7 +63,7 @@ export default async function SettingsPage() {
         </dl>
         <Link
           href="/onboarding"
-          className="inline-flex min-h-11 items-center text-sm font-medium text-primary-dark hover:underline"
+          className="inline-flex min-h-11 items-center text-sm font-medium text-secondary hover:underline"
         >
           {ar.settings.changeBusinessType}
         </Link>
@@ -84,27 +84,27 @@ export default async function SettingsPage() {
           <h2 className="text-sm font-semibold text-text">أدوات متقدمة</h2>
           <ul className="space-y-2 text-sm">
             <li>
-              <Link href="/dashboard/settings/canned-replies" className="text-primary-dark hover:underline">
+              <Link href="/dashboard/settings/canned-replies" className="text-secondary hover:underline">
                 الردود الجاهزة
               </Link>
             </li>
             <li>
-              <Link href="/dashboard/settings/api-keys" className="text-primary-dark hover:underline">
+              <Link href="/dashboard/settings/api-keys" className="text-secondary hover:underline">
                 مفاتيح API
               </Link>
             </li>
             <li>
-              <Link href="/dashboard/settings/escalation" className="text-primary-dark hover:underline">
+              <Link href="/dashboard/settings/escalation" className="text-secondary hover:underline">
                 سياسات التصعيد (SLA)
               </Link>
             </li>
             <li>
-              <a href="/api/export/contacts" className="text-primary-dark hover:underline">
+              <a href="/api/export/contacts" className="text-secondary hover:underline">
                 تصدير جهات الاتصال (CSV)
               </a>
             </li>
             <li>
-              <a href="/api/export/leads" className="text-primary-dark hover:underline">
+              <a href="/api/export/leads" className="text-secondary hover:underline">
                 تصدير العملاء المحتملين (CSV)
               </a>
             </li>

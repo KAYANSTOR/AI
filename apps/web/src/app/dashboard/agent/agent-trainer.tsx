@@ -425,10 +425,10 @@ export function AgentTrainer({
 
   const scoreColor =
     readiness.score >= 80
-      ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800'
+      ? 'text-success bg-success/10 border-success/30'
       : readiness.score >= 50
-      ? 'text-amber-600 bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800'
-      : 'text-rose-600 bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800'
+      ? 'text-warning bg-warning/10 border-warning/30'
+      : 'text-error bg-error/10 border-error/30'
 
   async function handleSaveProfileForm(e: React.FormEvent) {
     e.preventDefault()
@@ -476,8 +476,8 @@ export function AgentTrainer({
     <div className="space-y-6">
       {/* Toast notification */}
       {toastMessage && (
-        <div className="fixed top-20 start-1/2 -translate-x-1/2 z-50 rounded-xl bg-surface border border-primary/40 px-5 py-3 shadow-lg flex items-center gap-3 text-sm font-semibold text-primary-dark animate-fade-in">
-          <CheckCircle2 size={18} className="text-primary" />
+        <div className="fixed top-20 start-1/2 -translate-x-1/2 z-50 rounded-xl bg-surface border border-primary/40 px-5 py-3 shadow-lg flex items-center gap-3 text-sm font-semibold text-secondary animate-fade-in">
+          <CheckCircle2 size={18} className="text-secondary" />
           <span>{toastMessage}</span>
         </div>
       )}
@@ -490,13 +490,13 @@ export function AgentTrainer({
             onClick={() => setActiveTab('train')}
             className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-sm font-bold transition-all ${
               activeTab === 'train'
-                ? 'bg-primary text-white shadow-sm'
+                ? 'bg-primary text-primary-foreground shadow-sm'
                 : 'text-text-muted hover:text-text hover:bg-background/60'
             }`}
           >
             <Sparkles size={18} />
             <span>جلسة تدريب الوكيل (بناء المعرفة)</span>
-            <span className="ms-1.5 rounded-full bg-white/20 px-2 py-0.5 text-xs">
+            <span className="ms-1.5 rounded-full bg-text/20 px-2 py-0.5 text-xs">
               {readiness.score}%
             </span>
           </button>
@@ -506,7 +506,7 @@ export function AgentTrainer({
             onClick={() => setActiveTab('test')}
             className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-sm font-bold transition-all ${
               activeTab === 'test'
-                ? 'bg-primary text-white shadow-sm'
+                ? 'bg-primary text-primary-foreground shadow-sm'
                 : 'text-text-muted hover:text-text hover:bg-background/60'
             }`}
           >
@@ -519,7 +519,7 @@ export function AgentTrainer({
             onClick={() => setActiveTab('settings')}
             className={`flex items-center justify-center gap-2 py-3 px-5 rounded-xl text-sm font-bold transition-all ${
               activeTab === 'settings'
-                ? 'bg-primary text-white shadow-sm'
+                ? 'bg-primary text-primary-foreground shadow-sm'
                 : 'text-text-muted hover:text-text hover:bg-background/60'
             }`}
           >
@@ -532,7 +532,7 @@ export function AgentTrainer({
         <button
           type="button"
           onClick={() => setIsProfileModalOpen(true)}
-          className="flex items-center justify-center gap-2 py-3 px-5 rounded-2xl text-sm font-bold bg-primary text-white hover:bg-primary-dark transition-all shadow-sm shrink-0"
+          className="flex items-center justify-center gap-2 py-3 px-5 rounded-2xl text-sm font-bold bg-primary text-primary-foreground hover:bg-primary-dark transition-all shadow-sm shrink-0"
         >
           <Building2 size={18} />
           <span>تحديث نوع النشاط والبيانات</span>
@@ -549,13 +549,13 @@ export function AgentTrainer({
             {/* Chat Header */}
             <div className="border-b border-border bg-background/50 px-5 py-4 flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary-light/40 text-primary-dark">
+                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary-light/40 text-secondary">
                   <Bot size={22} />
                 </div>
                 <div>
                   <h2 className="text-base font-bold text-text flex items-center gap-2">
                     جلسة تدريب الوكيل الذكي
-                    <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                    <span className="h-2 w-2 rounded-full bg-success animate-pulse" />
                   </h2>
                   <p className="text-xs text-text-muted">
                     تحدث مع الوكيل بحرية، وسيقوم هو باستيعاب وحفظ معلومات نشاطك تلقائياً.
@@ -587,7 +587,7 @@ export function AgentTrainer({
                   }`}
                 >
                   {msg.role === 'assistant' && (
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-primary-light/50 text-primary-dark mt-1">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-primary-light/50 text-secondary mt-1">
                       <Bot size={17} />
                     </div>
                   )}
@@ -596,7 +596,7 @@ export function AgentTrainer({
                     <div
                       className={`rounded-2xl px-4 py-3 text-sm leading-relaxed ${
                         msg.role === 'user'
-                          ? 'bg-primary text-white rounded-br-xs'
+                          ? 'bg-primary text-primary-foreground rounded-br-xs'
                           : 'border border-border bg-background text-text rounded-bl-xs'
                       }`}
                     >
@@ -609,7 +609,7 @@ export function AgentTrainer({
                         {msg.savedFacts.map((fact, idx) => (
                           <span
                             key={idx}
-                            className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
+                            className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg bg-success/10 text-success border border-success/30"
                           >
                             <CheckCircle2 size={13} />
                             <span>تم استيعاب وحفظ: <strong>{fact.title}</strong></span>
@@ -620,7 +620,7 @@ export function AgentTrainer({
                   </div>
 
                   {msg.role === 'user' && (
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-primary text-white mt-1">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground mt-1">
                       <User size={16} />
                     </div>
                   )}
@@ -630,7 +630,7 @@ export function AgentTrainer({
               {busy && (
                 <div className="flex items-center gap-2 text-xs text-text-muted py-2 px-1">
                   <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary-light/30">
-                    <Loader2 size={14} className="animate-spin text-primary" />
+                    <Loader2 size={14} className="animate-spin text-secondary" />
                   </div>
                   <span>الوكيل يفكر ويرتب المعلومات المستخلصة…</span>
                 </div>
@@ -649,7 +649,7 @@ export function AgentTrainer({
             {/* Quick Prompt Suggestions */}
             <div className="px-5 py-2 border-t border-border bg-surface flex items-center gap-2 overflow-x-auto no-scrollbar">
               <span className="text-[11px] text-text-muted shrink-0 flex items-center gap-1">
-                <Sparkles size={12} className="text-primary" />
+                <Sparkles size={12} className="text-secondary" />
                 اقتراحات:
               </span>
               <button
@@ -713,13 +713,13 @@ export function AgentTrainer({
                   onChange={(e) => setInput(e.target.value)}
                   placeholder="تحدث مع الوكيل... مثلاً: اسم شركتنا، خدماتنا، أوقات العمل، الأسعار، السياسات..."
                   disabled={busy}
-                  className="flex-1 rounded-xl border border-border bg-background px-4 py-3 text-sm text-text placeholder:text-text-muted focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                  className="flex-1 rounded-xl border border-border bg-background px-4 py-3 text-sm text-text placeholder:text-text-muted focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
                   dir="auto"
                 />
                 <button
                   type="submit"
                   disabled={busy || !input.trim()}
-                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary text-white hover:bg-primary-dark disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-xs"
+                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground hover:bg-primary-dark disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-xs"
                   aria-label="إرسال"
                 >
                   <Send size={18} className="rtl:rotate-180" />
@@ -776,7 +776,7 @@ export function AgentTrainer({
                       className="w-full text-start p-2.5 rounded-xl border border-border bg-surface hover:border-primary/50 hover:bg-primary-light/10 transition-all flex items-center justify-between text-xs text-text group"
                     >
                       <span>• {item.label}</span>
-                      <span className="text-primary text-[11px] font-semibold opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
+                      <span className="text-secondary text-[11px] font-semibold opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
                         تزويد الوكيل
                         <ArrowRight size={12} className="rtl:rotate-180" />
                       </span>
@@ -804,7 +804,7 @@ export function AgentTrainer({
                       category: 'general',
                     })
                   }
-                  className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-primary text-white hover:bg-primary-dark transition-colors shadow-xs"
+                  className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-primary text-primary-foreground hover:bg-primary-dark transition-colors shadow-xs"
                 >
                   <Plus size={14} />
                   <span>إضافة معلومة</span>
@@ -828,11 +828,11 @@ export function AgentTrainer({
                         className="w-full px-4 py-3 flex items-center justify-between text-start text-xs font-bold text-text hover:bg-background/80 transition-colors"
                       >
                         <div className="flex items-center gap-2">
-                          {cat.id === 'business_info' && <Building2 size={16} className="text-primary" />}
-                          {cat.id === 'service_info' && <Briefcase size={16} className="text-primary" />}
-                          {cat.id === 'pricing' && <Tag size={16} className="text-primary" />}
-                          {cat.id === 'policy' && <ShieldCheck size={16} className="text-primary" />}
-                          {cat.id === 'faq' && <HelpCircle size={16} className="text-primary" />}
+                          {cat.id === 'business_info' && <Building2 size={16} className="text-secondary" />}
+                          {cat.id === 'service_info' && <Briefcase size={16} className="text-secondary" />}
+                          {cat.id === 'pricing' && <Tag size={16} className="text-secondary" />}
+                          {cat.id === 'policy' && <ShieldCheck size={16} className="text-secondary" />}
+                          {cat.id === 'faq' && <HelpCircle size={16} className="text-secondary" />}
                           <span>{cat.title}</span>
                           <span className="ms-1 px-2 py-0.5 rounded-full bg-surface text-[11px] text-text-muted border border-border">
                             {cat.items.length}
@@ -867,8 +867,8 @@ export function AgentTrainer({
                                       onClick={() => handleToggleKnowledge(item.id, item.isActive)}
                                       className={`px-2 py-0.5 rounded text-[10px] font-semibold transition-colors ${
                                         item.isActive
-                                          ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300'
-                                          : 'bg-stone-200 text-stone-600 dark:bg-stone-800 dark:text-stone-400'
+                                          ? 'bg-success/15 text-success'
+                                          : 'bg-surface-muted text-text-muted'
                                       }`}
                                     >
                                       {item.isActive ? 'مفعّلة' : 'معطّلة'}
@@ -923,16 +923,16 @@ export function AgentTrainer({
           {/* Simulated WhatsApp / Live Chat Container (8 cols) */}
           <div className="lg:col-span-8 flex flex-col h-[740px] rounded-2xl border border-border bg-surface shadow-2xs overflow-hidden">
             {/* Simulator Header - Brand Primary */}
-            <div className="border-b border-white/10 bg-primary-dark text-white px-5 py-4 flex items-center justify-between">
+            <div className="border-b border-text/10 bg-primary-dark text-primary-foreground px-5 py-4 flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/15 text-white font-bold">
+                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-text/15 text-text font-bold">
                   <Bot size={22} />
                 </div>
                 <div>
                   <h2 className="text-base font-bold flex items-center gap-2">
                     {consoleData.name || 'وكيل الاستقبال'} (تجربة عميل)
                   </h2>
-                  <p className="text-xs text-white/80">
+                  <p className="text-xs text-text/80">
                     محاكاة حقيقية لرد الوكيل على استفسارات وحجوزات العملاء.
                   </p>
                 </div>
@@ -949,7 +949,7 @@ export function AgentTrainer({
                     },
                   ])
                 }}
-                className="flex items-center gap-1.5 text-xs bg-white/15 hover:bg-white/25 text-white px-3 py-1.5 rounded-lg transition-colors font-semibold"
+                className="flex items-center gap-1.5 text-xs bg-text/15 hover:bg-text/25 text-text px-3 py-1.5 rounded-lg transition-colors font-semibold"
               >
                 <RotateCcw size={14} />
                 <span>محادثة جديدة</span>
@@ -966,7 +966,7 @@ export function AgentTrainer({
                   }`}
                 >
                   {m.role === 'assistant' && (
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-primary-light/40 text-primary-dark mt-1">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-primary-light/40 text-secondary mt-1">
                       <Bot size={17} />
                     </div>
                   )}
@@ -975,7 +975,7 @@ export function AgentTrainer({
                     <div
                       className={`rounded-2xl px-4 py-3 text-sm leading-relaxed shadow-2xs ${
                         m.role === 'user'
-                          ? 'bg-primary text-white rounded-br-xs shadow-xs'
+                          ? 'bg-primary text-primary-foreground rounded-br-xs shadow-xs'
                           : 'border border-border bg-surface text-text rounded-bl-xs'
                       }`}
                     >
@@ -985,14 +985,14 @@ export function AgentTrainer({
                     {/* Tool execution indicator */}
                     {m.tools && m.tools.length > 0 && (
                       <div className="flex items-center gap-1.5 text-[11px] text-text-muted bg-surface/90 border border-border/60 rounded-md px-2 py-0.5 w-fit">
-                        <Check size={11} className="text-primary-dark" />
+                        <Check size={11} className="text-secondary" />
                         <span>تم استخدام الأداة: <strong>{m.tools.join(', ')}</strong></span>
                       </div>
                     )}
                   </div>
 
                   {m.role === 'user' && (
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-dark text-white mt-1">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center theme-dark rounded-xl bg-dark text-text mt-1">
                       <User size={16} />
                     </div>
                   )}
@@ -1001,7 +1001,7 @@ export function AgentTrainer({
 
               {testBusy && (
                 <div className="flex items-center gap-2 text-xs text-text-muted py-2 px-1">
-                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary-light/40 text-primary-dark">
+                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary-light/40 text-secondary">
                     <Loader2 size={14} className="animate-spin" />
                   </div>
                   <span>الوكيل يبحث في المعرفة ويصيغ الرد الموثوق…</span>
@@ -1037,13 +1037,13 @@ export function AgentTrainer({
                   onChange={(e) => setTestInput(e.target.value)}
                   placeholder="اكتب استفسارك كعميل... مثلاً: كم السعر؟ هل لديكم مواعيد؟"
                   disabled={testBusy}
-                  className="flex-1 rounded-xl border border-border bg-background px-4 py-3 text-sm text-text placeholder:text-text-muted focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                  className="flex-1 rounded-xl border border-border bg-background px-4 py-3 text-sm text-text placeholder:text-text-muted focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
                   dir="auto"
                 />
                 <button
                   type="submit"
                   disabled={testBusy || !testInput.trim()}
-                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary text-white hover:bg-primary-dark disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-xs"
+                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground hover:bg-primary-dark disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-xs"
                   aria-label="إرسال"
                 >
                   <Send size={18} className="rtl:rotate-180" />
@@ -1056,7 +1056,7 @@ export function AgentTrainer({
           <div className="lg:col-span-4 space-y-5">
             <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm space-y-3">
               <div className="flex items-center gap-2 text-text font-bold text-sm">
-                <MessageSquare size={17} className="text-primary-dark" />
+                <MessageSquare size={17} className="text-secondary" />
                 <span>سيناريوهات اختبار جاهزة:</span>
               </div>
               <p className="text-xs text-text-muted leading-relaxed">
@@ -1071,7 +1071,7 @@ export function AgentTrainer({
                     onClick={() => handleSendTest(p.text)}
                     className="w-full text-start p-3 rounded-xl border border-border bg-background hover:bg-surface hover:border-primary/50 transition-all text-xs space-y-1 group"
                   >
-                    <div className="font-bold text-text group-hover:text-primary-dark transition-colors flex items-center justify-between">
+                    <div className="font-bold text-text group-hover:text-secondary transition-colors flex items-center justify-between">
                       <span>{p.label}</span>
                       <ArrowRight size={13} className="opacity-0 group-hover:opacity-100 transition-opacity rtl:rotate-180" />
                     </div>
@@ -1084,7 +1084,7 @@ export function AgentTrainer({
             {/* Quality and Strict Policy Box */}
             <div className="rounded-2xl border border-border bg-background/50 p-5 space-y-2.5 text-xs text-text-muted leading-relaxed">
               <div className="flex items-center gap-2 font-bold text-text">
-                <ShieldCheck size={16} className="text-primary-dark" />
+                <ShieldCheck size={16} className="text-secondary" />
                 <span>قاعدة عدم اختراع المعلومات</span>
               </div>
               <p>
@@ -1108,7 +1108,7 @@ export function AgentTrainer({
           EDIT / ADD KNOWLEDGE MODAL
          ───────────────────────────────────────────────────────────── */}
       {editingItem && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/50 backdrop-blur-xs p-4">
           <div className="w-full max-w-lg rounded-2xl border border-border bg-surface p-6 shadow-xl space-y-5 animate-scale-in">
             <div className="flex items-center justify-between border-b border-border pb-3">
               <h3 className="text-base font-bold text-text">
@@ -1134,7 +1134,7 @@ export function AgentTrainer({
                   onChange={(e) => setEditingItem({ ...editingItem, title: e.target.value })}
                   placeholder="مثلاً: أوقات العمل في رمضان، سياسة الاسترجاع..."
                   required
-                  className="w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-sm text-text placeholder:text-text-muted focus:border-primary focus:outline-none"
+                  className="w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-sm text-text placeholder:text-text-muted focus:border-accent focus:outline-none"
                 />
               </div>
 
@@ -1145,7 +1145,7 @@ export function AgentTrainer({
                 <select
                   value={editingItem.category}
                   onChange={(e) => setEditingItem({ ...editingItem, category: e.target.value })}
-                  className="w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-sm text-text focus:border-primary focus:outline-none"
+                  className="w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-sm text-text focus:border-accent focus:outline-none"
                 >
                   <option value="business_info">معلومات ونشاط الشركة</option>
                   <option value="service_info">الخدمات والمنتجات</option>
@@ -1166,7 +1166,7 @@ export function AgentTrainer({
                   onChange={(e) => setEditingItem({ ...editingItem, content: e.target.value })}
                   placeholder="اكتب تفاصيل المعلومة التي سيعتمد عليها الوكيل عند الرد على العملاء..."
                   required
-                  className="w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-sm text-text placeholder:text-text-muted focus:border-primary focus:outline-none leading-relaxed"
+                  className="w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-sm text-text placeholder:text-text-muted focus:border-accent focus:outline-none leading-relaxed"
                 />
               </div>
 
@@ -1181,7 +1181,7 @@ export function AgentTrainer({
                 <button
                   type="submit"
                   disabled={isPending}
-                  className="flex items-center gap-2 px-5 py-2 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary-dark disabled:opacity-50"
+                  className="flex items-center gap-2 px-5 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary-dark disabled:opacity-50"
                 >
                   {isPending && <Loader2 size={14} className="animate-spin" />}
                   <span>حفظ المعلومة</span>
@@ -1196,12 +1196,12 @@ export function AgentTrainer({
           UPDATE BUSINESS TYPE, DATA & AGENT INSTRUCTIONS MODAL
          ───────────────────────────────────────────────────────────── */}
       {isProfileModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/60 backdrop-blur-xs p-4 overflow-y-auto">
           <div className="w-full max-w-2xl rounded-3xl border border-border bg-surface p-6 sm:p-8 shadow-2xl space-y-6 animate-scale-in my-8 max-h-[90vh] overflow-y-auto">
             <div className="flex items-start justify-between border-b border-border pb-4">
               <div>
                 <h3 className="text-lg font-bold text-text flex items-center gap-2">
-                  <Building2 size={22} className="text-primary" />
+                  <Building2 size={22} className="text-secondary" />
                   <span>تحديث نوع النشاط والبيانات وتعليمات الوكيل</span>
                 </h3>
                 <p className="text-xs text-text-muted mt-1">
@@ -1242,7 +1242,7 @@ export function AgentTrainer({
                         }
                         className={`text-start p-3.5 rounded-2xl border transition-all relative ${
                           isSelected
-                            ? 'border-primary bg-primary/5 ring-2 ring-primary/20'
+                            ? 'border-secondary bg-primary/5 ring-2 ring-primary/20'
                             : 'border-border bg-background/50 hover:bg-background hover:border-border/80'
                         }`}
                       >
@@ -1250,13 +1250,13 @@ export function AgentTrainer({
                           <span className="text-xs font-bold text-text flex items-center gap-1.5">
                             {opt.label}
                             {opt.badge && (
-                              <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-success/15 text-success">
                                 {opt.badge}
                               </span>
                             )}
                           </span>
                           {isSelected && (
-                            <CheckCircle2 size={16} className="text-primary shrink-0" />
+                            <CheckCircle2 size={16} className="text-secondary shrink-0" />
                           )}
                         </div>
                         <p className="text-[11px] text-text-muted mt-1 leading-relaxed">
@@ -1286,7 +1286,7 @@ export function AgentTrainer({
                       }
                       required
                       placeholder="اسم شركتك الرسمي"
-                      className="w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-sm text-text focus:border-primary focus:outline-none"
+                      className="w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-sm text-text focus:border-accent focus:outline-none"
                     />
                   </div>
                   <div>
@@ -1301,7 +1301,7 @@ export function AgentTrainer({
                       }
                       placeholder="+9665xxxxxxxx أو 05xxxxxxxx"
                       dir="ltr"
-                      className="w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-sm text-text text-end focus:border-primary focus:outline-none"
+                      className="w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-sm text-text text-end focus:border-accent focus:outline-none"
                     />
                   </div>
                 </div>
@@ -1317,7 +1317,7 @@ export function AgentTrainer({
                       setProfileForm({ ...profileForm, industry: e.target.value })
                     }
                     placeholder="مثال: تطوير البرمجيات وحلول الذكاء الاصطناعي، الأمن السيبراني، الاستشارات التقنية"
-                    className="w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-sm text-text focus:border-primary focus:outline-none"
+                    className="w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-sm text-text focus:border-accent focus:outline-none"
                   />
                 </div>
 
@@ -1332,7 +1332,7 @@ export function AgentTrainer({
                       setProfileForm({ ...profileForm, setupDescription: e.target.value })
                     }
                     placeholder="شرح موجز عن ما تقدمه شركتكم، الميزة التنافسية، ونوع العملاء المستهدفين..."
-                    className="w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-sm text-text focus:border-primary focus:outline-none leading-relaxed"
+                    className="w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-sm text-text focus:border-accent focus:outline-none leading-relaxed"
                   />
                 </div>
               </div>
@@ -1354,7 +1354,7 @@ export function AgentTrainer({
                     setProfileForm({ ...profileForm, systemPromptAddition: e.target.value })
                   }
                   placeholder="مثال: تحدث بلهجة ترحيبية ودودة ومحترفة، رحب بالعميل باسم الشركة، ركز على جمع متطلبات المشروع البرمجي قبل تحديد موعد الاستشارة التقنية، وإذا طلب العميل دعماً فنياً عاجلاً اطلب رقم التذكرة وحوله للفريق الهندسي."
-                  className="w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-sm text-text focus:border-primary focus:outline-none leading-relaxed"
+                  className="w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-sm text-text focus:border-accent focus:outline-none leading-relaxed"
                 />
               </div>
 
@@ -1371,7 +1371,7 @@ export function AgentTrainer({
                 <button
                   type="submit"
                   disabled={profileSaving}
-                  className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-primary text-white text-sm font-bold hover:bg-primary-dark disabled:opacity-50 transition-all shadow-sm"
+                  className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-bold hover:bg-primary-dark disabled:opacity-50 transition-all shadow-sm"
                 >
                   {profileSaving && <Loader2 size={15} className="animate-spin" />}
                   <span>حفظ وتحديث النشاط والوكيل</span>

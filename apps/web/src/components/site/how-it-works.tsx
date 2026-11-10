@@ -43,13 +43,13 @@ export function HowItWorks() {
         {STEPS.map((step, index) => (
           <li
             key={step.title}
-            className="rounded-2xl border border-white/10 bg-white/5 p-6 transition-colors hover:border-primary-light/60"
+            className="rounded-2xl border border-text/10 bg-text/5 p-6 transition-colors hover:border-primary-light/60"
           >
-            <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-primary-light text-sm font-bold text-dark">
+            <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-primary-light text-sm font-bold text-text">
               {index + 1}
             </span>
-            <h3 className="mt-4 text-base font-semibold text-white">{step.title}</h3>
-            <p className="mt-2 text-sm leading-7 text-white/75">{step.body}</p>
+            <h3 className="mt-4 text-base font-semibold text-text">{step.title}</h3>
+            <p className="mt-2 text-sm leading-7 text-text/75">{step.body}</p>
           </li>
         ))}
       </ol>

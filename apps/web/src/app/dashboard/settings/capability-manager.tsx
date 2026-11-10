@@ -58,7 +58,7 @@ export function CapabilityManager({ rows }: { rows: Row[] }) {
               aria-label={r.name}
             >
               {pending && pendingId === r.id ? (
-                <Loader2 className="absolute inset-0 m-auto animate-spin text-surface" size={14} />
+                <Loader2 className="absolute inset-0 m-auto animate-spin text-text" size={14} />
               ) : (
                 <span
                   className={`pointer-events-none inline-block h-6 w-6 transform rounded-full bg-surface shadow transition ${

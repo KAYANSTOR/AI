@@ -142,7 +142,7 @@ async function AppointmentListSection({
                   </td>
                   <td className="px-4 py-3 text-text-muted">{service?.name || ar.common.unknown}</td>
                   <td className="px-4 py-3">
-                    <span className="inline-block rounded-full bg-primary-light/30 px-2.5 py-0.5 text-xs font-semibold text-primary-dark">
+                    <span className="inline-block rounded-full bg-primary-light/30 px-2.5 py-0.5 text-xs font-semibold text-secondary">
                       {appointmentStatusLabel(String(a.status))}
                     </span>
                   </td>

@@ -66,7 +66,7 @@ export function LoginForm({ returnTo, authConfigured }: { returnTo: string; auth
 
       <p className="text-center text-sm text-text-muted">
         ليس لديك حساب؟{' '}
-        <Link href="/signup" className="font-semibold text-primary hover:text-primary-dark">
+        <Link href="/signup" className="font-semibold text-secondary hover:text-secondary">
           أنشئ حساب شركتك
         </Link>
       </p>

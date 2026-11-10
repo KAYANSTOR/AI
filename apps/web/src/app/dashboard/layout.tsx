@@ -33,7 +33,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
           <span>
             <span className="font-semibold">الإعداد لم يكتمل بعد.</span> أكمل خطوات التفعيل حتى يبدأ الوكيل باستقبال العملاء.
           </span>
-          <Link href="/onboarding" className="rounded-lg bg-text px-3 py-1.5 text-xs font-semibold text-surface hover:bg-dark-muted">
+          <Link href="/onboarding" className="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:bg-primary-dark">
             متابعة الإعداد
           </Link>
         </div>

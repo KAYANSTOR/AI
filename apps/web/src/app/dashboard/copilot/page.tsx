@@ -55,7 +55,7 @@ export default function CopilotPage() {
     <div className="flex h-[calc(100vh-8rem)] flex-col overflow-hidden rounded-xl border border-border bg-surface shadow-sm">
       <div className="flex items-center gap-3 border-b border-border bg-surface p-4">
         <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary-light/40">
-          <Sparkles className="text-primary-dark" size={20} aria-hidden="true" />
+          <Sparkles className="text-secondary" size={20} aria-hidden="true" />
         </div>
         <div>
           <h1 className="text-lg font-bold text-text">مساعد الأعمال (Copilot)</h1>
@@ -71,14 +71,14 @@ export default function CopilotPage() {
           >
             {message.role === 'assistant' && (
               <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary-light/50">
-                <Bot size={16} className="text-primary-dark" aria-hidden="true" />
+                <Bot size={16} className="text-secondary" aria-hidden="true" />
               </div>
             )}
 
             <div
               className={`max-w-[80%] rounded-2xl px-4 py-2 ${
                 message.role === 'user'
-                  ? 'bg-primary text-surface'
+                  ? 'bg-primary text-primary-foreground'
                   : 'border border-border bg-background text-text'
               }`}
             >
@@ -152,7 +152,7 @@ export default function CopilotPage() {
             value={input}
             onChange={(event) => setInput(event.target.value)}
             placeholder="اكتب سؤالك هنا…"
-            className="flex-1 rounded-xl border border-border bg-background px-4 py-2.5 text-sm text-text placeholder:text-text-muted focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+            className="flex-1 rounded-xl border border-border bg-background px-4 py-2.5 text-sm text-text placeholder:text-text-muted focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
             disabled={busy}
             dir="auto"
           />
@@ -160,7 +160,7 @@ export default function CopilotPage() {
             type="submit"
             disabled={busy || !input.trim()}
             aria-label="إرسال"
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary text-surface transition-colors hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground transition-colors hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Send size={18} className="rtl:rotate-180" aria-hidden="true" />
           </button>

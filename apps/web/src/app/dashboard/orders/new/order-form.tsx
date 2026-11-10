@@ -72,7 +72,7 @@ export function OrderForm({ contacts, defaultValues }: { contacts: Contact[], de
       {error && <div className="rounded-lg bg-error/15 p-4 text-sm text-error">{error}</div>}
       
       {quoteId && (
-        <div className="rounded-lg bg-primary/10 p-4 text-sm text-primary-dark border border-primary/20">
+        <div className="rounded-lg bg-primary/10 p-4 text-sm text-secondary border border-primary/20">
           أنت تقوم بإنشاء طلب بناءً على عرض سعر معتمد مسبقاً.
         </div>
       )}
@@ -84,7 +84,7 @@ export function OrderForm({ contacts, defaultValues }: { contacts: Contact[], de
           <select 
             value={contactId} 
             onChange={e => setContactId(e.target.value)}
-            className="w-full rounded-lg border border-border bg-background p-2.5 text-sm text-text outline-none focus:border-primary disabled:opacity-50"
+            className="w-full rounded-lg border border-border bg-background p-2.5 text-sm text-text outline-none focus:border-accent disabled:opacity-50"
             required
             disabled={!!quoteId} // If created from quote, do not allow changing the contact
           >
@@ -107,7 +107,7 @@ export function OrderForm({ contacts, defaultValues }: { contacts: Contact[], de
                   type="text" 
                   value={item.name} 
                   onChange={e => updateItem(index, 'name', e.target.value)} 
-                  className="w-full rounded-md border border-border bg-surface p-2 text-sm outline-none focus:border-primary"
+                  className="w-full rounded-md border border-border bg-surface p-2 text-sm outline-none focus:border-accent"
                   required
                 />
               </div>
@@ -118,7 +118,7 @@ export function OrderForm({ contacts, defaultValues }: { contacts: Contact[], de
                   min="1"
                   value={item.quantity} 
                   onChange={e => updateItem(index, 'quantity', e.target.value)} 
-                  className="w-full rounded-md border border-border bg-surface p-2 text-sm outline-none focus:border-primary"
+                  className="w-full rounded-md border border-border bg-surface p-2 text-sm outline-none focus:border-accent"
                   required
                 />
               </div>
@@ -130,7 +130,7 @@ export function OrderForm({ contacts, defaultValues }: { contacts: Contact[], de
                   step="0.01"
                   value={item.unit_price} 
                   onChange={e => updateItem(index, 'unit_price', e.target.value)} 
-                  className="w-full rounded-md border border-border bg-surface p-2 text-sm outline-none focus:border-primary"
+                  className="w-full rounded-md border border-border bg-surface p-2 text-sm outline-none focus:border-accent"
                   required
                 />
               </div>
@@ -142,7 +142,7 @@ export function OrderForm({ contacts, defaultValues }: { contacts: Contact[], de
                   step="0.01"
                   value={item.discount} 
                   onChange={e => updateItem(index, 'discount', e.target.value)} 
-                  className="w-full rounded-md border border-border bg-surface p-2 text-sm outline-none focus:border-primary"
+                  className="w-full rounded-md border border-border bg-surface p-2 text-sm outline-none focus:border-accent"
                   required
                 />
               </div>
@@ -155,13 +155,13 @@ export function OrderForm({ contacts, defaultValues }: { contacts: Contact[], de
           ))}
         </div>
         
-        <button type="button" onClick={addItem} className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">
+        <button type="button" onClick={addItem} className="inline-flex items-center gap-1 text-sm font-medium text-secondary hover:underline">
           <Plus size={16} /> إضافة عنصر
         </button>
 
         <div className="mt-6 flex justify-between rounded-lg bg-background p-4 border border-border">
           <span className="font-bold text-text">الإجمالي النهائي:</span>
-          <span className="font-bold text-primary">{calculateTotal().toFixed(2)} SAR</span>
+          <span className="font-bold text-secondary">{calculateTotal().toFixed(2)} SAR</span>
         </div>
       </div>
 
@@ -170,7 +170,7 @@ export function OrderForm({ contacts, defaultValues }: { contacts: Contact[], de
         <textarea 
           value={notes} 
           onChange={e => setNotes(e.target.value)}
-          className="w-full rounded-lg border border-border bg-background p-3 text-sm text-text outline-none focus:border-primary min-h-[100px]"
+          className="w-full rounded-lg border border-border bg-background p-3 text-sm text-text outline-none focus:border-accent min-h-[100px]"
           placeholder="شروط التسليم..."
         />
       </div>
@@ -179,7 +179,7 @@ export function OrderForm({ contacts, defaultValues }: { contacts: Contact[], de
         <button type="button" onClick={() => router.back()} className="rounded-lg px-4 py-2 text-sm font-medium text-text-muted hover:bg-surface transition-colors" disabled={loading}>
           إلغاء
         </button>
-        <button type="submit" disabled={loading} className="inline-flex items-center gap-2 rounded-lg bg-primary px-6 py-2 text-sm font-medium text-white hover:bg-primary-dark transition-colors disabled:opacity-50">
+        <button type="submit" disabled={loading} className="inline-flex items-center gap-2 rounded-lg bg-primary px-6 py-2 text-sm font-medium text-primary-foreground hover:bg-primary-dark transition-colors disabled:opacity-50">
           {loading && <Loader2 size={16} className="animate-spin" />}
           حفظ المسودة
         </button>

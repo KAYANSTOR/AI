@@ -32,7 +32,7 @@ export function QuoteActions({ quoteId, currentStatus }: { quoteId: string, curr
             <button
               onClick={() => handleStatusChange('sent')}
               disabled={loading !== null}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-dark disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary-dark disabled:opacity-50"
             >
               {loading === 'sent' ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
               إرسال للعميل
@@ -53,7 +53,7 @@ export function QuoteActions({ quoteId, currentStatus }: { quoteId: string, curr
             <button
               onClick={() => handleStatusChange('accepted')}
               disabled={loading !== null}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-success px-3 py-1.5 text-sm font-medium text-white hover:bg-success/80 disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-success px-3 py-1.5 text-sm font-medium text-background hover:bg-success/80 disabled:opacity-50"
             >
               {loading === 'accepted' ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
               تأكيد القبول
@@ -61,7 +61,7 @@ export function QuoteActions({ quoteId, currentStatus }: { quoteId: string, curr
             <button
               onClick={() => handleStatusChange('rejected')}
               disabled={loading !== null}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-error px-3 py-1.5 text-sm font-medium text-white hover:bg-error/80 disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-error px-3 py-1.5 text-sm font-medium text-background hover:bg-error/80 disabled:opacity-50"
             >
               {loading === 'rejected' ? <Loader2 size={14} className="animate-spin" /> : <X size={14} />}
               مرفوض

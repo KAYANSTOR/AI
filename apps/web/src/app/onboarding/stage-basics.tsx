@@ -99,7 +99,7 @@ export function StageBasics({
             value={name}
             onChange={(event) => setName(event.target.value)}
             placeholder="مثال: روائع الأعراس"
-            className="mt-1.5 min-h-12 w-full rounded-xl border border-border bg-surface px-3 text-base text-text outline-none transition-colors focus:border-primary-dark focus:ring-2 focus:ring-primary-light"
+            className="mt-1.5 min-h-12 w-full rounded-xl border border-border bg-surface px-3 text-base text-text outline-none transition-colors focus:border-secondary focus:ring-2 focus:ring-accent/40"
           />
         </label>
 
@@ -108,7 +108,7 @@ export function StageBasics({
           <select
             value={businessTypeId}
             onChange={(event) => setBusinessTypeId(event.target.value)}
-            className="mt-1.5 min-h-12 w-full rounded-xl border border-border bg-surface px-3 text-base text-text outline-none transition-colors focus:border-primary-dark focus:ring-2 focus:ring-primary-light"
+            className="mt-1.5 min-h-12 w-full rounded-xl border border-border bg-surface px-3 text-base text-text outline-none transition-colors focus:border-secondary focus:ring-2 focus:ring-accent/40"
           >
             {BUSINESS_TYPES.map((type) => (
               <option key={type.id} value={type.id}>
@@ -129,7 +129,7 @@ export function StageBasics({
             placeholder="+967777123456"
             dir="ltr"
             inputMode="tel"
-            className="mt-1.5 min-h-12 w-full rounded-xl border border-border bg-surface px-3 text-base text-text outline-none transition-colors focus:border-primary-dark focus:ring-2 focus:ring-primary-light"
+            className="mt-1.5 min-h-12 w-full rounded-xl border border-border bg-surface px-3 text-base text-text outline-none transition-colors focus:border-secondary focus:ring-2 focus:ring-accent/40"
           />
           <span className="mt-1.5 block text-xs leading-5 text-text-muted">
             الرقم الذي يعرفه عملاؤك. لن نطلب منك تغييره، ويمكنك إضافته لاحقاً.
@@ -162,7 +162,7 @@ export function StageBasics({
           type="button"
           onClick={handleContinue}
           disabled={busy}
-          className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary-dark px-6 text-base font-semibold text-white transition-colors hover:bg-primary disabled:opacity-60 sm:w-auto"
+          className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary-dark px-6 text-base font-semibold text-primary-foreground transition-colors hover:bg-primary disabled:opacity-60 sm:w-auto"
         >
           {busy ? <Loader2 size={18} className="animate-spin" aria-hidden="true" /> : null}
           تجهيز نشاطي

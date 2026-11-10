@@ -112,7 +112,7 @@ export function InstallAppButton({ compact = false }: { compact?: boolean }) {
         aria-label={ar.install.button}
         aria-expanded={iosSafari ? helpOpen : undefined}
         aria-controls={iosSafari ? 'ios-install-help' : undefined}
-        className="inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-lg border border-border px-3 py-2 text-base font-medium text-text transition-colors hover:border-primary-dark hover:text-primary-dark md:text-sm"
+        className="inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-lg border border-border px-3 py-2 text-base font-medium text-text transition-colors hover:border-secondary hover:text-secondary md:text-sm"
       >
         <Download size={17} aria-hidden="true" />
         <span className={compact ? 'hidden lg:inline' : undefined}>{ar.install.button}</span>

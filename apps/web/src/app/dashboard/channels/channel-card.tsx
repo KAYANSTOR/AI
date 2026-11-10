@@ -86,7 +86,7 @@ export function ChannelCard({ data, channelType }: { data: ChannelCardData; chan
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-4">
         <div className="flex items-center gap-3">
           <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary-light/40">
-            <RadioTower size={20} className="text-primary-dark" aria-hidden="true" />
+            <RadioTower size={20} className="text-secondary" aria-hidden="true" />
           </span>
           <div>
             <h2 className="text-base font-semibold text-text">{data.spec.label}</h2>
@@ -109,7 +109,7 @@ export function ChannelCard({ data, channelType }: { data: ChannelCardData; chan
                 placeholder="+966…"
                 dir="ltr"
                 disabled={locked}
-                className="min-h-11 w-full rounded-lg border border-border bg-background px-3 py-2 text-base text-text transition-colors focus:border-primary-dark focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-60 md:text-sm"
+                className="min-h-11 w-full rounded-lg border border-border bg-background px-3 py-2 text-base text-text transition-colors focus:border-secondary focus:outline-none focus:ring-2 focus:ring-accent/20 disabled:opacity-60 md:text-sm"
               />
             </label>
             </div>
@@ -156,7 +156,7 @@ export function ChannelCard({ data, channelType }: { data: ChannelCardData; chan
                   placeholder={data.spec.bindingPlaceholder}
                   dir="ltr"
                   disabled={locked}
-                  className="min-h-11 w-full rounded-lg border border-border bg-background px-3 py-2 text-base text-text transition-colors focus:border-primary-dark focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-60 md:text-sm"
+                  className="min-h-11 w-full rounded-lg border border-border bg-background px-3 py-2 text-base text-text transition-colors focus:border-secondary focus:outline-none focus:ring-2 focus:ring-accent/20 disabled:opacity-60 md:text-sm"
                 />
               </label>
               <p className="text-xs leading-relaxed text-text-muted">{data.spec.bindingHint}</p>
@@ -174,7 +174,7 @@ export function ChannelCard({ data, channelType }: { data: ChannelCardData; chan
             type="button"
             onClick={runSave}
             disabled={pending || locked}
-            className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary-dark px-4 py-2 text-base font-medium text-surface transition-colors hover:bg-primary disabled:opacity-60 sm:w-auto md:text-sm"
+            className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary-dark px-4 py-2 text-base font-medium text-primary-foreground transition-colors hover:bg-primary disabled:opacity-60 sm:w-auto md:text-sm"
           >
             {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plug size={16} aria-hidden="true" />}
             {data.connected ? ar.channels.updateBinding : ar.channels.connectChannel}

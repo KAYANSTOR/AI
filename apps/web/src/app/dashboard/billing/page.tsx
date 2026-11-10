@@ -18,7 +18,7 @@ export default async function BillingPage() {
       title: 'رسائل الذكاء الاصطناعي',
       hint: 'كل رد وكيل يُحسب رسالة',
       icon: Zap,
-      color: 'bg-purple-500',
+      color: 'bg-accent',
       used: snapshot.usage.ai_messages ?? 0,
       limit: snapshot.limits.ai_messages ?? 100,
     },
@@ -27,7 +27,7 @@ export default async function BillingPage() {
       title: 'دقائق الصوت',
       hint: 'مكالمات الوكيل الصوتي',
       icon: Phone,
-      color: 'bg-blue-500',
+      color: 'bg-secondary',
       used: snapshot.usage.voice_minutes ?? 0,
       limit: snapshot.limits.voice_minutes ?? 30,
     },
@@ -36,7 +36,7 @@ export default async function BillingPage() {
       title: 'القنوات النشطة',
       hint: 'WhatsApp / SMS / هاتف / إنستغرام',
       icon: Radio,
-      color: 'bg-emerald-500',
+      color: 'bg-primary',
       used: snapshot.usage.channels ?? 0,
       limit: snapshot.limits.channels ?? 1,
     },
@@ -45,7 +45,7 @@ export default async function BillingPage() {
       title: 'تشغيل الأتمتة',
       hint: 'سير العمل المنشور',
       icon: Workflow,
-      color: 'bg-amber-500',
+      color: 'bg-accent/70',
       used: snapshot.usage.automation_runs ?? 0,
       limit: snapshot.limits.automation_runs ?? 50,
     },
@@ -54,7 +54,7 @@ export default async function BillingPage() {
       title: 'إرسال الحملات',
       hint: 'رسائل الحملات التسويقية',
       icon: Megaphone,
-      color: 'bg-rose-500',
+      color: 'bg-secondary/70',
       used: snapshot.usage.campaign_sends ?? 0,
       limit: snapshot.limits.campaign_sends ?? 50,
     },
@@ -84,13 +84,13 @@ export default async function BillingPage() {
         <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
           <div className="flex items-center gap-4">
             <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary-light/40">
-              <CreditCard className="text-primary-dark" size={24} />
+              <CreditCard className="text-secondary" size={24} />
             </div>
             <div>
               <p className="text-sm font-medium text-text-muted">الباقة الحالية</p>
               <h2 className="flex items-center gap-2 text-xl font-bold text-text">
                 {snapshot.planCode}
-                <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700 dark:bg-green-900/40 dark:text-green-400">
+                <span className="rounded-full bg-success/15 px-2 py-0.5 text-xs font-medium text-success">
                   {statusLabel}
                 </span>
               </h2>
@@ -121,7 +121,7 @@ export default async function BillingPage() {
                 </div>
                 <div className="h-2 w-full overflow-hidden rounded-full bg-border">
                   <div
-                    className={`h-full rounded-full ${percent > 90 ? 'bg-red-500' : m.color}`}
+                    className={`h-full rounded-full ${percent > 90 ? 'bg-error' : m.color}`}
                     style={{ width: `${percent}%` }}
                   />
                 </div>

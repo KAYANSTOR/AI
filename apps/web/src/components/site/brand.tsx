@@ -8,7 +8,7 @@ export function BrandMark({ className = 'h-9 w-9' }: { className?: string }) {
   return (
     <span
       aria-hidden="true"
-      className={`inline-flex shrink-0 items-center justify-center rounded-lg bg-primary text-surface ${className}`}
+      className={`inline-flex shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground ${className}`}
     >
       <svg viewBox="0 0 32 32" fill="none" className="h-[62%] w-[62%]">
         <path
@@ -35,14 +35,14 @@ export function BrandLockup({
   return (
     <Link
       href={href}
-      className={`inline-flex items-center gap-3 rounded-xl focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${className}`}
+      className={`inline-flex items-center gap-3 rounded-xl focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 ${className}`}
     >
       <BrandMark />
       <span className="flex flex-col leading-tight">
-        <span className={`text-[15px] font-bold tracking-tight ${tone === 'dark' ? 'text-surface' : 'text-text'}`}>
+        <span className={`text-[15px] font-bold tracking-tight ${tone === 'dark' ? 'text-text' : 'text-text'}`}>
           {BRAND_NAME}
         </span>
-        <span className={`hidden text-xs sm:block ${tone === 'dark' ? 'text-surface/60' : 'text-text-muted'}`}>
+        <span className={`hidden text-xs sm:block ${tone === 'dark' ? 'text-text/60' : 'text-text-muted'}`}>
           {subtitle ?? BRAND_TAGLINE}
         </span>
       </span>

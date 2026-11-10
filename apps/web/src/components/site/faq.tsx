@@ -62,7 +62,7 @@ export function Faq() {
               <ChevronDown
                 size={18}
                 aria-hidden="true"
-                className="shrink-0 text-primary-dark transition-transform group-open:rotate-180"
+                className="shrink-0 text-secondary transition-transform group-open:rotate-180"
               />
             </summary>
             <p className="mt-3 text-sm leading-8 text-text-muted">{item.a}</p>

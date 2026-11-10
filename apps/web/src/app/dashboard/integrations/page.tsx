@@ -36,7 +36,7 @@ export default async function IntegrationsPage() {
         </div>
         <Link
           href="/dashboard/channels"
-          className="rounded-lg border border-border px-3 py-2 text-sm font-medium text-primary-dark hover:bg-background"
+          className="rounded-lg border border-border px-3 py-2 text-sm font-medium text-secondary hover:bg-background"
         >
           إدارة القنوات
         </Link>

@@ -8,6 +8,7 @@ import { BrandLockup } from './brand'
 import { PrimaryCta, SecondaryCta } from './cta'
 import { SITE_NAV } from './nav'
 import { InstallAppButton } from '@/components/pwa/install-app-button'
+import { ThemeToggle } from '@/components/theme/theme-toggle'
 
 export function SiteHeader() {
   const [open, setOpen] = useState(false)
@@ -70,6 +71,8 @@ export function SiteHeader() {
 
         <InstallAppButton compact />
 
+        <ThemeToggle />
+
         <button
           type="button"
           onClick={() => setOpen((value) => !value)}
@@ -99,7 +102,7 @@ export function SiteHeader() {
                       onClick={() => setOpen(false)}
                       className={`block rounded-xl px-3.5 py-3 text-sm font-semibold transition-colors ${
                         active
-                          ? 'bg-primary-light/40 text-primary-dark'
+                          ? 'bg-primary-light/40 text-secondary'
                           : 'text-text hover:bg-background'
                       }`}
                     >

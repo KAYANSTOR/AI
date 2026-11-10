@@ -132,13 +132,13 @@ export function StageConnect({
                 inputMode="tel"
                 disabled={!canManage}
                 aria-label="رقم واتساب للأعمال"
-                className="min-h-12 w-full rounded-xl border border-border bg-surface px-3 text-base text-text outline-none transition-colors focus:border-primary-dark focus:ring-2 focus:ring-primary-light disabled:opacity-60 sm:flex-1"
+                className="min-h-12 w-full rounded-xl border border-border bg-surface px-3 text-base text-text outline-none transition-colors focus:border-secondary focus:ring-2 focus:ring-accent/40 disabled:opacity-60 sm:flex-1"
               />
               <button
                 type="button"
                 onClick={handleConnect}
                 disabled={busy || !canManage}
-                className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-border bg-surface px-6 text-base font-semibold text-text transition-colors hover:border-primary-dark hover:text-primary-dark disabled:opacity-60"
+                className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-border bg-surface px-6 text-base font-semibold text-text transition-colors hover:border-secondary hover:text-secondary disabled:opacity-60"
               >
                 {busy ? <Loader2 size={18} className="animate-spin" aria-hidden="true" /> : null}
                 {embeddedConfigured ? 'حفظ الرقم فقط' : whatsappState === 'pending' ? 'تحديث الرقم' : 'ربط WhatsApp'}
@@ -178,7 +178,7 @@ export function StageConnect({
             <summary className="cursor-pointer text-xs text-text-muted">تفاصيل متقدمة</summary>
             <p className="mt-2 text-xs leading-5 text-text-muted">
               يُستخدم هذا الرقم لربط رسائل العملاء بنشاطك. لإدارة الربط أو تغييره لاحقاً، افتح{' '}
-              <Link href="/dashboard/channels" className="font-medium text-primary-dark underline">
+              <Link href="/dashboard/channels" className="font-medium text-secondary underline">
                 صفحة القنوات
               </Link>
               .
@@ -189,7 +189,7 @@ export function StageConnect({
 
       <section className="rounded-2xl border border-border bg-background p-5">
         <header className="flex items-start gap-3">
-          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary-light/30 text-primary-dark">
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary-light/30 text-secondary">
             <Phone size={22} aria-hidden="true" />
           </span>
           <div className="min-w-0">
@@ -227,8 +227,8 @@ export function StageConnect({
           disabled={!canManage}
           className={`inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl px-6 text-base font-semibold transition-colors disabled:opacity-60 sm:w-auto ${
             connected
-              ? 'bg-primary-dark text-white hover:bg-primary'
-              : 'border border-border bg-background text-text hover:border-primary-dark hover:text-primary-dark'
+              ? 'bg-primary-dark text-primary-foreground hover:bg-primary'
+              : 'border border-border bg-background text-text hover:border-secondary hover:text-secondary'
           }`}
         >
           {connected ? null : <CheckCircle2 size={18} aria-hidden="true" />}

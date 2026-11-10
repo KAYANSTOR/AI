@@ -32,9 +32,9 @@ export default function ReportsPage() {
         {/* Filters/Categories Sidebar */}
         <div className="md:col-span-1 space-y-2">
           <div className="rounded-xl border border-border bg-surface p-2">
-            <button className="flex w-full items-center justify-between rounded-lg bg-primary-light/20 px-3 py-2 text-sm font-medium text-primary-dark">
+            <button className="flex w-full items-center justify-between rounded-lg bg-primary-light/20 px-3 py-2 text-sm font-medium text-secondary">
               <span>كل التقارير</span>
-              <span className="rounded-full bg-primary-light px-2 py-0.5 text-xs text-primary-dark">{reports.length}</span>
+              <span className="rounded-full bg-primary-light px-2 py-0.5 text-xs text-secondary">{reports.length}</span>
             </button>
             <button className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-medium text-text-muted hover:bg-surface-hover hover:text-text">
               <span>التقارير المجدولة</span>
@@ -66,7 +66,7 @@ export default function ReportsPage() {
                 <div key={report.id} className="flex items-center justify-between p-4 hover:bg-surface-hover transition-colors">
                   <div className="flex items-start gap-4">
                     <div className="mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-background border border-border">
-                      <FileSpreadsheet size={20} className="text-primary" />
+                      <FileSpreadsheet size={20} className="text-secondary" />
                     </div>
                     <div>
                       <h3 className="font-medium text-text">{report.name}</h3>
@@ -76,7 +76,7 @@ export default function ReportsPage() {
                           نوع التقرير: {report.type}
                         </span>
                         {report.schedule && (
-                          <span className="flex items-center gap-1 text-primary">
+                          <span className="flex items-center gap-1 text-secondary">
                             <Calendar size={14} />
                             مجدول ({report.schedule})
                           </span>

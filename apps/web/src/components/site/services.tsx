@@ -90,7 +90,7 @@ export function Services() {
         {SERVICES.map((service) => (
           <li key={service.title} className="rounded-2xl border border-border bg-surface p-6">
             <div className="flex items-start gap-4">
-              <span className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-background text-primary-dark">
+              <span className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-background text-secondary">
                 <service.icon size={22} aria-hidden="true" />
               </span>
               <div>

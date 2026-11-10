@@ -149,7 +149,7 @@ export default async function ConversationsPage({
             href={buildHref({ saved: v.id })}
             className={`rounded-lg border px-2 py-1 text-xs ${
               params.saved === v.id
-                ? 'border-primary bg-primary/10 text-primary-dark'
+                ? 'border-secondary bg-primary/10 text-secondary'
                 : 'border-border text-text-muted'
             }`}
           >

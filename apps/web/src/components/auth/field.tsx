@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { Eye, EyeOff } from 'lucide-react'
 
 export const inputClass =
-  'block min-h-11 w-full rounded-xl border border-border-strong/70 bg-surface px-3.5 py-2.5 text-base text-text outline-none transition placeholder:text-text-muted/60 hover:border-border-strong focus:border-primary focus:ring-4 focus:ring-primary/10 md:text-sm'
+  'block min-h-11 w-full rounded-xl border border-border-strong/70 bg-surface px-3.5 py-2.5 text-base text-text outline-none transition placeholder:text-text-muted/60 hover:border-border-strong focus:border-accent focus:ring-4 focus:ring-accent/10 md:text-sm'
 
 export function TextField({
   id,
@@ -88,4 +88,4 @@ export function FormError({ message }: { message: string | null }) {
 }
 
 export const submitClass =
-  'inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary-dark focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-60'
+  'inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary-dark focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-accent/20 disabled:cursor-not-allowed disabled:opacity-60'

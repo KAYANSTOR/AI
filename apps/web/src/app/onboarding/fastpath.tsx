@@ -88,9 +88,9 @@ export function FastPath({
                   <span
                     className={`flex h-8 w-8 items-center justify-center rounded-full border-2 text-xs font-bold transition-colors ${
                       isDone
-                        ? 'border-primary-dark bg-primary-dark text-white'
+                        ? 'border-secondary bg-primary-dark text-primary-foreground'
                         : isCurrent
-                          ? 'border-primary-dark bg-surface text-primary-dark'
+                          ? 'border-secondary bg-surface text-secondary'
                           : 'border-border bg-surface text-text-muted'
                     }`}
                   >
@@ -98,7 +98,7 @@ export function FastPath({
                   </span>
                   <span
                     className={`w-full truncate text-center text-[11px] leading-4 sm:text-xs ${
-                      isCurrent ? 'font-semibold text-primary-dark' : 'text-text-muted'
+                      isCurrent ? 'font-semibold text-secondary' : 'text-text-muted'
                     }`}
                   >
                     {STAGE_DEFINITIONS[stage].name}

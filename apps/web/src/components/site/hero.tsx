@@ -15,7 +15,7 @@ export function Hero() {
     <Section id="top" tone="background" className="relative overflow-hidden border-b border-border" labelledBy="hero-title">
       <div className="relative grid items-center gap-14 lg:grid-cols-[1fr_1.05fr] lg:gap-20">
         <div>
-          <p className="text-sm font-semibold text-primary">موظف الاستقبال الرقمي لشركتك</p>
+          <p className="text-sm font-semibold text-secondary">موظف الاستقبال الرقمي لشركتك</p>
 
           <h1
             id="hero-title"
@@ -42,7 +42,7 @@ export function Hero() {
           <ul className="mt-8 space-y-2.5 text-sm text-text-muted">
             {HERO_FACTS.map((fact) => (
               <li key={fact} className="flex items-center gap-2.5">
-                <Check size={15} aria-hidden="true" className="text-primary" />
+                <Check size={15} aria-hidden="true" className="text-secondary" />
                 {fact}
               </li>
             ))}
@@ -84,7 +84,7 @@ function HeroPreview() {
             <p className="text-sm font-semibold text-text">سارة أحمد</p>
             <p className="mt-0.5 text-xs text-text-muted">واتساب · عميلة جديدة</p>
           </div>
-          <span className="ms-auto inline-flex items-center gap-1.5 text-xs font-medium text-primary">
+          <span className="ms-auto inline-flex items-center gap-1.5 text-xs font-medium text-secondary">
             <span className="h-2 w-2 rounded-full bg-primary" aria-hidden="true" />
             يرد الآن
           </span>
@@ -102,7 +102,7 @@ function HeroPreview() {
               6:30 لو سمحت
             </p>
             <div className="ms-auto flex max-w-[86%] items-center gap-3 rounded-xl border border-accent/25 bg-accent-light px-3.5 py-3">
-              <CalendarCheck size={18} aria-hidden="true" className="shrink-0 text-accent" />
+              <CalendarCheck size={18} aria-hidden="true" className="shrink-0 text-accent-text" />
               <div className="text-xs leading-5">
                 <p className="font-semibold text-text">تم تأكيد موعدك: الخميس 6:30 م</p>
                 <p className="text-text-muted">سنرسل لك تذكيرًا قبل الموعد</p>
@@ -115,7 +115,7 @@ function HeroPreview() {
             <ol className="mt-4 space-y-4">
               {STEPS.map((step, index) => (
                 <li key={step.label} className="flex gap-3">
-                  <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary-light text-[11px] font-semibold tabular-nums text-primary-dark">
+                  <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary-light text-[11px] font-semibold tabular-nums text-secondary">
                     {index + 1}
                   </span>
                   <div className="text-xs leading-5">

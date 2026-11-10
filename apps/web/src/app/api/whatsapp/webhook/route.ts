@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/db/admin'
 import { acquireWebhookEvent, markWebhookProcessed } from '@/lib/channels/idempotency'
 import { normalizeE164 } from '@/lib/channels/contacts'
-import { processInboundMessage } from '@/lib/runtime/process-inbound'
+import { processInboundMessage, recordInboundMediaMessage } from '@/lib/runtime/process-inbound'
+import { parseWhatsAppInbound } from '@/lib/channels/whatsapp-inbound'
 import { resolveChannelExact } from '@/lib/runtime/tenant'
 import { publicWebhookError, stablePayloadEventId, verifyMetaSignature } from '@/lib/runtime/security'
 import { deliverOutbound, recordDeliveredOutboundMessage } from '@/lib/runtime/outbound'
@@ -56,10 +57,8 @@ export async function POST(req: NextRequest) {
 
         for (const msg of messages) {
           const from = String(msg.from ?? '').trim()
-          const text = String(
-            ((msg.text as Record<string, unknown> | undefined)?.body as string | undefined) ?? ''
-          ).trim()
-          if (!from || !text) continue
+          const inbound = parseWhatsAppInbound(msg)
+          if (!from || inbound.kind === 'ignored') continue
 
           const externalEventId = String(msg.id ?? '').trim() || stablePayloadEventId('whatsapp', msg)
           const acquired = await acquireWebhookEvent(db, 'whatsapp', externalEventId, msg)
@@ -86,23 +85,35 @@ export async function POST(req: NextRequest) {
             .update({
               organization_id: channel.organizationId,
               channel_id: channel.id,
-              event_type: 'message.received',
+              event_type: inbound.kind === 'media' ? 'message.media_received' : 'message.received',
               signature_verified: true,
             })
             .eq('id', eventRowId)
 
-          const result = await processInboundMessage(db, {
+          const identity = {
             organizationId: channel.organizationId,
             businessId: channel.businessId,
             channelId: channel.id,
-            channelType: 'whatsapp',
+            channelType: 'whatsapp' as const,
             provider: 'meta',
             externalEventId,
             externalUserId: from,
             senderPhone: normalizeE164(from),
             displayName: profileName || null,
-            text,
-          })
+          }
+
+          if (inbound.kind === 'media') {
+            await recordInboundMediaMessage(db, {
+              ...identity,
+              messageType: inbound.messageType,
+              content: inbound.content,
+            })
+            await markWebhookProcessed(db, eventRowId, 'processed')
+            eventRowId = null
+            continue
+          }
+
+          const result = await processInboundMessage(db, { ...identity, text: inbound.text })
 
           if (result.reply) {
             const delivery = await deliverOutbound(db, {

@@ -66,7 +66,7 @@ export function KnowledgeManager({ rows, canManage }: { rows: KnowledgeRow[]; ca
 
       <section className="rounded-xl border border-border bg-surface p-4">
         <h2 className="flex items-center gap-2 text-sm font-semibold text-text">
-          <Search size={15} className="text-primary-dark" />
+          <Search size={15} className="text-secondary" />
           {ar.knowledge.previewTitle}
         </h2>
         <p className="mt-1 text-xs text-text-muted">{ar.knowledge.previewDescription}</p>
@@ -81,7 +81,7 @@ export function KnowledgeManager({ rows, canManage }: { rows: KnowledgeRow[]; ca
             type="button"
             disabled={pending || query.trim().length < 2}
             onClick={runPreview}
-            className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-primary px-3 py-2 text-base font-medium text-primary-dark transition-colors hover:bg-primary/10 disabled:opacity-60 md:text-sm"
+            className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-secondary px-3 py-2 text-base font-medium text-secondary transition-colors hover:bg-primary/10 disabled:opacity-60 md:text-sm"
           >
             {pending && <Loader2 className="animate-spin" size={14} />}
             {ar.knowledge.previewButton}
@@ -108,7 +108,7 @@ export function KnowledgeManager({ rows, canManage }: { rows: KnowledgeRow[]; ca
             <li key={row.id} className="flex flex-wrap items-start justify-between gap-3 px-4 py-3">
               <div className="min-w-0 max-w-2xl">
                 <p className="flex items-center gap-2 text-sm font-medium text-text">
-                  <BookOpen size={15} className="text-primary-dark" />
+                  <BookOpen size={15} className="text-secondary" />
                   {row.title}
                   <span className="rounded-full bg-background px-2 py-0.5 text-xs text-text-muted">
                     {ar.knowledge.categories[row.category as keyof typeof ar.knowledge.categories] ?? row.category}
@@ -128,7 +128,7 @@ export function KnowledgeManager({ rows, canManage }: { rows: KnowledgeRow[]; ca
                     onClick={() =>
                       setForm({ id: row.id, title: row.title, content: row.content, category: row.category })
                     }
-                    className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg border border-border text-text-muted transition-colors hover:text-primary-dark"
+                    className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg border border-border text-text-muted transition-colors hover:text-secondary"
                     aria-label="تعديل"
                   >
                     <Pencil size={14} />
@@ -215,7 +215,7 @@ export function KnowledgeManager({ rows, canManage }: { rows: KnowledgeRow[]; ca
             type="button"
             disabled={pending || !form.title.trim() || !form.content.trim()}
             onClick={() => run(() => saveKnowledgeAction(form), true)}
-            className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-base font-medium text-surface transition-colors hover:bg-primary-dark disabled:opacity-60 md:w-auto md:text-sm"
+            className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-base font-medium text-primary-foreground transition-colors hover:bg-primary-dark disabled:opacity-60 md:w-auto md:text-sm"
           >
             {pending ? <Loader2 className="animate-spin" size={14} /> : <Plus size={14} />}
             {form.id ? 'حفظ التعديلات' : 'إضافة المدخل'}

@@ -144,7 +144,7 @@ export default async function ChannelsPage() {
     <div className="space-y-6">
       <header className="space-y-3">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary-dark">Kayan Connect</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-secondary">Kayan Connect</p>
           <h1 className="mt-1 text-2xl font-bold tracking-tight text-text">{ar.channels.title}</h1>
           <p className="mt-1 max-w-3xl text-sm leading-6 text-text-muted">
             ابدأ بربط WhatsApp الذي يتواصل من خلاله عملاؤك، وسنتولى حفظ الربط والتحقق منه دون عرض
@@ -155,7 +155,7 @@ export default async function ChannelsPage() {
         <div className="rounded-2xl border border-primary-light/60 bg-primary-light/20 p-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="text-xs font-semibold text-primary-dark">النشاط المتصل</p>
+              <p className="text-xs font-semibold text-secondary">النشاط المتصل</p>
               <p className="mt-1 text-sm font-bold text-text">{businessName}</p>
             </div>
             <div className="rounded-xl border border-border bg-surface px-4 py-3 text-center">
@@ -181,7 +181,7 @@ export default async function ChannelsPage() {
       </div>
 
       <p className="flex items-start gap-2 rounded-xl border border-border bg-surface px-4 py-3 text-xs leading-relaxed text-text">
-        <Info size={16} className="mt-0.5 shrink-0 text-primary-dark" aria-hidden="true" />
+        <Info size={16} className="mt-0.5 shrink-0 text-secondary" aria-hidden="true" />
         <span>
           مفاتيح المزودين والأسرار لا تُعرض هنا. شاشة القنوات تتعامل مع الربط فقط، بينما تظل بيانات الاعتماد في الخادم.
         </span>

@@ -43,15 +43,15 @@ export function ProblemSolution() {
           </ul>
         </article>
 
-        <article className="rounded-2xl bg-dark p-6 text-surface shadow-[var(--shadow-raised)] sm:p-8">
+        <article className="theme-dark rounded-2xl bg-dark p-6 text-text shadow-[var(--shadow-raised)] sm:p-8">
           <div className="flex items-center justify-between gap-3">
             <h3 className="text-lg font-bold">مع KAYAN AI</h3>
-            <span className="rounded-full bg-primary/25 px-3 py-1 text-xs font-medium text-primary-light">نفس الفريق، نتائج مختلفة</span>
+            <span className="rounded-full bg-primary/25 px-3 py-1 text-xs font-medium text-secondary">نفس الفريق، نتائج مختلفة</span>
           </div>
           <ul className="mt-6 space-y-4">
             {SOLUTIONS.map((solution) => (
-              <li key={solution} className="flex items-start gap-3 text-sm leading-7 text-surface/85">
-                <CheckCircle2 size={18} aria-hidden="true" className="mt-1 shrink-0 text-primary-light" />
+              <li key={solution} className="flex items-start gap-3 text-sm leading-7 text-text/85">
+                <CheckCircle2 size={18} aria-hidden="true" className="mt-1 shrink-0 text-secondary" />
                 <span>{solution}</span>
               </li>
             ))}

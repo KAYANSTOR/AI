@@ -41,7 +41,7 @@ export default async function QuoteDetailsPage({
 
   const statusColors: Record<string, string> = {
     draft: 'bg-background text-text-muted',
-    sent: 'bg-primary/15 text-primary-dark',
+    sent: 'bg-primary/15 text-secondary',
     accepted: 'bg-success/15 text-success',
     rejected: 'bg-error/15 text-error',
     expired: 'bg-warning/15 text-warning',
@@ -130,7 +130,7 @@ export default async function QuoteDetailsPage({
                   </div>
                   <div className="flex justify-between border-t border-border pt-3 text-base font-bold text-text">
                     <span>الإجمالي النهائي:</span>
-                    <span className="text-primary">{Number(quote.total).toFixed(2)} {quote.currency}</span>
+                    <span className="text-secondary">{Number(quote.total).toFixed(2)} {quote.currency}</span>
                   </div>
                 </div>
               </div>
@@ -148,7 +148,7 @@ export default async function QuoteDetailsPage({
         <div className="space-y-6">
           <div className="rounded-xl border border-border bg-surface p-6 shadow-sm">
             <h3 className="mb-4 flex items-center gap-2 text-sm font-bold text-text">
-              <User size={16} className="text-primary" />
+              <User size={16} className="text-secondary" />
               معلومات العميل
             </h3>
             <div className="space-y-3 text-sm">

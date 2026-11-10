@@ -117,7 +117,7 @@ export default async function ConversationThreadPage({
 
           <section className="overflow-hidden rounded-xl border border-border bg-surface">
             <header className="flex items-center gap-2 border-b border-border px-4 py-3">
-              <StickyNote size={15} className="text-primary-dark" />
+              <StickyNote size={15} className="text-secondary" />
               <h2 className="text-sm font-semibold text-text">{ar.conversations.notes}</h2>
             </header>
             {!notes?.length ? (

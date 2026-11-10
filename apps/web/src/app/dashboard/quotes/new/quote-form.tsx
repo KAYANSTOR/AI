@@ -69,7 +69,7 @@ export function QuoteForm({ contacts }: { contacts: Contact[] }) {
           <select 
             value={contactId} 
             onChange={e => setContactId(e.target.value)}
-            className="w-full rounded-lg border border-border bg-background p-2.5 text-sm text-text outline-none focus:border-primary"
+            className="w-full rounded-lg border border-border bg-background p-2.5 text-sm text-text outline-none focus:border-accent"
             required
           >
             <option value="" disabled>اختر العميل...</option>
@@ -91,7 +91,7 @@ export function QuoteForm({ contacts }: { contacts: Contact[] }) {
                   type="text" 
                   value={item.name} 
                   onChange={e => updateItem(index, 'name', e.target.value)} 
-                  className="w-full rounded-md border border-border bg-surface p-2 text-sm outline-none focus:border-primary"
+                  className="w-full rounded-md border border-border bg-surface p-2 text-sm outline-none focus:border-accent"
                   required
                 />
               </div>
@@ -102,7 +102,7 @@ export function QuoteForm({ contacts }: { contacts: Contact[] }) {
                   min="1"
                   value={item.quantity} 
                   onChange={e => updateItem(index, 'quantity', e.target.value)} 
-                  className="w-full rounded-md border border-border bg-surface p-2 text-sm outline-none focus:border-primary"
+                  className="w-full rounded-md border border-border bg-surface p-2 text-sm outline-none focus:border-accent"
                   required
                 />
               </div>
@@ -114,7 +114,7 @@ export function QuoteForm({ contacts }: { contacts: Contact[] }) {
                   step="0.01"
                   value={item.unit_price} 
                   onChange={e => updateItem(index, 'unit_price', e.target.value)} 
-                  className="w-full rounded-md border border-border bg-surface p-2 text-sm outline-none focus:border-primary"
+                  className="w-full rounded-md border border-border bg-surface p-2 text-sm outline-none focus:border-accent"
                   required
                 />
               </div>
@@ -126,7 +126,7 @@ export function QuoteForm({ contacts }: { contacts: Contact[] }) {
                   step="0.01"
                   value={item.discount} 
                   onChange={e => updateItem(index, 'discount', e.target.value)} 
-                  className="w-full rounded-md border border-border bg-surface p-2 text-sm outline-none focus:border-primary"
+                  className="w-full rounded-md border border-border bg-surface p-2 text-sm outline-none focus:border-accent"
                   required
                 />
               </div>
@@ -139,13 +139,13 @@ export function QuoteForm({ contacts }: { contacts: Contact[] }) {
           ))}
         </div>
         
-        <button type="button" onClick={addItem} className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">
+        <button type="button" onClick={addItem} className="inline-flex items-center gap-1 text-sm font-medium text-secondary hover:underline">
           <Plus size={16} /> إضافة عنصر
         </button>
 
         <div className="mt-6 flex justify-between rounded-lg bg-background p-4 border border-border">
           <span className="font-bold text-text">الإجمالي النهائي:</span>
-          <span className="font-bold text-primary">{calculateTotal().toFixed(2)} SAR</span>
+          <span className="font-bold text-secondary">{calculateTotal().toFixed(2)} SAR</span>
         </div>
       </div>
 
@@ -154,7 +154,7 @@ export function QuoteForm({ contacts }: { contacts: Contact[] }) {
         <textarea 
           value={notes} 
           onChange={e => setNotes(e.target.value)}
-          className="w-full rounded-lg border border-border bg-background p-3 text-sm text-text outline-none focus:border-primary min-h-[100px]"
+          className="w-full rounded-lg border border-border bg-background p-3 text-sm text-text outline-none focus:border-accent min-h-[100px]"
           placeholder="شروط الدفع، تفاصيل التسليم..."
         />
       </div>
@@ -163,7 +163,7 @@ export function QuoteForm({ contacts }: { contacts: Contact[] }) {
         <button type="button" onClick={() => router.back()} className="rounded-lg px-4 py-2 text-sm font-medium text-text-muted hover:bg-surface transition-colors" disabled={loading}>
           إلغاء
         </button>
-        <button type="submit" disabled={loading} className="inline-flex items-center gap-2 rounded-lg bg-primary px-6 py-2 text-sm font-medium text-white hover:bg-primary-dark transition-colors disabled:opacity-50">
+        <button type="submit" disabled={loading} className="inline-flex items-center gap-2 rounded-lg bg-primary px-6 py-2 text-sm font-medium text-primary-foreground hover:bg-primary-dark transition-colors disabled:opacity-50">
           {loading && <Loader2 size={16} className="animate-spin" />}
           حفظ المسودة
         </button>

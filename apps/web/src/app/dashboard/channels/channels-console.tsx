@@ -60,7 +60,7 @@ export function ChannelsConsole({
               key={card.type}
               type="button"
               onClick={() => setOpenType(card.type)}
-              className="rounded-2xl border border-border bg-surface p-4 text-start transition-colors hover:border-primary-dark"
+              className="rounded-2xl border border-border bg-surface p-4 text-start transition-colors hover:border-secondary"
             >
               <div className="flex items-start justify-between gap-3">
                 <div>
@@ -152,7 +152,7 @@ function ChannelDialog({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="presentation">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/40 p-4" role="presentation">
       <div
         role="dialog"
         aria-modal="true"
@@ -161,7 +161,7 @@ function ChannelDialog({
       >
         <header className="sticky top-0 z-10 flex items-start justify-between gap-3 border-b border-border bg-surface px-5 py-4">
           <div>
-            <p className="text-xs font-semibold text-primary-dark">Kayan Connect</p>
+            <p className="text-xs font-semibold text-secondary">Kayan Connect</p>
             <h2 id="channel-dialog-title" className="mt-1 text-lg font-bold text-text">
               {card.label}
             </h2>
@@ -216,7 +216,7 @@ function ChannelDialog({
               autoComplete="off"
               inputMode={card.type === 'whatsapp' || card.type === 'sms' ? 'tel' : 'numeric'}
               placeholder={card.type === 'whatsapp' ? '+967777123456' : spec.bindingPlaceholder}
-              className="mt-2 min-h-12 w-full rounded-xl border border-border bg-background px-3 text-base text-text outline-none focus:border-primary-dark focus:ring-2 focus:ring-primary-light"
+              className="mt-2 min-h-12 w-full rounded-xl border border-border bg-background px-3 text-base text-text outline-none focus:border-secondary focus:ring-2 focus:ring-accent/40"
               disabled={busy || !canManage}
             />
           </label>

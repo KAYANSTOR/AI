@@ -77,7 +77,7 @@ export default function HomePage() {
     <>
       <a
         href="#main"
-        className="sr-only focus:not-sr-only focus:absolute focus:top-3 focus:start-3 focus:z-50 focus:rounded-lg focus:bg-surface focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-primary"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-3 focus:start-3 focus:z-50 focus:rounded-lg focus:bg-surface focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-secondary"
       >
         تخطَّ إلى المحتوى الرئيسي
       </a>
@@ -106,12 +106,12 @@ export default function HomePage() {
                 href={href}
                 className="group flex flex-col rounded-2xl border border-border bg-surface p-6 transition-all hover:-translate-y-0.5 hover:border-border-strong hover:shadow-[var(--shadow-raised)]"
               >
-                <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-light/50 text-primary-dark">
+                <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-light/50 text-secondary">
                   <Icon size={18} aria-hidden="true" />
                 </span>
                 <h3 className="mt-5 text-base font-semibold text-text">{title}</h3>
                 <p className="mt-2 flex-1 text-sm leading-7 text-text-muted">{desc}</p>
-                <span className="mt-6 inline-flex items-center gap-1.5 text-sm font-semibold text-primary">
+                <span className="mt-6 inline-flex items-center gap-1.5 text-sm font-semibold text-secondary">
                   التفاصيل
                   <ArrowLeft size={15} aria-hidden="true" className="transition-transform group-hover:-translate-x-1" />
                 </span>
@@ -123,7 +123,7 @@ export default function HomePage() {
         <Section tone="background" className="border-b border-border" labelledBy="forwarding-heading">
           <div className="grid items-center gap-12 lg:grid-cols-2">
             <div>
-              <p className="inline-flex items-center gap-2 text-xs font-semibold text-primary">
+              <p className="inline-flex items-center gap-2 text-xs font-semibold text-secondary">
                 <PhoneForwarded size={15} aria-hidden="true" />
                 تحويل المكالمات
               </p>
@@ -147,7 +147,7 @@ export default function HomePage() {
               <div className="mt-8 flex flex-wrap gap-3">
                 <Link
                   href="/features"
-                  className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-text px-5 text-sm font-semibold text-surface transition-colors hover:bg-dark-muted"
+                  className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-primary px-5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary-dark"
                 >
                   مميزات المكالمات
                   <ArrowLeft size={15} aria-hidden="true" />
@@ -172,7 +172,7 @@ export default function HomePage() {
                   <p className="mt-1 text-text">عندكم موعد متاح بكرة الصباح لاستشارة؟</p>
                 </div>
                 <div className="rounded-xl border border-primary/15 bg-primary-light/30 p-4">
-                  <p className="text-xs font-semibold text-primary-dark">موظف الاستقبال</p>
+                  <p className="text-xs font-semibold text-secondary">موظف الاستقبال</p>
                   <p className="mt-1 text-text">
                     أهلًا بك. متاح غدًا 10:30 صباحًا أو 11:45. أيهما يناسبك لأؤكد الحجز وأرسل التفاصيل على واتساب؟
                   </p>

@@ -116,7 +116,7 @@ export function AgentConsole({ data }: { data: AgentConsoleData }) {
             <input
               value={name}
               onChange={(event) => setName(event.target.value)}
-              className="min-h-11 w-full rounded-lg border border-border bg-background px-3 py-2 text-base text-text focus:border-primary-dark focus:outline-none focus:ring-2 focus:ring-primary/20 md:text-sm"
+              className="min-h-11 w-full rounded-lg border border-border bg-background px-3 py-2 text-base text-text focus:border-secondary focus:outline-none focus:ring-2 focus:ring-accent/20 md:text-sm"
             />
           </label>
           <label className="block">
@@ -124,7 +124,7 @@ export function AgentConsole({ data }: { data: AgentConsoleData }) {
             <select
               value={locale}
               onChange={(event) => setLocale(event.target.value)}
-              className="min-h-11 w-full rounded-lg border border-border bg-background px-3 py-2 text-base text-text focus:border-primary-dark focus:outline-none focus:ring-2 focus:ring-primary/20 md:text-sm"
+              className="min-h-11 w-full rounded-lg border border-border bg-background px-3 py-2 text-base text-text focus:border-secondary focus:outline-none focus:ring-2 focus:ring-accent/20 md:text-sm"
             >
               <option value="ar">العربية</option>
               <option value="en">الإنجليزية</option>
@@ -135,7 +135,7 @@ export function AgentConsole({ data }: { data: AgentConsoleData }) {
             <select
               value={status}
               onChange={(event) => setStatus(event.target.value)}
-              className="min-h-11 w-full rounded-lg border border-border bg-background px-3 py-2 text-base text-text focus:border-primary-dark focus:outline-none focus:ring-2 focus:ring-primary/20 md:text-sm"
+              className="min-h-11 w-full rounded-lg border border-border bg-background px-3 py-2 text-base text-text focus:border-secondary focus:outline-none focus:ring-2 focus:ring-accent/20 md:text-sm"
             >
               <option value="active">نشط</option>
               <option value="suspended">موقوف</option>
@@ -166,7 +166,7 @@ export function AgentConsole({ data }: { data: AgentConsoleData }) {
             type="button"
             onClick={saveProfile}
             disabled={pending}
-            className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary-dark px-4 py-2 text-base font-medium text-surface transition-colors hover:bg-primary disabled:opacity-60 md:w-auto md:text-sm"
+            className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary-dark px-4 py-2 text-base font-medium text-primary-foreground transition-colors hover:bg-primary disabled:opacity-60 md:w-auto md:text-sm"
           >
             {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save size={16} aria-hidden="true" />}
             حفظ
@@ -191,7 +191,7 @@ export function AgentConsole({ data }: { data: AgentConsoleData }) {
           onChange={(event) => setInstructions(event.target.value)}
           rows={7}
           placeholder="مثال: رحّب بالعميل باسم النشاط، اسأل عن الخدمة المطلوبة، واقترح موعدين فقط…"
-          className="mt-3 min-h-11 w-full rounded-lg border border-border bg-background px-3 py-2 text-base leading-relaxed text-text focus:border-primary-dark focus:outline-none focus:ring-2 focus:ring-primary/20 md:text-sm"
+          className="mt-3 min-h-11 w-full rounded-lg border border-border bg-background px-3 py-2 text-base leading-relaxed text-text focus:border-secondary focus:outline-none focus:ring-2 focus:ring-accent/20 md:text-sm"
         />
         <p className="mt-2 text-[11px] leading-relaxed text-text-muted">
           هذه التعليمات تُضاف إلى سياق النشاط ولا تلغي السياسة العامة: الأسعار والتوافر والصلاحيات
@@ -203,7 +203,7 @@ export function AgentConsole({ data }: { data: AgentConsoleData }) {
             type="button"
             onClick={publish}
             disabled={pending}
-            className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary-dark px-4 py-2 text-base font-medium text-surface transition-colors hover:bg-primary disabled:opacity-60 md:w-auto md:text-sm"
+            className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary-dark px-4 py-2 text-base font-medium text-primary-foreground transition-colors hover:bg-primary disabled:opacity-60 md:w-auto md:text-sm"
           >
             {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send size={16} aria-hidden="true" />}
             نشر نسخة جديدة

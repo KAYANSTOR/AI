@@ -42,7 +42,7 @@ export default async function OrderDetailsPage({
 
   const statusColors: Record<string, string> = {
     draft: 'bg-background text-text-muted',
-    confirmation: 'bg-primary/15 text-primary-dark',
+    confirmation: 'bg-primary/15 text-secondary',
     processing: 'bg-warning/15 text-warning-dark',
     completed: 'bg-success/15 text-success',
     cancelled: 'bg-error/15 text-error'
@@ -129,7 +129,7 @@ export default async function OrderDetailsPage({
                   </div>
                   <div className="flex justify-between border-t border-border pt-3 text-base font-bold text-text">
                     <span>الإجمالي النهائي:</span>
-                    <span className="text-primary">{Number(order.total).toFixed(2)} {order.currency}</span>
+                    <span className="text-secondary">{Number(order.total).toFixed(2)} {order.currency}</span>
                   </div>
                 </div>
               </div>
@@ -147,7 +147,7 @@ export default async function OrderDetailsPage({
         <div className="space-y-6">
           <div className="rounded-xl border border-border bg-surface p-6 shadow-sm">
             <h3 className="mb-4 flex items-center gap-2 text-sm font-bold text-text">
-              <User size={16} className="text-primary" />
+              <User size={16} className="text-secondary" />
               معلومات العميل
             </h3>
             <div className="space-y-3 text-sm">
@@ -173,12 +173,12 @@ export default async function OrderDetailsPage({
           {order.quote_id && quote && (
             <div className="rounded-xl border border-border bg-surface p-6 shadow-sm">
               <h3 className="mb-4 flex items-center gap-2 text-sm font-bold text-text">
-                <FileText size={16} className="text-primary" />
+                <FileText size={16} className="text-secondary" />
                 المصدر
               </h3>
               <p className="text-sm text-text-muted">
                 تم إنشاء هذا الطلب بناءً على عرض السعر:{' '}
-                <Link href={`/dashboard/quotes/${order.quote_id}`} className="font-medium text-primary hover:underline">
+                <Link href={`/dashboard/quotes/${order.quote_id}`} className="font-medium text-secondary hover:underline">
                   {quote.quote_number}
                 </Link>
               </p>

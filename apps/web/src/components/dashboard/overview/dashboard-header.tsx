@@ -43,21 +43,21 @@ export function DashboardHeader({
         <div className="flex flex-wrap items-center gap-2">
           <Link
             href="/dashboard/agent"
-            className="inline-flex items-center gap-2 rounded-xl bg-primary px-3.5 py-2.5 text-xs font-bold text-white shadow-xs transition-colors hover:bg-primary-dark"
+            className="inline-flex items-center gap-2 rounded-xl bg-primary px-3.5 py-2.5 text-xs font-bold text-primary-foreground shadow-xs transition-colors hover:bg-primary-dark"
           >
             <Bot size={16} />
             <span>تجربة الوكيل الذكي</span>
           </Link>
           <Link
             href="/dashboard/appointments"
-            className="inline-flex items-center gap-2 rounded-xl border border-border bg-surface px-3.5 py-2.5 text-xs font-semibold text-text transition-colors hover:border-primary-dark hover:text-primary-dark shadow-2xs"
+            className="inline-flex items-center gap-2 rounded-xl border border-border bg-surface px-3.5 py-2.5 text-xs font-semibold text-text transition-colors hover:border-secondary hover:text-secondary shadow-2xs"
           >
             <CalendarPlus size={15} className="text-text-muted" />
             <span>حجز موعد جديد</span>
           </Link>
           <Link
             href="/dashboard/channels"
-            className="inline-flex items-center gap-2 rounded-xl border border-border bg-surface px-3.5 py-2.5 text-xs font-semibold text-text transition-colors hover:border-primary-dark hover:text-primary-dark shadow-2xs"
+            className="inline-flex items-center gap-2 rounded-xl border border-border bg-surface px-3.5 py-2.5 text-xs font-semibold text-text transition-colors hover:border-secondary hover:text-secondary shadow-2xs"
           >
             <RadioTower size={15} className="text-text-muted" />
             <span>القنوات والربط</span>

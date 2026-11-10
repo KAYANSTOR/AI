@@ -50,7 +50,7 @@ export function About() {
             key={step}
             className="rounded-xl border border-border bg-background px-3 py-4 text-center"
           >
-            <span className="mx-auto flex h-7 w-7 items-center justify-center rounded-full bg-primary-light/40 text-xs font-bold text-primary-dark">
+            <span className="mx-auto flex h-7 w-7 items-center justify-center rounded-full bg-primary-light/40 text-xs font-bold text-secondary">
               {index + 1}
             </span>
             <span className="mt-2 block text-sm font-semibold text-text">{step}</span>
@@ -64,7 +64,7 @@ export function About() {
             key={principle.title}
             className="rounded-2xl border border-border bg-background p-6 transition-colors hover:border-primary-light"
           >
-            <span className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-primary-light/35 text-primary-dark">
+            <span className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-primary-light/35 text-secondary">
               <principle.icon size={22} aria-hidden="true" />
             </span>
             <h3 className="mt-4 text-base font-semibold text-text">{principle.title}</h3>

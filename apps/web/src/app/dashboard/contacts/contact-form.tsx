@@ -36,17 +36,17 @@ export function ContactForm(_props: { organizationId: string }) {
       )}
       <div>
         <label className="mb-1 block text-sm font-medium text-text">{ar.contacts.fullName}</label>
-        <input value={form.full_name} onChange={(e) => setForm((f) => ({ ...f, full_name: e.target.value }))} className="min-h-11 w-full rounded-lg border border-border bg-surface px-3 py-2 text-base text-text focus:outline-none focus:ring-2 focus:ring-primary/30 md:text-sm" />
+        <input value={form.full_name} onChange={(e) => setForm((f) => ({ ...f, full_name: e.target.value }))} className="min-h-11 w-full rounded-lg border border-border bg-surface px-3 py-2 text-base text-text focus:outline-none focus:ring-2 focus:ring-accent/30 md:text-sm" />
       </div>
       <div>
         <label className="mb-1 block text-sm font-medium text-text">{ar.contacts.phone}</label>
-        <input dir="ltr" value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} className="min-h-11 w-full rounded-lg border border-border bg-surface px-3 py-2 text-start text-base text-text focus:outline-none focus:ring-2 focus:ring-primary/30 md:text-sm" placeholder="+9665..." />
+        <input dir="ltr" value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} className="min-h-11 w-full rounded-lg border border-border bg-surface px-3 py-2 text-start text-base text-text focus:outline-none focus:ring-2 focus:ring-accent/30 md:text-sm" placeholder="+9665..." />
       </div>
       <div>
         <label className="mb-1 block text-sm font-medium text-text">{ar.contacts.email}</label>
-        <input dir="ltr" type="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} className="min-h-11 w-full rounded-lg border border-border bg-surface px-3 py-2 text-start text-base text-text focus:outline-none focus:ring-2 focus:ring-primary/30 md:text-sm" placeholder="sara@example.com" />
+        <input dir="ltr" type="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} className="min-h-11 w-full rounded-lg border border-border bg-surface px-3 py-2 text-start text-base text-text focus:outline-none focus:ring-2 focus:ring-accent/30 md:text-sm" placeholder="sara@example.com" />
       </div>
-      <button type="submit" disabled={loading} className="flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary-dark py-2.5 text-base font-medium text-surface transition-colors hover:bg-primary disabled:opacity-60 md:text-sm">
+      <button type="submit" disabled={loading} className="flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary-dark py-2.5 text-base font-medium text-primary-foreground transition-colors hover:bg-primary disabled:opacity-60 md:text-sm">
         {loading ? <Loader2 className="animate-spin" size={16} /> : ar.common.save}
       </button>
     </form>

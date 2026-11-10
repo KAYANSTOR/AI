@@ -104,7 +104,7 @@ export function SignupForm({ authConfigured }: { authConfigured: boolean }) {
 
       <p className="text-center text-sm text-text-muted">
         لديك حساب بالفعل؟{' '}
-        <Link href="/login" className="font-semibold text-primary hover:text-primary-dark">
+        <Link href="/login" className="font-semibold text-secondary hover:text-secondary">
           تسجيل الدخول
         </Link>
       </p>

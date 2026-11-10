@@ -42,13 +42,13 @@ export function Trust() {
       <ul className="mt-12 grid gap-px overflow-hidden rounded-2xl border border-border bg-border sm:grid-cols-2 lg:grid-cols-3">
         {PRINCIPLES.map((principle) => (
           <li key={principle.title} className="bg-surface p-6 sm:p-7">
-            <principle.icon size={20} aria-hidden="true" className="text-primary" />
+            <principle.icon size={20} aria-hidden="true" className="text-secondary" />
             <h3 className="mt-4 text-base font-semibold text-text">{principle.title}</h3>
             <p className="mt-2 text-sm leading-7 text-text-muted">{principle.body}</p>
           </li>
         ))}
         <li className="flex flex-col justify-center bg-primary-light/40 p-6 sm:p-7">
-          <p className="text-sm font-medium leading-7 text-primary-dark">
+          <p className="text-sm font-medium leading-7 text-secondary">
             كل إجراء حساس يمر عبر الخادم وحده، ولا يصل المتصفح إلى قاعدة البيانات مباشرة.
           </p>
         </li>

@@ -33,7 +33,7 @@ export async function DashboardAgentHealthSection({
       <section className="rounded-2xl border border-border bg-surface p-5 shadow-[var(--shadow-card)]">
         <div className="flex items-center justify-between border-b border-border/70 pb-4">
           <div className="flex items-center gap-2.5">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary-light/40 text-primary-dark">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary-light/40 text-secondary">
               <Bot size={20} />
             </div>
             <div>
@@ -61,7 +61,7 @@ export async function DashboardAgentHealthSection({
                     key={id}
                     className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-2.5 py-1 text-xs font-medium text-text"
                   >
-                    <CheckCircle2 size={12} className="text-primary-dark shrink-0" />
+                    <CheckCircle2 size={12} className="text-secondary shrink-0" />
                     <span>{capabilityLabel(id)}</span>
                   </span>
                 ))
@@ -74,7 +74,7 @@ export async function DashboardAgentHealthSection({
           <div className="border-t border-border/60 pt-3 flex items-center justify-between">
             <Link
               href="/dashboard/agent"
-              className="inline-flex items-center gap-1 text-xs font-bold text-primary-dark hover:underline"
+              className="inline-flex items-center gap-1 text-xs font-bold text-secondary hover:underline"
             >
               <Sliders size={13} />
               <span>ضبط نبرة وصوت الوكيل وسيناريوهات الرد</span>
@@ -93,7 +93,7 @@ export async function DashboardAgentHealthSection({
       <section className="rounded-2xl border border-border bg-surface p-5 shadow-[var(--shadow-card)]">
         <div className="flex items-center justify-between border-b border-border/70 pb-4">
           <div className="flex items-center gap-2.5">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary-light/40 text-primary-dark">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary-light/40 text-secondary">
               <RadioTower size={20} />
             </div>
             <div>
@@ -103,7 +103,7 @@ export async function DashboardAgentHealthSection({
           </div>
           <Link
             href="/dashboard/channels"
-            className="text-xs font-bold text-primary-dark hover:underline flex items-center gap-1"
+            className="text-xs font-bold text-secondary hover:underline flex items-center gap-1"
           >
             <span>إدارة القنوات</span>
             <ArrowLeft size={13} />
@@ -136,7 +136,7 @@ export async function DashboardAgentHealthSection({
           {/* Voice Phone */}
           <div className="flex items-center justify-between rounded-xl border border-border/70 p-3">
             <div className="flex items-center gap-3">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/15 text-primary font-bold text-xs">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/15 text-secondary font-bold text-xs">
                 TEL
               </div>
               <div>
@@ -160,7 +160,7 @@ export async function DashboardAgentHealthSection({
         <div className="mt-4 border-t border-border/60 pt-3 text-center">
           <Link
             href="/dashboard/channels"
-            className="text-xs font-bold text-primary-dark hover:underline inline-flex items-center gap-1"
+            className="text-xs font-bold text-secondary hover:underline inline-flex items-center gap-1"
           >
             <span>ربط وتفعيل قنوات إضافية</span>
             <span aria-hidden="true" className="rtl:rotate-180">→</span>

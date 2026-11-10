@@ -44,7 +44,7 @@ export default async function WorkflowsPage() {
                   <td className="px-4 py-3 font-medium text-text">{wf.name}</td>
                   <td className="px-4 py-3 text-text-muted">{wf.trigger_type}</td>
                   <td className="px-4 py-3">
-                    <span className="rounded-full bg-primary-light/30 px-2 py-0.5 text-xs text-primary-dark">
+                    <span className="rounded-full bg-primary-light/30 px-2 py-0.5 text-xs text-secondary">
                       {wf.status}
                     </span>
                   </td>

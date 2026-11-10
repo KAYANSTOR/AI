@@ -123,7 +123,7 @@ export function Sidebar({
     <aside
       id="dashboard-sidebar"
       ref={drawerRef}
-      className={`fixed inset-y-0 start-0 z-50 flex h-dvh w-72 max-w-[85vw] flex-col border-e border-white/10 bg-dark pt-[env(safe-area-inset-top)] text-white shadow-2xl transition-all duration-300 ease-out transform-gpu lg:static lg:z-auto lg:h-dvh lg:w-64 lg:max-w-none lg:shrink-0 lg:translate-x-0 lg:shadow-none ${
+      className={`fixed inset-y-0 start-0 z-50 flex h-dvh w-72 max-w-[85vw] flex-col border-e border-text/10 theme-dark bg-dark pt-[env(safe-area-inset-top)] text-text shadow-2xl transition-all duration-300 ease-out transform-gpu lg:static lg:z-auto lg:h-dvh lg:w-64 lg:max-w-none lg:shrink-0 lg:translate-x-0 lg:shadow-none ${
         open
           ? 'translate-x-0 opacity-100 visible'
           : 'max-lg:rtl:translate-x-full max-lg:ltr:-translate-x-full max-lg:opacity-0 max-lg:invisible lg:visible lg:opacity-100'
@@ -133,14 +133,14 @@ export function Sidebar({
       aria-label={ar.nav.sidebarLabel}
     >
       {/* Brand Header */}
-      <div className="flex h-16 shrink-0 items-center justify-between border-b border-white/10 ps-[max(1.25rem,env(safe-area-inset-right))] pe-[max(1rem,env(safe-area-inset-left))]">
+      <div className="flex h-16 shrink-0 items-center justify-between border-b border-text/10 ps-[max(1.25rem,env(safe-area-inset-right))] pe-[max(1rem,env(safe-area-inset-left))]">
         <Link
           href="/dashboard"
           prefetch={true}
           onClick={close}
-          className="group flex items-center gap-2.5 text-lg font-extrabold tracking-tight text-white transition-opacity hover:opacity-90"
+          className="group flex items-center gap-2.5 text-lg font-extrabold tracking-tight text-text transition-opacity hover:opacity-90"
         >
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-white shadow-xs transition-transform group-hover:scale-105">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-xs transition-transform group-hover:scale-105">
             <BrandMark className="h-5 w-5" />
           </div>
           <span className="flex items-center gap-1.5 font-bold">
@@ -150,7 +150,7 @@ export function Sidebar({
         <button
           type="button"
           onClick={close}
-          className="inline-flex h-10 w-10 items-center justify-center rounded-xl text-white/80 hover:bg-white/10 hover:text-white transition-colors lg:hidden"
+          className="inline-flex h-10 w-10 items-center justify-center rounded-xl text-text/80 hover:bg-text/10 hover:text-text transition-colors lg:hidden"
           aria-label={ar.header.closeMenu}
         >
           <X size={20} aria-hidden="true" />
@@ -167,7 +167,7 @@ export function Sidebar({
 
           return (
             <div key={section.title} className="space-y-1.5">
-              <p className="px-3 text-[11px] font-extrabold tracking-wider text-white/40 uppercase">
+              <p className="px-3 text-[11px] font-extrabold tracking-wider text-text/40 uppercase">
                 {section.title}
               </p>
               <nav aria-label={section.title} className="flex flex-col gap-0.5">
@@ -186,15 +186,15 @@ export function Sidebar({
       </div>
 
       {/* Organization Badge Footer */}
-      <div className="shrink-0 border-t border-white/10 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-        <div className="flex items-center gap-3 rounded-xl bg-white/5 p-2.5 transition-colors hover:bg-white/10">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary-light/20 text-primary-light font-bold text-sm">
+      <div className="shrink-0 border-t border-text/10 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+        <div className="flex items-center gap-3 rounded-xl bg-text/5 p-2.5 transition-colors hover:bg-text/10">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary-light/20 text-secondary font-bold text-sm">
             {orgName ? orgName.slice(0, 1) : 'ك'}
           </div>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-xs font-bold text-white">{orgName || 'المؤسسة'}</p>
-            <div className="flex items-center gap-1 text-[11px] text-white/60">
-              <ShieldCheck size={12} className="text-primary-light shrink-0" />
+            <p className="truncate text-xs font-bold text-text">{orgName || 'المؤسسة'}</p>
+            <div className="flex items-center gap-1 text-[11px] text-text/60">
+              <ShieldCheck size={12} className="text-secondary shrink-0" />
               <span className="truncate">{roleLabel(role)}</span>
             </div>
           </div>
@@ -205,7 +205,7 @@ export function Sidebar({
             href="https://kayan-soft.online"
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-block text-[10px] text-white/40 hover:text-primary-light transition-colors"
+            className="inline-block text-[10px] text-text/40 hover:text-secondary transition-colors"
           >
             برمجة وتطوير شركة كيان سوفت
           </a>
@@ -241,8 +241,8 @@ function NavLink({
       }}
       className={`group relative flex min-h-10 items-center justify-between rounded-xl px-3 py-2 text-xs font-semibold transition-all duration-150 transform-gpu ${
         active
-          ? 'bg-primary text-white shadow-xs font-bold'
-          : 'text-white/70 hover:bg-white/10 hover:text-white'
+          ? 'bg-primary text-primary-foreground shadow-xs font-bold'
+          : 'text-text/70 hover:bg-text/10 hover:text-text'
       }`}
       aria-current={active ? 'page' : undefined}
     >
@@ -250,7 +250,7 @@ function NavLink({
         <Icon
           size={17}
           className={`shrink-0 transition-colors ${
-            active ? 'text-white' : 'text-white/60 group-hover:text-white'
+            active ? 'text-text' : 'text-text/60 group-hover:text-text'
           }`}
           aria-hidden="true"
         />
@@ -261,8 +261,8 @@ function NavLink({
         <span
           className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-extrabold ${
             active
-              ? 'bg-white/20 text-white'
-              : 'bg-primary-light/20 text-primary-light group-hover:bg-primary-light/30'
+              ? 'bg-text/20 text-text'
+              : 'bg-primary-light/20 text-secondary group-hover:bg-primary-light/30'
           }`}
         >
           {item.badge}

@@ -43,7 +43,7 @@ export default async function CampaignsPage() {
                   <td className="px-4 py-3 font-medium text-text">{c.name}</td>
                   <td className="px-4 py-3 text-text-muted">{c.channel}</td>
                   <td className="px-4 py-3">
-                    <span className="rounded-full bg-primary-light/30 px-2 py-0.5 text-xs text-primary-dark">
+                    <span className="rounded-full bg-primary-light/30 px-2 py-0.5 text-xs text-secondary">
                       {c.status}
                     </span>
                   </td>
