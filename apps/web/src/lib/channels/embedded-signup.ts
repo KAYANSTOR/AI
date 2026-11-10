@@ -135,6 +135,30 @@ async function fetchVerifiedPhoneNumber(
   return body.display_phone_number ?? null
 }
 
+async function verifyPhoneBelongsToWaba(
+  wabaId: string,
+  phoneNumberId: string,
+  businessToken: string
+): Promise<void> {
+  const url = new URL(`${graphBase()}/${encodeURIComponent(wabaId)}/phone_numbers`)
+  url.searchParams.set('fields', 'id')
+  url.searchParams.set('limit', '100')
+  const response = await fetch(url.toString(), {
+    headers: { Authorization: `Bearer ${businessToken}` },
+  })
+  const body = await response.json().catch(() => null) as {
+    data?: Array<{ id?: string }>
+    error?: { message?: string }
+  } | null
+  if (!response.ok || !body?.data?.some((phone) => phone.id === phoneNumberId)) {
+    console.error('EmbeddedSignup: phone/WABA association failed', {
+      status: response.status,
+      error: body?.error?.message ?? 'Phone number is not listed under the selected WABA',
+    })
+    throw new Error('رقم واتساب الذي أعادته Meta لا يتبع حساب الأعمال المحدد. أعد اختيار الحساب والرقم.')
+  }
+}
+
 async function ensureBusinessId(
   admin: ReturnType<typeof createAdminClient>,
   organizationId: string,
@@ -232,6 +256,7 @@ export async function completeEmbeddedSignup(input: {
     const businessId = await ensureBusinessId(admin, input.organizationId, input.businessId, input.organizationName)
 
     // Verify the Meta phone and webhook subscription before making the channel routable.
+    await verifyPhoneBelongsToWaba(wabaId, phoneNumberId, businessToken)
     const displayFromApi = await fetchVerifiedPhoneNumber(phoneNumberId, businessToken)
     await subscribeAppToWaba(wabaId, businessToken)
     const displayNumber = displayFromApi ??
