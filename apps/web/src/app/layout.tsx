@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from 'next'
-import { IBM_Plex_Mono, IBM_Plex_Sans_Arabic, Inter } from 'next/font/google'
+import { IBM_Plex_Mono, IBM_Plex_Sans_Arabic, Inter, Noto_Kufi_Arabic } from 'next/font/google'
 import { siteDescription } from '@/lib/site-metadata'
 import './globals.css'
 
@@ -7,6 +7,13 @@ const plexArabic = IBM_Plex_Sans_Arabic({
   variable: '--font-plex-arabic',
   subsets: ['arabic', 'latin'],
   weight: ['400', '500', '600', '700'],
+  display: 'swap',
+})
+
+const kufi = Noto_Kufi_Arabic({
+  variable: '--font-kufi',
+  subsets: ['arabic'],
+  weight: ['600', '700'],
   display: 'swap',
 })
 
@@ -64,7 +71,7 @@ export const metadata: Metadata = {
 }
 
 export const viewport: Viewport = {
-  themeColor: '#d97757',
+  themeColor: '#0b6b5d',
   colorScheme: 'light',
   viewportFit: 'cover',
 }
@@ -74,7 +81,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html
       lang="ar"
       dir="rtl"
-      className={`${plexArabic.variable} ${inter.variable} ${plexMono.variable} h-full antialiased`}
+      className={`${plexArabic.variable} ${kufi.variable} ${inter.variable} ${plexMono.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col bg-background text-text">{children}</body>
     </html>

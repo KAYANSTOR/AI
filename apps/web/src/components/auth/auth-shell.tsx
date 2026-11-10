@@ -52,32 +52,26 @@ export function AuthShell({
       </div>
 
       <aside className="relative hidden overflow-hidden bg-dark text-surface lg:flex lg:flex-col lg:justify-between">
-        <div className="bg-grid-dark absolute inset-0" aria-hidden="true" />
-        <div className="relative px-12 pt-16">
-          <p className="text-xs font-semibold tracking-wide text-primary-light/80">لوحة تشغيل واحدة لفريقك</p>
-          <h2 className="mt-4 max-w-md text-3xl font-bold leading-[1.35]">
+        <div className="relative px-14 pt-20">
+          <p className="text-sm font-semibold text-primary-light">لوحة تشغيل واحدة لفريقك</p>
+          <h2 className="mt-5 max-w-md text-[2rem] leading-[1.5]">
             كل عميل يتواصل معك يجد ردًا فوريًا، وكل طلب يصل إلى فريقك مرتبًا.
           </h2>
         </div>
 
-        <ul className="relative space-y-3 px-12">
+        <ul className="relative mx-14 divide-y divide-surface/10 border-y border-surface/10">
           {HIGHLIGHTS.map(({ icon: Icon, title, text }) => (
-            <li
-              key={title}
-              className="flex items-start gap-4 rounded-2xl border border-surface/10 bg-surface/[0.04] p-4"
-            >
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/20 text-primary-light">
-                <Icon size={18} aria-hidden="true" />
-              </span>
+            <li key={title} className="flex items-start gap-4 py-5">
+              <Icon size={20} aria-hidden="true" className="mt-0.5 shrink-0 text-primary-light" />
               <span>
                 <span className="block text-sm font-semibold">{title}</span>
-                <span className="mt-0.5 block text-sm text-surface/60">{text}</span>
+                <span className="mt-1 block text-sm leading-6 text-surface/65">{text}</span>
               </span>
             </li>
           ))}
         </ul>
 
-        <p className="relative px-12 pb-10 text-xs text-surface/40">© {new Date().getFullYear()} KAYAN AI</p>
+        <p className="relative px-14 pb-10 text-xs text-surface/50">© {new Date().getFullYear()} KAYAN AI</p>
       </aside>
     </div>
   )

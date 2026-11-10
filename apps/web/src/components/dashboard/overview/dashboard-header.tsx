@@ -4,15 +4,19 @@ import { Bot, CalendarPlus, RadioTower } from 'lucide-react'
 export function DashboardHeader({
   organizationName,
   setupComplete,
+  timezone,
 }: {
   organizationName: string
   setupComplete: boolean
+  /** Organization IANA timezone; the server clock runs in UTC. */
+  timezone?: string
 }) {
   const today = new Intl.DateTimeFormat('ar-SA', {
     weekday: 'long',
     day: 'numeric',
     month: 'long',
     year: 'numeric',
+    ...(isValidTimeZone(timezone) ? { timeZone: timezone } : {}),
   }).format(new Date())
 
   return (
@@ -63,4 +67,14 @@ export function DashboardHeader({
 
     </div>
   )
+}
+
+function isValidTimeZone(timezone: string | undefined): timezone is string {
+  if (!timezone) return false
+  try {
+    new Intl.DateTimeFormat('en', { timeZone: timezone })
+    return true
+  } catch {
+    return false
+  }
 }

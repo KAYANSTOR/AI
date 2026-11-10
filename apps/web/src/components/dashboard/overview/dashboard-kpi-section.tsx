@@ -90,30 +90,28 @@ export async function DashboardKpiSection({ organizationId }: { organizationId: 
   ]
 
   return (
-    <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
+    <div className="grid grid-cols-1 gap-px overflow-hidden rounded-[var(--radius-card)] border border-border bg-border shadow-[var(--shadow-card)] sm:grid-cols-2 lg:grid-cols-4">
       {kpis.map((kpi, idx) => {
         const Icon = kpi.icon
         return (
           <div
             key={idx}
-            className="rounded-2xl border border-border bg-surface p-5 shadow-[var(--shadow-card)]"
+            className="bg-surface p-5"
           >
-            <div className="flex items-center justify-between gap-3">
-              <span className="text-xs font-semibold text-text-muted">{kpi.title}</span>
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-background text-text-muted">
-                <Icon size={16} aria-hidden="true" />
-              </div>
+            <div className="flex items-center gap-2 text-text-muted">
+              <Icon size={15} aria-hidden="true" className="shrink-0" />
+              <span className="text-xs font-semibold">{kpi.title}</span>
             </div>
 
-            <div className="mt-3 flex items-baseline gap-2">
-              <span className="text-[1.75rem] font-bold tabular-nums leading-none text-text">
+            <div className="mt-4 flex items-baseline gap-2">
+              <span className="text-[2rem] font-semibold tabular-nums leading-none text-text">
                 {kpi.valueText ?? formatNumber(kpi.value ?? 0)}
               </span>
             </div>
 
             <p className="mt-1.5 text-xs text-text-muted">{kpi.subtitle}</p>
 
-            <div className="mt-3 flex items-center gap-1.5 border-t border-border/60 pt-2.5 text-[11px] font-medium text-text-muted">
+            <div className="mt-4 flex items-center gap-1.5 text-[11px] font-medium text-text-muted">
               {kpi.tone === 'success' ? (
                 <span className="h-1.5 w-1.5 rounded-full bg-success shrink-0" />
               ) : kpi.tone === 'warning' ? (
@@ -132,9 +130,9 @@ export async function DashboardKpiSection({ organizationId }: { organizationId: 
 
 export function DashboardKpiSkeleton() {
   return (
-    <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-4 animate-pulse">
+    <div className="grid grid-cols-1 gap-px overflow-hidden rounded-[var(--radius-card)] border border-border bg-border sm:grid-cols-2 lg:grid-cols-4 animate-pulse">
       {Array.from({ length: 8 }).map((_, i) => (
-        <div key={i} className="rounded-2xl border border-border bg-surface p-5 space-y-3">
+        <div key={i} className="bg-surface p-5 space-y-3">
           <div className="flex items-center justify-between">
             <div className="h-4 w-28 rounded bg-border/60" />
             <div className="h-9 w-9 rounded-xl bg-border/40" />

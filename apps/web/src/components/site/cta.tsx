@@ -2,7 +2,7 @@ import Link from 'next/link'
 import type { ReactNode } from 'react'
 
 const BASE =
-  'inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-5 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/20'
+  'inline-flex min-h-11 items-center justify-center gap-2 rounded-lg px-5 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/20'
 
 const PRIMARY = `${BASE} bg-primary text-primary-foreground hover:bg-primary-dark`
 const SECONDARY = `${BASE} border border-border-strong/70 bg-surface text-text hover:border-text/40`

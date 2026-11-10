@@ -47,8 +47,8 @@ export function Trust() {
             <p className="mt-2 text-sm leading-7 text-text-muted">{principle.body}</p>
           </li>
         ))}
-        <li className="flex flex-col justify-center bg-dark p-6 text-surface sm:p-7">
-          <p className="text-sm leading-7 text-surface/70">
+        <li className="flex flex-col justify-center bg-primary-light/40 p-6 sm:p-7">
+          <p className="text-sm font-medium leading-7 text-primary-dark">
             كل إجراء حساس يمر عبر الخادم وحده، ولا يصل المتصفح إلى قاعدة البيانات مباشرة.
           </p>
         </li>

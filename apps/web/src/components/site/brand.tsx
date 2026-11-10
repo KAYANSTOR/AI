@@ -8,7 +8,7 @@ export function BrandMark({ className = 'h-9 w-9' }: { className?: string }) {
   return (
     <span
       aria-hidden="true"
-      className={`inline-flex shrink-0 items-center justify-center rounded-xl bg-primary text-surface ${className}`}
+      className={`inline-flex shrink-0 items-center justify-center rounded-lg bg-primary text-surface ${className}`}
     >
       <svg viewBox="0 0 32 32" fill="none" className="h-[62%] w-[62%]">
         <path
