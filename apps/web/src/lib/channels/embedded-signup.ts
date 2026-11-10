@@ -10,7 +10,7 @@
  * All Graph calls are server-to-server. Nothing secret reaches the browser.
  */
 import { createAdminClient } from '@/lib/db/admin'
-import { saveChannelCredential } from '@/lib/credentials/service'
+import { loadChannelCredentials, saveChannelCredential } from '@/lib/credentials/service'
 import { normalizeChannelNumber } from '@/lib/channels/management'
 
 const GRAPH_VERSION = 'v26.0'
@@ -49,6 +49,7 @@ export type EmbeddedSignupResult =
       ok: true
       phoneNumberId: string
       wabaId: string
+      businessId: string
       displayNumber: string | null
       message: string
     }
@@ -277,6 +278,15 @@ export async function completeEmbeddedSignup(input: {
       }),
     ])
 
+    const persistedCredentials = await loadChannelCredentials(admin, channelId)
+    if (
+      persistedCredentials.access_token !== businessToken ||
+      persistedCredentials.business_account_id !== wabaId ||
+      persistedCredentials.phone_number_id !== phoneNumberId
+    ) {
+      throw new Error('تعذّر التحقق من حفظ بيانات اعتماد Meta المشفّرة.')
+    }
+
     const { error: activateError } = await admin.from('channels').update({
       verification_status: 'verified',
       is_active: true,
@@ -295,6 +305,7 @@ export async function completeEmbeddedSignup(input: {
       ok: true,
       phoneNumberId,
       wabaId,
+      businessId,
       displayNumber,
       message: 'تم التحقق من رقم واتساب وحفظ بيانات Meta وربط القناة بالنشاط بنجاح.',
     }
