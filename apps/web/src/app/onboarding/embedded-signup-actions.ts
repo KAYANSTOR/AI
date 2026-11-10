@@ -76,7 +76,7 @@ export async function completeWhatsAppEmbeddedSignupAction(input: {
 
     await auditSetup(
       org.organizationId,
-      (profile?.business_id as string | null) ?? null,
+      result.businessId,
       'channel.whatsapp_embedded_signup',
       'channel',
       null,
