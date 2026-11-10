@@ -31,25 +31,55 @@ export async function verifyMetaChannelConnection(input: {
 
   let credentials: Record<string, string>
   try {
-    credentials = await loadChannelCredentials(admin, input.channelId)
+    credentials = await loadChannelCredentials(admin, input.channelId, 'meta')
   } catch {
     return [
       { label: 'بيانات اعتماد Meta محفوظة ومقروءة', ok: false, detail: 'تعذّر فك تشفير بيانات Meta؛ تحقق من مفتاح التشفير.' },
     ]
   }
 
+  // Older integrations may have stored the WABA identifier under Meta's
+  // original field name. Accept it as a read-only compatibility alias.
   const token = credentials.access_token
-  const wabaId = credentials.business_account_id
-  const credentialSetOk = Boolean(token && wabaId && credentials.phone_number_id)
+  const wabaId = credentials.business_account_id || credentials.waba_id
+  const phoneCredential = credentials.phone_number_id
+  const requiredCredentials = [
+    ['access_token', token],
+    ['business_account_id', wabaId],
+    ['phone_number_id', phoneCredential],
+  ] as const
+  const missingCredentials = requiredCredentials.filter(([, value]) => !value).map(([name]) => name)
+  let credentialDetail = 'تم تحميل بيانات اعتماد Meta المطلوبة من التخزين المشفّر'
+  if (missingCredentials.length) {
+    const { data: metadata, error: metadataError } = await admin
+      .from('provider_credentials')
+      .select('credential_type, status')
+      .eq('channel_id', input.channelId)
+      .eq('provider', 'meta')
+    if (metadataError) {
+      credentialDetail = `تعذّر تحديد حالة الحقول الناقصة (${missingCredentials.join('، ')})`
+    } else {
+      const rows = metadata ?? []
+      const disabled = missingCredentials.filter((name) =>
+        rows.some((row) => row.credential_type === name && row.status !== 'active')
+      )
+      const absent = missingCredentials.filter((name) => !rows.some((row) => row.credential_type === name))
+      credentialDetail = [
+        absent.length ? `حقول غير محفوظة: ${absent.join('، ')}` : '',
+        disabled.length ? `حقول غير مفعّلة: ${disabled.join('، ')}` : '',
+      ].filter(Boolean).join('؛ ') || `تعذّر تحميل الحقول: ${missingCredentials.join('، ')}`
+    }
+  }
+  const credentialSetOk = missingCredentials.length === 0
   checks.push({
     label: 'بيانات اعتماد Meta محفوظة ومقروءة',
     ok: credentialSetOk,
-    detail: credentialSetOk ? 'تم تحميل الرمز ومعرّفات الحساب من التخزين المشفّر' : 'الرمز أو معرّف حساب الأعمال أو معرّف الهاتف مفقود',
+    detail: credentialDetail,
   })
-  if (!credentialSetOk || !token || !wabaId || !credentials.phone_number_id) return checks
+  if (!credentialSetOk || !token || !wabaId || !phoneCredential) return checks
 
   const phoneNumberId = input.phoneNumberId
-  const storedPhoneIdMatches = Boolean(phoneNumberId && credentials.phone_number_id === phoneNumberId)
+  const storedPhoneIdMatches = Boolean(phoneNumberId && phoneCredential === phoneNumberId)
   checks.push({
     label: 'معرّف الهاتف مطابق',
     ok: storedPhoneIdMatches,
