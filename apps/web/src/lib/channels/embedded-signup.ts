@@ -303,7 +303,7 @@ export async function completeEmbeddedSignup(input: {
       }),
     ])
 
-    const persistedCredentials = await loadChannelCredentials(admin, channelId)
+    const persistedCredentials = await loadChannelCredentials(admin, channelId, 'meta')
     if (
       persistedCredentials.access_token !== businessToken ||
       persistedCredentials.business_account_id !== wabaId ||
