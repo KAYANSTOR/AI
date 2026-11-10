@@ -63,6 +63,7 @@ export async function completeWhatsAppEmbeddedSignupAction(input: {
     const result = await completeEmbeddedSignup({
       organizationId: org.organizationId,
       businessId: (profile?.business_id as string | null) ?? null,
+      organizationName: org.organizationName,
       session: {
         code: input.code,
         phoneNumberId: input.phoneNumberId,
