@@ -4,8 +4,8 @@
  * After the customer completes the Facebook popup:
  *   1. Exchange the returned code for a business token.
  *   2. Subscribe our app to the customer's WABA webhooks.
- *   3. Register the phone number for Cloud API (best-effort).
- *   4. Persist the channel as verified + encrypted credentials.
+ *   3. Confirm Meta can read the selected phone number and subscribe the WABA.
+ *   4. Persist encrypted credentials, then activate the tenant-bound channel.
  *
  * All Graph calls are server-to-server. Nothing secret reaches the browser.
  */
