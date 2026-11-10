@@ -13,7 +13,7 @@ import { createAdminClient } from '@/lib/db/admin'
 import { saveChannelCredential } from '@/lib/credentials/service'
 import { normalizeChannelNumber } from '@/lib/channels/management'
 
-const GRAPH_VERSION = 'v21.0'
+const GRAPH_VERSION = 'v26.0'
 
 function graphBase(): string {
   const configured = process.env.META_GRAPH_BASE_URL?.trim()
@@ -92,47 +92,99 @@ async function subscribeAppToWaba(wabaId: string, businessToken: string): Promis
     method: 'POST',
     headers: { Authorization: `Bearer ${businessToken}` },
   })
-  if (!response.ok) {
-    const body = await response.text().catch(() => '')
-    console.error('EmbeddedSignup: subscribe_apps failed', response.status, body)
-    // Non-fatal for first connect; webhooks can be fixed later.
+  const body = await response.json().catch(() => null) as { success?: boolean; error?: { message?: string } } | null
+  if (!response.ok || body?.success !== true) {
+    console.error('EmbeddedSignup: subscribe_apps failed', {
+      status: response.status,
+      error: body?.error?.message ?? 'Meta did not confirm subscription',
+    })
+    throw new Error('لم تؤكد Meta تفعيل استقبال إشعارات واتساب. تحقق من صلاحيات التطبيق ثم أعد الربط.')
   }
 }
 
-async function registerPhoneNumber(phoneNumberId: string, businessToken: string): Promise<void> {
-  // 6-digit PIN required by the Register API. We generate a random one; the customer
-  // can change two-step verification later in WhatsApp Manager.
-  const pin = String(Math.floor(100000 + Math.random() * 900000))
-  const response = await fetch(`${graphBase()}/${encodeURIComponent(phoneNumberId)}/register`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${businessToken}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ messaging_product: 'whatsapp', pin }),
-  })
-  if (!response.ok) {
-    const body = await response.text().catch(() => '')
-    // Already registered is common and acceptable.
-    console.warn('EmbeddedSignup: register phone returned', response.status, body)
-  }
-}
-
-async function fetchDisplayPhoneNumber(
+async function fetchVerifiedPhoneNumber(
   phoneNumberId: string,
   businessToken: string
 ): Promise<string | null> {
-  try {
-    const response = await fetch(
-      `${graphBase()}/${encodeURIComponent(phoneNumberId)}?fields=display_phone_number,verified_name`,
-      { headers: { Authorization: `Bearer ${businessToken}` } }
-    )
-    if (!response.ok) return null
-    const json = (await response.json()) as { display_phone_number?: string }
-    return json.display_phone_number ?? null
-  } catch {
-    return null
+  const url = new URL(`${graphBase()}/${encodeURIComponent(phoneNumberId)}`)
+  url.searchParams.set('fields', 'id,display_phone_number,verified_name')
+  const response = await fetch(url.toString(), {
+    headers: { Authorization: `Bearer ${businessToken}` },
+  })
+  const body = await response.json().catch(() => null) as {
+    id?: string
+    display_phone_number?: string
+    error?: { message?: string }
+  } | null
+  if (!response.ok || body?.id !== phoneNumberId) {
+    console.error('EmbeddedSignup: phone verification failed', {
+      status: response.status,
+      error: body?.error?.message ?? 'Phone number was not confirmed by Meta',
+    })
+    throw new Error('لم تتمكن Meta من التحقق من رقم واتساب المرتبط. أعد الربط وتأكد من اختيار الرقم الصحيح.')
   }
+  return body.display_phone_number ?? null
+}
+
+async function ensureBusinessId(
+  admin: ReturnType<typeof createAdminClient>,
+  organizationId: string,
+  suppliedBusinessId: string | null,
+  organizationName?: string | null
+): Promise<string> {
+  if (suppliedBusinessId) {
+    const { data, error } = await admin.from('businesses').select('id')
+      .eq('id', suppliedBusinessId).eq('organization_id', organizationId).maybeSingle()
+    if (error) throw new Error('تعذّر التحقق من مرجع النشاط.')
+    if (data?.id) return data.id as string
+  }
+
+  const { data: existing, error: existingError } = await admin.from('businesses').select('id')
+    .eq('organization_id', organizationId).order('created_at', { ascending: true }).limit(1).maybeSingle()
+  if (existingError) throw new Error('تعذّر قراءة بيانات النشاط.')
+  if (existing?.id) return existing.id as string
+
+  const { data: profile, error: profileError } = await admin.from('business_profiles')
+    .select('business_id, display_name, name, business_type_id, timezone')
+    .eq('organization_id', organizationId).maybeSingle()
+  if (profileError) throw new Error('تعذّر قراءة ملف النشاط.')
+
+  if (profile?.business_id) {
+    const { data: linked, error: linkedError } = await admin.from('businesses').select('id')
+      .eq('id', profile.business_id).eq('organization_id', organizationId).maybeSingle()
+    if (linkedError) throw new Error('تعذّر التحقق من النشاط المرتبط.')
+    if (linked?.id) return linked.id as string
+  }
+
+  let name = (profile?.display_name as string | null) || (profile?.name as string | null) || organizationName?.trim() || ''
+  if (!name) {
+    const { data: organization } = await admin.from('organizations').select('name')
+      .eq('id', organizationId).maybeSingle()
+    name = (organization?.name as string | null) || 'Business'
+  }
+  const baseSlug = name.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 90)
+  const slug = baseSlug || 'business'
+
+  const created = await admin.from('businesses').insert({
+    organization_id: organizationId,
+    name,
+    slug: `${slug}-${organizationId.slice(0, 8)}`,
+    business_type_id: profile?.business_type_id ?? null,
+    timezone: profile?.timezone ?? 'UTC',
+  }).select('id').single()
+  if (created.error || !created.data?.id) {
+    console.error('EmbeddedSignup: unable to create business record', created.error)
+    throw new Error('تعذّر إنشاء سجل النشاط اللازم لتوجيه رسائل واتساب.')
+  }
+
+  const businessId = created.data.id as string
+  const profileWrite = profile
+    ? await admin.from('business_profiles').update({ business_id: businessId, updated_at: new Date().toISOString() })
+        .eq('organization_id', organizationId)
+    : await admin.from('business_profiles').insert({ organization_id: organizationId, business_id: businessId })
+  if (profileWrite.error) throw new Error('تم إنشاء النشاط لكن تعذّر ربط ملف النشاط به.')
+  return businessId
 }
 
 /**
@@ -142,6 +194,7 @@ async function fetchDisplayPhoneNumber(
 export async function completeEmbeddedSignup(input: {
   organizationId: string
   businessId: string | null
+  organizationName?: string | null
   session: EmbeddedSignupSession
 }): Promise<EmbeddedSignupResult> {
   const { code, phoneNumberId, wabaId } = input.session
@@ -151,88 +204,68 @@ export async function completeEmbeddedSignup(input: {
 
   try {
     const businessToken = await exchangeCodeForBusinessToken(code)
-
-    // Parallel non-blocking steps.
-    await Promise.all([
-      subscribeAppToWaba(wabaId, businessToken),
-      registerPhoneNumber(phoneNumberId, businessToken),
-    ])
-
-    const displayFromApi = await fetchDisplayPhoneNumber(phoneNumberId, businessToken)
-    const displayNumber =
-      displayFromApi ??
-      (input.session.displayPhoneNumber
-        ? normalizeChannelNumber(input.session.displayPhoneNumber)
-        : null)
-
     const admin = createAdminClient()
+    const businessId = await ensureBusinessId(admin, input.organizationId, input.businessId, input.organizationName)
 
-    const { data: existing } = await admin
-      .from('channels')
-      .select('id')
-      .eq('organization_id', input.organizationId)
-      .eq('channel_type', 'whatsapp')
-      .maybeSingle()
+    // Verify the Meta phone and webhook subscription before making the channel routable.
+    const displayFromApi = await fetchVerifiedPhoneNumber(phoneNumberId, businessToken)
+    await subscribeAppToWaba(wabaId, businessToken)
+    const displayNumber = displayFromApi ??
+      (input.session.displayPhoneNumber ? normalizeChannelNumber(input.session.displayPhoneNumber) : null)
 
+    const { data: existing, error: readError } = await admin.from('channels').select('id')
+      .eq('organization_id', input.organizationId).eq('channel_type', 'whatsapp').maybeSingle()
+    if (readError) throw new Error('تعذّر قراءة قناة واتساب الحالية.')
+
+    // Pending/inactive until every required encrypted credential is safely stored.
     const patch = {
-      ...(input.businessId ? { business_id: input.businessId } : {}),
+      business_id: businessId,
       provider_account_id: phoneNumberId,
       external_identifier: displayNumber,
-      verification_status: 'verified',
-      is_active: true,
+      verification_status: 'pending',
+      is_active: false,
       updated_at: new Date().toISOString(),
     }
-
     const written = existing
       ? await admin.from('channels').update(patch).eq('id', existing.id).select('id').single()
-      : await admin
-          .from('channels')
-          .insert({
-            organization_id: input.organizationId,
-            channel_type: 'whatsapp',
-            ...patch,
-          })
-          .select('id')
-          .single()
-
+      : await admin.from('channels').insert({
+          organization_id: input.organizationId,
+          channel_type: 'whatsapp',
+          ...patch,
+        }).select('id').single()
     if (written.error || !written.data) {
       console.error('EmbeddedSignup: failed to save channel', written.error)
-      return { ok: false, error: 'تعذّر حفظ قناة واتساب. حاول مرة أخرى.' }
+      throw new Error('تعذّر حفظ قناة واتساب. حاول مرة أخرى.')
     }
 
     const channelId = written.data.id as string
-
-    // Store credentials encrypted per-channel (access_token + waba + phone_number_id).
     await Promise.all([
       saveChannelCredential(admin, {
-        organizationId: input.organizationId,
-        channelId,
-        provider: 'meta',
-        credentialType: 'access_token',
-        value: businessToken,
+        organizationId: input.organizationId, channelId, provider: 'meta',
+        credentialType: 'access_token', value: businessToken,
       }),
       saveChannelCredential(admin, {
-        organizationId: input.organizationId,
-        channelId,
-        provider: 'meta',
-        credentialType: 'business_account_id',
-        value: wabaId,
+        organizationId: input.organizationId, channelId, provider: 'meta',
+        credentialType: 'business_account_id', value: wabaId,
       }),
       saveChannelCredential(admin, {
-        organizationId: input.organizationId,
-        channelId,
-        provider: 'meta',
-        credentialType: 'phone_number_id',
-        value: phoneNumberId,
+        organizationId: input.organizationId, channelId, provider: 'meta',
+        credentialType: 'phone_number_id', value: phoneNumberId,
       }),
     ])
 
-    // Keep public phone in sync when we learned a display number.
+    const { error: activateError } = await admin.from('channels').update({
+      verification_status: 'verified',
+      is_active: true,
+      updated_at: new Date().toISOString(),
+    }).eq('id', channelId).eq('organization_id', input.organizationId)
+    if (activateError) throw new Error('تم حفظ بيانات الربط لكن تعذّر تفعيل القناة.')
+
     if (displayNumber) {
-      await admin
-        .from('business_profiles')
+      const { error: profileUpdateError } = await admin.from('business_profiles')
         .update({ public_phone_number: displayNumber, updated_at: new Date().toISOString() })
         .eq('organization_id', input.organizationId)
+      if (profileUpdateError) console.warn('EmbeddedSignup: could not sync public phone number', profileUpdateError.message)
     }
 
     return {
@@ -240,14 +273,14 @@ export async function completeEmbeddedSignup(input: {
       phoneNumberId,
       wabaId,
       displayNumber,
-      message: 'تم ربط واتساب بنجاح. الرقم جاهز لاستقبال العملاء.',
+      message: 'تم التحقق من رقم واتساب وحفظ بيانات Meta وربط القناة بالنشاط بنجاح.',
     }
   } catch (error) {
     console.error('EmbeddedSignup: complete failed', error)
     const message =
-      error instanceof Error && error.message.startsWith('تعذّر')
+      error instanceof Error && /^(تعذّر|لم تتمكن|لم تؤكد)/.test(error.message)
         ? error.message
-        : 'تعذّر إتمام ربط واتساب. حاول مرة أخرى.'
+        : 'تعذّر إتمام ربط واتساب. لم يتم تفعيل القناة لأن التحقق أو حفظ بيانات الربط لم يكتمل.'
     return { ok: false, error: message }
   }
 }
