@@ -29,6 +29,16 @@ async function handle(req: NextRequest) {
     .limit(50)
   if (error) return NextResponse.json({ error: publicWebhookError() }, { status: 500 })
 
+  // One lookup for every channel in this batch instead of one per event.
+  const channelIds = [...new Set((events ?? []).map((event) => event.channel_id as string | null).filter((id): id is string => Boolean(id)))]
+  const channelsResult = channelIds.length
+    ? await db.from('channels')
+        .select('id, organization_id, business_id, channel_type, provider_account_id, external_identifier')
+        .in('id', channelIds)
+    : { data: [] as Array<Record<string, unknown>>, error: null }
+  const channelsById = new Map<string, Record<string, unknown>>()
+  for (const row of channelsResult.data ?? []) channelsById.set(row.id as string, row)
+
   let sent = 0
   for (const event of events ?? []) {
     const claim = await db.from('outbox_events')
@@ -40,11 +50,18 @@ async function handle(req: NextRequest) {
     if (!claim.data) continue
 
     try {
-      const { data: channel, error: channelError } = await db.from('channels')
-        .select('id, organization_id, business_id, channel_type, provider_account_id, external_identifier')
-        .eq('id', event.channel_id)
-        .maybeSingle()
-      if (channelError) throw new Error(channelError.message)
+      // A failed batch lookup fails each event individually (same retry/backoff path as before).
+      if (channelsResult.error) throw new Error(channelsResult.error.message)
+      const channel = channelsById.get(event.channel_id as string) as
+        | {
+            id: string
+            organization_id: string
+            business_id: string | null
+            channel_type: string
+            provider_account_id: string | null
+            external_identifier: string | null
+          }
+        | undefined
       if (!channel) throw new Error('channel_not_found')
 
       const payload = event.payload as Record<string, unknown>

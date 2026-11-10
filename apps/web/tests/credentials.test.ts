@@ -126,8 +126,30 @@ describe('per-channel storage', () => {
     }
   }
 
+  function channelDb() {
+    const fake = createFakeDb(channelTables(), {
+      put_channel_credential: (args) => {
+        const rows = fake.store.provider_credentials.rows ?? []
+        const key = ['channel_id', 'provider', 'credential_type']
+        const existing = rows.find((row) => key.every((column) => row[column] === args[`p_${column}`]))
+        const row = {
+          organization_id: args.p_organization_id,
+          channel_id: args.p_channel_id,
+          provider: args.p_provider,
+          credential_type: args.p_credential_type,
+          encrypted_value: args.p_encrypted_value,
+          status: args.p_status,
+        }
+        if (existing) Object.assign(existing, row)
+        else rows.push(row)
+        return null
+      },
+    })
+    return fake
+  }
+
   test('saving encrypts at rest: the row never holds the plaintext', async () => {
-    const fake = createFakeDb(channelTables())
+    const fake = channelDb()
     const db = fake.client as unknown as DbClient
 
     await saveChannelCredential(db, {
@@ -144,7 +166,7 @@ describe('per-channel storage', () => {
   })
 
   test('loading returns decrypted values for active credentials', async () => {
-    const fake = createFakeDb(channelTables())
+    const fake = channelDb()
     const db = fake.client as unknown as DbClient
     await saveChannelCredential(db, {
       organizationId: 'org-1',

@@ -21,6 +21,12 @@ async function handle(req: NextRequest) {
     )
     .in('sla_state', ['normal', 'at_risk', 'breached'])
     .neq('status', 'closed')
+    // Deterministic page. Rows not yet breached come first (they can still escalate), then by
+    // earliest first-response deadline; already-breached rows stay in the scan so they can
+    // still move to 'resolved', but they no longer crowd out the rest.
+    .order('sla_breached_at', { ascending: true, nullsFirst: true })
+    .order('first_response_due_at', { ascending: true, nullsFirst: false })
+    .order('id', { ascending: true })
     .limit(200)
 
   if (error) return NextResponse.json({ error: publicWebhookError() }, { status: 500 })
