@@ -133,8 +133,11 @@ export function WhatsAppEmbeddedSignupButton({
 
   const tryComplete = useCallback(async () => {
     const code = codeRef.current
-    const session = sessionRef.current
-    if (!code || !session || (!session.phone_number_id && !session.waba_id) || completionStartedRef.current) return
+    // On mobile browsers Meta may finish in a separate tab and fail to deliver
+    // WA_EMBEDDED_SIGNUP via postMessage. The authorization code is sufficient:
+    // the server resolves the granted WABA/phone from the exchanged token.
+    const session = sessionRef.current ?? {}
+    if (!code || completionStartedRef.current) return
 
     completionStartedRef.current = true
     setBusy(true)
