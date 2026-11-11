@@ -10,6 +10,7 @@
  * All Graph calls are server-to-server. Nothing secret reaches the browser.
  */
 import { createAdminClient } from '@/lib/db/admin'
+import type { DbClient } from '@/lib/db/client'
 import { deleteChannelCredential, loadChannelCredentials, saveChannelCredential } from '@/lib/credentials/service'
 import { normalizeChannelNumber } from '@/lib/channels/management'
 
@@ -267,14 +268,14 @@ async function resolveSignupResources(
   throw new Error('لم تتمكن Meta من تحديد رقم الهاتف بشكل مؤكد. أعد الربط من نافذة Meta.')
 }
 
-async function ensureBusinessId(
-  admin: ReturnType<typeof createAdminClient>,
+export async function ensureBusinessId(
+  admin: DbClient,
   organizationId: string,
   suppliedBusinessId: string | null,
   organizationName?: string | null
 ): Promise<string> {
   const { data: profile, error: profileError } = await admin.from('business_profiles')
-    .select('business_id, display_name, name, business_type_id, timezone')
+    .select('business_id, business_type_id, timezone')
     .eq('organization_id', organizationId).maybeSingle()
   if (profileError) throw new Error('تعذّر قراءة ملف النشاط.')
 
@@ -316,12 +317,17 @@ async function ensureBusinessId(
     return existing.id as string
   }
 
-  let name = (profile?.display_name as string | null) || (profile?.name as string | null) || organizationName?.trim() || ''
+  // business_profiles has no display_name/name columns. The canonical
+  // business name belongs to organizations; never query columns absent from
+  // the deployed schema.
+  let name = organizationName?.trim() ?? ''
   if (!name) {
-    const { data: organization } = await admin.from('organizations').select('name')
-      .eq('id', organizationId).maybeSingle()
-    name = (organization?.name as string | null) || 'Business'
+    const { data: organization, error: organizationError } = await admin.from('organizations')
+      .select('name').eq('id', organizationId).maybeSingle()
+    if (organizationError) throw new Error('تعذّر قراءة اسم النشاط من بيانات المؤسسة.')
+    name = (organization?.name as string | null)?.trim() ?? ''
   }
+  if (!name) throw new Error('اسم المؤسسة غير متوفر لإنشاء سجل النشاط.')
   const baseSlug = name.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
     .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 90)
   const slug = baseSlug || 'business'

@@ -31,8 +31,6 @@ type SessionPayload = {
   business_id?: string
 }
 
-const EMBEDDED_SIGNUP_CALLBACK = '/api/whatsapp/embedded-signup-callback'
-
 type Props = {
   disabled?: boolean
   onSuccess?: (message: string) => void
@@ -241,14 +239,18 @@ export function WhatsAppEmbeddedSignupButton({
           void tryComplete()
         } else {
           setBusy(false)
-          onError?.('لم يكتمل الربط. يمكنك المحاولة مرة أخرى.')
+          const message = response.status === 'not_authorized'
+            ? 'لم تمنح Kayan AI الأذونات المطلوبة من Meta. أعد المحاولة ووافق على الصلاحيات.'
+            : response.status === 'unknown'
+              ? 'لم تُكمل Meta عملية التفويض أو أُغلقت نافذتها قبل التأكيد. أعد المحاولة وأكمل الخطوات حتى النهاية.'
+              : 'لم تُرجع Meta رمز التفويض إلى الموقع. لم يتم حفظ أي بيانات أو تفعيل القناة؛ أعد المحاولة.'
+          onError?.(message)
         }
       },
       {
         config_id: configId,
         response_type: 'code',
         override_default_response_type: true,
-        redirect_uri: `${window.location.origin}${EMBEDDED_SIGNUP_CALLBACK}`,
         // Embedded Signup v4 reads products/permissions from config_id.
         // Do not pass the legacy session_info_version/sessionInfoVersion flag.
         extras: { setup: {} },
