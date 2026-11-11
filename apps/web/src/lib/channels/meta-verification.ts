@@ -9,6 +9,7 @@ async function graphGet<T>(path: string, token: string): Promise<{ ok: boolean; 
     const response = await fetch(`${getMetaGraphBaseUrl()}/${path}`, {
       headers: { Authorization: `Bearer ${token}` },
       cache: 'no-store',
+      signal: AbortSignal.timeout(12_000),
     })
     const body = await response.json().catch(() => null) as T | null
     return { ok: response.ok, body, status: response.status }
