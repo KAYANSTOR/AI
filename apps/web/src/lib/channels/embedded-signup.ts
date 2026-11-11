@@ -161,7 +161,7 @@ async function verifyPhoneBelongsToWaba(
 
 type GraphListResponse<T> = { data?: T[]; error?: { message?: string } }
 
-/** Resolve resources when mobile redirect flow cannot deliver postMessage session info. */
+/** Resolve resources from explicit session data or the token's granted WABA scopes. */
 async function resolveSignupResources(
   session: EmbeddedSignupSession,
   businessToken: string
@@ -170,38 +170,72 @@ async function resolveSignupResources(
     return { phoneNumberId: session.phoneNumberId, wabaId: session.wabaId }
   }
 
-  const businessIds = session.businessPortfolioId ? [session.businessPortfolioId] : []
-  if (businessIds.length === 0) {
-    const response = await fetch(`${getMetaGraphBaseUrl()}/me?fields=id`, {
-      headers: { Authorization: `Bearer ${businessToken}` },
+  const appId = requireEnv('NEXT_PUBLIC_META_APP_ID')
+  const appSecret = requireEnv('META_APP_SECRET')
+  const appAccessToken = `${appId}|${appSecret}`
+  const debugUrl = new URL(`${getMetaGraphBaseUrl()}/debug_token`)
+  debugUrl.searchParams.set('input_token', businessToken)
+  const debugResponse = await fetch(debugUrl.toString(), {
+    headers: { Authorization: `Bearer ${appAccessToken}` },
+    cache: 'no-store',
+  })
+  const debugBody = await debugResponse.json().catch(() => null) as {
+    data?: {
+      is_valid?: boolean
+      granular_scopes?: Array<{ scope?: string; target_ids?: string[] }>
+    }
+    error?: { message?: string }
+  } | null
+
+  if (!debugResponse.ok || debugBody?.data?.is_valid !== true) {
+    console.error('EmbeddedSignup: token debug failed', {
+      status: debugResponse.status,
+      error: debugBody?.error?.message ?? 'Meta did not validate the exchanged token',
     })
-    const body = await response.json().catch(() => null) as { id?: string } | null
-    if (response.ok && body?.id) businessIds.push(body.id)
+    throw new Error('تعذّر التحقق من صلاحية التفويض الذي أعادته Meta. أعد الربط.')
   }
 
-  const wabaIds = session.wabaId ? [session.wabaId] : []
-  for (const businessId of businessIds) {
-    const response = await fetch(
-      `${getMetaGraphBaseUrl()}/${encodeURIComponent(businessId)}/owned_whatsapp_business_accounts?fields=id&limit=100`,
-      { headers: { Authorization: `Bearer ${businessToken}` } }
-    )
-    const body = await response.json().catch(() => null) as GraphListResponse<{ id?: string }> | null
-    for (const account of body?.data ?? []) {
-      if (account.id && !wabaIds.includes(account.id)) wabaIds.push(account.id)
-    }
+  // For Embedded Signup, Meta's token debugger exposes the assets actually
+  // granted to this token. Never treat /me.id as a Business Portfolio ID.
+  const grantedWabaIds = (debugBody.data.granular_scopes ?? [])
+    .filter((scope) => scope.scope === 'whatsapp_business_management')
+    .flatMap((scope) => scope.target_ids ?? [])
+    .filter((id, index, all) => Boolean(id) && all.indexOf(id) === index)
+
+  const wabaIds = session.wabaId
+    ? [session.wabaId]
+    : grantedWabaIds
+  if (!wabaIds.length) {
+    throw new Error('لم تُرجع Meta حساب WhatsApp ضمن صلاحيات التفويض. أعد الربط وتأكد من اختيار حساب الأعمال.')
   }
 
   for (const wabaId of wabaIds) {
-    const response = await fetch(
-      `${getMetaGraphBaseUrl()}/${encodeURIComponent(wabaId)}/phone_numbers?fields=id&limit=100`,
-      { headers: { Authorization: `Bearer ${businessToken}` } }
-    )
+    const url = new URL(`${getMetaGraphBaseUrl()}/${encodeURIComponent(wabaId)}/phone_numbers`)
+    url.searchParams.set('fields', 'id')
+    url.searchParams.set('limit', '100')
+    const response = await fetch(url.toString(), {
+      headers: { Authorization: `Bearer ${businessToken}` },
+      cache: 'no-store',
+    })
     const body = await response.json().catch(() => null) as GraphListResponse<{ id?: string }> | null
-    const phoneNumberId = session.phoneNumberId ?? body?.data?.find((phone) => phone.id)?.id
+    if (!response.ok) {
+      console.error('EmbeddedSignup: phone discovery failed', {
+        status: response.status,
+        error: (body as { error?: { message?: string } } | null)?.error?.message ?? 'Meta denied access to WABA phone numbers',
+      })
+      continue
+    }
+
+    const phones = (body?.data ?? []).map((phone) => phone.id).filter((id): id is string => Boolean(id))
+    const phoneNumberId = session.phoneNumberId
+      ? phones.find((id) => id === session.phoneNumberId)
+      : phones.length === 1 ? phones[0] : undefined
+
+    // Do not silently choose a phone when a WABA contains multiple numbers.
     if (phoneNumberId) return { phoneNumberId, wabaId }
   }
 
-  throw new Error('لم تُرجع Meta معرّف حساب WhatsApp أو رقم الهاتف. أعد الربط من Meta.')
+  throw new Error('لم تتمكن Meta من تحديد رقم الهاتف بشكل مؤكد. أعد الربط من نافذة Meta.')
 }
 
 async function ensureBusinessId(
