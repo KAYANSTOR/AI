@@ -202,9 +202,30 @@ async function resolveSignupResources(
     .flatMap((scope) => scope.target_ids ?? [])
     .filter((id, index, all) => Boolean(id) && all.indexOf(id) === index)
 
+  // The session's business_id is a real Business Portfolio ID supplied by
+  // Meta. Query its owned and client WABAs; never substitute /me.id here.
+  const businessWabaIds: string[] = []
+  if (session.businessPortfolioId && !session.wabaId) {
+    for (const edge of ['owned_whatsapp_business_accounts', 'client_whatsapp_business_accounts']) {
+      const businessUrl = new URL(`${getMetaGraphBaseUrl()}/${encodeURIComponent(session.businessPortfolioId)}/${edge}`)
+      businessUrl.searchParams.set('fields', 'id')
+      businessUrl.searchParams.set('limit', '100')
+      const businessResponse = await fetch(businessUrl.toString(), {
+        headers: { Authorization: `Bearer ${businessToken}` },
+        cache: 'no-store',
+      })
+      const businessBody = await businessResponse.json().catch(() => null) as GraphListResponse<{ id?: string }> | null
+      if (businessResponse.ok) {
+        for (const account of businessBody?.data ?? []) {
+          if (account.id && !businessWabaIds.includes(account.id)) businessWabaIds.push(account.id)
+        }
+      }
+    }
+  }
+
   const wabaIds = session.wabaId
     ? [session.wabaId]
-    : grantedWabaIds
+    : [...new Set([...grantedWabaIds, ...businessWabaIds])]
   if (!wabaIds.length) {
     throw new Error('لم تُرجع Meta حساب WhatsApp ضمن صلاحيات التفويض. أعد الربط وتأكد من اختيار حساب الأعمال.')
   }
