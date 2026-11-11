@@ -21,6 +21,15 @@ export function verifyMetaSignature(rawBody:string,headers:Headers){
   return safeEqual(signature.slice(7),expected)
 }
 
+/** Verify Kapso's HMAC-SHA256 signature over the exact raw request body. */
+export function verifyKapsoWebhookSignature(rawBody:string,headers:Headers,secret=process.env.KAPSO_WHATSAPP_WEBHOOK_SECRET){
+  if(!secret) return false
+  const signature=headers.get('x-webhook-signature')
+  if(!signature || !/^[a-f0-9]{64}$/i.test(signature)) return false
+  const expected=createHmac('sha256',secret).update(rawBody,'utf8').digest('hex')
+  return safeEqual(signature.toLowerCase(),expected)
+}
+
 export function verifyTwilioSignature(rawUrl:string,params:Record<string,string>,signature:string|null,authToken=process.env.TWILIO_AUTH_TOKEN){
   if(!authToken || !signature) return false
   const data=rawUrl+Object.keys(params).sort().map(key=>key+params[key]).join('')
