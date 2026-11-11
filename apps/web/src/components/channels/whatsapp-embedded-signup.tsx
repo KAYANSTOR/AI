@@ -65,7 +65,10 @@ function loadFacebookSdk(appId: string): Promise<void> {
     }
 
     const existing = document.getElementById('facebook-jssdk')
-    if (existing) return
+    if (existing) {
+      existing.addEventListener('error', () => reject(new Error('فشل تحميل Facebook SDK')), { once: true })
+      return
+    }
 
     const script = document.createElement('script')
     script.id = 'facebook-jssdk'
@@ -79,8 +82,9 @@ function loadFacebookSdk(appId: string): Promise<void> {
 }
 
 /**
- * One-click WhatsApp connect via Meta Embedded Signup (v4).
- * Requires NEXT_PUBLIC_META_APP_ID + NEXT_PUBLIC_META_EMBEDDED_CONFIG_ID.
+ * One-click WhatsApp connect via Meta Embedded Signup v4.
+ * The Facebook Login for Business configuration (config_id) defines products
+ * and permissions. v4 does not use the legacy sessionInfoVersion option.
  */
 export function WhatsAppEmbeddedSignupButton({
   disabled,
@@ -100,15 +104,15 @@ export function WhatsAppEmbeddedSignupButton({
   const tryComplete = useCallback(async () => {
     const code = codeRef.current
     const session = sessionRef.current
-    if (!code || !session?.phone_number_id || !session?.waba_id || completionStartedRef.current) return
+    if (!code || !session || (!session.phone_number_id && !session.waba_id) || completionStartedRef.current) return
 
     completionStartedRef.current = true
     setBusy(true)
     try {
       const result = await completeWhatsAppEmbeddedSignupAction({
         code,
-        phoneNumberId: session.phone_number_id,
-        wabaId: session.waba_id,
+        phoneNumberId: session.phone_number_id ?? null,
+        wabaId: session.waba_id ?? null,
         businessPortfolioId: session.business_id ?? null,
       })
       if (!result.ok) {
@@ -141,7 +145,13 @@ export function WhatsAppEmbeddedSignupButton({
       })
 
     function onMessage(event: MessageEvent) {
-      if (event.origin !== 'https://www.facebook.com' && event.origin !== 'https://connect.facebook.net') return
+      let origin: URL
+      try {
+        origin = new URL(event.origin)
+      } catch {
+        return
+      }
+      if (origin.protocol !== 'https:' || !(origin.hostname === 'facebook.com' || origin.hostname.endsWith('.facebook.com'))) return
       try {
         const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data
         if (data?.type !== 'WA_EMBEDDED_SIGNUP') return
@@ -153,10 +163,13 @@ export function WhatsAppEmbeddedSignupButton({
           onError?.(data.event === 'CANCEL' ? 'ألغيت عملية الربط من Meta.' : 'أبلغت Meta عن خطأ أثناء إعداد واتساب. أعد المحاولة.')
           return
         }
-        if (data.event === 'FINISH' && data.data?.phone_number_id && data.data?.waba_id) {
+        if (
+          (data.event === 'FINISH' || data.event === 'FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING') &&
+          data.data && (data.data.phone_number_id || data.data.waba_id)
+        ) {
           sessionRef.current = {
-            phone_number_id: String(data.data.phone_number_id),
-            waba_id: String(data.data.waba_id),
+            phone_number_id: data.data.phone_number_id ? String(data.data.phone_number_id) : undefined,
+            waba_id: data.data.waba_id ? String(data.data.waba_id) : undefined,
             business_id: data.data.business_id ? String(data.data.business_id) : undefined,
           }
           void tryComplete()
@@ -203,10 +216,9 @@ export function WhatsAppEmbeddedSignupButton({
         response_type: 'code',
         override_default_response_type: true,
         redirect_uri: `${window.location.origin}${EMBEDDED_SIGNUP_CALLBACK}`,
-        extras: {
-          setup: {},
-          session_info_version: '3',
-        },
+        // Embedded Signup v4 reads products/permissions from config_id.
+        // Do not pass the legacy session_info_version/sessionInfoVersion flag.
+        extras: { setup: {} },
       }
     )
   }
