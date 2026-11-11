@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { completeWhatsAppEmbeddedSignupAction } from '@/app/onboarding/embedded-signup-actions'
 
+export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
+
 type SessionInfo = {
   phone_number_id?: string
   waba_id?: string
@@ -34,7 +37,10 @@ function safeDecode(value: string): string | null {
 function redirectToChannels(request: NextRequest, status: 'meta_success' | 'meta_error') {
   const url = new URL('/dashboard/channels', request.url)
   url.searchParams.set('status', status)
-  return NextResponse.redirect(url)
+  const response = NextResponse.redirect(url)
+  response.headers.set('Cache-Control', 'no-store, max-age=0')
+  response.headers.set('Referrer-Policy', 'no-referrer')
+  return response
 }
 
 /**
@@ -52,12 +58,25 @@ export async function GET(request: NextRequest) {
 
   if (!code || params.get('error')) return redirectToChannels(request, 'meta_error')
 
-  const result = await completeWhatsAppEmbeddedSignupAction({
-    code,
-    phoneNumberId: phoneNumberId ?? null,
-    wabaId: wabaId ?? null,
-    businessPortfolioId: businessPortfolioId ?? null,
-  })
+  try {
+    const result = await completeWhatsAppEmbeddedSignupAction({
+      code,
+      phoneNumberId: phoneNumberId ?? null,
+      wabaId: wabaId ?? null,
+      businessPortfolioId: businessPortfolioId ?? null,
+    })
 
-  return redirectToChannels(request, result.ok ? 'meta_success' : 'meta_error')
+    if (!result.ok) {
+      console.warn('Meta embedded signup callback was not completed', {
+        reason: result.error ?? 'unknown',
+        hasPhoneNumberId: Boolean(phoneNumberId),
+        hasWabaId: Boolean(wabaId),
+        hasBusinessPortfolioId: Boolean(businessPortfolioId),
+      })
+    }
+    return redirectToChannels(request, result.ok ? 'meta_success' : 'meta_error')
+  } catch (error) {
+    console.error('Meta embedded signup callback failed unexpectedly', error)
+    return redirectToChannels(request, 'meta_error')
+  }
 }
