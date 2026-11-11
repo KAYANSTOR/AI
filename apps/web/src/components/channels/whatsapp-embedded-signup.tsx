@@ -128,6 +128,7 @@ export function WhatsAppEmbeddedSignupButton({
   const sessionRef = useRef<SessionPayload | null>(null)
   const codeRef = useRef<string | null>(null)
   const completionStartedRef = useRef(false)
+  const completionTimerRef = useRef<number | null>(null)
 
   const tryComplete = useCallback(async () => {
     const code = codeRef.current
@@ -138,6 +139,10 @@ export function WhatsAppEmbeddedSignupButton({
     if (!code || completionStartedRef.current) return
 
     completionStartedRef.current = true
+    if (completionTimerRef.current !== null) {
+      window.clearTimeout(completionTimerRef.current)
+      completionTimerRef.current = null
+    }
     setBusy(true)
     try {
       const result = await completeWhatsAppEmbeddedSignupAction({
@@ -156,6 +161,10 @@ export function WhatsAppEmbeddedSignupButton({
       onError?.('تعذّر إتمام الربط. حاول مرة أخرى.')
     } finally {
       setBusy(false)
+      if (completionTimerRef.current !== null) {
+        window.clearTimeout(completionTimerRef.current)
+        completionTimerRef.current = null
+      }
       completionStartedRef.current = false
       codeRef.current = null
       sessionRef.current = null
@@ -187,6 +196,10 @@ export function WhatsAppEmbeddedSignupButton({
         const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data
         if (data?.type !== 'WA_EMBEDDED_SIGNUP') return
         if (data.event === 'CANCEL' || data.event === 'ERROR') {
+          if (completionTimerRef.current !== null) {
+            window.clearTimeout(completionTimerRef.current)
+            completionTimerRef.current = null
+          }
           completionStartedRef.current = false
           codeRef.current = null
           sessionRef.current = null
@@ -203,7 +216,16 @@ export function WhatsAppEmbeddedSignupButton({
             waba_id: data.data.waba_id ? String(data.data.waba_id) : undefined,
             business_id: data.data.business_id ? String(data.data.business_id) : undefined,
           }
-          void tryComplete()
+          // Meta delivers the authorization code and signup session through two
+          // independent channels. Prefer the explicit phone/WABA IDs when they
+          // arrive; only use token-scope discovery as a bounded fallback.
+          if (codeRef.current) {
+            if (completionTimerRef.current !== null) {
+              window.clearTimeout(completionTimerRef.current)
+              completionTimerRef.current = null
+            }
+            void tryComplete()
+          }
         }
       } catch {
         // Ignore non-JSON messages from the iframe.
@@ -214,6 +236,10 @@ export function WhatsAppEmbeddedSignupButton({
     return () => {
       cancelled = true
       window.removeEventListener('message', onMessage)
+      if (completionTimerRef.current !== null) {
+        window.clearTimeout(completionTimerRef.current)
+        completionTimerRef.current = null
+      }
     }
   }, [appId, configId, onError, tryComplete])
 
@@ -231,13 +257,28 @@ export function WhatsAppEmbeddedSignupButton({
     codeRef.current = null
     sessionRef.current = null
     completionStartedRef.current = false
+    if (completionTimerRef.current !== null) {
+      window.clearTimeout(completionTimerRef.current)
+      completionTimerRef.current = null
+    }
 
     window.FB.login(
       (response) => {
         if (response.authResponse?.code) {
           codeRef.current = response.authResponse.code
-          void tryComplete()
+          if (sessionRef.current?.phone_number_id && sessionRef.current?.waba_id) {
+            void tryComplete()
+          } else {
+            completionTimerRef.current = window.setTimeout(() => {
+              completionTimerRef.current = null
+              void tryComplete()
+            }, 2000)
+          }
         } else {
+          if (completionTimerRef.current !== null) {
+            window.clearTimeout(completionTimerRef.current)
+            completionTimerRef.current = null
+          }
           setBusy(false)
           const message = response.status === 'not_authorized'
             ? 'لم تمنح Kayan AI الأذونات المطلوبة من Meta. أعد المحاولة ووافق على الصلاحيات.'
@@ -249,6 +290,7 @@ export function WhatsAppEmbeddedSignupButton({
       },
       {
         config_id: configId,
+        auth_type: 'rerequest',
         response_type: 'code',
         override_default_response_type: true,
         // Embedded Signup v4 reads products/permissions from config_id.
