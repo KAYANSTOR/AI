@@ -35,6 +35,14 @@ function requireEnv(name: string): string {
   return value
 }
 
+/** Keep Meta Graph requests bounded so mobile signup cannot hang indefinitely. */
+function fetchMeta(input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> {
+  return fetch(input, {
+    ...init,
+    signal: AbortSignal.timeout(15_000),
+  })
+}
+
 export type EmbeddedSignupSession = {
   code: string
   phoneNumberId?: string | null
@@ -64,7 +72,7 @@ async function exchangeCodeForBusinessToken(code: string): Promise<string> {
   url.searchParams.set('client_secret', appSecret)
   url.searchParams.set('code', code)
 
-  const response = await fetch(url.toString(), { method: 'GET' })
+  const response = await fetchMeta(url.toString(), { method: 'GET' })
   if (!response.ok) {
     const body = await response.text().catch(() => '')
     console.error('EmbeddedSignup: code exchange failed', response.status, body)
@@ -97,7 +105,7 @@ async function exchangeCodeForBusinessToken(code: string): Promise<string> {
 }
 
 async function subscribeAppToWaba(wabaId: string, businessToken: string): Promise<void> {
-  const response = await fetch(`${getMetaGraphBaseUrl()}/${encodeURIComponent(wabaId)}/subscribed_apps`, {
+  const response = await fetchMeta(`${getMetaGraphBaseUrl()}/${encodeURIComponent(wabaId)}/subscribed_apps`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${businessToken}` },
   })
@@ -117,7 +125,7 @@ async function fetchVerifiedPhoneNumber(
 ): Promise<string | null> {
   const url = new URL(`${getMetaGraphBaseUrl()}/${encodeURIComponent(phoneNumberId)}`)
   url.searchParams.set('fields', 'id,display_phone_number,verified_name')
-  const response = await fetch(url.toString(), {
+  const response = await fetchMeta(url.toString(), {
     headers: { Authorization: `Bearer ${businessToken}` },
   })
   const body = await response.json().catch(() => null) as {
@@ -143,7 +151,7 @@ async function verifyPhoneBelongsToWaba(
   const url = new URL(`${getMetaGraphBaseUrl()}/${encodeURIComponent(wabaId)}/phone_numbers`)
   url.searchParams.set('fields', 'id')
   url.searchParams.set('limit', '100')
-  const response = await fetch(url.toString(), {
+  const response = await fetchMeta(url.toString(), {
     headers: { Authorization: `Bearer ${businessToken}` },
   })
   const body = await response.json().catch(() => null) as {
@@ -175,7 +183,7 @@ async function resolveSignupResources(
   const appAccessToken = `${appId}|${appSecret}`
   const debugUrl = new URL(`${getMetaGraphBaseUrl()}/debug_token`)
   debugUrl.searchParams.set('input_token', businessToken)
-  const debugResponse = await fetch(debugUrl.toString(), {
+  const debugResponse = await fetchMeta(debugUrl.toString(), {
     headers: { Authorization: `Bearer ${appAccessToken}` },
     cache: 'no-store',
   })
@@ -210,7 +218,7 @@ async function resolveSignupResources(
       const businessUrl = new URL(`${getMetaGraphBaseUrl()}/${encodeURIComponent(session.businessPortfolioId)}/${edge}`)
       businessUrl.searchParams.set('fields', 'id')
       businessUrl.searchParams.set('limit', '100')
-      const businessResponse = await fetch(businessUrl.toString(), {
+      const businessResponse = await fetchMeta(businessUrl.toString(), {
         headers: { Authorization: `Bearer ${businessToken}` },
         cache: 'no-store',
       })
@@ -234,7 +242,7 @@ async function resolveSignupResources(
     const url = new URL(`${getMetaGraphBaseUrl()}/${encodeURIComponent(wabaId)}/phone_numbers`)
     url.searchParams.set('fields', 'id')
     url.searchParams.set('limit', '100')
-    const response = await fetch(url.toString(), {
+    const response = await fetchMeta(url.toString(), {
       headers: { Authorization: `Bearer ${businessToken}` },
       cache: 'no-store',
     })
