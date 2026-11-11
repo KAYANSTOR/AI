@@ -294,7 +294,7 @@ function ChannelDialog({
                   className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-border px-4 text-sm font-semibold text-text hover:bg-background disabled:opacity-50"
                 >
                   {busy ? <Loader2 size={17} className="animate-spin" /> : <RefreshCw size={17} />}
-                  فحص الربط
+                  إعادة فحص الاتصال
                 </button>
                 <button
                   type="button"

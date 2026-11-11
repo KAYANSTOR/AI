@@ -30,9 +30,15 @@ type ChannelViewData = {
   isActive: boolean
 }
 
-export default async function ChannelsPage() {
+export default async function ChannelsPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ status?: string }>
+}) {
   const context = await getDashboardContext()
   if (!context) redirect('/login')
+
+  const status = (await searchParams)?.status
 
   const db = await createClient()
   const canManage = context.role === 'owner' || context.role === 'admin'
@@ -173,6 +179,12 @@ export default async function ChannelsPage() {
       )}
 
       {channelsError && <Notice tone="error" message={channelsError} />}
+      {status === 'meta_success' && (
+        <Notice tone="success" message="تمت إعادة الفحص وحفظ ربط WhatsApp بنجاح. القناة الآن متصلة ونشطة." />
+      )}
+      {status === 'meta_error' && (
+        <Notice tone="error" message="تعذّر إكمال ربط Meta. أعد المحاولة من بطاقة WhatsApp ثم استخدم إعادة فحص الاتصال." />
+      )}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <SummaryTile label="جاهزة" value={formatNumber(verifiedCount)} />
@@ -220,11 +232,13 @@ export default async function ChannelsPage() {
   )
 }
 
-function Notice({ tone, message }: { tone: 'error' | 'warning'; message: string }) {
+function Notice({ tone, message }: { tone: 'error' | 'warning' | 'success'; message: string }) {
   const className =
     tone === 'error'
       ? 'border-error/40 bg-error/10'
-      : 'border-warning/40 bg-warning/10'
+      : tone === 'success'
+        ? 'border-success/40 bg-success/10'
+        : 'border-warning/40 bg-warning/10'
   return (
     <p role="status" className={`rounded-xl border px-4 py-3 text-sm text-text ${className}`}>
       {message}

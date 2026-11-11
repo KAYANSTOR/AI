@@ -46,8 +46,8 @@ async function auditSetup(
  */
 export async function completeWhatsAppEmbeddedSignupAction(input: {
   code: string
-  phoneNumberId: string
-  wabaId: string
+  phoneNumberId?: string | null
+  wabaId?: string | null
   businessPortfolioId?: string | null
 }): Promise<OnboardingResult> {
   try {
@@ -66,8 +66,8 @@ export async function completeWhatsAppEmbeddedSignupAction(input: {
       organizationName: org.organizationName,
       session: {
         code: input.code,
-        phoneNumberId: input.phoneNumberId,
-        wabaId: input.wabaId,
+        phoneNumberId: input.phoneNumberId ?? null,
+        wabaId: input.wabaId ?? null,
         businessPortfolioId: input.businessPortfolioId ?? null,
       },
     })

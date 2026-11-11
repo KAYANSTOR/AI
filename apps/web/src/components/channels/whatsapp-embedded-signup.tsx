@@ -31,6 +31,8 @@ type SessionPayload = {
   business_id?: string
 }
 
+const EMBEDDED_SIGNUP_CALLBACK = '/api/whatsapp/embedded-signup-callback'
+
 type Props = {
   disabled?: boolean
   onSuccess?: (message: string) => void
@@ -139,7 +141,7 @@ export function WhatsAppEmbeddedSignupButton({
       })
 
     function onMessage(event: MessageEvent) {
-      if (typeof event.origin !== 'string' || !event.origin.endsWith('facebook.com')) return
+      if (event.origin !== 'https://www.facebook.com' && event.origin !== 'https://connect.facebook.net') return
       try {
         const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data
         if (data?.type !== 'WA_EMBEDDED_SIGNUP') return
@@ -151,7 +153,7 @@ export function WhatsAppEmbeddedSignupButton({
           onError?.(data.event === 'CANCEL' ? 'ألغيت عملية الربط من Meta.' : 'أبلغت Meta عن خطأ أثناء إعداد واتساب. أعد المحاولة.')
           return
         }
-        if (data.data?.phone_number_id && data.data?.waba_id) {
+        if (data.event === 'FINISH' && data.data?.phone_number_id && data.data?.waba_id) {
           sessionRef.current = {
             phone_number_id: String(data.data.phone_number_id),
             waba_id: String(data.data.waba_id),
@@ -200,8 +202,10 @@ export function WhatsAppEmbeddedSignupButton({
         config_id: configId,
         response_type: 'code',
         override_default_response_type: true,
+        redirect_uri: `${window.location.origin}${EMBEDDED_SIGNUP_CALLBACK}`,
         extras: {
           setup: {},
+          session_info_version: '3',
         },
       }
     )

@@ -37,8 +37,8 @@ function requireEnv(name: string): string {
 
 export type EmbeddedSignupSession = {
   code: string
-  phoneNumberId: string
-  wabaId: string
+  phoneNumberId?: string | null
+  wabaId?: string | null
   businessPortfolioId?: string | null
   /** Optional display number if the client already knows it. */
   displayPhoneNumber?: string | null
@@ -159,6 +159,51 @@ async function verifyPhoneBelongsToWaba(
   }
 }
 
+type GraphListResponse<T> = { data?: T[]; error?: { message?: string } }
+
+/** Resolve resources when mobile redirect flow cannot deliver postMessage session info. */
+async function resolveSignupResources(
+  session: EmbeddedSignupSession,
+  businessToken: string
+): Promise<{ phoneNumberId: string; wabaId: string }> {
+  if (session.phoneNumberId && session.wabaId) {
+    return { phoneNumberId: session.phoneNumberId, wabaId: session.wabaId }
+  }
+
+  const businessIds = session.businessPortfolioId ? [session.businessPortfolioId] : []
+  if (businessIds.length === 0) {
+    const response = await fetch(`${getMetaGraphBaseUrl()}/me?fields=id`, {
+      headers: { Authorization: `Bearer ${businessToken}` },
+    })
+    const body = await response.json().catch(() => null) as { id?: string } | null
+    if (response.ok && body?.id) businessIds.push(body.id)
+  }
+
+  const wabaIds = session.wabaId ? [session.wabaId] : []
+  for (const businessId of businessIds) {
+    const response = await fetch(
+      `${getMetaGraphBaseUrl()}/${encodeURIComponent(businessId)}/owned_whatsapp_business_accounts?fields=id&limit=100`,
+      { headers: { Authorization: `Bearer ${businessToken}` } }
+    )
+    const body = await response.json().catch(() => null) as GraphListResponse<{ id?: string }> | null
+    for (const account of body?.data ?? []) {
+      if (account.id && !wabaIds.includes(account.id)) wabaIds.push(account.id)
+    }
+  }
+
+  for (const wabaId of wabaIds) {
+    const response = await fetch(
+      `${getMetaGraphBaseUrl()}/${encodeURIComponent(wabaId)}/phone_numbers?fields=id&limit=100`,
+      { headers: { Authorization: `Bearer ${businessToken}` } }
+    )
+    const body = await response.json().catch(() => null) as GraphListResponse<{ id?: string }> | null
+    const phoneNumberId = session.phoneNumberId ?? body?.data?.find((phone) => phone.id)?.id
+    if (phoneNumberId) return { phoneNumberId, wabaId }
+  }
+
+  throw new Error('لم تُرجع Meta معرّف حساب WhatsApp أو رقم الهاتف. أعد الربط من Meta.')
+}
+
 async function ensureBusinessId(
   admin: ReturnType<typeof createAdminClient>,
   organizationId: string,
@@ -245,13 +290,14 @@ export async function completeEmbeddedSignup(input: {
   organizationName?: string | null
   session: EmbeddedSignupSession
 }): Promise<EmbeddedSignupResult> {
-  const { code, phoneNumberId, wabaId } = input.session
-  if (!code || !phoneNumberId || !wabaId) {
+  const { code } = input.session
+  if (!code) {
     return { ok: false, error: 'بيانات الربط من Meta غير مكتملة. حاول مرة أخرى.' }
   }
 
   try {
     const businessToken = await exchangeCodeForBusinessToken(code)
+    const { phoneNumberId, wabaId } = await resolveSignupResources(input.session, businessToken)
     const admin = createAdminClient()
     const businessId = await ensureBusinessId(admin, input.organizationId, input.businessId, input.organizationName)
 
