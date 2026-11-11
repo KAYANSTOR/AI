@@ -60,14 +60,18 @@ export function ChannelsConsole({
               key={card.type}
               type="button"
               onClick={() => setOpenType(card.type)}
-              className="rounded-2xl border border-border bg-surface p-4 text-start transition-colors hover:border-secondary"
+              className={`rounded-2xl border bg-surface p-4 text-start transition-colors hover:border-secondary ${
+                state === 'verified' ? 'border-success/40' : state === 'error' ? 'border-error/40' : 'border-border'
+              }`}
             >
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="text-base font-bold text-text">{card.label}</p>
                   <p className="mt-1 text-xs text-text-muted">{card.provider}</p>
                 </div>
-                <span className="rounded-full bg-background px-3 py-1 text-xs font-semibold text-text">
+                <span className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                  state === 'verified' ? 'bg-success/10 text-success' : state === 'error' ? 'bg-error/10 text-error' : 'bg-background text-text'
+                }`}>
                   {stateCopy[state].title}
                 </span>
               </div>

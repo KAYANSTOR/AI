@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { Calendar, MessageSquare, Phone, Globe, ArrowLeft, User } from 'lucide-react'
 import { createClient } from '@/lib/db/server'
 import { formatDateTime } from '@/lib/i18n/format'
+import { StateBadge } from '@/components/dashboard/ui/primitives'
 
 export async function DashboardActivitySection({
   organizationId,
@@ -42,7 +43,7 @@ export async function DashboardActivitySection({
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
       {/* Recent Live Conversations */}
-      <section className="rounded-2xl border border-border bg-surface p-5 shadow-2xs lg:col-span-2 flex flex-col justify-between">
+      <section className="rounded-2xl border border-border bg-surface p-5 lg:col-span-2 flex flex-col justify-between">
         <div>
           <div className="flex items-center justify-between border-b border-border/70 pb-4">
             <div>
@@ -142,7 +143,7 @@ export async function DashboardActivitySection({
       </section>
 
       {/* Upcoming Appointments Schedule */}
-      <section className="rounded-2xl border border-border bg-surface p-5 shadow-2xs flex flex-col justify-between">
+      <section className="rounded-2xl border border-border bg-surface p-5 flex flex-col justify-between">
         <div>
           <div className="flex items-center justify-between border-b border-border/70 pb-4">
             <div>
@@ -177,6 +178,15 @@ export async function DashboardActivitySection({
                 const contact = apt.contacts as unknown as { full_name: string | null } | null
                 const service = apt.services as unknown as { name: string } | null
 
+                const appointmentState: 'success' | 'warning' | 'error' | 'info' =
+                  apt.status === 'confirmed' ? 'success' :
+                    apt.status === 'cancelled' ? 'error' :
+                      apt.status === 'completed' ? 'info' : 'warning'
+                const appointmentLabel =
+                  apt.status === 'confirmed' ? 'مؤكد' :
+                    apt.status === 'cancelled' ? 'ملغي' :
+                      apt.status === 'completed' ? 'مكتمل' : 'بانتظار التأكيد'
+
                 return (
                   <div
                     key={apt.id}
@@ -195,9 +205,7 @@ export async function DashboardActivitySection({
                       <span className="block text-xs font-semibold text-secondary">
                         {formatDateTime(apt.starts_at, timezone)}
                       </span>
-                      <span className="mt-0.5 inline-block text-[10px] text-success font-medium">
-                        مؤكد
-                      </span>
+                      <span className="mt-1 inline-flex"><StateBadge state={appointmentState} label={appointmentLabel} /></span>
                     </div>
                   </div>
                 )

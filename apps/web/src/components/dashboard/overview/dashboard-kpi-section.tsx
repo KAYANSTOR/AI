@@ -90,13 +90,13 @@ export async function DashboardKpiSection({ organizationId }: { organizationId: 
   ]
 
   return (
-    <div className="grid grid-cols-1 gap-px overflow-hidden rounded-[var(--radius-card)] border border-border bg-border shadow-[var(--shadow-card)] sm:grid-cols-2 lg:grid-cols-4">
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
       {kpis.map((kpi, idx) => {
         const Icon = kpi.icon
         return (
           <div
             key={idx}
-            className="bg-surface p-5"
+            className="rounded-[var(--radius-card)] border border-border bg-surface p-5 transition-colors hover:border-border-strong"
           >
             <div className="flex items-center gap-2 text-text-muted">
               <Icon size={15} aria-hidden="true" className="shrink-0" />
@@ -130,9 +130,9 @@ export async function DashboardKpiSection({ organizationId }: { organizationId: 
 
 export function DashboardKpiSkeleton() {
   return (
-    <div className="grid grid-cols-1 gap-px overflow-hidden rounded-[var(--radius-card)] border border-border bg-border sm:grid-cols-2 lg:grid-cols-4 animate-pulse">
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 animate-pulse">
       {Array.from({ length: 8 }).map((_, i) => (
-        <div key={i} className="bg-surface p-5 space-y-3">
+        <div key={i} className="rounded-[var(--radius-card)] border border-border bg-surface p-5 space-y-3">
           <div className="flex items-center justify-between">
             <div className="h-4 w-28 rounded bg-border/60" />
             <div className="h-9 w-9 rounded-xl bg-border/40" />

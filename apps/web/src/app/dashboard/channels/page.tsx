@@ -148,7 +148,7 @@ export default async function ChannelsPage({
 
   return (
     <div className="space-y-6">
-      <header className="space-y-3">
+      <header className="space-y-4 rounded-[1.15rem] border border-border bg-background/55 p-5 sm:p-6">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-secondary">Kayan Connect</p>
           <h1 className="mt-1 text-2xl font-bold tracking-tight text-text">{ar.channels.title}</h1>
@@ -248,7 +248,7 @@ function Notice({ tone, message }: { tone: 'error' | 'warning' | 'success'; mess
 
 function SummaryTile({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-border bg-surface p-5 shadow-sm">
+    <div className="rounded-xl border border-border bg-surface p-5">
       <p className="text-xs font-medium text-text-muted">{label}</p>
       <p className="mt-1 truncate text-xl font-bold tracking-tight text-text">{value}</p>
     </div>

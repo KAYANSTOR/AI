@@ -30,7 +30,7 @@ export async function DashboardAgentHealthSection({
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
       {/* Agent Status & Brain */}
-      <section className="rounded-2xl border border-border bg-surface p-5 shadow-[var(--shadow-card)]">
+      <section className="rounded-2xl border border-border bg-surface p-5">
         <div className="flex items-center justify-between border-b border-border/70 pb-4">
           <div className="flex items-center gap-2.5">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary-light/40 text-secondary">
@@ -90,7 +90,7 @@ export async function DashboardAgentHealthSection({
       </section>
 
       {/* Connected Communication Channels */}
-      <section className="rounded-2xl border border-border bg-surface p-5 shadow-[var(--shadow-card)]">
+      <section className="rounded-2xl border border-border bg-surface p-5">
         <div className="flex items-center justify-between border-b border-border/70 pb-4">
           <div className="flex items-center gap-2.5">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary-light/40 text-secondary">

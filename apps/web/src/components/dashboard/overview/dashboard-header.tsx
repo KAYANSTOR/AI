@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { Bot, CalendarPlus, RadioTower } from 'lucide-react'
+import { StateBadge } from '@/components/dashboard/ui/primitives'
 
 export function DashboardHeader({
   organizationName,
@@ -20,22 +21,19 @@ export function DashboardHeader({
   }).format(new Date())
 
   return (
-    <div className="space-y-4">
+    <div className="rounded-[1.15rem] border border-border bg-background/55 p-5 sm:p-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <div className="flex items-center gap-2 text-xs font-semibold text-text-muted">
+          <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-text-muted">
             <span>{today}</span>
-            <span>·</span>
-            <span className={`flex items-center gap-1.5 font-medium ${setupComplete ? 'text-success' : 'text-warning'}`}>
-              <span className={`inline-flex h-2 w-2 rounded-full ${setupComplete ? 'bg-success' : 'bg-warning'}`} />
-              {setupComplete ? 'الوكيل يعمل' : 'الوكيل بانتظار إكمال الإعداد'}
-            </span>
+            <span className="text-border-strong">·</span>
+            <StateBadge state={setupComplete ? 'success' : 'warning'} label={setupComplete ? 'الوكيل يعمل' : 'يحتاج إكمال الإعداد'} />
           </div>
           <h1 className="mt-1 text-2xl font-bold tracking-tight text-text sm:text-3xl">
             مرحبًا، {organizationName}
           </h1>
           <p className="mt-1 text-sm text-text-muted">
-            ملخص نشاط شركتك اليوم: المحادثات، العملاء، والمواعيد.
+            ما الذي ينتظر ردّك اليوم؟ راقب المحادثات، المواعيد، والمهام التي تحتاج قرارًا.
           </p>
         </div>
 

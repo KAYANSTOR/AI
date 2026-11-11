@@ -61,8 +61,8 @@ export function DashboardShell({
         {sidebar}
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
           <Header userEmail={userEmail} />
-          <main className="min-w-0 flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
-            <div className="mx-auto max-w-6xl space-y-5 animate-page-enter">
+          <main className="min-w-0 flex-1 overflow-y-auto p-3 sm:p-5 lg:p-6">
+            <div className="mx-auto min-h-full max-w-[1380px] rounded-[1.35rem] border border-border/80 bg-surface p-4 sm:p-6 lg:p-8 animate-page-enter">
               {setupBanner}
               {children}
             </div>

@@ -484,11 +484,11 @@ export function AgentTrainer({
 
       {/* Main Navigation Tabs & Action Button */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-        <div className="flex flex-1 border-b border-border bg-surface rounded-2xl p-1.5 shadow-xs">
+        <div className="flex flex-1 overflow-x-auto border border-border bg-surface rounded-2xl p-1.5">
           <button
             type="button"
             onClick={() => setActiveTab('train')}
-            className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-sm font-bold transition-all ${
+            className={`min-w-[13rem] flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-sm font-bold transition-all ${
               activeTab === 'train'
                 ? 'bg-primary text-primary-foreground shadow-sm'
                 : 'text-text-muted hover:text-text hover:bg-background/60'
@@ -504,7 +504,7 @@ export function AgentTrainer({
           <button
             type="button"
             onClick={() => setActiveTab('test')}
-            className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-sm font-bold transition-all ${
+            className={`min-w-[13rem] flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-sm font-bold transition-all ${
               activeTab === 'test'
                 ? 'bg-primary text-primary-foreground shadow-sm'
                 : 'text-text-muted hover:text-text hover:bg-background/60'
@@ -517,7 +517,7 @@ export function AgentTrainer({
           <button
             type="button"
             onClick={() => setActiveTab('settings')}
-            className={`flex items-center justify-center gap-2 py-3 px-5 rounded-xl text-sm font-bold transition-all ${
+            className={`min-w-[11rem] flex items-center justify-center gap-2 py-3 px-5 rounded-xl text-sm font-bold transition-all ${
               activeTab === 'settings'
                 ? 'bg-primary text-primary-foreground shadow-sm'
                 : 'text-text-muted hover:text-text hover:bg-background/60'
@@ -532,7 +532,7 @@ export function AgentTrainer({
         <button
           type="button"
           onClick={() => setIsProfileModalOpen(true)}
-          className="flex items-center justify-center gap-2 py-3 px-5 rounded-2xl text-sm font-bold bg-primary text-primary-foreground hover:bg-primary-dark transition-all shadow-sm shrink-0"
+          className="flex items-center justify-center gap-2 py-3 px-5 rounded-2xl text-sm font-bold bg-primary text-primary-foreground hover:bg-primary-dark transition-all shrink-0"
         >
           <Building2 size={18} />
           <span>تحديث نوع النشاط والبيانات</span>
@@ -545,7 +545,7 @@ export function AgentTrainer({
       {activeTab === 'train' && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
           {/* Main Chat Interface (7 cols) */}
-          <div className="lg:col-span-7 flex flex-col h-[740px] rounded-2xl border border-border bg-surface shadow-sm overflow-hidden">
+          <div className="lg:col-span-7 flex flex-col h-[740px] rounded-2xl border border-border bg-surface overflow-hidden">
             {/* Chat Header */}
             <div className="border-b border-border bg-background/50 px-5 py-4 flex items-center justify-between">
               <div className="flex items-center gap-3">

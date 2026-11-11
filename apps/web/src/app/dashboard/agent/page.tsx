@@ -77,15 +77,21 @@ export default async function AgentPage() {
   return (
     <div className="space-y-6">
       {/* 0ms Instant Header */}
-      <header className="flex items-start gap-3">
-        <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary-light/40">
-          <Bot size={22} className="text-secondary" aria-hidden="true" />
-        </span>
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-text">وكيل الذكاء الاصطناعي</h1>
-          <p className="mt-0.5 text-sm text-text-muted">
-            مركز تدريب وتجهيز واختبار الوكيل الذكي لنشاط «{business.name}».
-          </p>
+      <header className="flex flex-col gap-4 rounded-[1.15rem] border border-border bg-background/55 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+        <div className="flex items-start gap-3">
+          <span className="flex h-11 w-11 items-center justify-center rounded-xl border border-border bg-surface">
+            <Bot size={22} className="text-secondary" aria-hidden="true" />
+          </span>
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight text-text">وكيل الذكاء الاصطناعي</h1>
+            <p className="mt-0.5 text-sm text-text-muted">
+              مركز تدريب وتجهيز واختبار الوكيل الذكي لنشاط «{business.name}».
+            </p>
+          </div>
+        </div>
+        <div className="text-xs text-text-muted sm:text-end">
+          <span className="font-semibold text-secondary">ثلاثة مسارات واضحة</span>
+          <p className="mt-1">درّب · اختبر · اضبط</p>
         </div>
       </header>
 
