@@ -131,12 +131,21 @@ function ChannelDialog({
   function test() {
     startTransition(async () => {
       setNotice(null)
-      const result = await testChannelAction({ channelType: card.type })
-      setNotice({
-        ok: result.ok,
-        text: result.ok ? 'تم اجتياز فحص الربط.' : result.error ?? 'فشل الفحص.',
-      })
-      setTestResult(result.result ?? null)
+      setTestResult(null)
+      try {
+        const result = await testChannelAction({ channelType: card.type })
+        setNotice({
+          ok: result.ok,
+          text: result.ok ? 'تم اجتياز فحص الربط.' : result.error ?? 'فشل الفحص.',
+        })
+        setTestResult(result.result ?? null)
+      } catch (error) {
+        console.error('Channel connection test request failed', error)
+        setNotice({
+          ok: false,
+          text: 'تعذّر إكمال طلب الفحص. بقيت صفحة القنوات مفتوحة؛ تحقق من الاتصال ثم أعد المحاولة.',
+        })
+      }
     })
   }
 
