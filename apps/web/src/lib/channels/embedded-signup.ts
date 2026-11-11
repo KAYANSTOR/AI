@@ -10,7 +10,7 @@
  * All Graph calls are server-to-server. Nothing secret reaches the browser.
  */
 import { createAdminClient } from '@/lib/db/admin'
-import { loadChannelCredentials, saveChannelCredential } from '@/lib/credentials/service'
+import { deleteChannelCredential, loadChannelCredentials, saveChannelCredential } from '@/lib/credentials/service'
 import { normalizeChannelNumber } from '@/lib/channels/management'
 
 const GRAPH_VERSION = 'v26.0'
@@ -389,20 +389,30 @@ export async function completeEmbeddedSignup(input: {
     }
 
     const channelId = written.data.id as string
-    await Promise.all([
-      saveChannelCredential(admin, {
+    // Persist each encrypted field before activation. If any write fails,
+    // remove the partial set and leave the channel pending/inactive.
+    try {
+      await saveChannelCredential(admin, {
         organizationId: input.organizationId, channelId, provider: 'meta',
         credentialType: 'access_token', value: businessToken,
-      }),
-      saveChannelCredential(admin, {
+      })
+      await saveChannelCredential(admin, {
         organizationId: input.organizationId, channelId, provider: 'meta',
         credentialType: 'business_account_id', value: wabaId,
-      }),
-      saveChannelCredential(admin, {
+      })
+      await saveChannelCredential(admin, {
         organizationId: input.organizationId, channelId, provider: 'meta',
         credentialType: 'phone_number_id', value: phoneNumberId,
-      }),
-    ])
+      })
+    } catch (credentialWriteError) {
+      const cleanup = await deleteChannelCredential(admin, {
+        organizationId: input.organizationId, channelId, provider: 'meta',
+      }).catch((cleanupError) => {
+        console.error('EmbeddedSignup: partial credential cleanup failed', cleanupError)
+      })
+      void cleanup
+      throw credentialWriteError
+    }
 
     const persistedCredentials = await loadChannelCredentials(admin, channelId, 'meta')
     if (
