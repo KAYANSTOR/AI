@@ -54,20 +54,47 @@ function loadFacebookSdk(appId: string): Promise<void> {
       return
     }
 
+    let settled = false
+    const finish = (error?: Error) => {
+      if (settled) return
+      settled = true
+      window.clearTimeout(timeout)
+      if (error) reject(error)
+      else if (window.FB) resolve()
+      else reject(new Error('Facebook SDK did not initialize'))
+    }
+    const timeout = window.setTimeout(
+      () => finish(new Error('انتهت مهلة تحميل Facebook SDK')),
+      12_000
+    )
+
     window.fbAsyncInit = () => {
-      window.FB?.init({
-        appId,
-        autoLogAppEvents: true,
-        xfbml: false,
-        version: GRAPH_SDK_VERSION,
-      })
-      resolve()
+      try {
+        window.FB?.init({
+          appId,
+          autoLogAppEvents: true,
+          xfbml: false,
+          version: GRAPH_SDK_VERSION,
+        })
+        finish()
+      } catch {
+        finish(new Error('تعذّر تهيئة Facebook SDK'))
+      }
     }
 
-    const existing = document.getElementById('facebook-jssdk')
+    const existing = document.getElementById('facebook-jssdk') as HTMLScriptElement | null
     if (existing) {
-      existing.addEventListener('error', () => reject(new Error('فشل تحميل Facebook SDK')), { once: true })
-      return
+      existing.addEventListener('load', () => {
+        if (window.FB) finish()
+      }, { once: true })
+      existing.addEventListener('error', () => finish(new Error('فشل تحميل Facebook SDK')), { once: true })
+      // A previous page/component may have inserted the script before fbAsyncInit
+      // was registered. Reinsert it so the SDK invokes the current initializer.
+      if (!window.FB && existing.dataset.initialized !== 'true') {
+        existing.remove()
+      } else {
+        return
+      }
     }
 
     const script = document.createElement('script')
@@ -76,7 +103,10 @@ function loadFacebookSdk(appId: string): Promise<void> {
     script.defer = true
     script.crossOrigin = 'anonymous'
     script.src = 'https://connect.facebook.net/en_US/sdk.js'
-    script.onerror = () => reject(new Error('فشل تحميل Facebook SDK'))
+    script.onload = () => {
+      if (window.FB) finish()
+    }
+    script.onerror = () => finish(new Error('فشل تحميل Facebook SDK'))
     document.body.appendChild(script)
   })
 }
