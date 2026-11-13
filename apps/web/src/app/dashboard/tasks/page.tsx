@@ -129,7 +129,7 @@ export default async function TasksPage({
         <MobileEmptyState
           title="لا توجد مهام حالياً"
           description="ستظهر هنا المحادثات التي تحتاج تدخلاً والمواعيد التي تتطلب تأكيداً."
-          icon={ListTodo}
+          icon={<ListTodo className="h-8 w-8" aria-hidden="true" />}
           action={
             <Link
               href="/dashboard/conversations"

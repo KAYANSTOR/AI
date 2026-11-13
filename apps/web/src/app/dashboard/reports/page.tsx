@@ -66,7 +66,7 @@ export default async function ReportsPage() {
 
       {!reports.length ? (
         <MobileEmptyState
-          icon={FileSpreadsheet}
+          icon={<FileSpreadsheet className="h-8 w-8" aria-hidden="true" />}
           title="لا توجد تقارير محفوظة"
           description={
             canManage

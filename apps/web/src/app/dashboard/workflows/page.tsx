@@ -37,7 +37,7 @@ export default async function WorkflowsPage() {
 
         {rows.length === 0 ? (
           <MobileEmptyState
-            icon={GitBranch}
+            icon={<GitBranch className="h-8 w-8" aria-hidden="true" />}
             title="لا توجد مسارات أتمتة"
             description="أنشئ مسارات متابعة وتذكير بعد تفعيل الوحدات المناسبة وربط القنوات."
             action={

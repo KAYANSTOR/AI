@@ -55,7 +55,7 @@ export default async function NotificationsPage() {
 
       {items.length === 0 ? (
         <MobileEmptyState
-          icon={Bell}
+          icon={<Bell className="h-8 w-8" aria-hidden="true" />}
           title="لا توجد إشعارات"
           description="ستصلك هنا تنبيهات المحادثات الجديدة والتصعيد وربط القنوات بعد بدء الاستخدام."
           action={

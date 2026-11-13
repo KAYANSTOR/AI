@@ -49,7 +49,7 @@ export default async function CampaignsPage() {
 
       {!rows.length ? (
         <MobileEmptyState
-          icon={Megaphone}
+          icon={<Megaphone className="h-8 w-8" aria-hidden="true" />}
           title="لا توجد حملات"
           description={
             canManage

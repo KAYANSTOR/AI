@@ -8,7 +8,7 @@ export default function DashboardNotFound() {
       <MobileEmptyState
         title="الصفحة غير موجودة"
         description="الصفحة التي تبحث عنها قد تكون نُقلت أو حُذفت أو غير متوفرة حالياً."
-        icon={FileQuestion}
+        icon={<FileQuestion className="h-8 w-8" aria-hidden="true" />}
         action={
           <Link
             href="/dashboard"

@@ -136,7 +136,7 @@ export default async function AgentHubPage() {
         </div>
         {conversationCount === 0 ? (
           <MobileEmptyState
-            icon={Bot}
+            icon={<Bot className="h-8 w-8" aria-hidden="true" />}
             title="لا نشاط للوكيل بعد"
             description="اربط قناة وابدأ محادثات العملاء، أو درّب الوكيل أولاً."
             action={

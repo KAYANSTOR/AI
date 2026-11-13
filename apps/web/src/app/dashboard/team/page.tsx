@@ -99,7 +99,7 @@ export default async function TeamPage() {
           <MobileEmptyState
             title="لا يوجد أعضاء بعد"
             description="سيظهر هنا أعضاء المؤسسة بعد دعوتهم أو تسجيل الدخول لأول مرة."
-            icon={UserPlus}
+            icon={<UserPlus className="h-8 w-8" aria-hidden="true" />}
           />
         ) : (
           (members ?? []).map((member) => {

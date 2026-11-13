@@ -102,7 +102,7 @@ async function AppointmentListSection({
         <MobileEmptyState
           title={ar.appointments.empty}
           description="لم يتم تسجيل أي مواعيد حتى الآن. يمكنك إضافة موعد جديد أو انتظار حجز المواعيد عبر المحادثات."
-          icon={Calendar}
+          icon={<Calendar className="h-8 w-8" aria-hidden="true" />}
         />
       </div>
     )
