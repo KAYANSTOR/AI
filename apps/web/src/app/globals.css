@@ -165,6 +165,14 @@
   html {
     scroll-behavior: auto;
   }
+
+  .animate-fade-in,
+  .animate-scale-in,
+  .animate-page-enter,
+  .animate-progress-indeterminate {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
 }
 
 @keyframes pageFadeIn {
@@ -210,4 +218,54 @@
 .bg-grid-light {
   background-image: radial-gradient(rgb(62 90 63 / 0.07) 1px, transparent 1px);
   background-size: 24px 24px;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Shared motion & helper utilities.
+   شاشات المودال والتوست والقوائم الأفقية تستعمل نفس الحركة القصيرة
+   حتى تبقى الواجهة موحّدة. تحترم prefers-reduced-motion أعلاه.
+   ───────────────────────────────────────────────────────────── */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.18s ease-out both;
+  will-change: opacity;
+}
+
+.animate-scale-in {
+  animation: scaleIn 0.18s cubic-bezier(0.16, 1, 0.3, 1) both;
+  will-change: opacity, transform;
+}
+
+/* شريط تمرير مخفي للقوائم الأفقية (التبويبات، الاقتراحات السريعة…) */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* شريط تمرير رقيق موحّد لمحتوى اللوحات */
+.scrollbar-thin {
+  scrollbar-width: thin;
 }

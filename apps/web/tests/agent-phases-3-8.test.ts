@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import type { DbClient } from '@/lib/db/client'
 import type { FakeDb } from './support/fake-db'
 import { createFakeDb } from './support/fake-db'
-import { createNotification, listNotifications, markNotificationRead } from '@/lib/notifications'
+import { createNotification, listNotifications, markNotificationRead, notificationMemberFilter } from '@/lib/notifications'
 import { getCustomerSummary, getCustomerTimeline } from '@/lib/customer360'
 import { getNextFollowUpStep, markFollowUpAsSent } from '@/lib/followup'
 import { evaluateSegment } from '@/lib/segments'
@@ -19,6 +19,11 @@ function setup(tables: FakeDb) {
 }
 
 describe('agent phase 3-8', () => {
+  test('notification queries include shared and current-member rows only', () => {
+    expect(notificationMemberFilter(MEMBER)).toBe(`member_id.is.null,member_id.eq.${MEMBER}`)
+    expect(notificationMemberFilter(null)).toBe('member_id.is.null')
+  })
+
   test('notifications are created, listed, and marked read by org/member scope', async () => {
     const { db } = setup({
       notifications: {

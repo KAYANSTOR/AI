@@ -21,6 +21,10 @@ export type NotificationRow = {
   created_at: string
 }
 
+export function notificationMemberFilter(memberId: string | null) {
+  return memberId ? `member_id.is.null,member_id.eq.${memberId}` : 'member_id.is.null'
+}
+
 export async function createNotification(
   db: DbClient | Awaited<ReturnType<typeof createClient>>,
   args: {

@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+exec npm run dev:prod --workspace=apps/web -- --port "$PORT" --hostname 0.0.0.0
