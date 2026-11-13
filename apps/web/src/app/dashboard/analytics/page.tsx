@@ -107,7 +107,7 @@ export default async function AnalyticsPage() {
         />
         {!hasActivity ? (
           <MobileEmptyState
-            icon={BarChart3}
+            icon={<BarChart3 className="h-8 w-8" aria-hidden="true" />}
             title="لا توجد بيانات كافية بعد"
             description="ستظهر المؤشرات والمخططات هنا بعد ربط واتساب أو القنوات وبدء استقبال المحادثات."
             action={

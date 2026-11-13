@@ -1,29 +1,22 @@
-import type { ReactNode, ComponentType } from 'react'
+import type { ReactNode } from 'react'
 import { MessageSquare } from 'lucide-react'
 import { cx } from './cx'
 
 export type MobileEmptyStateProps = {
   title: string
   description?: string
-  icon?: ComponentType<{ className?: string }> | ReactNode
+  /** Pass a rendered element, not a component reference, across server/client boundaries. */
+  icon?: ReactNode
   action?: ReactNode
   actionLabel?: string
   onAction?: () => void
   className?: string
 }
 
-function renderEmptyStateIcon(Icon: ComponentType<{ className?: string }> | ReactNode) {
-  if (typeof Icon === 'function') {
-    const IconComp = Icon
-    return <IconComp className="h-8 w-8" aria-hidden="true" />
-  }
-  return Icon as ReactNode
-}
-
 export function MobileEmptyState({
   title,
   description,
-  icon = MessageSquare,
+  icon = <MessageSquare className="h-8 w-8" aria-hidden="true" />,
   action,
   actionLabel,
   onAction,
@@ -37,7 +30,7 @@ export function MobileEmptyState({
       )}
     >
       <div className="flex h-[72px] w-[72px] items-center justify-center rounded-full bg-primary-light text-primary shadow-sm">
-        {renderEmptyStateIcon(icon)}
+        {icon}
       </div>
 
       <h3 className="text-[17px] font-semibold text-text">{title}</h3>

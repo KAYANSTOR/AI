@@ -69,7 +69,7 @@ export async function DashboardActivitySection({
         <div className="space-y-2.5">
           {conversations.length === 0 ? (
             <MobileEmptyState
-              icon={MessageSquare}
+              icon={<MessageSquare className="h-8 w-8" aria-hidden="true" />}
               title="لا توجد محادثات بعد"
               description="ستظهر هنا آخر محادثات العملاء بعد ربط قناة وبدء التواصل."
               action={
@@ -119,7 +119,7 @@ export async function DashboardActivitySection({
         <div className="space-y-2.5">
           {appointments.length === 0 ? (
             <MobileEmptyState
-              icon={Calendar}
+              icon={<Calendar className="h-8 w-8" aria-hidden="true" />}
               title="لا مواعيد قادمة"
               description="المواعيد المؤكدة والمجدولة ستظهر هنا تلقائياً."
               action={
