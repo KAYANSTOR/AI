@@ -1,120 +1,134 @@
-'use client'
+import { redirect } from 'next/navigation'
+import { FileSpreadsheet } from 'lucide-react'
+import { getDashboardContext } from '@/lib/dashboard/context'
+import { createClient } from '@/lib/db/server'
+import { formatDateTime } from '@/lib/i18n/format'
+import { MobileEmptyState } from '@/components/ui/empty-state'
+import { CreateReportForm } from './create-report-form'
+import { ReportRowActions } from './report-row-actions'
 
-import { useState } from 'react'
-import { FileSpreadsheet, Plus, Filter, Download, Calendar, Mail, FileText, ChevronDown } from 'lucide-react'
+export const dynamic = 'force-dynamic'
 
-// Dummy data for Reports until we hook up to actual API
-const dummyReports = [
-  { id: '1', name: 'ملخص المبيعات الأسبوعي', type: 'analytics', schedule: '0 9 * * 1', lastRun: '2026-09-28T09:00:00Z', active: true },
-  { id: '2', name: 'أداء الوكيل الذكي (شهري)', type: 'conversations', schedule: '0 9 1 * *', lastRun: '2026-09-01T09:00:00Z', active: true },
-  { id: '3', name: 'العملاء المحتملون (بدون تواصل)', type: 'leads', schedule: null, lastRun: null, active: false }
-]
+const TYPE_LABEL: Record<string, string> = {
+  analytics: 'تحليلات',
+  conversations: 'محادثات',
+  leads: 'عملاء محتملون',
+  orders: 'طلبات',
+  appointments: 'مواعيد',
+}
 
-export default function ReportsPage() {
-  const [reports] = useState(dummyReports)
+export default async function ReportsPage() {
+  const context = await getDashboardContext()
+  if (!context) redirect('/login')
+
+  const db = await createClient()
+  const canManage = context.role === 'owner' || context.role === 'admin'
+
+  let reports: Array<{
+    id: string
+    name: string
+    description: string | null
+    report_type: string
+    schedule_cron: string | null
+    last_run_at: string | null
+    is_active: boolean | null
+    created_at: string
+  }> = []
+
+  if (context.businessId) {
+    const { data } = await db
+      .from('reports')
+      .select(
+        'id, name, description, report_type, schedule_cron, last_run_at, is_active, created_at'
+      )
+      .eq('business_id', context.businessId)
+      .order('created_at', { ascending: false })
+      .limit(100)
+    reports = data ?? []
+  }
 
   return (
-    <div className="flex flex-col gap-6 p-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-text">التقارير المحفوظة</h1>
-          <p className="text-sm text-text-muted mt-1">
-            أدر تقاريرك المحفوظة، فلاتر البيانات، وتصدير الملفات.
-          </p>
-        </div>
-        <button className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90">
-          <Plus size={16} />
-          إنشاء تقرير جديد
-        </button>
+    <div className="mx-auto max-w-4xl space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight text-text">التقارير المحفوظة</h1>
+        <p className="mt-1 text-sm text-text-muted">
+          تقارير مرتبطة بنشاطك في قاعدة البيانات — بدون قوائم تجريبية.
+        </p>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-4">
-        {/* Filters/Categories Sidebar */}
-        <div className="md:col-span-1 space-y-2">
-          <div className="rounded-xl border border-border bg-surface p-2">
-            <button className="flex w-full items-center justify-between rounded-lg bg-primary-light/20 px-3 py-2 text-sm font-medium text-secondary">
-              <span>كل التقارير</span>
-              <span className="rounded-full bg-primary-light px-2 py-0.5 text-xs text-secondary">{reports.length}</span>
-            </button>
-            <button className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-medium text-text-muted hover:bg-surface-hover hover:text-text">
-              <span>التقارير المجدولة</span>
-              <span className="rounded-full bg-background px-2 py-0.5 text-xs">2</span>
-            </button>
-            <button className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-medium text-text-muted hover:bg-surface-hover hover:text-text">
-              <span>المبيعات والطلبات</span>
-            </button>
-            <button className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-medium text-text-muted hover:bg-surface-hover hover:text-text">
-              <span>المحادثات والوكيل</span>
-            </button>
-          </div>
+      {!context.businessId ? (
+        <div className="rounded-xl border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-text">
+          أكمل إعداد ملف النشاط أولاً من الإعداد أو المعالج حتى يمكن حفظ التقارير.
         </div>
+      ) : null}
 
-        {/* Reports List */}
-        <div className="md:col-span-3">
-          <div className="rounded-xl border border-border bg-surface overflow-hidden">
-            <div className="border-b border-border bg-surface p-4 flex items-center justify-between">
-              <div className="flex gap-2">
-                <button className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-1.5 text-sm font-medium text-text hover:bg-surface-hover">
-                  <Filter size={16} className="text-text-muted" />
-                  فلتر
-                </button>
-              </div>
-            </div>
-            
-            <div className="divide-y divide-border">
-              {reports.map(report => (
-                <div key={report.id} className="flex items-center justify-between p-4 hover:bg-surface-hover transition-colors">
-                  <div className="flex items-start gap-4">
-                    <div className="mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-background border border-border">
-                      <FileSpreadsheet size={20} className="text-secondary" />
-                    </div>
-                    <div>
-                      <h3 className="font-medium text-text">{report.name}</h3>
-                      <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-text-muted">
-                        <span className="flex items-center gap-1">
-                          <FileText size={14} />
-                          نوع التقرير: {report.type}
-                        </span>
-                        {report.schedule && (
-                          <span className="flex items-center gap-1 text-secondary">
-                            <Calendar size={14} />
-                            مجدول ({report.schedule})
-                          </span>
-                        )}
-                        {report.lastRun && (
-                          <span className="flex items-center gap-1">
-                            <Mail size={14} />
-                            آخر تشغيل: {new Date(report.lastRun).toLocaleDateString('ar-SA')}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button className="flex items-center gap-1.5 rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium text-text hover:bg-surface-hover">
-                      <Download size={14} />
-                      تصدير (CSV)
-                    </button>
-                    <button className="flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-background hover:bg-surface-hover text-text-muted">
-                      <ChevronDown size={16} />
-                    </button>
-                  </div>
-                </div>
+      {canManage && context.businessId ? <CreateReportForm /> : null}
+
+      {!reports.length ? (
+        <MobileEmptyState
+          icon={FileSpreadsheet}
+          title="لا توجد تقارير محفوظة"
+          description={
+            canManage
+              ? 'أنشئ تقريراً محفوظاً من النموذج أعلاه لتتبع المحادثات أو العملاء أو الطلبات.'
+              : 'لم يُنشئ المسؤول أي تقارير بعد.'
+          }
+        />
+      ) : (
+        <div className="overflow-hidden rounded-xl border border-border bg-surface shadow-sm">
+          <table className="w-full text-sm">
+            <thead className="border-b border-border bg-background">
+              <tr>
+                <th className="px-4 py-3 text-start font-medium text-text-muted">الاسم</th>
+                <th className="px-4 py-3 text-start font-medium text-text-muted">النوع</th>
+                <th className="px-4 py-3 text-start font-medium text-text-muted">جدولة</th>
+                <th className="px-4 py-3 text-start font-medium text-text-muted">آخر تشغيل</th>
+                <th className="px-4 py-3 text-start font-medium text-text-muted">الحالة</th>
+                {canManage ? (
+                  <th className="px-4 py-3 text-start font-medium text-text-muted">إجراءات</th>
+                ) : null}
+              </tr>
+            </thead>
+            <tbody>
+              {reports.map((r) => (
+                <tr key={r.id} className="border-b border-border last:border-0">
+                  <td className="px-4 py-3">
+                    <p className="font-medium text-text">{r.name}</p>
+                    {r.description ? (
+                      <p className="mt-0.5 text-xs text-text-muted">{r.description}</p>
+                    ) : null}
+                  </td>
+                  <td className="px-4 py-3 text-text-muted">
+                    {TYPE_LABEL[r.report_type] ?? r.report_type}
+                  </td>
+                  <td className="px-4 py-3 text-text-muted">
+                    {r.schedule_cron ? r.schedule_cron : 'يدوي'}
+                  </td>
+                  <td className="px-4 py-3 text-xs text-text-muted">
+                    {r.last_run_at ? formatDateTime(r.last_run_at, context.timezone) : '—'}
+                  </td>
+                  <td className="px-4 py-3">
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                        r.is_active
+                          ? 'bg-success/15 text-success'
+                          : 'bg-background text-text-muted'
+                      }`}
+                    >
+                      {r.is_active ? 'نشط' : 'متوقف'}
+                    </span>
+                  </td>
+                  {canManage ? (
+                    <td className="px-4 py-3">
+                      <ReportRowActions reportId={r.id} isActive={Boolean(r.is_active)} />
+                    </td>
+                  ) : null}
+                </tr>
               ))}
-              
-              {reports.length === 0 && (
-                <div className="flex flex-col items-center justify-center py-12 text-center">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-background border border-border">
-                    <FileSpreadsheet size={24} className="text-text-muted" />
-                  </div>
-                  <h3 className="mt-4 text-sm font-medium text-text">لا توجد تقارير</h3>
-                  <p className="mt-1 text-xs text-text-muted">لم تقم بإنشاء أي تقارير محفوظة بعد.</p>
-                </div>
-              )}
-            </div>
-          </div>
+            </tbody>
+          </table>
         </div>
-      </div>
+      )}
     </div>
   )
 }
