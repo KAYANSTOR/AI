@@ -31,11 +31,11 @@ const toneStyles: Record<
     hint: 'text-text-muted',
   },
   dark: {
-    container: 'bg-dark text-[#d9c7a3] border border-transparent shadow-sm',
-    iconTile: 'bg-[#d9c7a3]/20 text-[#d9c7a3]',
-    label: 'text-[#d9c7a3]/80',
-    value: 'text-[#d9c7a3]',
-    hint: 'text-[#d9c7a3]/80',
+    container: 'bg-dark text-[#e8d5a8] border border-transparent shadow-sm',
+    iconTile: 'bg-[#e8d5a8]/20 text-[#e8d5a8]',
+    label: 'text-[#e8d5a8]/90',
+    value: 'text-[#faf7f0]',
+    hint: 'text-[#d2be96]',
   },
   gold: {
     container: 'bg-accent-light border border-border-strong text-text',
