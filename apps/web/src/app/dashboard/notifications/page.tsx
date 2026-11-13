@@ -1,11 +1,12 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { AlertCircle, Bell, MessageSquare, UserCheck, Calendar } from 'lucide-react'
+import { AlertCircle, Bell, MessageSquare, Calendar } from 'lucide-react'
 import { getDashboardContext } from '@/lib/dashboard/context'
 import { createClient } from '@/lib/db/server'
 import { formatDateTime } from '@/lib/i18n/format'
 import { SectionHeader } from '@/components/ui/section-header'
 import { ListRow } from '@/components/ui/list-row'
+import { MobileEmptyState } from '@/components/ui/empty-state'
 
 export const dynamic = 'force-dynamic'
 
@@ -26,12 +27,8 @@ export default async function NotificationsPage() {
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
 
   const items = notifications ?? []
-  const todayItems = items.filter(
-    (item) => new Date(item.created_at).getTime() >= startOfToday
-  )
-  const earlierItems = items.filter(
-    (item) => new Date(item.created_at).getTime() < startOfToday
-  )
+  const todayItems = items.filter((item) => new Date(item.created_at).getTime() >= startOfToday)
+  const earlierItems = items.filter((item) => new Date(item.created_at).getTime() < startOfToday)
 
   function getNotificationIcon(entityType: string) {
     if (entityType.includes('conversation')) return <MessageSquare className="h-5 w-5" />
@@ -48,53 +45,28 @@ export default async function NotificationsPage() {
   }
 
   return (
-    <div className="space-y-6 max-w-2xl mx-auto">
-      {/* Title */}
+    <div className="mx-auto max-w-2xl space-y-6">
       <div>
         <h1 className="text-2xl font-bold tracking-tight text-text">الإشعارات</h1>
         <p className="mt-1 text-sm text-text-muted">
-          آخر التنبيهات وإشعارات النظام والمحادثات التي تحتاج تدخلاً.
+          تنبيهات المحادثات والقنوات والمهام من حسابك فقط.
         </p>
       </div>
 
       {items.length === 0 ? (
-        <div className="space-y-4">
-          {/* Mock previews matching Figma node 15:2455 if database has no rows */}
-          <SectionHeader title="اليوم" />
-          <div className="space-y-2.5">
-            <Link href="/dashboard/conversations" className="block">
-              <ListRow
-                title="محادثة تحتاج إلى موظف"
-                subtitle="سارة المطيري طلبت التحدث مع موظف"
-                meta="10:27"
-                trailing="meta"
-                icon={<UserCheck className="h-5 w-5 text-primary" />}
-              />
+        <MobileEmptyState
+          icon={Bell}
+          title="لا توجد إشعارات"
+          description="ستصلك هنا تنبيهات المحادثات الجديدة والتصعيد وربط القنوات بعد بدء الاستخدام."
+          action={
+            <Link
+              href="/dashboard/channels"
+              className="mt-2 inline-flex h-11 items-center justify-center rounded-xl bg-primary px-5 text-sm font-semibold text-primary-foreground shadow-sm transition hover:bg-primary-dark"
+            >
+              ربط قناة
             </Link>
-            <Link href="/dashboard/channels" className="block">
-              <ListRow
-                title="انقطع اتصال قناة واتساب"
-                subtitle="رقم الفروع"
-                meta="09:12"
-                trailing="meta"
-                icon={<AlertCircle className="h-5 w-5 text-warning" />}
-              />
-            </Link>
-          </div>
-
-          <SectionHeader title="أمس" />
-          <div className="space-y-2.5">
-            <Link href="/dashboard/conversations" className="block">
-              <ListRow
-                title="مهمة متأخرة"
-                subtitle="الرد على استفسار الضمان"
-                meta="أمس"
-                trailing="meta"
-                icon={<Bell className="h-5 w-5 text-secondary" />}
-              />
-            </Link>
-          </div>
-        </div>
+          }
+        />
       ) : (
         <div className="space-y-6">
           {todayItems.length > 0 && (
