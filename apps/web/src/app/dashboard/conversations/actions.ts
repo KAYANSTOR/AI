@@ -5,6 +5,8 @@ import { requireCapability, audit, type AuthorizedContext } from '@/lib/capabili
 import { actionErrorMessage, dbActionError } from '@/lib/i18n/action-error'
 import { createNotification } from '@/lib/notifications'
 import { dispatchWorkflowTrigger } from '@/lib/workflows/triggers'
+import { getConsentStatus } from '@/lib/channels/consent'
+import { deliverOutbound, recordDeliveredOutboundMessage } from '@/lib/runtime/outbound'
 
 export type InboxResult = { ok: boolean; error?: string; message?: string }
 
@@ -328,5 +330,139 @@ export async function markAsReadAction(conversationId: string): Promise<InboxRes
     return { ok: true }
   } catch (error) {
     return { ok: false, error: actionErrorMessage(error, 'تعذّر تحديث حالة القراءة.') }
+  }
+}
+
+/** Staff reply on the conversation channel (WhatsApp/SMS/etc). */
+export async function sendHumanReplyAction(
+  conversationId: string,
+  body: string
+): Promise<InboxResult> {
+  let ctx: AuthorizedContext
+  try {
+    ctx = await requireCapability('inbox')
+  } catch (error) {
+    return { ok: false, error: actionErrorMessage(error, 'غير مصرح.') }
+  }
+
+  if (ctx.role === 'read_only') {
+    return { ok: false, error: 'صلاحية القراءة فقط لا تسمح بالإرسال.' }
+  }
+
+  const text = body.trim()
+  if (!text) return { ok: false, error: 'نص الرسالة فارغ.' }
+  if (text.length > 4000) return { ok: false, error: 'الرسالة طويلة جداً.' }
+
+  try {
+    const { data: conversation, error: readError } = await ctx.db
+      .from('conversations')
+      .select('id, contact_id, channel_id, status, business_id, ai_enabled')
+      .eq('id', conversationId)
+      .eq('organization_id', ctx.organizationId)
+      .maybeSingle()
+
+    if (readError) return { ok: false, error: dbActionError(readError) }
+    if (!conversation) return { ok: false, error: 'المحادثة غير موجودة.' }
+    if (conversation.status === 'closed') {
+      return { ok: false, error: 'المحادثة مغلقة. أعد فتحها قبل الإرسال.' }
+    }
+    if (!conversation.channel_id) return { ok: false, error: 'لا توجد قناة مرتبطة بالمحادثة.' }
+
+    const { data: channel } = await ctx.db
+      .from('channels')
+      .select(
+        'id, organization_id, business_id, channel_type, provider_account_id, external_identifier, is_active'
+      )
+      .eq('id', conversation.channel_id)
+      .eq('organization_id', ctx.organizationId)
+      .maybeSingle()
+
+    if (!channel?.is_active) return { ok: false, error: 'القناة غير نشطة.' }
+
+    const { data: contact } = await ctx.db
+      .from('contacts')
+      .select('phone')
+      .eq('id', conversation.contact_id)
+      .maybeSingle()
+
+    const { data: identity } = await ctx.db
+      .from('contact_identities')
+      .select('external_user_id, external_phone')
+      .eq('contact_id', conversation.contact_id)
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    const recipient = (
+      identity?.external_phone ||
+      identity?.external_user_id ||
+      contact?.phone ||
+      ''
+    ).trim()
+    if (!recipient) return { ok: false, error: 'لا يوجد رقم أو معرّف للإرسال لهذا العميل.' }
+
+    const consent = await getConsentStatus(ctx.db, conversation.contact_id, channel.channel_type)
+    if (consent === 'opted_out') return { ok: false, error: 'العميل ألغى الاشتراك ولا يمكن مراسلته.' }
+
+    if (conversation.ai_enabled) {
+      await ctx.db
+        .from('conversations')
+        .update({
+          ai_enabled: false,
+          status: conversation.status === 'active' ? 'handed_off' : conversation.status,
+          state: 'human_handoff',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', conversationId)
+        .eq('organization_id', ctx.organizationId)
+    }
+
+    const idempotencyKey = `staff-reply:${conversationId}:${Date.now()}:${text.slice(0, 24)}`
+    const delivery = await deliverOutbound(ctx.db, {
+      channel: {
+        id: channel.id,
+        organizationId: channel.organization_id,
+        businessId: channel.business_id,
+        channelType: channel.channel_type,
+        providerAccountId: channel.provider_account_id,
+        externalIdentifier: channel.external_identifier,
+      },
+      recipient,
+      body: text,
+      idempotencyKey,
+      conversationId,
+      queueOnFailure: true,
+    })
+
+    if (delivery === 'sent') {
+      await recordDeliveredOutboundMessage(ctx.db, {
+        organizationId: ctx.organizationId,
+        conversationId,
+        body: text,
+        idempotencyKey,
+      })
+    }
+
+    await ctx.db
+      .from('conversations')
+      .update({
+        last_message_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', conversationId)
+
+    await audit(ctx, 'conversation.staff_reply', 'conversation', conversationId, {
+      delivery,
+      length: text.length,
+    })
+
+    revalidatePath('/dashboard/conversations')
+    revalidatePath(`/dashboard/conversations/${conversationId}`)
+    return {
+      ok: true,
+      message: delivery === 'sent' ? 'تم إرسال الرد.' : 'أُضيف الرد لطابور الإرسال وسيُرسل قريباً.',
+    }
+  } catch (error) {
+    return { ok: false, error: actionErrorMessage(error, 'تعذّر إرسال الرد.') }
   }
 }
