@@ -1,15 +1,20 @@
+import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/db/server'
 import { getDashboardContext } from '@/lib/dashboard/context'
 import { formatNumber } from '@/lib/i18n/format'
 import {
   MessageCircle,
-  Clock,
   Users,
   TrendingUp,
   BrainCircuit,
+  BarChart3,
 } from 'lucide-react'
 import { KpiCard } from '@/components/ui/kpi-card'
+import { MobileEmptyState } from '@/components/ui/empty-state'
+import { SectionHeader } from '@/components/ui/section-header'
+
+export const dynamic = 'force-dynamic'
 
 export default async function AnalyticsPage() {
   const context = await getDashboardContext()
@@ -18,112 +23,127 @@ export default async function AnalyticsPage() {
 
   const [
     { count: totalConversations },
+    { count: openConversations },
+    { count: totalContacts },
     { count: totalLeads },
     { data: ordersData },
   ] = await Promise.all([
-    db.from('conversations').select('id', { count: 'exact', head: true }).eq('organization_id', context.organizationId),
-    db.from('leads').select('id', { count: 'exact', head: true }).eq('organization_id', context.organizationId),
-    db.from('orders').select('total_amount').eq('organization_id', context.organizationId).eq('status', 'completed'),
+    db
+      .from('conversations')
+      .select('id', { count: 'exact', head: true })
+      .eq('organization_id', context.organizationId),
+    db
+      .from('conversations')
+      .select('id', { count: 'exact', head: true })
+      .eq('organization_id', context.organizationId)
+      .in('status', ['open', 'needs_human', 'handoff', 'active']),
+    db
+      .from('contacts')
+      .select('id', { count: 'exact', head: true })
+      .eq('organization_id', context.organizationId),
+    db
+      .from('leads')
+      .select('id', { count: 'exact', head: true })
+      .eq('organization_id', context.organizationId),
+    db
+      .from('orders')
+      .select('total_amount')
+      .eq('organization_id', context.organizationId)
+      .eq('status', 'completed'),
   ])
 
-  const revenue = ordersData?.reduce((sum, order) => sum + (Number(order.total_amount) || 0), 0) || 0
+  const conversations = totalConversations ?? 0
+  const open = openConversations ?? 0
+  const contacts = totalContacts ?? 0
+  const leads = totalLeads ?? 0
+  const revenue =
+    ordersData?.reduce((sum, order) => sum + (Number(order.total_amount) || 0), 0) || 0
+  const hasActivity = conversations > 0 || contacts > 0 || leads > 0 || revenue > 0
 
   return (
-    <div className="space-y-6">
+    <div className="mx-auto max-w-5xl space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight text-text">التحليلات ومؤشرات الأداء</h1>
+        <h1 className="text-2xl font-bold tracking-tight text-text">التحليلات</h1>
         <p className="mt-1 text-sm text-text-muted">
-          نظرة شاملة على أداء فريقك والذكاء الاصطناعي ومعدل الإغلاق.
+          مؤشرات مستمدة من بيانات حسابك فقط — بدون أرقام تقديرية.
         </p>
       </div>
 
-      {/* KPI Grid (Figma node 19:2319) */}
       <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         <KpiCard
-          label="إجمالي المحادثات"
-          value={formatNumber(totalConversations ?? 24)}
-          hint="+12% نمو هذا الأسبوع"
+          label="المحادثات"
+          value={formatNumber(conversations)}
+          hint={conversations === 0 ? 'بعد ربط القنوات' : undefined}
           icon={<MessageCircle className="h-4 w-4" />}
           tone="default"
         />
         <KpiCard
-          label="العملاء المحتملون"
-          value={formatNumber(totalLeads ?? 12)}
-          hint="+5% من واتساب"
-          icon={<Users className="h-4 w-4" />}
-          tone="default"
-        />
-        <KpiCard
-          label="معدل الأتمتة"
-          value="85%"
-          hint="دون أي تدخل بشري"
+          label="محادثات مفتوحة"
+          value={formatNumber(open)}
+          hint={open === 0 ? 'لا يوجد حالياً' : undefined}
           icon={<BrainCircuit className="h-4 w-4" />}
           tone="dark"
         />
         <KpiCard
-          label="إجمالي الإيرادات"
-          value={revenue > 0 ? `${formatNumber(revenue)} ر.س` : '18,500 ر.س'}
-          hint="+22% هذا الشهر"
+          label="جهات الاتصال"
+          value={formatNumber(contacts)}
+          hint={contacts === 0 ? 'تُضاف مع الرسائل' : undefined}
+          icon={<Users className="h-4 w-4" />}
+          tone="default"
+        />
+        <KpiCard
+          label="إيرادات مكتملة"
+          value={revenue > 0 ? formatNumber(revenue) : '—'}
+          hint={revenue > 0 ? 'من الطلبات المكتملة' : 'لا طلبات مكتملة بعد'}
           icon={<TrendingUp className="h-4 w-4" />}
           tone="gold"
         />
       </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        {/* AI Performance */}
-        <section className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
-          <div className="mb-4 flex items-center gap-3 border-b border-border/80 pb-4">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-light text-primary">
-              <BrainCircuit size={20} />
-            </div>
-            <div>
-              <h2 className="text-base font-semibold text-text">أداء الوكيل الذكي</h2>
-              <p className="text-xs text-text-muted">مؤشرات دقة الردود ونسبة المعالجة الفورية.</p>
-            </div>
-          </div>
-          <div className="space-y-3.5 divide-y divide-border/60">
-            <div className="flex justify-between items-center pt-2">
-              <span className="text-sm font-medium text-text-muted">معدل الأتمتة الكامل</span>
-              <span className="text-sm font-bold text-success">85%</span>
-            </div>
-            <div className="flex justify-between items-center pt-3">
-              <span className="text-sm font-medium text-text-muted">المحادثات المنجزة بالذكاء الاصطناعي</span>
-              <span className="text-sm font-bold text-text">{formatNumber(Math.floor((totalConversations || 24) * 0.85))}</span>
-            </div>
-            <div className="flex justify-between items-center pt-3">
-              <span className="text-sm font-medium text-text-muted">العملاء المؤهلون تلقائياً</span>
-              <span className="text-sm font-bold text-accent-text">{totalLeads || 12}</span>
-            </div>
-          </div>
-        </section>
+      <section className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
+        <SectionHeader
+          title="حجم النشاط"
+          action={<span className="text-xs text-text-muted">من قاعدة بياناتك</span>}
+        />
+        {!hasActivity ? (
+          <MobileEmptyState
+            icon={BarChart3}
+            title="لا توجد بيانات كافية بعد"
+            description="ستظهر المؤشرات والمخططات هنا بعد ربط واتساب أو القنوات وبدء استقبال المحادثات."
+            action={
+              <Link
+                href="/dashboard/channels"
+                className="mt-2 inline-flex h-11 items-center justify-center rounded-xl bg-primary px-5 text-sm font-semibold text-primary-foreground shadow-sm transition hover:bg-primary-dark"
+              >
+                ربط قناة
+              </Link>
+            }
+          />
+        ) : (
+          <ul className="mt-4 space-y-3 text-sm">
+            <li className="flex items-center justify-between border-b border-border/60 pb-3">
+              <span className="text-text-muted">إجمالي المحادثات</span>
+              <span className="font-semibold text-text">{formatNumber(conversations)}</span>
+            </li>
+            <li className="flex items-center justify-between border-b border-border/60 pb-3">
+              <span className="text-text-muted">المحادثات المفتوحة / تحتاج متابعة</span>
+              <span className="font-semibold text-text">{formatNumber(open)}</span>
+            </li>
+            <li className="flex items-center justify-between border-b border-border/60 pb-3">
+              <span className="text-text-muted">العملاء المحتملون</span>
+              <span className="font-semibold text-text">{formatNumber(leads)}</span>
+            </li>
+            <li className="flex items-center justify-between">
+              <span className="text-text-muted">جهات الاتصال</span>
+              <span className="font-semibold text-text">{formatNumber(contacts)}</span>
+            </li>
+          </ul>
+        )}
+      </section>
 
-        {/* SLA & Response speed */}
-        <section className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
-          <div className="mb-4 flex items-center gap-3 border-b border-border/80 pb-4">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-success/15 text-success">
-              <Clock size={20} />
-            </div>
-            <div>
-              <h2 className="text-base font-semibold text-text">سرعة الاستجابة وخدمة العملاء (SLA)</h2>
-              <p className="text-xs text-text-muted">متوسط أوقات الرد والإغلاق.</p>
-            </div>
-          </div>
-          <div className="space-y-3.5 divide-y divide-border/60">
-            <div className="flex justify-between items-center pt-2">
-              <span className="text-sm font-medium text-text-muted">متوسط وقت الاستجابة الأولية</span>
-              <span className="text-sm font-bold text-text">فوري (1.2 ثانية)</span>
-            </div>
-            <div className="flex justify-between items-center pt-3">
-              <span className="text-sm font-medium text-text-muted">متوسط وقت إغلاق التذكرة</span>
-              <span className="text-sm font-bold text-text">12 دقيقة</span>
-            </div>
-            <div className="flex justify-between items-center pt-3">
-              <span className="text-sm font-medium text-text-muted">الرسائل ضمن مهلة الرد SLA</span>
-              <span className="text-sm font-bold text-success">98.2%</span>
-            </div>
-          </div>
-        </section>
-      </div>
+      <p className="text-xs text-text-muted">
+        مؤشرات مثل معدل الحل أو زمن الاستجابة تظهر فقط عند توفر أحداث كافية في النظام — ولن تُعرض قيم تقديرية.
+      </p>
     </div>
   )
 }
