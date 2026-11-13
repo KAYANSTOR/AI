@@ -12,7 +12,9 @@ import {
   Shield,
   Sliders,
   Users,
+  UserRound,
   Zap,
+  ListTodo,
 } from 'lucide-react'
 import { PasswordForm } from './password-form'
 import { CapabilityManager } from './capability-manager'
@@ -52,18 +54,36 @@ export default async function SettingsPage() {
         </p>
       </div>
 
-      {/* 1. Account Section (Figma node 19:2996) */}
       <div className="space-y-3">
         <SectionHeader title="الحساب والمنشأة" />
 
         <div className="space-y-2.5">
-          <ListRow
-            title={context.organizationName}
-            subtitle={`الدور: ${roleLabel(context.role)} · ${context.email}`}
-            trailing="meta"
-            meta={context.timezone}
-            icon={<Shield className="h-5 w-5" />}
-          />
+          <Link href="/dashboard/account" className="block">
+            <ListRow
+              title={context.organizationName}
+              subtitle={`الدور: ${roleLabel(context.role)} · ${context.email}`}
+              trailing="chevron"
+              icon={<UserRound className="h-5 w-5" />}
+            />
+          </Link>
+
+          <Link href="/dashboard/team" className="block">
+            <ListRow
+              title="الفريق والصلاحيات"
+              subtitle="الأعضاء والأدوار داخل المؤسسة"
+              trailing="chevron"
+              icon={<Users className="h-5 w-5" />}
+            />
+          </Link>
+
+          <Link href="/dashboard/tasks" className="block">
+            <ListRow
+              title="المهام والمتابعات"
+              subtitle="المحادثات والمواعيد التي تحتاج إجراءً"
+              trailing="chevron"
+              icon={<ListTodo className="h-5 w-5" />}
+            />
+          </Link>
 
           <Link href="/dashboard/channels" className="block">
             <ListRow
@@ -85,7 +105,6 @@ export default async function SettingsPage() {
         </div>
       </div>
 
-      {/* 2. Preferences (Figma node 19:3033) */}
       <div className="space-y-3">
         <SectionHeader title="التفضيلات والمظهر" />
 
@@ -122,7 +141,6 @@ export default async function SettingsPage() {
         </div>
       </div>
 
-      {/* 3. Advanced Tools & Capabilities (for Admins) */}
       {isAdmin && (
         <div className="space-y-3">
           <SectionHeader title="أدوات متقدمة والذكاء الاصطناعي" />
@@ -142,7 +160,7 @@ export default async function SettingsPage() {
                 title="سياسات التصعيد ومستوى الخدمة (SLA)"
                 subtitle="قواعد تحويل المحادثات من الذكاء الاصطناعي للموظفين"
                 trailing="chevron"
-                icon={<Users className="h-5 w-5" />}
+                icon={<Shield className="h-5 w-5" />}
               />
             </Link>
 
@@ -163,7 +181,6 @@ export default async function SettingsPage() {
         </div>
       )}
 
-      {/* 4. Security & Password */}
       <section id="security" className="rounded-2xl border border-border bg-surface p-5 space-y-4">
         <div>
           <h2 className="text-base font-semibold text-text">أمان الحساب</h2>
@@ -174,7 +191,6 @@ export default async function SettingsPage() {
         <PasswordForm />
       </section>
 
-      {/* 5. Sign Out */}
       <form action={signOutAction} className="pt-2 pb-6">
         <button
           type="submit"
