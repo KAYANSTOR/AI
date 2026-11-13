@@ -6,8 +6,10 @@ import { KpiCard, type KpiCardTone } from '@/components/ui/kpi-card'
 
 export async function DashboardKpiSection({ organizationId }: { organizationId: string }) {
   const db = await createClient()
-
   const metrics = await loadCoreAnalytics(db, organizationId)
+
+  const closeRate =
+    metrics.leadsTotal > 0 ? `${Math.round((metrics.leadsWon / metrics.leadsTotal) * 100)}%` : '—'
 
   const kpis: Array<{
     title: string
@@ -18,34 +20,32 @@ export async function DashboardKpiSection({ organizationId }: { organizationId: 
   }> = [
     {
       title: 'العملاء المحتملون',
-      value: formatNumber(metrics.leadsTotal || 12),
-      hint: 'تأهيل تلقائي',
+      value: formatNumber(metrics.leadsTotal),
+      hint: metrics.leadsOpen > 0 ? `${formatNumber(metrics.leadsOpen)} مفتوح` : 'لا عملاء مفتوحين',
       icon: Users,
       tone: 'default',
     },
     {
       title: 'المحادثات النشطة',
-      value: formatNumber(metrics.conversationsOpen || 24),
-      hint: metrics.conversationsBreachedSla
-        ? `${formatNumber(metrics.conversationsBreachedSla)} تجاوزت مهلة الرد`
-        : '2 تجاوزت مهلة الرد',
+      value: formatNumber(metrics.conversationsOpen),
+      hint:
+        metrics.conversationsBreachedSla > 0
+          ? `${formatNumber(metrics.conversationsBreachedSla)} تجاوزت مهلة الرد`
+          : 'ضمن المهلة',
       icon: MessageSquare,
       tone: 'default',
     },
     {
       title: 'معدل الإغلاق',
-      value:
-        metrics.leadsTotal > 0
-          ? `${Math.round((metrics.leadsWon / metrics.leadsTotal) * 100)}%`
-          : '38%',
-      hint: 'من العملاء المحتملين',
+      value: closeRate,
+      hint: metrics.leadsTotal > 0 ? 'من العملاء المحتملين' : 'لا بيانات بعد',
       icon: TrendingUp,
       tone: 'dark',
     },
     {
       title: 'المواعيد القادمة',
-      value: formatNumber(metrics.appointmentsUpcoming || 7),
-      hint: 'مؤكدة ومجدولة',
+      value: formatNumber(metrics.appointmentsUpcoming),
+      hint: metrics.appointmentsUpcoming > 0 ? 'مؤكدة ومجدولة' : 'لا مواعيد قادمة',
       icon: Calendar,
       tone: 'gold',
     },
@@ -76,14 +76,16 @@ export function DashboardKpiSkeleton() {
       {[1, 2, 3, 4].map((i) => (
         <div
           key={i}
-          className="h-32 rounded-[20px] border border-border bg-surface p-4 animate-pulse flex flex-col justify-between"
+          className="flex h-32 animate-pulse flex-col justify-between rounded-[20px] border border-border bg-surface p-4"
         >
-          <div className="flex justify-between items-center">
+          <div className="flex items-center justify-between">
             <div className="h-3 w-20 rounded bg-border" />
             <div className="h-8 w-8 rounded-full bg-border" />
           </div>
-          <div className="h-7 w-16 rounded bg-border" />
-          <div className="h-3 w-24 rounded bg-border/70" />
+          <div className="space-y-2">
+            <div className="h-7 w-16 rounded bg-border" />
+            <div className="h-3 w-24 rounded bg-border" />
+          </div>
         </div>
       ))}
     </div>
