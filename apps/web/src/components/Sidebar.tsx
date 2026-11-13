@@ -16,6 +16,8 @@ import {
   Clock,
   BookOpen,
   X,
+  ListTodo,
+  UserRound,
 } from 'lucide-react'
 import { useEffect, useRef } from 'react'
 import { BrandMark } from '@/components/site/brand'
@@ -42,6 +44,7 @@ const navSections: NavSection[] = [
     items: [
       { name: ar.nav.dashboard, href: '/dashboard', icon: LayoutDashboard, capability: null },
       { name: ar.nav.conversations, href: '/dashboard/conversations', icon: MessageSquare, capability: 'inbox' },
+      { name: 'المهام', href: '/dashboard/tasks', icon: ListTodo, capability: 'inbox' },
       { name: ar.nav.appointments, href: '/dashboard/appointments', icon: Calendar, capability: 'appointments' },
       { name: ar.nav.contacts, href: '/dashboard/contacts', icon: Contact, capability: 'lead_capture' },
       { name: ar.nav.leads, href: '/dashboard/leads', icon: Users, capability: 'lead_capture' },
@@ -60,6 +63,8 @@ const navSections: NavSection[] = [
     title: 'النظام',
     items: [
       { name: ar.nav.services, href: '/dashboard/services', icon: Wrench, capability: 'appointments' },
+      { name: 'الفريق والصلاحيات', href: '/dashboard/team', icon: Users, capability: null },
+      { name: 'الحساب', href: '/dashboard/account', icon: UserRound, capability: null },
       { name: ar.nav.settings, href: '/dashboard/settings', icon: Settings, capability: null },
     ],
   },
@@ -132,7 +137,6 @@ export function Sidebar({
       aria-modal={open ? true : undefined}
       aria-label={ar.nav.sidebarLabel}
     >
-      {/* Brand Header */}
       <div className="flex h-16 shrink-0 items-center justify-between border-b border-text/10 ps-[max(1.25rem,env(safe-area-inset-right))] pe-[max(1rem,env(safe-area-inset-left))]">
         <Link
           href="/dashboard"
@@ -143,9 +147,7 @@ export function Sidebar({
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-xs transition-transform group-hover:scale-105">
             <BrandMark className="h-5 w-5" />
           </div>
-          <span className="flex items-center gap-1.5 font-bold">
-            KAYAN AI
-          </span>
+          <span className="flex items-center gap-1.5 font-bold">KAYAN AI</span>
         </Link>
         <button
           type="button"
@@ -157,7 +159,6 @@ export function Sidebar({
         </button>
       </div>
 
-      {/* Navigation Sections */}
       <div className="flex-1 overflow-y-auto px-3.5 py-4 space-y-6 scrollbar-thin scrollbar-thumb-white/15">
         {navSections.map((section) => {
           const visibleItems = section.items.filter(
@@ -172,12 +173,7 @@ export function Sidebar({
               </p>
               <nav aria-label={section.title} className="flex flex-col gap-0.5">
                 {visibleItems.map((item) => (
-                  <NavLink
-                    key={item.href}
-                    item={item}
-                    pathname={pathname}
-                    onClick={close}
-                  />
+                  <NavLink key={item.href} item={item} pathname={pathname} onClick={close} />
                 ))}
               </nav>
             </div>
@@ -185,9 +181,12 @@ export function Sidebar({
         })}
       </div>
 
-      {/* Organization Badge Footer */}
       <div className="shrink-0 border-t border-text/10 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-        <div className="flex items-center gap-3 rounded-xl bg-text/5 p-2.5 transition-colors hover:bg-text/10">
+        <Link
+          href="/dashboard/account"
+          onClick={close}
+          className="flex items-center gap-3 rounded-xl bg-text/5 p-2.5 transition-colors hover:bg-text/10"
+        >
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary-light/20 text-secondary font-bold text-sm">
             {orgName ? orgName.slice(0, 1) : 'ك'}
           </div>
@@ -198,7 +197,7 @@ export function Sidebar({
               <span className="truncate">{roleLabel(role)}</span>
             </div>
           </div>
-        </div>
+        </Link>
 
         <div className="mt-2 px-1 text-center">
           <a
@@ -229,7 +228,6 @@ function NavLink({
   const active =
     pathname === item.href ||
     (item.href !== '/dashboard' && pathname.startsWith(`${item.href}/`))
-
 
   return (
     <Link
