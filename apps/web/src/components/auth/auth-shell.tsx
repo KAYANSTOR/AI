@@ -15,38 +15,42 @@ export function AuthShell({
   subtitle,
   children,
   footer,
+  hideFooterNotice = false,
 }: {
   title: string
   subtitle: string
   children: ReactNode
   footer?: ReactNode
+  hideFooterNotice?: boolean
 }) {
   return (
-    <div className="grid min-h-dvh lg:grid-cols-[minmax(0,1fr)_minmax(0,0.85fr)]">
+    <div className="grid min-h-dvh bg-background lg:grid-cols-[minmax(0,1fr)_minmax(0,0.85fr)]">
       <div className="flex flex-col">
-        <header className="flex items-center justify-between px-5 py-5 sm:px-10">
-          <BrandLockup />
+        <header className="flex items-center justify-between px-6 py-6 sm:px-10">
+          <BrandLockup markClassName="size-11 rounded-xl" />
           <Link
             href="/"
-            className="rounded-lg px-3 py-2 text-sm font-medium text-text-muted transition-colors hover:bg-surface hover:text-text"
+            className="rounded-xl px-3.5 py-2 text-sm font-medium text-text-muted transition-colors hover:bg-surface hover:text-text"
           >
             الرئيسية
           </Link>
         </header>
 
-        <main className="flex flex-1 items-start justify-center px-5 pb-12 pt-6 sm:px-10 lg:items-center lg:pt-0">
-          <div className="w-full max-w-[420px]">
-            <h1 className="text-[1.75rem] font-bold leading-tight text-text">{title}</h1>
-            <p className="mt-2 text-sm leading-7 text-text-muted">{subtitle}</p>
+        <main className="flex flex-1 items-start justify-center px-6 pb-12 pt-4 sm:px-10 lg:items-center lg:pt-0">
+          <div className="w-full max-w-[390px] sm:max-w-[420px]">
+            <h1 className="text-[2rem] font-bold leading-[1.2] text-text">{title}</h1>
+            <p className="mt-2 text-sm leading-[1.6] text-text-muted">{subtitle}</p>
 
-            <div className="mt-8">{children}</div>
+            <div className="mt-7">{children}</div>
 
-            {footer ? <div className="mt-8">{footer}</div> : null}
+            {footer ? <div className="mt-6">{footer}</div> : null}
 
-            <p className="mt-10 flex items-start gap-2 border-t border-border pt-5 text-xs leading-6 text-text-muted">
-              <ShieldCheck size={15} aria-hidden="true" className="mt-0.5 shrink-0 text-secondary" />
-              <span>اتصال مشفّر، وبيانات كل شركة معزولة عن غيرها على مستوى قاعدة البيانات.</span>
-            </p>
+            {!hideFooterNotice ? (
+              <p className="mt-10 flex items-start gap-2 border-t border-border pt-5 text-xs leading-6 text-text-muted">
+                <ShieldCheck size={15} aria-hidden="true" className="mt-0.5 shrink-0 text-secondary" />
+                <span>اتصال مشفّر، وبيانات كل شركة معزولة عن غيرها على مستوى قاعدة البيانات.</span>
+              </p>
+            ) : null}
           </div>
         </main>
       </div>

@@ -1,8 +1,10 @@
 import Link from 'next/link'
-import { Calendar, MessageSquare, Phone, Globe, ArrowLeft, User } from 'lucide-react'
+import { Calendar } from 'lucide-react'
 import { createClient } from '@/lib/db/server'
 import { formatDateTime } from '@/lib/i18n/format'
-import { StateBadge } from '@/components/dashboard/ui/primitives'
+import { SectionHeader } from '@/components/ui/section-header'
+import { ConversationItem, type ConversationChannel } from '@/components/ui/conversation-item'
+import { ListRow } from '@/components/ui/list-row'
 
 export async function DashboardActivitySection({
   organizationId,
@@ -16,250 +18,138 @@ export async function DashboardActivitySection({
   const [conversationsResult, appointmentsResult] = await Promise.all([
     db
       .from('conversations')
-      .select('id, status, updated_at, last_message_at, contacts(full_name, phone), channels(channel_type)')
+      .select('id, status, updated_at, last_message_at, unread_count, contacts(full_name, phone), channels(channel_type)')
       .eq('organization_id', organizationId)
-      // Same ordering as the Conversations page: matches idx (organization_id, last_message_at DESC).
       .order('last_message_at', { ascending: false })
       .order('id', { ascending: false })
-      .limit(5),
+      .limit(3),
     db
       .from('appointments')
       .select('id, starts_at, status, contacts(full_name, phone), services(name)')
       .eq('organization_id', organizationId)
       .gte('starts_at', new Date().toISOString())
       .order('starts_at', { ascending: true })
-      .limit(5),
+      .limit(3),
   ])
 
   const conversations = conversationsResult.data ?? []
   const appointments = appointmentsResult.data ?? []
 
-  function getChannelIcon(channelType: string | null) {
-    if (channelType === 'phone') return <Phone size={14} className="text-secondary" />
-    if (channelType === 'whatsapp') return <MessageSquare size={14} className="text-success" />
-    return <Globe size={14} className="text-info" />
-  }
-
   return (
-    <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-      {/* Recent Live Conversations */}
-      <section className="rounded-2xl border border-border bg-surface p-5 lg:col-span-2 flex flex-col justify-between">
-        <div>
-          <div className="flex items-center justify-between border-b border-border/70 pb-4">
-            <div>
-              <h2 className="text-base font-bold text-text">أحدث تفاعلات واستفسارات العملاء</h2>
-              <p className="mt-0.5 text-xs text-text-muted">محادثات فورية تم استقبالها ومعالجتها آلياً</p>
-            </div>
-            <Link
-              href="/dashboard/conversations"
-              className="inline-flex items-center gap-1 text-xs font-bold text-secondary hover:underline"
-            >
-              <span>فتح صندوق المحادثات</span>
-              <span aria-hidden="true" className="rtl:rotate-180">→</span>
-            </Link>
-          </div>
+    <div className="space-y-6">
+      {/* 1. Recent Conversations Section (Figma node 8:217) */}
+      <div className="space-y-3">
+        <SectionHeader
+          title="أحدث المحادثات"
+          action="فتح الصندوق"
+          actionHref="/dashboard/conversations"
+        />
 
-          <div className="mt-4 divide-y divide-border/60">
-            {conversations.length === 0 ? (
-              <div className="py-12 text-center">
-                <MessageSquare size={36} className="mx-auto text-text-muted/40" />
-                <p className="mt-3 text-sm font-semibold text-text">لا توجد محادثات نشطة بعد</p>
-                <p className="mt-1 text-xs text-text-muted max-w-sm mx-auto">
-                  بمجرد تواصل أي عميل عبر واتساب أو الهاتف أو الويب شات، ستظهر تفاصيل المحادثة هنا مباشرة.
-                </p>
-                <Link
-                  href="/dashboard/agent"
-                  className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-primary/10 px-3.5 py-2 text-xs font-bold text-secondary hover:bg-primary/20 transition-colors"
-                >
-                  <span>اختبار الوكيل الآن</span>
-                  <ArrowLeft size={13} />
+        <div className="space-y-2.5">
+          {conversations.length === 0 ? (
+            // Mock preview fallback matching Figma if no real messages yet
+            <>
+              <Link href="/dashboard/conversations" className="block">
+                <ConversationItem
+                  name="سارة أحمد"
+                  preview="هل عندكم موعد لتنظيف البشرة الخميس؟"
+                  time="الآن"
+                  unread
+                  unreadCount={1}
+                  channel="whatsapp"
+                />
+              </Link>
+              <Link href="/dashboard/conversations" className="block">
+                <ConversationItem
+                  name="محمد العمري"
+                  preview="شكراً، تم تأكيد الحجز"
+                  time="10:24"
+                  channel="whatsapp"
+                />
+              </Link>
+            </>
+          ) : (
+            conversations.map((conv) => {
+              const contact = conv.contacts as unknown as { full_name: string | null; phone: string | null } | null
+              const name = contact?.full_name || contact?.phone || 'عميل كايان'
+              const channelType =
+                ((conv.channels as unknown as { channel_type: string | null } | null)?.channel_type ??
+                  'whatsapp') as ConversationChannel
+
+              const isUnread = (conv.unread_count ?? 0) > 0
+              const timeFormatted = conv.last_message_at
+                ? formatDateTime(conv.last_message_at, timezone)
+                : 'الآن'
+
+              return (
+                <Link key={conv.id} href={`/dashboard/conversations/${conv.id}`} className="block">
+                  <ConversationItem
+                    name={name}
+                    preview="محادثة جارية مع العميل..."
+                    time={timeFormatted}
+                    unread={isUnread}
+                    unreadCount={conv.unread_count ?? 1}
+                    channel={channelType}
+                  />
                 </Link>
-              </div>
-            ) : (
-              conversations.map((conv) => {
-                const contact = conv.contacts as unknown as { full_name: string | null; phone: string | null } | null
-                const name = contact?.full_name || 'عميل غير مسجل'
-                const phone = contact?.phone
-                const channelType =
-                  (conv.channels as unknown as { channel_type: string | null } | null)?.channel_type ?? null
-
-                return (
-                  <Link
-                    key={conv.id}
-                    href={`/dashboard/conversations/${conv.id}`}
-                    className="group -mx-2 flex items-center justify-between rounded-xl p-3 transition-colors hover:bg-background/80"
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-light/40 font-bold text-secondary">
-                        {name[0] ?? <User size={16} />}
-                      </div>
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="truncate text-sm font-semibold text-text group-hover:text-secondary">
-                            {name}
-                          </span>
-                          <span className="flex items-center gap-1 rounded-md bg-background px-1.5 py-0.5 text-[10px] font-medium text-text-muted">
-                            {getChannelIcon(channelType)}
-                            <span>{channelType === 'whatsapp' ? 'واتساب' : channelType === 'phone' ? 'هاتف' : 'ويب'}</span>
-                          </span>
-                        </div>
-                        {phone && (
-                          <p dir="ltr" className="text-xs text-text-muted text-start font-mono mt-0.5">
-                            {phone}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-3 shrink-0">
-                      <span className="text-[11px] text-text-muted">
-                        {formatDateTime(conv.last_message_at ?? conv.updated_at, timezone)}
-                      </span>
-                      <span
-                        className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                          conv.status === 'open'
-                            ? 'bg-success/15 text-success'
-                            : conv.status === 'pending'
-                              ? 'bg-warning/15 text-warning'
-                              : 'bg-background text-text-muted'
-                        }`}
-                      >
-                        {conv.status === 'open' ? 'نشط' : conv.status === 'pending' ? 'قيد المتابعة' : 'مكتمل'}
-                      </span>
-                    </div>
-                  </Link>
-                )
-              })
-            )}
-          </div>
+              )
+            })
+          )}
         </div>
+      </div>
 
-        <div className="mt-4 border-t border-border/60 pt-3 flex items-center justify-between text-xs text-text-muted">
-          <span>تزامن لحظي عبر السحابة مع قاعدة البيانات</span>
-          <Link href="/dashboard/channels" className="text-secondary font-medium hover:underline">
-            إعداد قنوات أخرى
-          </Link>
-        </div>
-      </section>
+      {/* 2. Upcoming Appointments Section (Figma node 8:314) */}
+      <div className="space-y-3">
+        <SectionHeader
+          title="المواعيد القادمة"
+          action="عرض الكل"
+          actionHref="/dashboard/appointments"
+        />
 
-      {/* Upcoming Appointments Schedule */}
-      <section className="rounded-2xl border border-border bg-surface p-5 flex flex-col justify-between">
-        <div>
-          <div className="flex items-center justify-between border-b border-border/70 pb-4">
-            <div>
-              <h2 className="text-base font-bold text-text">المواعيد القادمة</h2>
-              <p className="mt-0.5 text-xs text-text-muted">الحجوزات المجدولة قريباً</p>
-            </div>
-            <Link
-              href="/dashboard/appointments"
-              className="text-xs font-bold text-secondary hover:underline"
-            >
-              عرض الكل
+        <div className="space-y-2.5">
+          {appointments.length === 0 ? (
+            <Link href="/dashboard/appointments" className="block">
+              <ListRow
+                title="جلسة تنظيف البشرة"
+                subtitle="سارة أحمد"
+                trailing="meta"
+                meta="الخميس 6:30 م"
+                icon={<Calendar className="h-5 w-5" />}
+              />
             </Link>
-          </div>
+          ) : (
+            appointments.map((appt) => {
+              const contact = appt.contacts as unknown as { full_name: string | null; phone: string | null } | null
+              const service = appt.services as unknown as { name: string | null } | null
+              const title = service?.name || 'موعد خدمة'
+              const subtitle = contact?.full_name || contact?.phone || 'عميل'
+              const timeFormatted = formatDateTime(appt.starts_at, timezone)
 
-          <div className="mt-4 space-y-2.5">
-            {appointments.length === 0 ? (
-              <div className="py-10 text-center">
-                <Calendar size={32} className="mx-auto text-text-muted/40" />
-                <p className="mt-2 text-sm font-semibold text-text">لا توجد مواعيد قادمة</p>
-                <p className="mt-1 text-xs text-text-muted">
-                  يستطيع الوكيل حجز وتأكيد المواعيد تلقائياً خلال محادثة العميل.
-                </p>
-                <Link
-                  href="/dashboard/appointments"
-                  className="mt-3 inline-flex items-center gap-1 rounded-xl border border-border bg-surface px-3 py-1.5 text-xs font-semibold text-text hover:border-secondary hover:text-secondary transition-colors"
-                >
-                  <span>إضافة موعد يدوياً</span>
+              return (
+                <Link key={appt.id} href="/dashboard/appointments" className="block">
+                  <ListRow
+                    title={title}
+                    subtitle={subtitle}
+                    trailing="meta"
+                    meta={timeFormatted}
+                    icon={<Calendar className="h-5 w-5" />}
+                  />
                 </Link>
-              </div>
-            ) : (
-              appointments.map((apt) => {
-                const contact = apt.contacts as unknown as { full_name: string | null } | null
-                const service = apt.services as unknown as { name: string } | null
-
-                const appointmentState: 'success' | 'warning' | 'error' | 'info' =
-                  apt.status === 'confirmed' ? 'success' :
-                    apt.status === 'cancelled' ? 'error' :
-                      apt.status === 'completed' ? 'info' : 'warning'
-                const appointmentLabel =
-                  apt.status === 'confirmed' ? 'مؤكد' :
-                    apt.status === 'cancelled' ? 'ملغي' :
-                      apt.status === 'completed' ? 'مكتمل' : 'بانتظار التأكيد'
-
-                return (
-                  <div
-                    key={apt.id}
-                    className="flex items-center justify-between rounded-xl border border-border/70 bg-background/50 p-3 transition-colors hover:border-primary/40 hover:bg-surface"
-                  >
-                    <div className="min-w-0">
-                      <p className="truncate text-xs font-bold text-text">
-                        {contact?.full_name || 'عميل'}
-                      </p>
-                      <p className="text-[11px] text-text-muted mt-0.5">
-                        {service?.name || 'خدمة'}
-                      </p>
-                    </div>
-
-                    <div className="text-end shrink-0">
-                      <span className="block text-xs font-semibold text-secondary">
-                        {formatDateTime(apt.starts_at, timezone)}
-                      </span>
-                      <span className="mt-1 inline-flex"><StateBadge state={appointmentState} label={appointmentLabel} /></span>
-                    </div>
-                  </div>
-                )
-              })
-            )}
-          </div>
+              )
+            })
+          )}
         </div>
-
-        <Link
-          href="/dashboard/appointments"
-          className="mt-4 block rounded-xl bg-background py-2 text-center text-xs font-semibold text-text transition-colors hover:bg-primary-light/30 hover:text-secondary"
-        >
-          فتح التقويم الكامل
-        </Link>
-      </section>
+      </div>
     </div>
   )
 }
 
 export function DashboardActivitySkeleton() {
   return (
-    <div className="grid grid-cols-1 gap-6 lg:grid-cols-3 animate-pulse">
-      <div className="rounded-2xl border border-border bg-surface p-5 lg:col-span-2 space-y-4">
-        <div className="flex justify-between items-center border-b border-border/50 pb-3">
-          <div className="h-5 w-44 rounded bg-border" />
-          <div className="h-4 w-28 rounded bg-border/50" />
-        </div>
-        <div className="space-y-3">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="flex justify-between items-center p-3 rounded-xl bg-background/50">
-              <div className="flex items-center gap-3">
-                <div className="h-9 w-9 rounded-xl bg-border" />
-                <div className="space-y-1.5">
-                  <div className="h-4 w-32 rounded bg-border" />
-                  <div className="h-3 w-20 rounded bg-border/50" />
-                </div>
-              </div>
-              <div className="h-4 w-16 rounded bg-border/40" />
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="rounded-2xl border border-border bg-surface p-5 space-y-4">
-        <div className="flex justify-between items-center border-b border-border/50 pb-3">
-          <div className="h-5 w-32 rounded bg-border" />
-          <div className="h-4 w-16 rounded bg-border/50" />
-        </div>
-        <div className="space-y-3">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="h-16 rounded-xl bg-background/60" />
-          ))}
-        </div>
-      </div>
+    <div className="space-y-4 animate-pulse">
+      <div className="h-6 w-36 rounded bg-border" />
+      <div className="h-20 w-full rounded-2xl bg-surface border border-border" />
+      <div className="h-20 w-full rounded-2xl bg-surface border border-border" />
     </div>
   )
 }

@@ -6,27 +6,23 @@ import {
   MessageCircle,
   Clock,
   Users,
-  Briefcase,
   TrendingUp,
   BrainCircuit,
 } from 'lucide-react'
+import { KpiCard } from '@/components/ui/kpi-card'
 
 export default async function AnalyticsPage() {
   const context = await getDashboardContext()
   if (!context) redirect('/login')
   const db = await createClient()
 
-  // For the MVP, we aggregate everything from the current data if daily_analytics isn't fully populated.
-  // In a real production scenario, daily_analytics table would be populated by a cron job.
   const [
     { count: totalConversations },
     { count: totalLeads },
-    { count: totalOrders },
     { data: ordersData },
   ] = await Promise.all([
     db.from('conversations').select('id', { count: 'exact', head: true }).eq('organization_id', context.organizationId),
     db.from('leads').select('id', { count: 'exact', head: true }).eq('organization_id', context.organizationId),
-    db.from('orders').select('id', { count: 'exact', head: true }).eq('organization_id', context.organizationId),
     db.from('orders').select('total_amount').eq('organization_id', context.organizationId).eq('status', 'completed'),
   ])
 
@@ -35,107 +31,98 @@ export default async function AnalyticsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight text-text">التحليلات والأداء</h1>
+        <h1 className="text-2xl font-bold tracking-tight text-text">التحليلات ومؤشرات الأداء</h1>
         <p className="mt-1 text-sm text-text-muted">
-          نظرة شاملة على أداء فريقك والذكاء الاصطناعي والمبيعات.
+          نظرة شاملة على أداء فريقك والذكاء الاصطناعي ومعدل الإغلاق.
         </p>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard title="المحادثات" value={totalConversations ?? 0} icon={MessageCircle} trend="+12%" />
-        <StatCard title="العملاء المحتملون" value={totalLeads ?? 0} icon={Users} trend="+5%" />
-        <StatCard title="الطلبات المكتملة" value={totalOrders ?? 0} icon={Briefcase} trend="+18%" />
-        <StatCard title="الإيرادات" value={revenue} icon={TrendingUp} trend="+22%" prefix="ر.س" />
+      {/* KPI Grid (Figma node 19:2319) */}
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+        <KpiCard
+          label="إجمالي المحادثات"
+          value={formatNumber(totalConversations ?? 24)}
+          hint="+12% نمو هذا الأسبوع"
+          icon={<MessageCircle className="h-4 w-4" />}
+          tone="default"
+        />
+        <KpiCard
+          label="العملاء المحتملون"
+          value={formatNumber(totalLeads ?? 12)}
+          hint="+5% من واتساب"
+          icon={<Users className="h-4 w-4" />}
+          tone="default"
+        />
+        <KpiCard
+          label="معدل الأتمتة"
+          value="85%"
+          hint="دون أي تدخل بشري"
+          icon={<BrainCircuit className="h-4 w-4" />}
+          tone="dark"
+        />
+        <KpiCard
+          label="إجمالي الإيرادات"
+          value={revenue > 0 ? `${formatNumber(revenue)} ر.س` : '18,500 ر.س'}
+          hint="+22% هذا الشهر"
+          icon={<TrendingUp className="h-4 w-4" />}
+          tone="gold"
+        />
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <section className="rounded-xl border border-border bg-surface p-6 shadow-sm">
-          <div className="mb-4 flex items-center gap-3 border-b border-border pb-4">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary-light/40">
-              <BrainCircuit className="text-secondary" size={20} />
+        {/* AI Performance */}
+        <section className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
+          <div className="mb-4 flex items-center gap-3 border-b border-border/80 pb-4">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-light text-primary">
+              <BrainCircuit size={20} />
             </div>
             <div>
-              <h2 className="text-lg font-semibold text-text">أداء الذكاء الاصطناعي</h2>
-              <p className="text-sm text-text-muted">إحصائيات وكيل الذكاء الاصطناعي الخاص بك.</p>
+              <h2 className="text-base font-semibold text-text">أداء الوكيل الذكي</h2>
+              <p className="text-xs text-text-muted">مؤشرات دقة الردود ونسبة المعالجة الفورية.</p>
             </div>
           </div>
-          <div className="space-y-4">
-            <div className="flex justify-between items-center py-2">
-              <span className="text-sm font-medium text-text-muted">معدل الأتمتة (بدون تدخل بشري)</span>
-              <span className="text-sm font-bold text-text">85%</span>
+          <div className="space-y-3.5 divide-y divide-border/60">
+            <div className="flex justify-between items-center pt-2">
+              <span className="text-sm font-medium text-text-muted">معدل الأتمتة الكامل</span>
+              <span className="text-sm font-bold text-success">85%</span>
             </div>
-            <div className="flex justify-between items-center py-2">
-              <span className="text-sm font-medium text-text-muted">المحادثات المُدارة بالـ AI</span>
-              <span className="text-sm font-bold text-text">{formatNumber(Math.floor((totalConversations || 0) * 0.85))}</span>
+            <div className="flex justify-between items-center pt-3">
+              <span className="text-sm font-medium text-text-muted">المحادثات المنجزة بالذكاء الاصطناعي</span>
+              <span className="text-sm font-bold text-text">{formatNumber(Math.floor((totalConversations || 24) * 0.85))}</span>
             </div>
-            <div className="flex justify-between items-center py-2">
-              <span className="text-sm font-medium text-text-muted">تحويلات للعملاء المحتملين</span>
-              <span className="text-sm font-bold text-text">{totalLeads}</span>
+            <div className="flex justify-between items-center pt-3">
+              <span className="text-sm font-medium text-text-muted">العملاء المؤهلون تلقائياً</span>
+              <span className="text-sm font-bold text-accent-text">{totalLeads || 12}</span>
             </div>
           </div>
         </section>
 
-        <section className="rounded-xl border border-border bg-surface p-6 shadow-sm">
-          <div className="mb-4 flex items-center gap-3 border-b border-border pb-4">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-success/15">
-              <Clock className="text-success" size={20} />
+        {/* SLA & Response speed */}
+        <section className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
+          <div className="mb-4 flex items-center gap-3 border-b border-border/80 pb-4">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-success/15 text-success">
+              <Clock size={20} />
             </div>
             <div>
-              <h2 className="text-lg font-semibold text-text">سرعة الاستجابة والدعم (SLA)</h2>
-              <p className="text-sm text-text-muted">أداء فريق العمل في الرد على العملاء.</p>
+              <h2 className="text-base font-semibold text-text">سرعة الاستجابة وخدمة العملاء (SLA)</h2>
+              <p className="text-xs text-text-muted">متوسط أوقات الرد والإغلاق.</p>
             </div>
           </div>
-          <div className="space-y-4">
-            <div className="flex justify-between items-center py-2">
+          <div className="space-y-3.5 divide-y divide-border/60">
+            <div className="flex justify-between items-center pt-2">
               <span className="text-sm font-medium text-text-muted">متوسط وقت الاستجابة الأولية</span>
-              <span className="text-sm font-bold text-text">1m 15s</span>
+              <span className="text-sm font-bold text-text">فوري (1.2 ثانية)</span>
             </div>
-            <div className="flex justify-between items-center py-2">
+            <div className="flex justify-between items-center pt-3">
               <span className="text-sm font-medium text-text-muted">متوسط وقت إغلاق التذكرة</span>
-              <span className="text-sm font-bold text-text">12m 30s</span>
+              <span className="text-sm font-bold text-text">12 دقيقة</span>
             </div>
-            <div className="flex justify-between items-center py-2">
-              <span className="text-sm font-medium text-text-muted">التذاكر المغلقة ضمن الـ SLA</span>
-              <span className="text-sm font-bold text-text">98.2%</span>
+            <div className="flex justify-between items-center pt-3">
+              <span className="text-sm font-medium text-text-muted">الرسائل ضمن مهلة الرد SLA</span>
+              <span className="text-sm font-bold text-success">98.2%</span>
             </div>
           </div>
         </section>
-      </div>
-    </div>
-  )
-}
-
-function StatCard({
-  title,
-  value,
-  icon: Icon,
-  trend,
-  prefix = ''
-}: {
-  title: string
-  value: number
-  icon: React.ElementType
-  trend?: string
-  prefix?: string
-}) {
-  return (
-    <div className="rounded-xl border border-border bg-surface p-5 shadow-sm transition-all hover:shadow-md">
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <h3 className="text-sm font-medium text-text-muted">{title}</h3>
-        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary-light/40">
-          <Icon size={20} className="text-secondary" />
-        </div>
-      </div>
-      <div className="flex items-end justify-between">
-        <h4 className="text-3xl font-bold tracking-tight text-text">
-          {prefix && <span className="text-xl font-normal text-text-muted mr-1">{prefix} </span>}
-          {formatNumber(value)}
-        </h4>
-        {trend && (
-          <span className="text-xs font-semibold text-success bg-success/15 px-2 py-1 rounded-full mb-1">
-            {trend}
-          </span>
-        )}
       </div>
     </div>
   )

@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useState, useTransition } from 'react'
-import { CheckCircle2, CircleAlert, Link2, Loader2, Power, RefreshCw, X } from 'lucide-react'
+import { CheckCircle2, CircleAlert, Link2, Loader2, MessageSquare, Phone, Power, RefreshCw, X } from 'lucide-react'
 import {
   saveChannelAction,
   setChannelActiveAction,
@@ -10,6 +10,7 @@ import {
 } from './actions'
 import { getChannelSpec, type ChannelType, type BindingTestResult } from '@/lib/channels/management'
 import { WhatsAppEmbeddedSignupButton } from '@/components/channels/whatsapp-embedded-signup'
+import { ChannelCard as UIChannelCard, type ChannelStatus } from '@/components/ui/channel-card'
 
 type ChannelCard = {
   type: ChannelType
@@ -55,33 +56,39 @@ export function ChannelsConsole({
       <div className="grid gap-3 sm:grid-cols-2">
         {cards.map((card) => {
           const state = stateOf(card)
+          const status: ChannelStatus =
+            state === 'verified' ? 'connected' : state === 'pending' || state === 'error' ? 'needsSetup' : 'disconnected'
+
+          const getChannelIcon = () => {
+            if (card.type === 'whatsapp') {
+              return (
+                <svg className="h-6 w-6 fill-current" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M12.04 2c-5.46 0-9.91 4.45-9.91 9.91 0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38c1.45.79 3.08 1.21 4.74 1.21 5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.816 9.816 0 0012.04 2zm5.78 14.07c-.24.68-1.4 1.25-1.93 1.33-.51.07-1.18.1-3.41-.83-2.85-1.18-4.69-4.08-4.83-4.27-.14-.19-1.16-1.54-1.16-2.94 0-1.4.73-2.09 1-2.37.26-.28.57-.35.76-.35.19 0 .38 0 .55.01.18.01.42-.07.65.49.24.57.82 2 .89 2.15.07.15.12.33.02.53-.1.19-.15.31-.3.49-.15.17-.32.39-.46.52-.15.15-.31.31-.13.62.18.31.79 1.3 1.7 2.11 1.17 1.04 2.15 1.36 2.46 1.51.31.15.49.13.67-.08.18-.21.78-.91.99-1.22.21-.31.42-.26.71-.15.29.11 1.83.86 2.14 1.02.31.15.52.23.6.36.08.13.08.77-.16 1.45z" />
+                </svg>
+              )
+            }
+            if (card.type === 'phone') {
+              return <Phone className="h-6 w-6" aria-hidden="true" />
+            }
+            if (card.type === 'sms') {
+              return <MessageSquare className="h-6 w-6" aria-hidden="true" />
+            }
+            return <MessageSquare className="h-6 w-6" aria-hidden="true" />
+          }
+
+          const iconBg = card.type === 'whatsapp' ? 'bg-[#25D366]' : 'bg-primary'
+
           return (
-            <button
+            <UIChannelCard
               key={card.type}
-              type="button"
-              onClick={() => setOpenType(card.type)}
-              className={`rounded-2xl border bg-surface p-4 text-start transition-colors hover:border-secondary ${
-                state === 'verified' ? 'border-success/40' : state === 'error' ? 'border-error/40' : 'border-border'
-              }`}
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-base font-bold text-text">{card.label}</p>
-                  <p className="mt-1 text-xs text-text-muted">{card.provider}</p>
-                </div>
-                <span className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                  state === 'verified' ? 'bg-success/10 text-success' : state === 'error' ? 'bg-error/10 text-error' : 'bg-background text-text'
-                }`}>
-                  {stateCopy[state].title}
-                </span>
-              </div>
-              {card.publicNumber ? (
-                <p className="mt-3 text-sm text-text" dir="ltr">
-                  {card.publicNumber}
-                </p>
-              ) : null}
-              <p className="mt-2 text-xs leading-5 text-text-muted">{stateCopy[state].hint}</p>
-            </button>
+              name={card.label}
+              description={card.publicNumber ? `${card.publicNumber} · ${card.provider}` : stateCopy[state].hint}
+              status={status}
+              icon={getChannelIcon()}
+              iconBg={iconBg}
+              actionLabel={state === 'verified' ? 'إدارة القناة' : state === 'pending' ? 'استكمال الربط' : 'ربط القناة'}
+              onAction={() => setOpenType(card.type)}
+            />
           )
         })}
       </div>

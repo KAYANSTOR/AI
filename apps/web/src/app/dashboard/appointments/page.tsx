@@ -1,4 +1,5 @@
 import { Suspense } from 'react'
+import { Calendar } from 'lucide-react'
 import { getDashboardContext } from '@/lib/dashboard/context'
 import { createClient } from '@/lib/db/server'
 import { redirect } from 'next/navigation'
@@ -6,6 +7,7 @@ import { AppointmentForm } from './appointment-form'
 import { ar } from '@/lib/i18n/ar'
 import { formatDateTime } from '@/lib/i18n/format'
 import { appointmentStatusLabel } from '@/lib/i18n/labels'
+import { MobileEmptyState } from '@/components/ui/empty-state'
 
 export const dynamic = 'force-dynamic'
 
@@ -95,7 +97,15 @@ async function AppointmentListSection({
     .limit(50)
 
   if (!appointments?.length) {
-    return <div className="p-10 text-center text-sm text-text-muted">{ar.appointments.empty}</div>
+    return (
+      <div className="p-8">
+        <MobileEmptyState
+          title={ar.appointments.empty}
+          description="لم يتم تسجيل أي مواعيد حتى الآن. يمكنك إضافة موعد جديد أو انتظار حجز المواعيد عبر المحادثات."
+          icon={Calendar}
+        />
+      </div>
+    )
   }
 
   return (

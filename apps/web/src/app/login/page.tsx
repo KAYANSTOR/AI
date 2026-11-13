@@ -33,6 +33,7 @@ export default async function LoginPage({
     <AuthShell
       title="تسجيل الدخول"
       subtitle="أهلًا بعودتك. ادخل إلى لوحة شركتك لمتابعة المحادثات والعملاء والمواعيد."
+      hideFooterNotice
     >
       <LoginForm returnTo={returnTo} authConfigured={authConfigured} />
     </AuthShell>

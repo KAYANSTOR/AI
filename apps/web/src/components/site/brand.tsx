@@ -24,11 +24,13 @@ export function BrandMark({ className = 'h-9 w-9' }: { className?: string }) {
 export function BrandLockup({
   href = '/',
   className = '',
+  markClassName,
   subtitle,
   tone = 'light',
 }: {
   href?: string
   className?: string
+  markClassName?: string
   subtitle?: string
   tone?: 'light' | 'dark'
 }) {
@@ -37,7 +39,7 @@ export function BrandLockup({
       href={href}
       className={`inline-flex items-center gap-3 rounded-xl focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 ${className}`}
     >
-      <BrandMark />
+      <BrandMark className={markClassName} />
       <span className="flex flex-col leading-tight">
         <span className={`text-[15px] font-bold tracking-tight ${tone === 'dark' ? 'text-text' : 'text-text'}`}>
           {BRAND_NAME}

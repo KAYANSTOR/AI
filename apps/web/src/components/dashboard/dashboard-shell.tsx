@@ -3,6 +3,8 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, Suspense } from 'react'
 import { Header } from '@/components/Header'
 import { NavigationProgress } from './navigation-progress'
+import { MobileTabBar } from './mobile-tab-bar'
+import { OfflineBanner } from './offline-banner'
 import { ar } from '@/lib/i18n/ar'
 
 type DashboardShellContextValue = {
@@ -46,6 +48,7 @@ export function DashboardShell({
 
   return (
     <DashboardShellContext.Provider value={{ open, close, toggle, triggerRef }}>
+      <OfflineBanner />
       <Suspense fallback={null}>
         <NavigationProgress />
       </Suspense>
@@ -61,13 +64,14 @@ export function DashboardShell({
         {sidebar}
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
           <Header userEmail={userEmail} />
-          <main className="min-w-0 flex-1 overflow-y-auto p-3 sm:p-5 lg:p-6">
+          <main className="min-w-0 flex-1 overflow-y-auto p-3 pb-28 sm:p-5 sm:pb-28 lg:p-6 lg:pb-6">
             <div className="mx-auto min-h-full max-w-[1380px] rounded-[1.35rem] border border-border/80 bg-surface p-4 sm:p-6 lg:p-8 animate-page-enter">
               {setupBanner}
               {children}
             </div>
           </main>
         </div>
+        <MobileTabBar />
       </div>
     </DashboardShellContext.Provider>
   )
