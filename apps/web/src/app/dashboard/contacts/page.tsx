@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { getDashboardContext } from '@/lib/dashboard/context'
 import { createClient } from '@/lib/db/server'
 import { redirect } from 'next/navigation'
@@ -39,11 +40,13 @@ export default async function ContactsPage() {
             <>
               <ul className="divide-y divide-border md:hidden">
                 {contacts.map((contact) => (
-                  <li key={contact.id} className="space-y-1 p-4">
-                    <p className="font-medium text-text">{contact.full_name || ar.common.unknown}</p>
-                    {contact.phone && <p dir="ltr" className="text-start text-sm text-text-muted">{contact.phone}</p>}
-                    {contact.email && <p dir="ltr" className="break-all text-start text-sm text-text-muted">{contact.email}</p>}
-                    <p className="text-xs text-text-muted">{formatDate(contact.created_at, context.timezone)}</p>
+                  <li key={contact.id}>
+                    <Link href={`/dashboard/contacts/${contact.id}`} className="block space-y-1 p-4 transition hover:bg-background">
+                      <p className="font-medium text-text">{contact.full_name || ar.common.unknown}</p>
+                      {contact.phone && <p dir="ltr" className="text-start text-sm text-text-muted">{contact.phone}</p>}
+                      {contact.email && <p dir="ltr" className="break-all text-start text-sm text-text-muted">{contact.email}</p>}
+                      <p className="text-xs text-text-muted">{formatDate(contact.created_at, context.timezone)}</p>
+                    </Link>
                   </li>
                 ))}
               </ul>
@@ -59,8 +62,12 @@ export default async function ContactsPage() {
                   </thead>
                   <tbody>
                     {contacts.map((contact) => (
-                      <tr key={contact.id} className="border-b border-border last:border-0">
-                        <td className="px-4 py-3 font-medium text-text">{contact.full_name || ar.common.unknown}</td>
+                      <tr key={contact.id} className="border-b border-border last:border-0 hover:bg-background/70">
+                        <td className="px-4 py-3 font-medium text-text">
+                          <Link href={`/dashboard/contacts/${contact.id}`} className="hover:text-primary hover:underline">
+                            {contact.full_name || ar.common.unknown}
+                          </Link>
+                        </td>
                         <td dir="ltr" className="px-4 py-3 text-start text-text-muted">{contact.phone || ar.common.unknown}</td>
                         <td dir="ltr" className="px-4 py-3 text-start text-text-muted">{contact.email || ar.common.unknown}</td>
                         <td className="px-4 py-3 text-xs text-text-muted">{formatDate(contact.created_at, context.timezone)}</td>
