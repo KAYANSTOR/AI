@@ -1,235 +1,163 @@
-import { Suspense } from 'react'
-import { redirect } from 'next/navigation'
-import { Bot } from 'lucide-react'
 import Link from 'next/link'
-import { createClient } from '@/lib/db/server'
-import { getDashboardContext } from '@/lib/dashboard/context'
-import { TOOL_POLICIES } from '@/lib/ai/registry'
-import type { AgentConsoleData } from './agent-console'
-import { AgentTrainer } from './agent-trainer'
-import { calculateAgentReadiness } from '@/lib/ai/readiness'
-import { ar } from '@/lib/i18n/ar'
+import { Bot, MessageSquare, Settings2, Sparkles } from 'lucide-react'
+import { loadAgentContext } from './load-agent-context'
+import { MobileEmptyState } from '@/components/ui/empty-state'
+import { KpiCard } from '@/components/ui/kpi-card'
 
 export const dynamic = 'force-dynamic'
 
-export default async function AgentPage() {
-  const context = await getDashboardContext()
-  if (!context) redirect('/login')
+export default async function AgentHubPage() {
+  const data = await loadAgentContext()
 
-  const db = await createClient()
-
-  if (!context.businessId) {
+  if (data.kind === 'no_business') {
     return (
-      <div className="space-y-4">
-        <h1 className="text-2xl font-bold tracking-tight text-text">وكيل الذكاء الاصطناعي</h1>
+      <div className="mx-auto max-w-lg space-y-4">
+        <h1 className="text-2xl font-bold text-text">الوكيل الذكي</h1>
         <p className="rounded-xl border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-text">
-          لا يوجد نشاط مُهيّأ لهذه الشركة بعد.{' '}
+          لا يوجد نشاط مُهيّأ بعد.{' '}
           <Link href="/onboarding" className="font-semibold underline">
-            أكمل إعداد النشاط
-          </Link>{' '}
-          ليتم إنشاء الوكيل تلقائيًا.
+            أكمل الإعداد
+          </Link>
         </p>
       </div>
     )
   }
 
-  const { data: business } = await db
-    .from('businesses')
-    .select('id, name')
-    .eq('id', context.businessId)
-    .eq('organization_id', context.organizationId)
-    .maybeSingle()
-
-  if (!business) {
+  if (data.kind === 'error') {
     return (
-      <div className="space-y-4">
-        <h1 className="text-2xl font-bold tracking-tight text-text">وكيل الذكاء الاصطناعي</h1>
+      <div className="mx-auto max-w-lg space-y-4">
+        <h1 className="text-2xl font-bold text-text">الوكيل الذكي</h1>
         <p className="rounded-xl border border-error/40 bg-error/10 px-4 py-3 text-sm text-text">
-          تعذّر تحميل النشاط الحالي.
+          تعذّر تحميل بيانات الوكيل.
         </p>
       </div>
     )
   }
 
-  const { data: agent, error: agentError } = await db
-    .from('ai_agents')
-    .select('id, name, locale, temperature, status, business_id')
-    .eq('business_id', business.id)
-    .eq('organization_id', context.organizationId)
-    .neq('status', 'archived')
-    .order('created_at', { ascending: true })
-    .limit(1)
-    .maybeSingle()
+  const { readiness, businessName, conversationCount, consoleData } = data
+  const statusLabel =
+    consoleData.status === 'active' ? 'نشط' : consoleData.status === 'paused' ? 'متوقف' : 'مسودة'
 
-  if (agentError) {
-    return (
-      <div className="space-y-4">
-        <h1 className="text-2xl font-bold tracking-tight text-text">وكيل الذكاء الاصطناعي</h1>
-        <p className="rounded-xl border border-error/40 bg-error/10 px-4 py-3 text-sm text-text">
-          {ar.errors.load}
+  return (
+    <div className="mx-auto max-w-lg space-y-5 pb-8">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold tracking-tight text-text">الوكيل الذكي</h1>
+        <Link
+          href="/dashboard/agent/settings"
+          className="flex h-10 w-10 items-center justify-center rounded-full border border-border bg-surface text-text"
+          aria-label="إعدادات الوكيل"
+        >
+          <Settings2 className="h-5 w-5" />
+        </Link>
+      </div>
+
+      <section className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
+        <p className="text-xs font-semibold text-secondary">جاهزية الوكيل · {readiness.score}%</p>
+        <h2 className="mt-1 text-lg font-bold text-text">{businessName}</h2>
+        <p className="mt-1 text-sm text-text-muted">
+          الحالة: {statusLabel} · النموذج: {consoleData.modelProvider}
         </p>
-      </div>
-    )
-  }
+        <Link
+          href="/dashboard/agent/settings"
+          className="mt-4 inline-flex h-11 w-full items-center justify-center rounded-xl bg-primary text-sm font-bold text-primary-foreground"
+        >
+          إدارة إعدادات الوكيل
+        </Link>
+      </section>
 
-  if (!agent) redirect('/onboarding')
-
-  return (
-    <div className="space-y-6">
-      {/* 0ms Instant Header */}
-      <header className="flex flex-col gap-4 rounded-[1.15rem] border border-border bg-background/55 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
-        <div className="flex items-start gap-3">
-          <span className="flex h-11 w-11 items-center justify-center rounded-xl border border-border bg-surface">
-            <Bot size={22} className="text-secondary" aria-hidden="true" />
-          </span>
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight text-text">وكيل الذكاء الاصطناعي</h1>
-            <p className="mt-0.5 text-sm text-text-muted">
-              مركز تدريب وتجهيز واختبار الوكيل الذكي لنشاط «{business.name}».
-            </p>
-          </div>
+      <div>
+        <div className="mb-2 flex items-center justify-between">
+          <h3 className="text-base font-bold text-text">أداء اليوم</h3>
+          <Link href="/dashboard/analytics" className="text-xs font-semibold text-secondary">
+            التفاصيل
+          </Link>
         </div>
-        <div className="text-xs text-text-muted sm:text-end">
-          <span className="font-semibold text-secondary">ثلاثة مسارات واضحة</span>
-          <p className="mt-1">درّب · اختبر · اضبط</p>
-        </div>
-      </header>
-
-      {/* Streamed Trainer & Readiness Console */}
-      <Suspense fallback={<AgentTrainerSkeleton />}>
-        <AgentTrainerSection
-          organizationId={context.organizationId}
-          businessName={business.name}
-          enabledCapabilities={context.enabledCapabilities}
-          agentId={agent.id}
-          agentName={agent.name}
-          agentLocale={agent.locale}
-          agentTemperature={agent.temperature}
-          agentStatus={agent.status}
-        />
-      </Suspense>
-    </div>
-  )
-}
-
-async function AgentTrainerSection({
-  organizationId,
-  businessName,
-  enabledCapabilities,
-  agentId,
-  agentName,
-  agentLocale,
-  agentTemperature,
-  agentStatus,
-}: {
-  organizationId: string
-  businessName: string
-  enabledCapabilities: string[]
-  agentId: string
-  agentName: string | null
-  agentLocale: string | null
-  agentTemperature: number | null
-  agentStatus: string | null
-}) {
-  const db = await createClient()
-  const enabled = new Set(enabledCapabilities)
-
-  const [readiness, { data: profile }, { data: versions }, { data: policies }] = await Promise.all([
-    calculateAgentReadiness(db, organizationId),
-    db
-      .from('business_profiles')
-      .select('business_type_id, industry, setup_description, public_phone_number, system_prompt_addition')
-      .eq('organization_id', organizationId)
-      .maybeSingle(),
-    db
-      .from('agent_prompt_versions')
-      .select('version, status, published_at, system_prompt_addition')
-      .eq('agent_id', agentId)
-      .order('version', { ascending: false }),
-    db
-      .from('agent_tool_policies')
-      .select('tool_name, is_allowed, requires_confirmation')
-      .eq('agent_id', agentId),
-  ])
-
-  const policyByTool = new Map(
-    (policies ?? []).map((row) => [
-      row.tool_name as string,
-      row as { is_allowed: boolean; requires_confirmation: boolean },
-    ])
-  )
-  const published = (versions ?? []).find((row) => row.status === 'published') ?? null
-
-  const data: AgentConsoleData = {
-    agentId,
-    name: agentName ?? 'KAYAN',
-    locale: agentLocale ?? 'ar',
-    temperature: Number(agentTemperature ?? 0.2),
-    status: agentStatus ?? 'active',
-    modelProvider: 'Gemini API (Google AI Studio)',
-    publishedVersion: published?.version ?? null,
-    publishedInstructions: published?.system_prompt_addition ?? '',
-    versions: (versions ?? []).map((row) => ({
-      version: row.version as number,
-      status: row.status as string,
-      publishedAt: (row.published_at as string | null) ?? null,
-      characters: ((row.system_prompt_addition as string | null) ?? '').length,
-    })),
-    tools: Object.values(TOOL_POLICIES).map((policy) => {
-      const override = policyByTool.get(policy.name)
-      return {
-        policy,
-        isAllowed: override ? Boolean(override.is_allowed) : true,
-        requiresConfirmation: override
-          ? Boolean(override.requires_confirmation)
-          : policy.requiresConfirmation,
-        capabilityEnabled: policy.capability === null || enabled.has(policy.capability),
-      }
-    }),
-  }
-
-  return (
-    <AgentTrainer
-      agentId={agentId}
-      businessName={businessName}
-      initialReadiness={readiness}
-      consoleData={data}
-      initialProfile={{
-        businessTypeId: profile?.business_type_id ?? '',
-        industry: profile?.industry ?? '',
-        setupDescription: profile?.setup_description ?? '',
-        publicPhoneNumber: profile?.public_phone_number ?? '',
-        systemPromptAddition: profile?.system_prompt_addition ?? '',
-      }}
-    />
-  )
-}
-
-function AgentTrainerSkeleton() {
-  return (
-    <div className="grid grid-cols-1 gap-6 lg:grid-cols-3 animate-pulse">
-      <div className="space-y-5 lg:col-span-2">
-        <div className="rounded-2xl border border-border bg-surface p-5 space-y-4">
-          <div className="h-6 w-36 rounded bg-border" />
-          <div className="space-y-2">
-            <div className="h-4 w-full rounded bg-border/50" />
-            <div className="h-4 w-4/5 rounded bg-border/50" />
-          </div>
-          <div className="h-28 rounded-xl bg-border/30" />
-        </div>
-        <div className="rounded-2xl border border-border bg-surface p-5 space-y-4">
-          <div className="h-6 w-40 rounded bg-border" />
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="h-20 rounded-xl bg-border/30" />
-            ))}
-          </div>
+        <div className="grid grid-cols-2 gap-3">
+          <KpiCard
+            label="محادثات"
+            value={String(conversationCount)}
+            hint="إجمالي المحادثات"
+            icon={<MessageSquare className="h-4 w-4" />}
+            tone="default"
+          />
+          <KpiCard
+            label="جاهزية المعرفة"
+            value={`${readiness.score}%`}
+            hint={readiness.score >= 70 ? 'جاهز للرد' : 'يحتاج تدريب'}
+            icon={<Sparkles className="h-4 w-4" />}
+            tone="gold"
+          />
         </div>
       </div>
-      <div className="rounded-2xl border border-border bg-surface p-5 space-y-4">
-        <div className="h-6 w-28 rounded bg-border" />
-        <div className="h-80 rounded-xl bg-border/20" />
-        <div className="h-11 rounded-xl bg-border/40" />
+
+      <div className="space-y-2">
+        <h3 className="text-base font-bold text-text">إجراءات الوكيل</h3>
+        <Link
+          href="/dashboard/agent/train"
+          className="flex items-center gap-3 rounded-2xl border border-border bg-surface px-4 py-3.5 transition hover:bg-background"
+        >
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-light/40 text-secondary">
+            <Sparkles className="h-5 w-5" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="font-semibold text-text">تدريب الوكيل</p>
+            <p className="text-xs text-text-muted">بناء المعرفة من محادثة تدريب</p>
+          </div>
+        </Link>
+        <Link
+          href="/dashboard/agent/test"
+          className="flex items-center gap-3 rounded-2xl border border-border bg-surface px-4 py-3.5 transition hover:bg-background"
+        >
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-light/40 text-secondary">
+            <Bot className="h-5 w-5" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="font-semibold text-text">اختبار الوكيل</p>
+            <p className="text-xs text-text-muted">محاكاة عميل على بياناتك الحقيقية</p>
+          </div>
+        </Link>
+        <Link
+          href="/dashboard/knowledge"
+          className="flex items-center gap-3 rounded-2xl border border-border bg-surface px-4 py-3.5 transition hover:bg-background"
+        >
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-light/40 text-secondary">
+            <MessageSquare className="h-5 w-5" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="font-semibold text-text">قاعدة المعرفة</p>
+            <p className="text-xs text-text-muted">عرض وتعديل البنود المحفوظة</p>
+          </div>
+        </Link>
+      </div>
+
+      <div>
+        <div className="mb-2 flex items-center justify-between">
+          <h3 className="text-base font-bold text-text">أحدث النشاط</h3>
+        </div>
+        {conversationCount === 0 ? (
+          <MobileEmptyState
+            icon={Bot}
+            title="لا نشاط للوكيل بعد"
+            description="اربط قناة وابدأ محادثات العملاء، أو درّب الوكيل أولاً."
+            action={
+              <Link
+                href="/dashboard/agent/train"
+                className="mt-2 inline-flex h-11 items-center justify-center rounded-xl bg-primary px-5 text-sm font-semibold text-primary-foreground"
+              >
+                ابدأ التدريب
+              </Link>
+            }
+          />
+        ) : (
+          <div className="rounded-2xl border border-border bg-surface px-4 py-3 text-sm text-text-muted">
+            يوجد {conversationCount} محادثة مسجّلة. راجع الصندوق لمتابعة أحدث التفاعلات.
+            <div className="mt-2">
+              <Link href="/dashboard/conversations" className="font-semibold text-secondary">
+                فتح الصندوق
+              </Link>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )
