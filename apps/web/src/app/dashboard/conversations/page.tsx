@@ -83,6 +83,26 @@ export default async function ConversationsPage({
 
   const { data: conversations } = await query
 
+  const conversationIds = (conversations ?? []).map((conversation) => conversation.id)
+  const latestMessageByConversation = new Map<string, string>()
+
+  if (conversationIds.length > 0) {
+    const { data: recentMessages } = await ctx.db
+      .from('messages')
+      .select('conversation_id, content, created_at')
+      .eq('organization_id', ctx.organizationId)
+      .in('conversation_id', conversationIds)
+      .order('created_at', { ascending: false })
+      .limit(3000)
+
+    for (const message of recentMessages ?? []) {
+      const conversationId = String(message.conversation_id)
+      if (!latestMessageByConversation.has(conversationId) && message.content) {
+        latestMessageByConversation.set(conversationId, String(message.content))
+      }
+    }
+  }
+
   const filtered = !effectiveQ
     ? conversations
     : (conversations ?? []).filter((c) => {
@@ -203,7 +223,7 @@ export default async function ConversationsPage({
                     full_name: string | null
                     phone: string | null
                   } | null
-                  const name = contact?.full_name || contact?.phone || 'عميل كايان'
+                  const name = contact?.full_name || contact?.phone || 'عميل'
                   const channel =
                     ((conv.channels as unknown as { channel_type: string | null } | null)
                       ?.channel_type ?? 'whatsapp') as ConversationChannel
@@ -220,7 +240,7 @@ export default async function ConversationsPage({
                     >
                       <ConversationItem
                         name={name}
-                        preview="انقر لعرض المحادثة والرد على العميل..."
+                        preview={latestMessageByConversation.get(String(conv.id)) ?? ''}
                         time={timeStr}
                         unread={unread}
                         unreadCount={conv.unread_count ?? 1}
@@ -243,7 +263,7 @@ export default async function ConversationsPage({
                     full_name: string | null
                     phone: string | null
                   } | null
-                  const name = contact?.full_name || contact?.phone || 'عميل كايان'
+                  const name = contact?.full_name || contact?.phone || 'عميل'
                   const channel =
                     ((conv.channels as unknown as { channel_type: string | null } | null)
                       ?.channel_type ?? 'whatsapp') as ConversationChannel
@@ -260,7 +280,7 @@ export default async function ConversationsPage({
                     >
                       <ConversationItem
                         name={name}
-                        preview="انقر لعرض المحادثة والرد على العميل..."
+                        preview={latestMessageByConversation.get(String(conv.id)) ?? ''}
                         time={timeStr}
                         unread={unread}
                         unreadCount={conv.unread_count ?? 1}

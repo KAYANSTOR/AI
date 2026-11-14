@@ -1,7 +1,7 @@
 'use client'
 
 import { Moon, Sun } from 'lucide-react'
-import { useEffect, useSyncExternalStore } from 'react'
+import { useSyncExternalStore } from 'react'
 import { THEME_STORAGE_KEY, type ThemePreference } from './theme-script'
 
 function applyTheme(theme: ThemePreference) {
@@ -24,17 +24,6 @@ const readServerTheme = (): ThemePreference | null => null
 /** Switches between light and dark; the choice is remembered on this device. */
 export function ThemeToggle({ className = '' }: { className?: string }) {
   const theme = useSyncExternalStore<ThemePreference | null>(subscribe, readTheme, readServerTheme)
-
-  useEffect(() => {
-    const media = window.matchMedia('(prefers-color-scheme: dark)')
-    const onSystemChange = (event: MediaQueryListEvent) => {
-      // Follow the system only while the user has not chosen explicitly.
-      if (localStorage.getItem(THEME_STORAGE_KEY)) return
-      applyTheme(event.matches ? 'dark' : 'light')
-    }
-    media.addEventListener('change', onSystemChange)
-    return () => media.removeEventListener('change', onSystemChange)
-  }, [])
 
   const isDark = theme === 'dark'
   const label = isDark ? 'التبديل إلى الوضع الفاتح' : 'التبديل إلى الوضع الداكن'
