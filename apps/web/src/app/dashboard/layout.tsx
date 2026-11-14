@@ -20,6 +20,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   return (
     <DashboardShell
       userEmail={context.email}
+      organizationName={context.organizationName}
       sidebar={
         <Sidebar
           orgName={context.organizationName}

@@ -1,26 +1,13 @@
 import type { Metadata, Viewport } from 'next'
-import { IBM_Plex_Mono, IBM_Plex_Sans_Arabic, Inter, Noto_Kufi_Arabic } from 'next/font/google'
+import { Cairo, IBM_Plex_Mono } from 'next/font/google'
 import { siteDescription } from '@/lib/site-metadata'
 import { themeBootScript } from '@/components/theme/theme-script'
 import './globals.css'
 
-const plexArabic = IBM_Plex_Sans_Arabic({
-  variable: '--font-plex-arabic',
+const cairo = Cairo({
+  variable: '--font-cairo',
   subsets: ['arabic', 'latin'],
   weight: ['400', '500', '600', '700'],
-  display: 'swap',
-})
-
-const kufi = Noto_Kufi_Arabic({
-  variable: '--font-kufi',
-  subsets: ['arabic'],
-  weight: ['600', '700'],
-  display: 'swap',
-})
-
-const inter = Inter({
-  variable: '--font-inter',
-  subsets: ['latin'],
   display: 'swap',
 })
 
@@ -86,7 +73,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       lang="ar"
       dir="rtl"
       suppressHydrationWarning
-      className={`${plexArabic.variable} ${kufi.variable} ${inter.variable} ${plexMono.variable} h-full antialiased`}
+      className={`${cairo.variable} ${plexMono.variable} h-full antialiased`}
     >
       <head>
         {/* Applies the saved or system theme before first paint. */}

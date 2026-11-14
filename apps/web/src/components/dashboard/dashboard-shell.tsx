@@ -27,11 +27,13 @@ export function DashboardShell({
   sidebar,
   setupBanner,
   userEmail,
+  organizationName,
 }: {
   children: React.ReactNode
   sidebar: React.ReactNode
   setupBanner?: React.ReactNode
   userEmail: string
+  organizationName: string
 }) {
   const [open, setOpen] = useState(false)
   const triggerRef = useRef<HTMLButtonElement>(null)
@@ -63,9 +65,9 @@ export function DashboardShell({
         )}
         {sidebar}
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-          <Header userEmail={userEmail} />
-          <main className="min-w-0 flex-1 overflow-y-auto p-3 pb-28 sm:p-5 sm:pb-28 lg:p-6 lg:pb-6">
-            <div className="mx-auto min-h-full max-w-[1380px] rounded-[1.35rem] border border-border/80 bg-surface p-4 sm:p-6 lg:p-8 animate-page-enter">
+          <Header userEmail={userEmail} organizationName={organizationName} />
+          <main className="min-w-0 flex-1 overflow-y-auto bg-background px-4 pb-28 pt-5 sm:px-6 sm:pt-6 lg:px-8 lg:pb-8">
+            <div className="mx-auto min-h-full w-full max-w-[1440px] animate-page-enter">
               {setupBanner}
               {children}
             </div>

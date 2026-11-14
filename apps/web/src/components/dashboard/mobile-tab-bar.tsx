@@ -40,9 +40,9 @@ export function MobileTabBar() {
   return (
     <nav
       aria-label="التنقل بين أقسام التطبيق"
-      className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-surface/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md lg:hidden shadow-[0_-4px_16px_rgba(31,42,31,0.06)]"
+      className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-surface pb-[env(safe-area-inset-bottom)] backdrop-blur-md shadow-[0_-4px_8px_rgba(31,42,31,0.07)] lg:hidden"
     >
-      <div className="mx-auto flex h-[76px] max-w-md items-center justify-around px-2 pt-1.5 pb-1">
+      <div className="mx-auto flex h-[78px] max-w-[520px] items-center justify-around px-3 pt-2 pb-1">
         {tabs.map(({ href, label, icon: Icon }) => {
           const active = isTabActive(pathname, href)
           return (
@@ -70,8 +70,8 @@ export function MobileTabBar() {
                 className={cx(
                   'text-center leading-tight transition-colors',
                   active
-                    ? 'text-[12px] font-semibold text-text'
-                    : 'text-[11px] font-medium text-text-muted group-hover:text-text'
+                    ? 'text-[14px] font-semibold text-text'
+                    : 'text-[12px] font-medium text-text-muted group-hover:text-text'
                 )}
               >
                 {label}

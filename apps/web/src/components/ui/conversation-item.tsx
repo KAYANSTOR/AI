@@ -35,9 +35,9 @@ function ChannelDot({ channel = 'whatsapp' }: { channel?: ConversationChannel })
   }[channel]
 
   const bg = {
-    whatsapp: 'bg-[#2fa866]',
-    instagram: 'bg-[#e1306c]',
-    sms: 'bg-primary',
+    whatsapp: 'bg-whatsapp',
+    instagram: 'bg-instagram',
+    sms: 'bg-sms',
     phone: 'bg-secondary',
     web: 'bg-accent',
   }[channel]

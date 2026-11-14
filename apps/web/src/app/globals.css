@@ -42,16 +42,20 @@
   --color-success: var(--k-success);
   --color-warning: var(--k-warning);
   --color-error: var(--k-error);
-  --color-info: var(--k-success);
+  --color-error-soft: var(--k-error-soft);
+  --color-info: var(--k-info);
 
   --color-dark: var(--k-dark);
   --color-dark-muted: var(--k-dark-muted);
+  --color-whatsapp: var(--k-whatsapp);
+  --color-instagram: var(--k-instagram);
+  --color-sms: var(--k-sms);
 
   --shadow-card: var(--k-shadow-card);
   --shadow-raised: var(--k-shadow-raised);
 
-  --font-sans: var(--font-plex-arabic), var(--font-inter), ui-sans-serif, system-ui, "Segoe UI", sans-serif;
-  --font-display: var(--font-kufi), var(--font-plex-arabic), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-cairo), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-cairo), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-plex-mono), ui-monospace, monospace;
 }
 
@@ -64,25 +68,35 @@
 /* Light theme (default). Sand-based surfaces, forest identity. */
 :root {
   color-scheme: light;
+  --motion-fast: 120ms;
+  --motion-normal: 200ms;
+  --motion-moderate: 280ms;
+  --motion-slow: 400ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
   --k-primary: #3e5a3f;
-  --k-primary-dark: color-mix(in oklab, #3e5a3f 84%, #0b0f0d);
-  --k-primary-light: color-mix(in oklab, #3e5a3f 14%, #fcfbf8);
-  --k-primary-foreground: #faf8f4;
-  --k-secondary: color-mix(in srgb, #8ca98c 50%, #1f2a1f);
+  --k-primary-dark: #2c3e2c;
+  --k-primary-light: #e1e4de;
+  --k-primary-foreground: #fcfbf8;
+  --k-secondary: #505950;
   --k-accent: #b08d57;
-  --k-accent-light: color-mix(in oklab, #b08d57 16%, #fcfbf8);
-  --k-accent-foreground: #0b0f0d;
-  --k-accent-text: color-mix(in srgb, #b08d57 68%, #0b0f0d);
-  --k-background: color-mix(in srgb, #d9c7a3 28%, #ffffff);
-  --k-surface: color-mix(in srgb, #d9c7a3 8%, #ffffff);
-  --k-surface-muted: color-mix(in srgb, #d9c7a3 45%, #ffffff);
+  --k-accent-light: #f0e9de;
+  --k-accent-foreground: #1f2a1f;
+  --k-accent-text: #7b653f;
+  --k-background: #f4efe5;
+  --k-surface: #fcfbf8;
+  --k-surface-muted: #eee6d6;
   --k-text: #1f2a1f;
-  --k-text-muted: color-mix(in srgb, #1f2a1f 78%, #ffffff);
-  --k-border: color-mix(in oklab, #d9c7a3 62%, #ffffff);
-  --k-border-strong: color-mix(in oklab, #b08d57 45%, #d9c7a3);
+  --k-text-muted: #505950;
+  --k-border: #e7dcc6;
+  --k-border-strong: #c7ad81;
   --k-success: color-mix(in srgb, #8ca98c 45%, #1f2a1f);
   --k-warning: color-mix(in srgb, #b08d57 68%, #0b0f0d);
   --k-error: #a8402f;
+  --k-error-soft: #f6e1dc;
+  --k-info: #3e7cb1;
+  --k-whatsapp: #2fa866;
+  --k-instagram: #c13584;
+  --k-sms: #3e7cb1;
   --k-dark: #1f2a1f;
   --k-dark-muted: color-mix(in oklab, #3e5a3f 50%, #1f2a1f);
   --k-shadow-card: 0 1px 2px rgb(31 42 31 / 0.06), 0 1px 1px rgb(31 42 31 / 0.04);
@@ -94,24 +108,26 @@
 .theme-dark {
   color-scheme: dark;
   --k-primary: #3e5a3f;
-  --k-primary-dark: color-mix(in oklab, #3e5a3f 82%, #0b0f0d);
-  --k-primary-light: color-mix(in oklab, #3e5a3f 42%, #1f2a1f);
-  --k-primary-foreground: #d9c7a3;
+  --k-primary-dark: #2c3e2c;
+  --k-primary-light: #2c3e2c;
+  --k-primary-foreground: #fcfbf8;
   --k-secondary: #8ca98c;
   --k-accent: #b08d57;
-  --k-accent-light: color-mix(in oklab, #b08d57 16%, #1f2a1f);
+  --k-accent-light: #363a28;
   --k-accent-foreground: #0b0f0d;
   --k-accent-text: #b08d57;
   --k-background: #0b0f0d;
-  --k-surface: #1f2a1f;
-  --k-surface-muted: color-mix(in oklab, #1f2a1f 55%, #0b0f0d);
-  --k-text: #d9c7a3;
-  --k-text-muted: #8ca98c;
-  --k-border: color-mix(in oklab, #8ca98c 16%, #1f2a1f);
-  --k-border-strong: color-mix(in oklab, #8ca98c 32%, #1f2a1f);
+  --k-surface: #161e18;
+  --k-surface-muted: #1f2a1f;
+  --k-text: #fcfbf8;
+  --k-text-muted: #aab4aa;
+  --k-border: #2b352d;
+  --k-border-strong: #48564a;
   --k-success: #8ca98c;
   --k-warning: #b08d57;
   --k-error: #e08a7a;
+  --k-error-soft: #402621;
+  --k-info: #78a4ca;
   --k-dark: #1f2a1f;
   --k-dark-muted: color-mix(in oklab, #3e5a3f 50%, #1f2a1f);
   --k-shadow-card: 0 1px 2px rgb(0 0 0 / 0.35);
@@ -166,12 +182,13 @@
     scroll-behavior: auto;
   }
 
-  .animate-fade-in,
-  .animate-scale-in,
-  .animate-page-enter,
-  .animate-progress-indeterminate {
+  *,
+  *::before,
+  *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
 

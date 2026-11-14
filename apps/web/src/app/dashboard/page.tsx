@@ -24,11 +24,7 @@ export default async function DashboardPage() {
   return (
     <div className="space-y-6">
       {/* 1. Instant Shell Header (0ms TTFB) */}
-      <DashboardHeader
-        organizationName={context.organizationName}
-        setupComplete={context.setupComplete}
-        timezone={context.timezone}
-      />
+      <DashboardHeader timezone={context.timezone} />
 
       {/* 2. Granular Suspense Stream: Core KPIs & Performance Metrics */}
       <Suspense fallback={<DashboardKpiSkeleton />}>

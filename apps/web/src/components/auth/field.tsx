@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { Eye, EyeOff } from 'lucide-react'
 
 export const inputClass =
-  'block h-[52px] w-full rounded-xl border border-border bg-surface px-4 py-3 text-base text-text outline-none transition placeholder:text-text-muted/60 hover:border-border-strong focus:border-accent focus:ring-4 focus:ring-accent/10 md:text-sm'
+  'block h-[52px] w-full rounded-xl border border-border bg-surface px-4 py-3 text-base text-text outline-none transition-[border-color,box-shadow] duration-150 placeholder:text-text-muted/60 hover:border-border-strong focus:border-primary focus:ring-2 focus:ring-primary/15 disabled:cursor-not-allowed disabled:bg-surface-muted disabled:opacity-[0.65] md:text-sm'
 
 export function TextField({
   id,
@@ -103,7 +103,7 @@ export function FormError({ message }: { message: string | null }) {
 }
 
 export const submitClass =
-  'group inline-flex h-[52px] w-full items-center justify-center gap-2 rounded-2xl bg-primary px-6 py-3 text-[15px] font-semibold text-primary-foreground transition-colors hover:bg-primary-dark focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-accent/20 disabled:cursor-not-allowed disabled:opacity-60'
+  'group inline-flex h-[52px] w-full items-center justify-center gap-2 rounded-2xl bg-primary px-6 py-3 text-[15px] font-semibold text-primary-foreground transition-[background-color,transform] duration-150 hover:bg-primary-dark active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-[0.45]'
 
 export const secondaryButtonClass =
   'inline-flex h-[52px] w-full items-center justify-center gap-2 rounded-2xl border border-border-strong bg-surface px-6 py-3 text-[15px] font-semibold text-text transition-colors hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-accent/20'

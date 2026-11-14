@@ -2,29 +2,12 @@
 
 import { KeyRound, LogOut, Menu, Search, X } from 'lucide-react'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
 import { InstallAppButton } from '@/components/pwa/install-app-button'
 import { ThemeToggle } from '@/components/theme/theme-toggle'
 import { useDashboardShell } from '@/components/dashboard/dashboard-shell'
 import { signOutAction } from '@/lib/auth/actions'
 import { ar } from '@/lib/i18n/ar'
-
-const pageTitles: Record<string, string> = {
-  '/dashboard': ar.nav.dashboard,
-  '/dashboard/conversations': ar.nav.conversations,
-  '/dashboard/appointments': ar.nav.appointments,
-  '/dashboard/leads': ar.nav.leads,
-  '/dashboard/contacts': ar.nav.contacts,
-  '/dashboard/services': ar.nav.services,
-  '/dashboard/knowledge': ar.nav.knowledge,
-  '/dashboard/hours': ar.nav.hours,
-  '/dashboard/locations': ar.nav.locations,
-  '/dashboard/channels': ar.nav.channels,
-  '/dashboard/agent': ar.nav.agent,
-  '/dashboard/setup': ar.nav.setup,
-  '/dashboard/settings': ar.nav.settings,
-}
 
 function SearchForm({ autoFocus = false }: { autoFocus?: boolean }) {
   return (
@@ -103,50 +86,55 @@ function AccountMenu({ email }: { email: string }) {
   )
 }
 
-export function Header({ userEmail }: { userEmail: string }) {
-  const pathname = usePathname()
+export function Header({
+  userEmail,
+  organizationName,
+}: {
+  userEmail: string
+  organizationName: string
+}) {
   const { toggle, open, triggerRef } = useDashboardShell()
   const [searchOpen, setSearchOpen] = useState(false)
-  const title =
-    pageTitles[pathname] ??
-    Object.entries(pageTitles).find(([path]) => path !== '/dashboard' && pathname.startsWith(path))?.[1] ??
-    ar.nav.mobileTitle
 
   return (
-    <header className="sticky top-0 z-30 border-b border-border bg-surface/90 pt-[env(safe-area-inset-top)] backdrop-blur-md">
-      <div className="flex min-h-16 min-w-0 items-center justify-between gap-3 ps-[max(1rem,env(safe-area-inset-right))] pe-[max(1rem,env(safe-area-inset-left))] lg:px-8">
-        <div className="flex min-w-0 flex-1 items-center gap-2 lg:gap-6">
+    <header className="sticky top-0 z-30 border-b border-border bg-surface pt-[env(safe-area-inset-top)]">
+      <div className="flex min-h-16 min-w-0 items-center justify-between gap-3 px-4 sm:px-6 lg:px-8">
+        <div className="flex min-w-0 items-center gap-3">
           <button
             ref={triggerRef}
             type="button"
             onClick={toggle}
-            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-background hover:text-text lg:hidden"
+            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-text-muted transition-colors hover:bg-background hover:text-text lg:hidden"
             aria-label={open ? ar.header.closeMenu : ar.header.openMenu}
             aria-expanded={open}
             aria-controls="dashboard-sidebar"
           >
             {open ? <X size={20} aria-hidden="true" /> : <Menu size={20} aria-hidden="true" />}
           </button>
-          <h1 className="min-w-0 truncate text-base font-semibold text-text">{title}</h1>
-          <div className="hidden w-full max-w-sm lg:block">
-            <SearchForm />
+          <span className="text-base font-bold text-text lg:hidden">Kayan AI</span>
+          <div className="hidden min-w-0 lg:block">
+            <p className="truncate text-sm font-semibold text-text">مرحباً، {organizationName || 'فريقك'}</p>
+            <p className="mt-0.5 text-xs text-text-muted">مساحة عملك في مكان واحد</p>
           </div>
         </div>
 
         <div className="flex shrink-0 items-center gap-1.5 sm:gap-3">
+          <InstallAppButton compact />
+          <ThemeToggle />
+          <AccountMenu email={userEmail} />
+          <div className="hidden w-[min(280px,24vw)] lg:block">
+            <SearchForm />
+          </div>
           <button
             type="button"
             onClick={() => setSearchOpen((value) => !value)}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-text-muted hover:bg-background lg:hidden"
+            className="inline-flex h-11 w-11 items-center justify-center rounded-xl text-text-muted hover:bg-background lg:hidden"
             aria-label={searchOpen ? ar.header.closeSearch : ar.header.openSearch}
             aria-expanded={searchOpen}
             aria-controls="mobile-dashboard-search"
           >
             {searchOpen ? <X size={19} aria-hidden="true" /> : <Search size={19} aria-hidden="true" />}
           </button>
-          <InstallAppButton compact />
-          <ThemeToggle />
-          <AccountMenu email={userEmail} />
         </div>
       </div>
       {searchOpen ? (

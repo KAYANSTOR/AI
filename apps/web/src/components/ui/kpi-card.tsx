@@ -31,11 +31,11 @@ const toneStyles: Record<
     hint: 'text-text-muted',
   },
   dark: {
-    container: 'bg-dark text-[#e8d5a8] border border-transparent shadow-sm',
-    iconTile: 'bg-[#e8d5a8]/20 text-[#e8d5a8]',
-    label: 'text-[#e8d5a8]/90',
-    value: 'text-[#faf7f0]',
-    hint: 'text-[#d2be96]',
+    container: 'bg-dark text-text border border-transparent shadow-sm',
+    iconTile: 'bg-text/10 text-accent',
+    label: 'text-text/75',
+    value: 'text-text',
+    hint: 'text-text/70',
   },
   gold: {
     container: 'bg-accent-light border border-border-strong text-text',
@@ -63,7 +63,7 @@ export function KpiCard({
       role={onClick ? 'button' : undefined}
       tabIndex={onClick ? 0 : undefined}
       className={cx(
-        'flex flex-col gap-2 rounded-[20px] p-4 transition-all',
+        'flex min-h-[104px] flex-col gap-2 rounded-2xl p-4 transition-all duration-200',
         styles.container,
         onClick && 'cursor-pointer hover:shadow-md active:scale-[0.99]',
         className

@@ -16,7 +16,14 @@ import {
   Clock,
   BookOpen,
   X,
-  ListTodo,
+  CircleDollarSign,
+  Megaphone,
+  ChartNoAxesCombined,
+  Sparkles,
+  KeyRound,
+  MessageSquareText,
+  ShieldAlert,
+  Building2,
   UserRound,
 } from 'lucide-react'
 import { useEffect, useRef } from 'react'
@@ -40,29 +47,49 @@ type NavSection = {
 
 const navSections: NavSection[] = [
   {
-    title: 'العمليات والعملاء',
+    title: 'الرئيسية',
     items: [
       { name: ar.nav.dashboard, href: '/dashboard', icon: LayoutDashboard, capability: null },
-      { name: ar.nav.conversations, href: '/dashboard/conversations', icon: MessageSquare, capability: 'inbox' },
-      { name: 'المهام', href: '/dashboard/tasks', icon: ListTodo, capability: 'inbox' },
+    ],
+  },
+  {
+    title: 'إدارة النشاط',
+    items: [
       { name: ar.nav.appointments, href: '/dashboard/appointments', icon: Calendar, capability: 'appointments' },
-      { name: ar.nav.contacts, href: '/dashboard/contacts', icon: Contact, capability: 'lead_capture' },
       { name: ar.nav.leads, href: '/dashboard/leads', icon: Users, capability: 'lead_capture' },
-    ],
-  },
-  {
-    title: 'الذكاء الاصطناعي والاستقبال',
-    items: [
-      { name: ar.nav.agent, href: '/dashboard/agent', icon: Bot, capability: null, badge: 'AI' },
-      { name: ar.nav.channels, href: '/dashboard/channels', icon: RadioTower, capability: null, badge: 'صوت / شات' },
-      { name: ar.nav.knowledge, href: '/dashboard/knowledge', icon: BookOpen, capability: 'knowledge_base' },
-      { name: ar.nav.hours, href: '/dashboard/hours', icon: Clock, capability: null },
-    ],
-  },
-  {
-    title: 'النظام',
-    items: [
+      { name: ar.nav.contacts, href: '/dashboard/contacts', icon: Contact, capability: 'lead_capture' },
       { name: ar.nav.services, href: '/dashboard/services', icon: Wrench, capability: 'appointments' },
+      { name: ar.nav.hours, href: '/dashboard/hours', icon: Clock, capability: null },
+      { name: ar.nav.locations, href: '/dashboard/locations', icon: Building2, capability: null },
+      { name: 'عروض الأسعار', href: '/dashboard/quotes', icon: CircleDollarSign, capability: 'sales' },
+      { name: 'الطلبات', href: '/dashboard/orders', icon: Contact, capability: 'sales' },
+    ],
+  },
+  {
+    title: 'التواصل والذكاء الاصطناعي',
+    items: [
+      { name: ar.nav.conversations, href: '/dashboard/conversations', icon: MessageSquare, capability: 'inbox' },
+      { name: ar.nav.agent, href: '/dashboard/agent', icon: Bot, capability: null, badge: 'AI' },
+      { name: ar.nav.channels, href: '/dashboard/channels', icon: RadioTower, capability: null },
+      { name: ar.nav.knowledge, href: '/dashboard/knowledge', icon: BookOpen, capability: 'knowledge_base' },
+    ],
+  },
+  {
+    title: 'النمو والأدوات',
+    items: [
+      { name: 'الباقات والاستهلاك', href: '/dashboard/billing', icon: CircleDollarSign, capability: null },
+      { name: 'الحملات', href: '/dashboard/campaigns', icon: Megaphone, capability: 'campaigns' },
+      { name: 'التقارير', href: '/dashboard/reports', icon: ChartNoAxesCombined, capability: null },
+      { name: 'Copilot', href: '/dashboard/copilot', icon: Sparkles, capability: null },
+      { name: 'مفاتيح API', href: '/dashboard/settings/api-keys', icon: KeyRound, capability: null },
+      { name: 'الردود الجاهزة', href: '/dashboard/settings/canned-replies', icon: MessageSquareText, capability: 'inbox' },
+      { name: 'سياسات التصعيد', href: '/dashboard/settings/escalation', icon: ShieldAlert, capability: 'inbox' },
+      { name: 'إعداد النشاط', href: '/dashboard/setup', icon: Settings, capability: null },
+    ],
+  },
+  {
+    title: 'الحساب',
+    items: [
       { name: 'الفريق والصلاحيات', href: '/dashboard/team', icon: Users, capability: null },
       { name: 'الحساب', href: '/dashboard/account', icon: UserRound, capability: null },
       { name: ar.nav.settings, href: '/dashboard/settings', icon: Settings, capability: null },
@@ -128,7 +155,7 @@ export function Sidebar({
     <aside
       id="dashboard-sidebar"
       ref={drawerRef}
-      className={`fixed inset-y-0 start-0 z-50 flex h-dvh w-72 max-w-[85vw] flex-col border-e border-text/10 theme-dark bg-dark pt-[env(safe-area-inset-top)] text-text shadow-2xl transition-all duration-300 ease-out transform-gpu lg:static lg:z-auto lg:h-dvh lg:w-64 lg:max-w-none lg:shrink-0 lg:translate-x-0 lg:shadow-none ${
+      className={`fixed inset-y-0 start-0 z-50 flex h-dvh w-72 max-w-[85vw] flex-col border-e border-text/10 theme-dark bg-primary-dark pt-[env(safe-area-inset-top)] text-text shadow-2xl transition-all duration-300 ease-out transform-gpu lg:static lg:z-auto lg:h-dvh lg:w-[260px] lg:max-w-none lg:shrink-0 lg:translate-x-0 lg:shadow-none ${
         open
           ? 'translate-x-0 opacity-100 visible'
           : 'max-lg:rtl:translate-x-full max-lg:ltr:-translate-x-full max-lg:opacity-0 max-lg:invisible lg:visible lg:opacity-100'
@@ -168,7 +195,7 @@ export function Sidebar({
 
           return (
             <div key={section.title} className="space-y-1.5">
-              <p className="px-3 text-[11px] font-extrabold tracking-wider text-text/40 uppercase">
+              <p className="px-3 text-[11px] font-semibold tracking-wide text-text/55">
                 {section.title}
               </p>
               <nav aria-label={section.title} className="flex flex-col gap-0.5">
@@ -238,9 +265,9 @@ function NavLink({
         router.prefetch(item.href)
       }}
       className={`group relative flex min-h-10 items-center justify-between rounded-xl px-3 py-2 text-xs font-semibold transition-all duration-150 transform-gpu ${
-        active
-          ? 'bg-primary text-primary-foreground shadow-xs font-bold'
-          : 'text-text/70 hover:bg-text/10 hover:text-text'
+          active
+          ? 'bg-primary/25 text-text font-bold before:absolute before:inset-y-1 before:start-0 before:w-[3px] before:rounded-full before:bg-accent'
+          : 'text-text/75 hover:bg-text/10 hover:text-text'
       }`}
       aria-current={active ? 'page' : undefined}
     >

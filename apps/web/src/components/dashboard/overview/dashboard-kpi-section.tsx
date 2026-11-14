@@ -1,4 +1,4 @@
-import { Users, Calendar, MessageSquare, TrendingUp } from 'lucide-react'
+import { Users, Calendar, MessageSquare } from 'lucide-react'
 import { createClient } from '@/lib/db/server'
 import { loadCoreAnalytics } from '@/lib/analytics/core'
 import { formatNumber } from '@/lib/i18n/format'
@@ -7,9 +7,6 @@ import { KpiCard, type KpiCardTone } from '@/components/ui/kpi-card'
 export async function DashboardKpiSection({ organizationId }: { organizationId: string }) {
   const db = await createClient()
   const metrics = await loadCoreAnalytics(db, organizationId)
-
-  const closeRate =
-    metrics.leadsTotal > 0 ? `${Math.round((metrics.leadsWon / metrics.leadsTotal) * 100)}%` : '—'
 
   const kpis: Array<{
     title: string
@@ -26,6 +23,13 @@ export async function DashboardKpiSection({ organizationId }: { organizationId: 
       tone: 'default',
     },
     {
+      title: 'المواعيد القادمة',
+      value: formatNumber(metrics.appointmentsUpcoming),
+      hint: metrics.appointmentsUpcoming > 0 ? 'مؤكدة ومجدولة' : 'لا مواعيد قادمة',
+      icon: Calendar,
+      tone: 'gold',
+    },
+    {
       title: 'المحادثات النشطة',
       value: formatNumber(metrics.conversationsOpen),
       hint:
@@ -33,26 +37,12 @@ export async function DashboardKpiSection({ organizationId }: { organizationId: 
           ? `${formatNumber(metrics.conversationsBreachedSla)} تجاوزت مهلة الرد`
           : 'ضمن المهلة',
       icon: MessageSquare,
-      tone: 'default',
-    },
-    {
-      title: 'معدل الإغلاق',
-      value: closeRate,
-      hint: metrics.leadsTotal > 0 ? 'من العملاء المحتملين' : 'لا بيانات بعد',
-      icon: TrendingUp,
       tone: 'dark',
-    },
-    {
-      title: 'المواعيد القادمة',
-      value: formatNumber(metrics.appointmentsUpcoming),
-      hint: metrics.appointmentsUpcoming > 0 ? 'مؤكدة ومجدولة' : 'لا مواعيد قادمة',
-      icon: Calendar,
-      tone: 'gold',
     },
   ]
 
   return (
-    <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
       {kpis.map((kpi, idx) => {
         const Icon = kpi.icon
         return (
@@ -72,7 +62,7 @@ export async function DashboardKpiSection({ organizationId }: { organizationId: 
 
 export function DashboardKpiSkeleton() {
   return (
-    <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
       {[1, 2, 3, 4].map((i) => (
         <div
           key={i}
