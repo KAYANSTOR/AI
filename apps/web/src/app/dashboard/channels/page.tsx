@@ -15,6 +15,7 @@ type ChannelRow = {
   id: string
   channel_type: string
   external_identifier: string | null
+  provider_account_id: string | null
   verification_status: string | null
   is_active: boolean | null
 }
@@ -48,7 +49,7 @@ export default async function ChannelsPage({
   try {
     const result = await db
       .from('channels')
-      .select('id, channel_type, external_identifier, verification_status, is_active')
+      .select('id, channel_type, external_identifier, provider_account_id, verification_status, is_active')
       .eq('organization_id', context.organizationId)
 
     if (result.error) {
@@ -143,8 +144,7 @@ export default async function ChannelsPage({
   const phoneSpec = getChannelSpec('phone')
 
   const phoneRow = byType.get('phone')
-  const resolvedVapiNumber =
-    phoneConnection?.internal_vapi_number || phoneRow?.external_identifier || null
+  const resolvedVapiNumber = phoneConnection?.internal_vapi_number || null
 
   return (
     <div className="space-y-6">
@@ -219,6 +219,7 @@ export default async function ChannelsPage({
               ? {
                   existingPhoneNumber: phoneConnection?.existing_phone_number ?? null,
                   vapiNumber: canManage ? resolvedVapiNumber : null,
+                  vapiPhoneNumberId: canManage ? phoneRow?.provider_account_id ?? null : null,
                   carrierProfileId: phoneConnection?.carrier_profile_id ?? null,
                   forwardType: phoneConnection?.forward_type ?? 'no_answer',
                   forwardingStatus: phoneConnection?.forwarding_status ?? (phoneRow?.is_active ? 'active' : 'pending_test'),
