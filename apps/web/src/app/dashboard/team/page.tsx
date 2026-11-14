@@ -1,11 +1,13 @@
 import { redirect } from 'next/navigation'
-import { Shield, UserCog, UserRound, Eye, UserPlus } from 'lucide-react'
+import { Shield, UserCog, UserRound, Eye } from 'lucide-react'
 import { getDashboardContext } from '@/lib/dashboard/context'
 import { createClient } from '@/lib/db/server'
+import { findUserIdentitiesByIds } from '@/lib/auth/users'
 import { roleLabel } from '@/lib/i18n/labels'
 import { SectionHeader } from '@/components/ui/section-header'
 import { ListRow } from '@/components/ui/list-row'
 import { MobileEmptyState } from '@/components/ui/empty-state'
+import { AddExistingMemberForm, TeamMemberControls } from './team-management'
 
 export const dynamic = 'force-dynamic'
 
@@ -20,6 +22,11 @@ const ROLE_META: Record<
   },
   admin: {
     subtitle: 'الإعدادات والفريق',
+    tone: 'warning',
+    icon: UserCog,
+  },
+  manager: {
+    subtitle: 'إدارة المهام ومتابعة الفريق',
     tone: 'warning',
     icon: UserCog,
   },
@@ -49,7 +56,7 @@ export default async function TeamPage() {
 
   const { data: members, error } = await db
     .from('organization_members')
-    .select('id, user_id, role, created_at')
+    .select('id, user_id, role, is_active, created_at')
     .eq('organization_id', context.organizationId)
     .order('created_at', { ascending: true })
 
@@ -61,19 +68,18 @@ export default async function TeamPage() {
   const emailByUserId = new Map<string, string>()
 
   if (userIds.length > 0) {
-    const { data: users } = await db
-      .from('users')
-      .select('id, email')
-      .in('id', userIds)
-
-    for (const user of users ?? []) {
-      emailByUserId.set(user.id as string, (user.email as string) || '')
+    try {
+      const users = await findUserIdentitiesByIds(userIds as string[])
+      for (const user of users) emailByUserId.set(user.id, user.email)
+    } catch (error) {
+      console.error('Unable to load team member email addresses', error)
     }
   }
 
   const roleDescriptions = [
     { id: 'owner', title: 'مالك', subtitle: 'كل الصلاحيات والفوترة' },
     { id: 'admin', title: 'مدير', subtitle: 'الإعدادات والفريق' },
+    { id: 'manager', title: 'مدير عمليات', subtitle: 'إدارة المهام ومتابعة الفريق' },
     { id: 'member', title: 'موظف', subtitle: 'المحادثات والمهام' },
     { id: 'read_only', title: 'مشاهد', subtitle: 'عرض التحليلات فقط' },
   ]
@@ -89,33 +95,52 @@ export default async function TeamPage() {
 
       {!isAdmin && (
         <p className="rounded-xl border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-text">
-          أنت في وضع الاطلاع فقط. دعوة الأعضاء وتغيير الأدوار متاحة للمالك أو المدير.
+          أنت في وضع الاطلاع فقط. إضافة الأعضاء وتغيير الأدوار متاحان للمالك أو المدير.
         </p>
       )}
 
       <section className="space-y-2.5">
         <SectionHeader title="الأعضاء" />
-        {(members ?? []).length === 0 ? (
+        {error ? (
+          <p role="alert" className="rounded-xl border border-error/30 bg-error/5 px-4 py-3 text-sm text-error">
+            تعذر تحميل أعضاء الفريق من قاعدة البيانات. أعد المحاولة لاحقاً.
+          </p>
+        ) : (members ?? []).length === 0 ? (
           <MobileEmptyState
             title="لا يوجد أعضاء بعد"
-            description="سيظهر هنا أعضاء المؤسسة بعد دعوتهم أو تسجيل الدخول لأول مرة."
-            icon={<UserPlus className="h-8 w-8" aria-hidden="true" />}
+            description="سيظهر هنا أعضاء المؤسسة بعد تسجيلهم وإضافتهم إلى مساحة العمل."
+            icon={<UserCog className="h-8 w-8" aria-hidden="true" />}
           />
         ) : (
           (members ?? []).map((member) => {
             const role = (member.role as string) || 'member'
             const meta = ROLE_META[role] || ROLE_META.member
             const Icon = meta.icon
-            const email = emailByUserId.get(member.user_id as string) || member.user_id
-            const isYou = member.user_id === context.userId
+            const memberId = member.id as string
+            const memberUserId = member.user_id as string
+            const email = emailByUserId.get(memberUserId) || memberUserId
+            const isYou = memberUserId === context.userId
+            const isActive = Boolean(member.is_active)
             return (
               <ListRow
-                key={member.id}
+                key={memberId}
                 title={isYou ? `${email} (أنت)` : email}
-                subtitle={meta.subtitle}
-                trailing="badge"
-                badgeLabel={roleLabel(role)}
-                badgeTone={meta.tone}
+                subtitle={`${meta.subtitle} · ${isActive ? 'نشط' : 'غير نشط'}`}
+                trailing={isAdmin ? 'custom' : 'badge'}
+                trailingContent={
+                  isAdmin ? (
+                    <TeamMemberControls
+                      memberId={memberId}
+                      memberLabel={email}
+                      role={role}
+                      isActive={isActive}
+                      allowOwner={context.role === 'owner'}
+                      isSelf={isYou}
+                    />
+                  ) : undefined
+                }
+                badgeLabel={isActive ? roleLabel(role) : 'معطّل'}
+                badgeTone={isActive ? meta.tone : 'warning'}
                 icon={<Icon className="h-5 w-5" />}
               />
             )
@@ -136,14 +161,9 @@ export default async function TeamPage() {
         ))}
       </section>
 
-      {isAdmin && (
-        <div className="rounded-2xl border border-border bg-surface p-5">
-          <h2 className="text-base font-semibold text-text">دعوة عضو</h2>
-          <p className="mt-1 text-sm text-text-muted">
-            دعوة الأعضاء بالبريد الإلكتروني ستُفعّل في مرحلة لاحقة. حالياً يظهر الأعضاء المسجّلون في المؤسسة.
-          </p>
-        </div>
-      )}
+      {isAdmin ? (
+        <AddExistingMemberForm allowOwner={context.role === 'owner'} />
+      ) : null}
     </div>
   )
 }

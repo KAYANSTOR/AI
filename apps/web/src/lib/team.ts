@@ -1,8 +1,9 @@
 import type { DbClient } from '@/lib/db/client'
 import { createClient } from '@/lib/db/server'
+import { isTeamRole, type TeamRole } from './team-roles'
 
-export const TEAM_ROLES = ['owner', 'admin', 'manager', 'member', 'read_only'] as const
-export type TeamRole = (typeof TEAM_ROLES)[number]
+export { isTeamRole, TEAM_ROLES } from './team-roles'
+export type { TeamRole } from './team-roles'
 
 export type TeamMember = {
   id: string
@@ -18,10 +19,6 @@ export class TeamAccessError extends Error {
     super(message)
     this.name = 'TeamAccessError'
   }
-}
-
-export function isTeamRole(value: unknown): value is TeamRole {
-  return typeof value === 'string' && (TEAM_ROLES as readonly string[]).includes(value)
 }
 
 /** Roles that may mutate operational data (not read_only). */

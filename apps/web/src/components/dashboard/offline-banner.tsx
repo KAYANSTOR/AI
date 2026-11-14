@@ -31,7 +31,7 @@ export function OfflineBanner() {
       className="fixed top-0 inset-x-0 z-50 flex items-center justify-center gap-2 bg-warning px-4 py-2.5 text-xs font-bold text-dark shadow-md"
     >
       <WifiOff className="h-4 w-4 shrink-0" aria-hidden="true" />
-      <span>أنت غير متصل بالإنترنت — ستتم مزامنة التعديلات فور عودة الاتصال.</span>
+      <span>أنت غير متصل بالإنترنت — قد تتعذر بعض الإجراءات. تحقّق من اتصالك ثم أعد المحاولة.</span>
     </div>
   )
 }

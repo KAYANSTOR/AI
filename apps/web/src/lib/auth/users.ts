@@ -58,6 +58,21 @@ export async function findUserById(id: string): Promise<AuthUser | null> {
   return mapUser(rows[0])
 }
 
+export async function findUserIdentitiesByIds(
+  ids: string[]
+): Promise<{ id: string; email: string }[]> {
+  const uniqueIds = [...new Set(ids.filter(Boolean))]
+  if (uniqueIds.length === 0) return []
+
+  return getSql().unsafe<{ id: string; email: string }[]>(
+    `select id::text as id, email
+       from auth.users
+      where id = any($1::uuid[])
+        and deleted_at is null`,
+    [uniqueIds]
+  )
+}
+
 export async function createUser(input: {
   email: string
   password: string

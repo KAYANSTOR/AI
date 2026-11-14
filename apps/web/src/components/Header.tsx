@@ -51,7 +51,7 @@ function AccountMenu({ email }: { email: string }) {
         aria-expanded={open}
         aria-haspopup="menu"
         aria-label="قائمة الحساب"
-        className="flex h-10 w-10 items-center justify-center theme-dark rounded-full bg-dark text-sm font-semibold uppercase text-text transition hover:ring-4 hover:ring-primary/15"
+        className="flex h-11 w-11 items-center justify-center theme-dark rounded-full bg-dark text-sm font-semibold uppercase text-text transition hover:ring-4 hover:ring-primary/15"
       >
         {email.slice(0, 1)}
       </button>
@@ -119,8 +119,12 @@ export function Header({
         </div>
 
         <div className="flex shrink-0 items-center gap-1.5 sm:gap-3">
-          <InstallAppButton compact />
-          <ThemeToggle />
+          <div className="hidden lg:block">
+            <InstallAppButton compact />
+          </div>
+          <div className="hidden lg:block">
+            <ThemeToggle />
+          </div>
           <AccountMenu email={userEmail} />
           <div className="hidden w-[min(280px,24vw)] lg:block">
             <SearchForm />

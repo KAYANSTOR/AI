@@ -40,9 +40,9 @@ export function MobileTabBar() {
   return (
     <nav
       aria-label="التنقل بين أقسام التطبيق"
-      className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-surface pb-[env(safe-area-inset-bottom)] backdrop-blur-md shadow-[0_-4px_8px_rgba(31,42,31,0.07)] lg:hidden"
+      className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-surface pb-[max(8px,env(safe-area-inset-bottom))] backdrop-blur-md shadow-[0_-4px_8px_rgba(31,42,31,0.07)] lg:hidden"
     >
-      <div className="mx-auto flex h-[78px] max-w-[520px] items-center justify-around px-3 pt-2 pb-1">
+      <div className="mx-auto flex h-[67px] max-w-[520px] items-center justify-around px-3 pt-2 pb-1">
         {tabs.map(({ href, label, icon: Icon }) => {
           const active = isTabActive(pathname, href)
           return (
@@ -50,7 +50,7 @@ export function MobileTabBar() {
               key={href}
               href={href}
               aria-current={active ? 'page' : undefined}
-              className="flex flex-1 flex-col items-center justify-center gap-1 group py-1"
+              className="group flex min-h-11 flex-1 flex-col items-center justify-center gap-1 py-1"
             >
               <div
                 className={cx(
@@ -61,7 +61,7 @@ export function MobileTabBar() {
                 )}
               >
                 <Icon
-                  size={20}
+                  size={22}
                   strokeWidth={active ? 2.4 : 1.8}
                   aria-hidden="true"
                 />
@@ -81,7 +81,7 @@ export function MobileTabBar() {
         })}
       </div>
       {/* iOS style home indicator on mobile */}
-      <div className="mx-auto h-1 w-32 rounded-full bg-text/15 mb-1" />
+      <div className="mx-auto mt-2 h-[5px] w-[134px] rounded-full bg-text/15" />
     </nav>
   )
 }
