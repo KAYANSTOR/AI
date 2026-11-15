@@ -11,7 +11,7 @@ import { FormError, TextField, submitClass, secondaryButtonClass } from '@/compo
 
 export function LoginForm({ returnTo, authConfigured }: { returnTo: string; authConfigured: boolean }) {
   const router = useRouter()
-  const [email, setEmail] = useState('')
+  const [identifier, setIdentifier] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
@@ -23,7 +23,7 @@ export function LoginForm({ returnTo, authConfigured }: { returnTo: string; auth
     setError(null)
     startTransition(async () => {
       try {
-        const result = await signInAction({ email, password, returnTo })
+        const result = await signInAction({ identifier, password, returnTo })
         if (!result.ok) {
           setError(result.error)
           return
@@ -42,13 +42,13 @@ export function LoginForm({ returnTo, authConfigured }: { returnTo: string; auth
 
       <div className="space-y-3.5">
         <TextField
-          id="email"
-          label="البريد الإلكتروني"
-          type="email"
-          value={email}
-          onChange={setEmail}
-          autoComplete="email"
-          placeholder="name@company.com"
+          id="identifier"
+          label="البريد الإلكتروني أو رقم الهاتف"
+          value={identifier}
+          onChange={setIdentifier}
+          autoComplete="username"
+          placeholder="name@company.com أو +967777123456"
+          hint="استخدم نفس البريد أو الرقم الذي سجلت به."
           trailingIcon={<Mail size={18} className="text-text-muted" />}
         />
 

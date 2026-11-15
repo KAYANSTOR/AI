@@ -16,7 +16,9 @@ export function SignupForm({ authConfigured }: { authConfigured: boolean }) {
   const router = useRouter()
   const [companyName, setCompanyName] = useState('')
   const [businessType, setBusinessType] = useState<string>(DEFAULT_BUSINESS_TYPE)
+  const [identityMethod, setIdentityMethod] = useState<'email' | 'phone'>('email')
   const [email, setEmail] = useState('')
+  const [phone, setPhone] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
@@ -28,7 +30,13 @@ export function SignupForm({ authConfigured }: { authConfigured: boolean }) {
     setError(null)
     startTransition(async () => {
       try {
-        const result = await signUpAction({ companyName, businessTypeId: businessType, email, password })
+        const result = await signUpAction({
+          companyName,
+          businessTypeId: businessType,
+          email: identityMethod === 'email' ? email : undefined,
+          phone: identityMethod === 'phone' ? phone : undefined,
+          password,
+        })
         if (!result.ok) {
           setError(result.error)
           return
@@ -76,15 +84,49 @@ export function SignupForm({ authConfigured }: { authConfigured: boolean }) {
         {hint ? <p className="mt-1.5 text-xs leading-6 text-text-muted">{hint}</p> : null}
       </div>
 
-      <TextField
-        id="email"
-        label="البريد الإلكتروني"
-        type="email"
-        value={email}
-        onChange={setEmail}
-        autoComplete="email"
-        placeholder="name@company.com"
-      />
+      <fieldset className="space-y-3">
+        <legend className="mb-2 text-sm font-semibold text-text">طريقة تسجيل الدخول</legend>
+        <div className="grid grid-cols-2 gap-2 rounded-xl border border-border bg-surface-muted p-1">
+          <button
+            type="button"
+            aria-pressed={identityMethod === 'email'}
+            onClick={() => setIdentityMethod('email')}
+            className={`min-h-10 rounded-lg px-3 text-sm font-semibold transition-colors ${identityMethod === 'email' ? 'bg-surface text-text shadow-sm' : 'text-text-muted hover:text-text'}`}
+          >
+            البريد الإلكتروني
+          </button>
+          <button
+            type="button"
+            aria-pressed={identityMethod === 'phone'}
+            onClick={() => setIdentityMethod('phone')}
+            className={`min-h-10 rounded-lg px-3 text-sm font-semibold transition-colors ${identityMethod === 'phone' ? 'bg-surface text-text shadow-sm' : 'text-text-muted hover:text-text'}`}
+          >
+            رقم الهاتف
+          </button>
+        </div>
+        {identityMethod === 'email' ? (
+          <TextField
+            id="email"
+            label="البريد الإلكتروني"
+            type="email"
+            value={email}
+            onChange={setEmail}
+            autoComplete="email"
+            placeholder="name@company.com"
+          />
+        ) : (
+          <TextField
+            id="phone"
+            label="رقم الهاتف بصيغة دولية"
+            type="tel"
+            value={phone}
+            onChange={setPhone}
+            autoComplete="tel"
+            placeholder="+967777123456"
+            hint="لن نرسل رسالة نصية أو رمز تحقق."
+          />
+        )}
+      </fieldset>
 
       <TextField
         id="password"

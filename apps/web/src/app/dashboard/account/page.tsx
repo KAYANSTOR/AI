@@ -40,8 +40,8 @@ export default async function AccountPage() {
       <section className="space-y-2.5">
         <SectionHeader title="بيانات الحساب" />
         <ListRow
-          title="البريد الإلكتروني"
-          subtitle={context.email}
+          title={context.email ? 'البريد الإلكتروني' : 'رقم الهاتف'}
+          subtitle={context.email ?? context.phone ?? '—'}
           trailing="meta"
           meta=""
           icon={<Mail className="h-5 w-5" />}

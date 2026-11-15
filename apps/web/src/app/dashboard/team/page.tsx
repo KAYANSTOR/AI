@@ -65,12 +65,12 @@ export default async function TeamPage() {
   }
 
   const userIds = (members ?? []).map((m) => m.user_id).filter(Boolean)
-  const emailByUserId = new Map<string, string>()
+  const emailByUserId = new Map<string, string | null>()
 
   if (userIds.length > 0) {
     try {
       const users = await findUserIdentitiesByIds(userIds as string[])
-      for (const user of users) emailByUserId.set(user.id, user.email)
+      for (const user of users) emailByUserId.set(user.id, user.email ?? user.phone)
     } catch (error) {
       console.error('Unable to load team member email addresses', error)
     }

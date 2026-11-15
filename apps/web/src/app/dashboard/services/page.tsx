@@ -12,7 +12,7 @@ export default async function ServicesPage() {
   const db = await createClient()
   const { data: services } = await db
     .from('services')
-    .select('id, name, description, duration_minutes, price_amount, price_currency, is_active')
+    .select('id, name, category, description, duration_minutes, price_amount, price_currency, is_active')
     .eq('organization_id', context.organizationId)
     .order('created_at', { ascending: false })
 

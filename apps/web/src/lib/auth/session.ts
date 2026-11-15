@@ -15,7 +15,7 @@ export const SESSION_REFRESH_AFTER_SECONDS = 60 * 60 * 24
 
 export type SessionClaims = {
   sub: string
-  email: string
+  email: string | null
   sv: number
   iat: number
   exp: number
@@ -34,7 +34,7 @@ export function isAuthSecretConfigured(): boolean {
   return Boolean(secret && secret.length >= 32)
 }
 
-export async function signSession(user: { id: string; email: string; sessionVersion: number }): Promise<string> {
+export async function signSession(user: { id: string; email: string | null; sessionVersion: number }): Promise<string> {
   return new SignJWT({ email: user.email, sv: user.sessionVersion })
     .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
     .setSubject(user.id)
@@ -53,10 +53,13 @@ export async function verifySession(token: string | undefined | null): Promise<S
       issuer: 'frontdesk',
       audience: 'frontdesk-web',
     })
-    if (typeof payload.sub !== 'string' || typeof payload.email !== 'string') return null
+    if (
+      typeof payload.sub !== 'string' ||
+      (payload.email !== null && typeof payload.email !== 'string')
+    ) return null
     return {
       sub: payload.sub,
-      email: payload.email,
+      email: typeof payload.email === 'string' ? payload.email : null,
       sv: typeof payload.sv === 'number' ? payload.sv : 0,
       iat: payload.iat ?? 0,
       exp: payload.exp ?? 0,

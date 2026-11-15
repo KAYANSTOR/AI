@@ -9,6 +9,7 @@ import { formatNumber } from '@/lib/i18n/format'
 type Service = {
   id: string
   name: string
+  category: string | null
   description: string | null
   duration_minutes: number
   price_amount: number | null
@@ -41,6 +42,7 @@ export function ServiceList({ services }: { services: Service[]; organizationId:
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <p className="font-medium text-text">{service.name}</p>
+                {service.category ? <p className="mt-1 text-xs text-text-muted">{service.category}</p> : null}
                 {service.description && <p className="mt-1 line-clamp-2 text-xs text-text-muted">{service.description}</p>}
               </div>
               <button type="button" onClick={() => remove(service.id)} className="inline-flex min-h-11 shrink-0 items-center gap-1 rounded-lg px-2 text-xs font-medium text-error hover:bg-error/10">
@@ -59,6 +61,7 @@ export function ServiceList({ services }: { services: Service[]; organizationId:
           <thead className="border-b border-border bg-background">
             <tr>
               <th className="px-4 py-3 text-start font-medium text-text-muted">{ar.services.name}</th>
+              <th className="px-4 py-3 text-start font-medium text-text-muted">الفئة</th>
               <th className="px-4 py-3 text-start font-medium text-text-muted">{ar.services.duration}</th>
               <th className="px-4 py-3 text-start font-medium text-text-muted">{ar.services.price}</th>
               <th className="px-4 py-3 text-start font-medium text-text-muted">{ar.services.actions}</th>
@@ -71,6 +74,7 @@ export function ServiceList({ services }: { services: Service[]; organizationId:
                   <div className="font-medium text-text">{service.name}</div>
                   {service.description && <div className="mt-0.5 line-clamp-1 text-xs text-text-muted">{service.description}</div>}
                 </td>
+                <td className="px-4 py-3 text-text-muted">{service.category || '—'}</td>
                 <td className="px-4 py-3 text-text-muted">{formatNumber(service.duration_minutes)} {ar.services.minutes}</td>
                 <td dir="ltr" className="px-4 py-3 text-start text-text-muted">{service.price_amount != null ? `${service.price_currency} ${formatNumber(Number(service.price_amount), { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : ar.common.unknown}</td>
                 <td className="px-4 py-3">

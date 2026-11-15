@@ -1,8 +1,7 @@
--- Migration 0043: phone login columns, onboarding step, website pages.
--- Additive and idempotent. No data is deleted; the only UPDATE sets onboarding_step.
--- Phone ownership verification (SMS/OTP) is intentionally out of scope.
+-- Migration 0043: phone login, onboarding progress, and website pages.
+-- Additive; no records are deleted. Phone ownership verification (SMS/OTP) is out of scope.
 
--- 1. auth.users.phone (E.164), unique among live users ---------------------------
+-- Phone-based password accounts use normalized E.164 numbers.
 ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS phone text;
 
 DO $$
@@ -12,7 +11,8 @@ BEGIN
     WHERE conrelid = 'auth.users'::regclass AND conname = 'users_phone_e164_check'
   ) THEN
     ALTER TABLE auth.users
-      ADD CONSTRAINT users_phone_e164_check CHECK (phone IS NULL OR phone ~ '^\+[1-9][0-9]{7,14}$');
+      ADD CONSTRAINT users_phone_e164_check
+      CHECK (phone IS NULL OR phone ~ '^[+][1-9][0-9]{7,14}$');
   END IF;
 END $$;
 
@@ -20,72 +20,76 @@ CREATE UNIQUE INDEX IF NOT EXISTS users_phone_key
   ON auth.users (phone)
   WHERE phone IS NOT NULL AND phone <> '' AND deleted_at IS NULL;
 
--- 2. business_profiles.onboarding_step -------------------------------------------
-ALTER TABLE business_profiles ADD COLUMN IF NOT EXISTS onboarding_step smallint NOT NULL DEFAULT 1;
+-- Preserve an explicit step in the four-stage business onboarding flow.
+ALTER TABLE public.business_profiles
+  ADD COLUMN IF NOT EXISTS onboarding_step smallint NOT NULL DEFAULT 1;
 
 DO $$
 BEGIN
   IF NOT EXISTS (
     SELECT 1 FROM pg_constraint
-    WHERE conrelid = 'public.business_profiles'::regclass AND conname = 'business_profiles_onboarding_step_check'
+    WHERE conrelid = 'public.business_profiles'::regclass
+      AND conname = 'business_profiles_onboarding_step_check'
   ) THEN
-    ALTER TABLE business_profiles
-      ADD CONSTRAINT business_profiles_onboarding_step_check CHECK (onboarding_step BETWEEN 1 AND 4);
+    ALTER TABLE public.business_profiles
+      ADD CONSTRAINT business_profiles_onboarding_step_check
+      CHECK (onboarding_step BETWEEN 1 AND 4);
   END IF;
 END $$;
 
--- Existing businesses are already set up: mark their profiles as finished.
-UPDATE business_profiles bp
-SET onboarding_step = 4
-FROM businesses b
-WHERE b.id = bp.business_id AND bp.onboarding_step <> 4;
+UPDATE public.business_profiles bp
+   SET onboarding_step = 4
+  FROM public.businesses b
+ WHERE b.id = bp.business_id
+   AND bp.onboarding_step <> 4;
 
--- 3. Business and service descriptors --------------------------------------------
-ALTER TABLE businesses ADD COLUMN IF NOT EXISTS city text;
-ALTER TABLE businesses ADD COLUMN IF NOT EXISTS website_url text;
-ALTER TABLE services   ADD COLUMN IF NOT EXISTS category text;
+ALTER TABLE public.businesses
+  ADD COLUMN IF NOT EXISTS city text,
+  ADD COLUMN IF NOT EXISTS website_url text;
 
--- 4. website_pages ---------------------------------------------------------------
+ALTER TABLE public.services
+  ADD COLUMN IF NOT EXISTS category text;
+
+-- The schema matches apps/web/src/app/dashboard/website-pages/actions.ts.
 CREATE TABLE IF NOT EXISTS public.website_pages (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-  business_id UUID NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
-  url TEXT NOT NULL,
-  title TEXT,
-  content TEXT,
-  status VARCHAR(30) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','fetched','failed')),
-  fetched_at TIMESTAMPTZ,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  UNIQUE (business_id, url)
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id uuid NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
+  name text NOT NULL CHECK (length(trim(name)) BETWEEN 1 AND 120),
+  path text NOT NULL CHECK (path ~ '^/(?:[a-z0-9]+(?:-[a-z0-9]+)*/?)*$'),
+  title text,
+  description text,
+  status text NOT NULL DEFAULT 'draft' CHECK (status IN ('published', 'draft', 'scheduled')),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (organization_id, path)
 );
 
-CREATE INDEX IF NOT EXISTS idx_website_pages_org_business
-  ON public.website_pages (organization_id, business_id);
+CREATE INDEX IF NOT EXISTS website_pages_org_updated_idx
+  ON public.website_pages (organization_id, updated_at DESC);
 
 ALTER TABLE public.website_pages ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS website_pages_select ON public.website_pages;
-CREATE POLICY website_pages_select ON public.website_pages FOR SELECT
-  USING (organization_id IN (SELECT private.member_org_ids()));
+CREATE POLICY website_pages_select ON public.website_pages
+  FOR SELECT USING (public.is_org_member(organization_id));
 DROP POLICY IF EXISTS website_pages_insert ON public.website_pages;
-CREATE POLICY website_pages_insert ON public.website_pages FOR INSERT
-  WITH CHECK (is_org_admin(organization_id));
+CREATE POLICY website_pages_insert ON public.website_pages
+  FOR INSERT WITH CHECK (public.is_org_admin(organization_id));
 DROP POLICY IF EXISTS website_pages_update ON public.website_pages;
-CREATE POLICY website_pages_update ON public.website_pages FOR UPDATE
-  USING (is_org_admin(organization_id)) WITH CHECK (is_org_admin(organization_id));
+CREATE POLICY website_pages_update ON public.website_pages
+  FOR UPDATE USING (public.is_org_admin(organization_id))
+  WITH CHECK (public.is_org_admin(organization_id));
 DROP POLICY IF EXISTS website_pages_delete ON public.website_pages;
-CREATE POLICY website_pages_delete ON public.website_pages FOR DELETE
-  USING (is_org_admin(organization_id));
+CREATE POLICY website_pages_delete ON public.website_pages
+  FOR DELETE USING (public.is_org_admin(organization_id));
 
 DROP TRIGGER IF EXISTS trigger_update_website_pages_updated_at ON public.website_pages;
 CREATE TRIGGER trigger_update_website_pages_updated_at
   BEFORE UPDATE ON public.website_pages
   FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
--- 5. Signup: support phone-only users (no email) ---------------------------------
--- Same body as 0008; only the organization-name fallback changes. Email signups and
--- organization_name / business_type_id metadata behave exactly as before.
+-- Retain the existing governance provisioning for every newly registered account,
+-- while allowing phone-only accounts to receive a useful organization name.
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp
 AS $$

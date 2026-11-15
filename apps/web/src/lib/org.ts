@@ -5,7 +5,8 @@ import { getCurrentUser } from '@/lib/auth/current-user'
 
 export type OrgContext = {
   userId: string
-  email: string
+  email: string | null
+  phone: string | null
   organizationId: string
   organizationName: string
   role: string
@@ -35,6 +36,7 @@ export const getCurrentOrg = cache(async (): Promise<OrgContext | null> => {
   return {
     userId,
     email: user.email,
+    phone: user.phone,
     organizationId: membership.organization_id,
     organizationName: org?.name ?? '—',
     role: membership.role,

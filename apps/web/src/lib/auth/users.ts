@@ -8,7 +8,8 @@ import { hashPassword } from './password'
 
 export type AuthUser = {
   id: string
-  email: string
+  email: string | null
+  phone: string | null
   encryptedPassword: string | null
   sessionVersion: number
   bannedUntil: string | null
@@ -17,7 +18,8 @@ export type AuthUser = {
 
 type UserRow = {
   id: string
-  email: string
+  email: string | null
+  phone: string | null
   encrypted_password: string | null
   session_version: number
   banned_until: string | null
@@ -29,6 +31,7 @@ function mapUser(row: UserRow | undefined): AuthUser | null {
   return {
     id: row.id,
     email: row.email,
+    phone: row.phone,
     encryptedPassword: row.encrypted_password,
     sessionVersion: row.session_version ?? 0,
     bannedUntil: row.banned_until,
@@ -36,16 +39,28 @@ function mapUser(row: UserRow | undefined): AuthUser | null {
   }
 }
 
-const USER_COLUMNS = 'id, email, encrypted_password, session_version, banned_until::text as banned_until, raw_user_meta_data'
+const USER_COLUMNS = 'id, email, phone, encrypted_password, session_version, banned_until::text as banned_until, raw_user_meta_data'
 
 export function normalizeEmail(email: string): string {
   return email.trim().toLowerCase()
+}
+
+export function normalizePhone(phone: string): string {
+  return phone.replace(/[^0-9+]/g, '')
 }
 
 export async function findUserByEmail(email: string): Promise<AuthUser | null> {
   const rows = await getSql().unsafe<UserRow[]>(
     `select ${USER_COLUMNS} from auth.users where lower(email) = $1 and deleted_at is null limit 1`,
     [normalizeEmail(email)]
+  )
+  return mapUser(rows[0])
+}
+
+export async function findUserByPhone(phone: string): Promise<AuthUser | null> {
+  const rows = await getSql().unsafe<UserRow[]>(
+    `select ${USER_COLUMNS} from auth.users where phone = $1 and deleted_at is null limit 1`,
+    [normalizePhone(phone)]
   )
   return mapUser(rows[0])
 }
@@ -60,12 +75,12 @@ export async function findUserById(id: string): Promise<AuthUser | null> {
 
 export async function findUserIdentitiesByIds(
   ids: string[]
-): Promise<{ id: string; email: string }[]> {
+): Promise<{ id: string; email: string | null; phone: string | null }[]> {
   const uniqueIds = [...new Set(ids.filter(Boolean))]
   if (uniqueIds.length === 0) return []
 
-  return getSql().unsafe<{ id: string; email: string }[]>(
-    `select id::text as id, email
+  return getSql().unsafe<{ id: string; email: string | null; phone: string | null }[]>(
+    `select id::text as id, email, phone
        from auth.users
       where id = any($1::uuid[])
         and deleted_at is null`,
@@ -74,16 +89,17 @@ export async function findUserIdentitiesByIds(
 }
 
 export async function createUser(input: {
-  email: string
+  email: string | null
+  phone: string | null
   password: string
   metadata: Record<string, unknown>
 }): Promise<AuthUser> {
   const hash = await hashPassword(input.password)
   const rows = await getSql().unsafe<UserRow[]>(
-    `insert into auth.users (email, encrypted_password, email_confirmed_at, raw_user_meta_data)
-     values ($1, $2, now(), $3::text::jsonb)
+    `insert into auth.users (email, phone, encrypted_password, email_confirmed_at, raw_user_meta_data)
+     values ($1, $2, case when $1 is null then null else now() end, $3, $4::text::jsonb)
      returning ${USER_COLUMNS}`,
-    [normalizeEmail(input.email), hash, JSON.stringify(input.metadata)]
+    [input.email ? normalizeEmail(input.email) : null, input.phone, hash, JSON.stringify(input.metadata)]
   )
   return mapUser(rows[0])!
 }

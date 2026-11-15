@@ -62,6 +62,7 @@ export function PhonePanel({
   initial: {
     existingPhoneNumber: string | null
     vapiNumber: string | null
+    vapiPhoneNumberId: string | null
     carrierProfileId?: string | null
     forwardType: string
     forwardingStatus: string
@@ -76,6 +77,7 @@ export function PhonePanel({
   const [form, setForm] = useState<PhoneSetupInput>({
     existingPhoneNumber: initial?.existingPhoneNumber ?? '',
     vapiNumber: initial?.vapiNumber ?? '',
+    vapiPhoneNumberId: initial?.vapiPhoneNumberId ?? '',
     carrierProfileId: initial?.carrierProfileId ?? (displayCarriers[0]?.id || ''),
     forwardType: (initial?.forwardType ?? 'no_answer') as PhoneSetupInput['forwardType'],
   })
@@ -89,8 +91,7 @@ export function PhonePanel({
     displayCarriers.find((c) => c.id === form.carrierProfileId) || displayCarriers[0] || null
 
   // Destination forwarding target
-  const forwardTarget =
-    form.vapiNumber?.trim() || initial?.vapiNumber?.trim() || '+967770000000'
+  const forwardTarget = form.vapiNumber?.trim() || initial?.vapiNumber?.trim() || ''
 
   // Generate USSD codes
   let activationPattern = '*61*{PHONE}#'
@@ -112,7 +113,7 @@ export function PhonePanel({
     }
   }
 
-  const generatedCode = activationPattern.replace('{PHONE}', forwardTarget)
+  const generatedCode = forwardTarget ? activationPattern.replace('{PHONE}', forwardTarget) : ''
 
   // Extra note for Yemen Mobile if CDMA or 4G LTE
   const isYemenMobile = selectedCarrier?.operator_name.includes('يمن موبايل')
@@ -148,12 +149,17 @@ export function PhonePanel({
   function runAutoProvision() {
     setResult(null)
     startTransition(async () => {
-      const outcome = await autoProvisionPhoneChannelAction()
+      const outcome = await autoProvisionPhoneChannelAction({
+        existingPhoneNumber: form.existingPhoneNumber,
+        carrierProfileId: form.carrierProfileId,
+        forwardType: form.forwardType,
+      })
       setResult(outcome)
-      if (outcome.ok && outcome.vapiNumber) {
+      if (outcome.ok && outcome.vapiNumber && outcome.phoneNumberId) {
         setForm((prev) => ({
           ...prev,
           vapiNumber: outcome.vapiNumber ?? prev.vapiNumber,
+          vapiPhoneNumberId: outcome.phoneNumberId ?? prev.vapiPhoneNumberId,
         }))
       }
     })
@@ -266,7 +272,7 @@ export function PhonePanel({
                 <div className="flex items-center gap-2">
                   <CheckCircle2 size={16} className="text-success" />
                   <span className="text-xs font-bold text-success">
-                    تم إنشاء وتفعيل رقم التحويل الذكي الخاص بشركتك:
+                    رقم التحويل السحابي المخصص لشركتك:
                   </span>
                 </div>
                 <div className="flex items-center gap-3">
@@ -309,7 +315,7 @@ export function PhonePanel({
             </div>
           ) : (
             <div className="rounded-xl border border-warning/30 bg-warning/5 p-3.5 text-xs text-text-muted leading-relaxed">
-              اضغط على زر <strong>«تفعيل وإنشاء رقم خاص لشركتي الآن»</strong> بالأعلى، وسيقوم النظام فوراً في الخلفية بإنشاء وتجهيز رقم دولي خاص بنشاطك وربطه بموظف الاستقبال بالذكاء الاصطناعي دون أي خطوات تقنية.
+              يتطلب إنشاء الرقم إعداد حساب Vapi ومفتاحه على الخادم. بعد إنشاء الرقم، احفظ إعدادات التحويل ثم فعّل التحويل لدى شركة الاتصالات؛ لا يُعتبر الربط مكتملاً قبل ذلك.
             </div>
           )}
         </div>
@@ -454,12 +460,13 @@ export function PhonePanel({
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
             <div className="flex-1 flex items-center justify-between bg-surface border border-border rounded-xl px-4 py-3 shadow-2xs">
               <span className="font-mono text-base sm:text-lg font-bold text-secondary tracking-wider select-all" dir="ltr">
-                {generatedCode}
+                {generatedCode || 'أدخل رقم Vapi أولاً'}
               </span>
               <button
                 type="button"
                 onClick={() => handleCopy(generatedCode, 'code')}
-                className="flex items-center gap-1 text-xs text-text-muted hover:text-text bg-background border border-border rounded-lg px-2.5 py-1.5 transition-colors"
+                disabled={!generatedCode}
+                className="flex items-center gap-1 text-xs text-text-muted hover:text-text bg-background border border-border rounded-lg px-2.5 py-1.5 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {copiedCode === 'code' ? (
                   <>
@@ -476,13 +483,17 @@ export function PhonePanel({
             </div>
 
             {/* Direct Dial Link for Mobile */}
-            <a
-              href={`tel:${encodeURIComponent(generatedCode)}`}
-              className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-bold text-primary-foreground hover:bg-primary-dark transition-all shadow-xs shrink-0"
-            >
-              <PhoneCall size={16} />
-              <span>اتصال وتفعيل الكود فوراً</span>
-            </a>
+            {generatedCode ? (
+              <a
+                href={`tel:${encodeURIComponent(generatedCode)}`}
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-bold text-primary-foreground hover:bg-primary-dark transition-all shadow-xs shrink-0"
+              >
+                <PhoneCall size={16} />
+                <span>اتصال وتفعيل الكود فوراً</span>
+              </a>
+            ) : (
+              <span className="text-xs text-text-muted">أنشئ رقم Vapi أو أدخله أولاً لتوليد كود صحيح.</span>
+            )}
           </div>
 
           {/* Yemen Mobile 4G VoLTE alternative code if applicable */}
@@ -624,19 +635,31 @@ export function PhonePanel({
             </summary>
             <div className="space-y-4 pt-4 mt-3 border-t border-border">
               <label className="block text-xs text-text-muted">
-                {ar.channels.vapiNumber} (معرّف التوجيه السحابي المخصص لشركتك):
+                رقم Vapi الذي ستحوّل إليه المكالمات:
                 <input
                   value={form.vapiNumber}
                   disabled={!canManage}
+                  inputMode="tel"
                   onChange={(event) => setForm({ ...form, vapiNumber: event.target.value })}
-                  placeholder="frontdesk_xxxx أو معرّف هاتف Vapi"
+                  placeholder="+14155550123"
+                  dir="ltr"
+                  className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm text-text font-mono focus:border-accent focus:outline-none"
+                />
+              </label>
+              <label className="block text-xs text-text-muted">
+                معرّف رقم الهاتف (Phone Number ID) من Vapi:
+                <input
+                  value={form.vapiPhoneNumberId}
+                  disabled={!canManage}
+                  autoComplete="off"
+                  onChange={(event) => setForm({ ...form, vapiPhoneNumberId: event.target.value })}
+                  placeholder="يُملأ تلقائياً عند إنشاء الرقم من الزر أعلاه"
                   dir="ltr"
                   className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm text-text font-mono focus:border-accent focus:outline-none"
                 />
               </label>
               <p className="text-[11px] text-text-muted leading-relaxed">
-                في المنصة متعددة المشتركين (Multi-tenant SaaS)، يتم إنشاء وتعيين معرّف التوجيه الداخلي
-                تلقائياً لكل مشترك لضمان عزل البيانات الكامل، وتوجيه المكالمة إلى وكيل شركتك وقاعدة معرفتك تحديداً.
+                رقم التحويل الذي تتصل به شركة الاتصالات منفصل عن معرّف Vapi الذي يربط Webhook بالقناة. لا نستخدم أرقامًا افتراضية أو مشتركة.
               </p>
             </div>
           </details>
