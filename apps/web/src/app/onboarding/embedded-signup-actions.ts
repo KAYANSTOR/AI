@@ -189,7 +189,7 @@ export async function registerWhatsAppCloudApiNumberAction(input: {
       }
     )
     const body = await response.json().catch(() => null) as {
-      success?: boolean
+      success?: boolean | string
       error?: {
         code?: number
         message?: string
@@ -197,7 +197,7 @@ export async function registerWhatsAppCloudApiNumberAction(input: {
       }
     } | null
 
-    if (!response.ok || body?.success !== true) {
+    if (!response.ok || (body?.success !== true && body?.success !== 'true')) {
       const code = body?.error?.code ?? null
       console.error('WhatsApp registration: Meta rejected phone registration', {
         httpStatus: response.status,
