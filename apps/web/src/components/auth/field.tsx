@@ -23,7 +23,7 @@ export function TextField({
 }: {
   id: string
   label: string
-  type?: 'text' | 'email' | 'password'
+  type?: 'text' | 'email' | 'tel' | 'password'
   value: string
   onChange: (value: string) => void
   autoComplete?: string
@@ -63,11 +63,11 @@ export function TextField({
           placeholder={placeholder}
           minLength={minLength}
           required={required}
-          dir={type === 'email' ? 'ltr' : undefined}
+          dir={type === 'email' || type === 'tel' || id === 'identifier' ? 'ltr' : undefined}
           aria-describedby={hintId}
           className={`${inputClass} ${leadingIcon ? 'ps-11' : ''} ${
             isPassword || trailingIcon ? 'pe-11' : ''
-          } ${type === 'email' ? 'text-start' : ''}`}
+          } ${type === 'email' || type === 'tel' || id === 'identifier' ? 'text-start' : ''}`}
         />
         {isPassword ? (
           <button

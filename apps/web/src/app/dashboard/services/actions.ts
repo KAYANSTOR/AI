@@ -8,6 +8,7 @@ export type SimpleResult = { ok: true } | { ok: false }
 
 export async function createServiceAction(input: {
   name: string
+  category?: string
   description: string
   duration_minutes: number
   price_amount: number | null
@@ -15,13 +16,21 @@ export async function createServiceAction(input: {
 }): Promise<SimpleResult> {
   const org = await getCurrentOrg()
   if (!org || !input.name.trim()) return { ok: false }
+  const name = input.name?.trim()
+  const duration = Number(input.duration_minutes)
+  const price = input.price_amount === null ? null : Number(input.price_amount)
+  if (!name || name.length > 255) return { ok: false }
+  if (!Number.isInteger(duration) || duration < 5 || duration > 1440) return { ok: false }
+  if (price !== null && (!Number.isFinite(price) || price < 0)) return { ok: false }
+  if (input.category && input.category.length > 80) return { ok: false }
   const db = await createClient()
   const { error } = await db.from('services').insert({
     organization_id: org.organizationId,
-    name: input.name.trim(),
-    description: input.description.trim() || null,
-    duration_minutes: Number(input.duration_minutes),
-    price_amount: input.price_amount,
+    name,
+    category: input.category?.trim().slice(0, 80) || null,
+    description: input.description.trim().slice(0, 4000) || null,
+    duration_minutes: duration,
+    price_amount: price,
     price_currency: input.price_currency,
     is_active: true,
   })

@@ -10,7 +10,7 @@ import { AUTH_MESSAGES } from './messages'
 import { burnPasswordCheck, MIN_PASSWORD_LENGTH, verifyPassword } from './password'
 import { isRateLimited } from './rate-limit'
 import { SESSION_COOKIE, sessionCookieOptions, signSession } from './session'
-import { createUser, findUserByEmail, findUserById, normalizeEmail, recordSignIn, setPassword } from './users'
+import { createUser, findUserByEmail, findUserByPhone, findUserById, normalizeEmail, normalizePhone, recordSignIn, setPassword } from './users'
 
 export type AuthActionResult = { ok: true; redirectTo: string } | { ok: false; error: string }
 
@@ -25,14 +25,14 @@ function safeDestination(value: unknown, fallback: string): string {
   return typeof value === 'string' && value.startsWith('/') && !value.startsWith('//') ? value : fallback
 }
 
-async function startSession(user: { id: string; email: string; sessionVersion: number }) {
+async function startSession(user: { id: string; email: string | null; sessionVersion: number }) {
   const token = await signSession(user)
   const store = await cookies()
   store.set(SESSION_COOKIE, token, sessionCookieOptions())
 }
 
 const signInSchema = z.object({
-  email: z.string().trim().email(),
+  identifier: z.string().trim().min(1).max(254),
   password: z.string().min(1).max(200),
   returnTo: z.string().optional(),
 })
@@ -42,14 +42,20 @@ export async function signInAction(input: z.input<typeof signInSchema>): Promise
   const parsed = signInSchema.safeParse(input)
   if (!parsed.success) return { ok: false, error: AUTH_MESSAGES.invalidCredentials }
 
-  const email = normalizeEmail(parsed.data.email)
+  const identifier = parsed.data.identifier.includes('@')
+    ? normalizeEmail(parsed.data.identifier)
+    : normalizePhone(parsed.data.identifier)
+  const isEmail = identifier.includes('@')
+  if (!isEmail && !/^[+][1-9][0-9]{7,14}$/.test(identifier)) {
+    return { ok: false, error: AUTH_MESSAGES.invalidCredentials }
+  }
   const ip = await clientIp()
-  if (isRateLimited(`login:ip:${ip}`, 30, FIFTEEN_MINUTES) || isRateLimited(`login:email:${email}`, 8, FIFTEEN_MINUTES)) {
+  if (isRateLimited(`login:ip:${ip}`, 30, FIFTEEN_MINUTES) || isRateLimited(`login:identity:${identifier}`, 8, FIFTEEN_MINUTES)) {
     return { ok: false, error: AUTH_MESSAGES.tooManyAttempts }
   }
 
   try {
-    const user = await findUserByEmail(email)
+    const user = isEmail ? await findUserByEmail(identifier) : await findUserByPhone(identifier)
     if (!user) {
       await burnPasswordCheck(parsed.data.password)
       return { ok: false, error: AUTH_MESSAGES.invalidCredentials }
@@ -73,9 +79,15 @@ export async function signInAction(input: z.input<typeof signInSchema>): Promise
 const signUpSchema = z.object({
   companyName: z.string().trim().min(2).max(120),
   businessTypeId: z.string().trim().min(1),
-  email: z.string().trim().email(),
+  email: z.string().trim().email().optional(),
+  phone: z.string().trim().optional(),
   password: z.string().min(MIN_PASSWORD_LENGTH).max(200),
-})
+}).refine(
+  (value) =>
+    (Boolean(value.email) && !value.phone) ||
+    (!value.email && Boolean(value.phone && /^[+][1-9][0-9]{7,14}$/.test(normalizePhone(value.phone)))),
+  { path: ['email'], message: 'اختر بريداً إلكترونياً أو رقم هاتف دولياً صحيحاً.' }
+)
 
 export async function signUpAction(input: z.input<typeof signUpSchema>): Promise<AuthActionResult> {
   if (!isAuthConfigured()) return { ok: false, error: AUTH_MESSAGES.notConfigured }
@@ -83,7 +95,7 @@ export async function signUpAction(input: z.input<typeof signUpSchema>): Promise
   if (!parsed.success) {
     const field = parsed.error.issues[0]?.path[0]
     if (field === 'companyName') return { ok: false, error: AUTH_MESSAGES.companyRequired }
-    if (field === 'email') return { ok: false, error: AUTH_MESSAGES.invalidEmail }
+    if (field === 'email' || field === 'phone') return { ok: false, error: 'اكتب بريداً إلكترونياً أو رقم هاتف دولياً صحيحاً.' }
     if (field === 'password') return { ok: false, error: AUTH_MESSAGES.weakPassword }
     return { ok: false, error: AUTH_MESSAGES.generic }
   }
@@ -91,14 +103,18 @@ export async function signUpAction(input: z.input<typeof signUpSchema>): Promise
   const ip = await clientIp()
   if (isRateLimited(`signup:ip:${ip}`, 10, FIFTEEN_MINUTES)) return { ok: false, error: AUTH_MESSAGES.tooManyAttempts }
 
+  const email = parsed.data.email ? normalizeEmail(parsed.data.email) : null
+  const phone = parsed.data.phone ? normalizePhone(parsed.data.phone) : null
   const businessTypeId = BUSINESS_TYPES.some((type) => type.id === parsed.data.businessTypeId)
     ? parsed.data.businessTypeId
     : BUSINESS_TYPES[0]?.id
 
   try {
-    if (await findUserByEmail(parsed.data.email)) return { ok: false, error: AUTH_MESSAGES.emailTaken }
+    if (email && (await findUserByEmail(email))) return { ok: false, error: AUTH_MESSAGES.emailTaken }
+    if (phone && (await findUserByPhone(phone))) return { ok: false, error: AUTH_MESSAGES.emailTaken }
     const user = await createUser({
-      email: parsed.data.email,
+      email,
+      phone,
       password: parsed.data.password,
       metadata: { organization_name: parsed.data.companyName, business_type_id: businessTypeId },
     })
