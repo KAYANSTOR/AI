@@ -535,12 +535,10 @@ export async function completeEmbeddedSignup(input: {
       throw new Error('تعذّر التحقق من حفظ بيانات اعتماد Meta المشفّرة.')
     }
 
-    const { error: activateError } = await admin.from('channels').update({
-      verification_status: 'verified',
-      is_active: true,
-      updated_at: new Date().toISOString(),
-    }).eq('id', channelId).eq('organization_id', input.organizationId)
-    if (activateError) throw new Error('تم حفظ بيانات الربط لكن تعذّر تفعيل القناة.')
+    // Meta Embedded Signup grants access to the WABA, but does not itself
+    // register the selected phone number for Cloud API messaging. Keep the
+    // channel inactive until the owner submits the number's 6-digit 2-step PIN
+    // to POST /{phone-number-id}/register.
 
     if (displayNumber) {
       const { error: profileUpdateError } = await admin.from('business_profiles')
@@ -555,7 +553,7 @@ export async function completeEmbeddedSignup(input: {
       wabaId,
       businessId,
       displayNumber,
-      message: 'تم التحقق من رقم واتساب وحفظ بيانات Meta وربط القناة بالنشاط بنجاح.',
+      message: 'تم تفويض Meta وحفظ بيانات القناة. بقي تسجيل رقم الإرسال برمز PIN المكوّن من 6 أرقام لإكمال التفعيل.',
     }
   } catch (error) {
     console.error('EmbeddedSignup: complete failed', error)

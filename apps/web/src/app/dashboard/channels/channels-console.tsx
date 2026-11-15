@@ -10,6 +10,7 @@ import {
 } from './actions'
 import { getChannelSpec, type ChannelType, type BindingTestResult } from '@/lib/channels/management'
 import { WhatsAppEmbeddedSignupButton } from '@/components/channels/whatsapp-embedded-signup'
+import { registerWhatsAppCloudApiNumberAction } from '@/app/onboarding/embedded-signup-actions'
 import { ChannelCard as UIChannelCard, type ChannelStatus } from '@/components/ui/channel-card'
 
 type ChannelCard = {
@@ -27,6 +28,7 @@ type State = 'not_connected' | 'pending' | 'verified' | 'disabled' | 'error'
 
 function stateOf(card: ChannelCard): State {
   if (!card.connected) return 'not_connected'
+  if (card.verificationStatus === 'pending') return 'pending'
   if (!card.isActive || card.verificationStatus === 'disabled') return 'disabled'
   if (card.verificationStatus === 'verified') return 'verified'
   if (card.verificationStatus === 'failed') return 'error'
@@ -35,7 +37,7 @@ function stateOf(card: ChannelCard): State {
 
 const stateCopy: Record<State, { title: string; hint: string }> = {
   not_connected: { title: 'غير مربوط', hint: 'ابدأ بالربط عبر Meta لاستقبال رسائل العملاء' },
-  pending: { title: 'غير مربوط — الرقم محفوظ فقط', hint: 'أكمل الربط عبر زر Meta' },
+  pending: { title: 'تفويض Meta مكتمل — التسجيل معلّق', hint: 'أدخل PIN التحقق بخطوتين لإكمال تسجيل رقم الإرسال' },
   verified: { title: 'مربوط', hint: 'القناة جاهزة للتوجيه والرد' },
   disabled: { title: 'متوقف', hint: 'القناة موجودة لكنها غير مفعّلة' },
   error: { title: 'يحتاج إعادة محاولة', hint: 'راجع بيانات الربط ثم أعد المحاولة' },
@@ -114,6 +116,7 @@ function ChannelDialog({
   const [busy, startTransition] = useTransition()
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null)
   const [testResult, setTestResult] = useState<BindingTestResult | null>(null)
+  const [registrationPin, setRegistrationPin] = useState('')
   const state = stateOf(card)
 
   if (!spec) return null
@@ -171,6 +174,26 @@ function ChannelDialog({
     })
   }
 
+  function registerWhatsAppNumber() {
+    if (!canManage || card.type !== 'whatsapp') return
+    if (!/^\\d{6}$/.test(registrationPin)) {
+      setNotice({ ok: false, text: 'أدخل PIN التحقق بخطوتين المكوّن من 6 أرقام.' })
+      return
+    }
+    startTransition(async () => {
+      setNotice(null)
+      const result = await registerWhatsAppCloudApiNumberAction({ pin: registrationPin })
+      setNotice({
+        ok: result.ok,
+        text: result.ok ? result.message ?? 'تم تسجيل رقم الإرسال.' : result.error ?? 'تعذّر تسجيل رقم الإرسال.',
+      })
+      if (result.ok) {
+        setRegistrationPin('')
+        window.location.reload()
+      }
+    })
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/40 p-4" role="presentation">
       <div
@@ -212,6 +235,47 @@ function ChannelDialog({
                 الربط الفعلي يتم من زر Meta فقط. حفظ الرقم وحده لا يستقبل رسائل العملاء.
               </p>
             </div>
+          ) : null}
+
+          {card.type === 'whatsapp' ? (
+            <section className="space-y-3 rounded-2xl border border-warning/40 bg-warning/5 p-4">
+              <div>
+                <h3 className="text-sm font-bold text-text">تسجيل رقم الإرسال على WhatsApp</h3>
+                <p className="mt-1 text-xs leading-6 text-text-muted">
+                  تفويض Meta وربط الرقم لا يُكملان تسجيله للإرسال تلقائياً. أدخل PIN التحقق بخطوتين الحالي للرقم.
+                  هذا ليس رمز SMS. إذا لم تُنشئ PIN لهذا الرقم من قبل، اختر رمزاً جديداً من 6 أرقام واحتفظ به،
+                  لأن Meta ستعتمده للتحقق بخطوتين.
+                </p>
+              </div>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <input
+                  type="password"
+                  value={registrationPin}
+                  onChange={(event) => setRegistrationPin(event.target.value.replace(/\\D/g, '').slice(0, 6))}
+                  inputMode="numeric"
+                  autoComplete="off"
+                  maxLength={6}
+                  dir="ltr"
+                  placeholder="••••••"
+                  aria-label="رمز PIN المكوّن من 6 أرقام"
+                  disabled={busy || !canManage}
+                  className="min-h-12 w-full rounded-xl border border-border bg-background px-3 text-center text-lg tracking-[0.35em] text-text outline-none focus:border-secondary focus:ring-2 focus:ring-accent/40 sm:max-w-52"
+                />
+                <button
+                  type="button"
+                  onClick={registerWhatsAppNumber}
+                  disabled={busy || !canManage || registrationPin.length !== 6}
+                  className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-primary-dark px-5 text-sm font-semibold text-primary-foreground hover:bg-primary disabled:opacity-50"
+                >
+                  {busy ? <Loader2 size={18} className="animate-spin" /> : <CheckCircle2 size={17} />}
+                  إكمال تسجيل الرقم
+                </button>
+              </div>
+              <p className="text-[11px] leading-5 text-text-muted">
+                لا يُحفظ هذا الرمز في Kayan AI؛ يُرسل إلى Meta لإكمال التسجيل فقط.
+                استخدم هذا الإجراء إذا ظهر لك الخطأ 133010 أو إذا كان الرقم جديداً.
+              </p>
+            </section>
           ) : null}
 
           <label className="block">

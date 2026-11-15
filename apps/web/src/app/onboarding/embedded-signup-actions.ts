@@ -2,6 +2,9 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/db/server'
+import { createAdminClient } from '@/lib/db/admin'
+import { loadChannelCredentials } from '@/lib/credentials/service'
+import { getMetaGraphBaseUrl } from '@/lib/channels/embedded-signup'
 import { getCurrentOrg } from '@/lib/org'
 import { actionErrorMessage } from '@/lib/i18n/action-error'
 import {
@@ -122,5 +125,150 @@ export async function completeWhatsAppEmbeddedSignupAction(input: {
     return { ok: true, message: result.message }
   } catch (error) {
     return { ok: false, error: actionErrorMessage(error, 'تعذّر إتمام ربط واتساب عبر Meta.') }
+  }
+}
+
+
+/**
+ * Completes the separate WhatsApp Cloud API phone registration step.
+ * The six-digit PIN is sent directly to Meta and is never stored or logged.
+ */
+export async function registerWhatsAppCloudApiNumberAction(input: {
+  pin: string
+}): Promise<OnboardingResult> {
+  try {
+    const org = await requireOnboardingAdmin()
+    const pin = String(input?.pin ?? '').trim()
+    if (!/^\\d{6}$/.test(pin)) {
+      return { ok: false, error: 'أدخل رمز التحقق بخطوتين المكوّن من 6 أرقام.' }
+    }
+
+    const admin = createAdminClient()
+    const { data: channel, error: channelError } = await admin
+      .from('channels')
+      .select('id, provider_account_id, business_id, channel_type')
+      .eq('organization_id', org.organizationId)
+      .eq('channel_type', 'whatsapp')
+      .maybeSingle()
+
+    if (channelError) {
+      console.error('WhatsApp registration: unable to load owned channel', channelError)
+      return { ok: false, error: 'تعذّر قراءة قناة واتساب الحالية.' }
+    }
+    if (!channel?.id || !channel.provider_account_id) {
+      return { ok: false, error: 'لم يتم العثور على رقم إرسال مرتبط بالقناة. أعد ربط واتساب عبر Meta.' }
+    }
+
+    const phoneNumberId = String(channel.provider_account_id)
+    const credentials = await loadChannelCredentials(admin, channel.id, 'meta')
+    const accessToken = credentials.access_token?.trim()
+    const storedPhoneNumberId = credentials.phone_number_id?.trim()
+    if (!accessToken || !storedPhoneNumberId) {
+      return { ok: false, error: 'بيانات ربط Meta غير مكتملة. أعد ربط واتساب عبر Meta.' }
+    }
+    if (storedPhoneNumberId !== phoneNumberId) {
+      console.error('WhatsApp registration: channel/credential phone ID mismatch', {
+        channelId: channel.id,
+        channelPhoneNumberId: phoneNumberId,
+        credentialPhoneNumberId: storedPhoneNumberId,
+      })
+      return { ok: false, error: 'رقم الإرسال المحفوظ لا يطابق بيانات تفويض Meta. أعد ربط القناة قبل التسجيل.' }
+    }
+
+    const response = await fetch(
+      `${getMetaGraphBaseUrl()}/${encodeURIComponent(phoneNumberId)}/register`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ messaging_product: 'whatsapp', pin }),
+        signal: AbortSignal.timeout(15_000),
+        cache: 'no-store',
+      }
+    )
+    const body = await response.json().catch(() => null) as {
+      success?: boolean
+      error?: {
+        code?: number
+        message?: string
+        error_data?: { details?: string }
+      }
+    } | null
+
+    if (!response.ok || body?.success !== true) {
+      const code = body?.error?.code ?? null
+      console.error('WhatsApp registration: Meta rejected phone registration', {
+        httpStatus: response.status,
+        metaCode: code,
+        details: body?.error?.error_data?.details ?? null,
+      })
+
+      if (code === 133005) {
+        return { ok: false, error: 'رمز PIN غير صحيح. أدخل رمز التحقق بخطوتين الحالي لهذا الرقم.' }
+      }
+      if (code === 133006) {
+        return { ok: false, error: 'يجب إكمال التحقق من ملكية رقم الهاتف لدى Meta قبل التسجيل.' }
+      }
+      if (code === 133008 || code === 133009) {
+        return { ok: false, error: 'محاولات إدخال PIN كثيرة أو متقاربة. انتظر المدة التي تحددها Meta ثم حاول مرة واحدة.' }
+      }
+      if (code === 133015) {
+        return { ok: false, error: 'Meta ما زالت تُكمل إزالة تسجيل سابق لهذا الرقم. انتظر 5 دقائق ثم أعد المحاولة.' }
+      }
+      return {
+        ok: false,
+        error: code
+          ? `رفضت Meta تسجيل رقم الإرسال (رمز ${code}). تحقق من حالة الرقم وصلاحيات حساب الأعمال ثم أعد المحاولة.`
+          : 'تعذّر تأكيد تسجيل رقم الإرسال لدى Meta. تحقق من الاتصال ثم حاول مرة أخرى.',
+      }
+    }
+
+    const { data: updated, error: updateError } = await admin
+      .from('channels')
+      .update({
+        verification_status: 'verified',
+        is_active: true,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', channel.id)
+      .eq('organization_id', org.organizationId)
+      .eq('channel_type', 'whatsapp')
+      .select('id')
+      .single()
+
+    if (updateError || !updated) {
+      console.error('WhatsApp registration: Meta succeeded but channel activation failed', {
+        channelId: channel.id,
+        error: updateError,
+      })
+      return {
+        ok: false,
+        error: 'سجّلت Meta الرقم بنجاح، لكن تعذّر تحديث حالة القناة في Kayan AI. أعد الضغط على التسجيل لإكمال التفعيل.',
+      }
+    }
+
+    await auditSetup(
+      org.organizationId,
+      (channel.business_id as string | null) ?? null,
+      'channel.whatsapp_phone_registered',
+      'channel',
+      channel.id,
+      { phone_number_id: phoneNumberId }
+    )
+    revalidatePath('/dashboard/channels')
+    revalidatePath('/dashboard/conversations')
+    revalidatePath('/onboarding')
+    return {
+      ok: true,
+      message: 'تم تسجيل رقم الإرسال لدى WhatsApp Cloud API وتفعيل القناة بنجاح.',
+    }
+  } catch (error) {
+    console.error('WhatsApp registration action failed', error)
+    return {
+      ok: false,
+      error: actionErrorMessage(error, 'تعذّر تسجيل رقم واتساب لدى Meta. تحقق من إعدادات القناة ثم حاول مرة أخرى.'),
+    }
   }
 }

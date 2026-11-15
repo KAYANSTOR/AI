@@ -180,7 +180,7 @@ export default async function ChannelsPage({
 
       {channelsError && <Notice tone="error" message={channelsError} />}
       {status === 'meta_success' && (
-        <Notice tone="success" message="تمت إعادة الفحص وحفظ ربط WhatsApp بنجاح. القناة الآن متصلة ونشطة." />
+        <Notice tone="success" message="تم تفويض حساب Meta وحفظ بيانات القناة. افتح بطاقة WhatsApp وأكمل تسجيل رقم الإرسال باستخدام PIN التحقق بخطوتين قبل إرسال الرسائل." />
       )}
       {status === 'meta_error' && (
         <Notice tone="error" message="تعذّر إكمال ربط Meta. أعد المحاولة من بطاقة WhatsApp ثم استخدم إعادة فحص الاتصال." />
