@@ -3,8 +3,9 @@
  *
  * Simple path for onboarding:
  *   The customer types their WhatsApp number. We always save it.
- *   If platform credentials exist and the number is found in the WABA,
- *   we mark it verified. Otherwise we mark it pending. Live inbound still needs Meta.
+ *   A WABA lookup only discovers the phone_number_id; it does not register
+ *   the phone for Cloud API messaging. Only the explicit registration action
+ *   may promote the channel to verified/active.
  *
  * Provider identifiers never reach the browser through this module.
  */
@@ -69,6 +70,7 @@ export async function resolveWhatsAppBinding(input: {
   if (
     input.channel?.provider_account_id &&
     input.channel.verification_status === 'verified' &&
+    input.channel.is_active === true &&
     phoneDigits(input.channel.external_identifier ?? '') === digits
   ) {
     return {
@@ -97,10 +99,10 @@ export async function resolveWhatsAppBinding(input: {
 
       if (lookup.ok) {
         return {
-          status: 'verified',
+          status: 'pending',
           reason: 'provider_lookup',
           phoneNumberId: lookup.phoneNumberId,
-          message: 'تم ربط رقم واتساب بنشاطك.',
+          message: 'تم العثور على الرقم في حساب Meta. أكمل تسجيله برمز PIN من 6 أرقام قبل تفعيل الإرسال.',
         }
       }
 
@@ -162,7 +164,7 @@ export async function connectWhatsAppChannel(input: {
       provider_account_id: outcome.phoneNumberId,
       external_identifier: number,
       verification_status: outcome.status === 'verified' ? 'verified' : 'pending',
-      is_active: true,
+      is_active: outcome.status === 'verified',
       updated_at: new Date().toISOString(),
     }
 
