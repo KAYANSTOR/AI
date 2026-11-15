@@ -145,18 +145,12 @@ export async function saveChannelAction(input: {
     const raw = input.identifier.trim()
     if (!raw) return { ok: false, error: 'أدخل ' + spec.bindingLabel + '.' }
 
-    if (spec.type === 'whatsapp' && !/^\\d+$/.test(raw)) {
-      return {
-        ok: false,
-        error: 'أدخل phone_number_id الرقمي من لوحة Meta، وليس رقم الهاتف مثل +967....',
-      }
-    }
     if (spec.type === 'instagram' && !/^\\d+$/.test(raw)) {
       return { ok: false, error: 'أدخل معرّف حساب إنستغرام الرقمي من لوحة Meta.' }
     }
 
     const identifier =
-      spec.type === 'whatsapp' || spec.type === 'instagram' ? raw : normalizeChannelNumber(raw)
+      spec.type === 'instagram' ? raw : normalizeChannelNumber(raw)
     const publicNumber = spec.publicNumberLabel
       ? normalizeChannelNumber((input.publicNumber ?? '').trim())
       : null
