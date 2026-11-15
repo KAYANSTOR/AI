@@ -1,4 +1,5 @@
 import type { DbClient } from '@/lib/db/client'
+import { isTrialExpired } from './trial-period'
 
 export type PlanLimits = {
   channels?: number
@@ -37,23 +38,27 @@ function periodBounds(now = new Date()) {
 export async function getOrganizationPlanLimits(
   db: DbClient,
   organizationId: string
-): Promise<{ status: string; limits: PlanLimits; planCode: string }> {
+): Promise<{ status: string; limits: PlanLimits; planCode: string; trialEnd: string | null }> {
   const { data: sub } = await db
     .from('subscriptions')
-    .select('status, plan_id, plan_tier, plans(limits, code)')
+    .select('status, plan_id, plan_tier, trial_end, plans(limits, code)')
     .eq('organization_id', organizationId)
     .maybeSingle()
 
   if (!sub) {
-    return { status: 'trial', limits: { ...TRIAL_LIMITS }, planCode: 'trial' }
+    return { status: 'expired', limits: { ...TRIAL_LIMITS }, planCode: 'trial', trialEnd: null }
   }
 
+  const storedStatus = String(sub.status ?? 'active')
+  const trialEnd = (sub.trial_end as string | null) ?? null
+  const status = storedStatus === 'trial' && isTrialExpired(trialEnd) ? 'expired' : storedStatus
   const plans = sub.plans as unknown as { limits?: PlanLimits; code?: string } | null
   if (plans?.limits) {
     return {
-      status: String(sub.status ?? 'active'),
+      status,
       limits: plans.limits,
       planCode: plans.code ?? 'custom',
+      trialEnd,
     }
   }
 
@@ -67,9 +72,10 @@ export async function getOrganizationPlanLimits(
   }
 
   return {
-    status: String(sub.status ?? 'active'),
+    status,
     limits: tierLimits[tier] ?? tierLimits.starter,
     planCode: tier,
+    trialEnd,
   }
 }
 
@@ -78,7 +84,7 @@ export async function assertSubscriptionActive(
   organizationId: string
 ): Promise<void> {
   const { status } = await getOrganizationPlanLimits(db, organizationId)
-  if (status === 'suspended' || status === 'cancelled') {
+  if (status === 'suspended' || status === 'cancelled' || status === 'expired') {
     throw new EntitlementExceededError('subscription', 0, 0)
   }
 }

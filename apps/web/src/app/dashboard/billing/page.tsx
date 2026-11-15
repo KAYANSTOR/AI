@@ -65,11 +65,12 @@ export default async function BillingPage() {
       ? 'نشط'
       : snapshot.status === 'trial'
         ? 'تجريبي'
-        : snapshot.status === 'past_due' || snapshot.status === 'grace_period'
-          ? 'متأخر'
-          : snapshot.status === 'suspended'
-            ? 'موقوف'
-            : snapshot.status
+      : snapshot.status === 'past_due' || snapshot.status === 'grace_period'
+        ? 'متأخر'
+        : snapshot.status === 'expired'
+          ? 'انتهت الفترة التجريبية'
+          : snapshot.status
+
 
   return (
     <div className="mx-auto max-w-5xl space-y-8">
@@ -94,6 +95,11 @@ export default async function BillingPage() {
                   {statusLabel}
                 </span>
               </h2>
+              {snapshot.trialEnd ? (
+                <p className="mt-1 text-xs text-text-muted">
+                  تنتهي الفترة التجريبية في {new Date(snapshot.trialEnd).toLocaleDateString('ar', { dateStyle: 'long' })}
+                </p>
+              ) : null}
             </div>
           </div>
         </div>

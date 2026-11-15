@@ -4,7 +4,7 @@ import { useState, useTransition, type FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import { Check, Loader2 } from 'lucide-react'
 import { BUSINESS_TYPES, DEFAULT_BUSINESS_TYPE } from '@/lib/capabilities/business-types'
-import { saveBasicsAction, saveOnboardingStepAction } from './actions'
+import { saveBasicsAction, saveOnboardingStepAction, selectTrialPlanAction } from './actions'
 import { createServiceAction } from '@/app/dashboard/services/actions'
 import { saveLocationAction } from '@/app/dashboard/locations/actions'
 import { saveWeeklyHoursAction, type DayInput } from '@/app/dashboard/hours/actions'
@@ -19,14 +19,15 @@ type SetupData = {
   location: { id: string; name: string; address: string; phone: string } | null
   days: DayInput[]
   timezone: string
+  currentPlan: { code: string; name: string; status: string; trialEnd: string | null } | null
   canManage: boolean
 }
 
-const titles = ['معلومات النشاط', 'خدماتك الأساسية', 'فروع النشاط', 'ساعات العمل']
+const titles = ['معلومات النشاط', 'خدماتك الأساسية', 'فروع النشاط', 'ساعات العمل', 'اختيار الباقة']
 const inputClass = 'min-h-12 w-full rounded-xl border border-border bg-surface px-3.5 py-2.5 text-sm text-text outline-none transition placeholder:text-text-muted/60 focus:border-primary focus:ring-2 focus:ring-primary/15'
 const weekdays = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت']
 
-export function SetupWizard({ step, data }: { step: 1 | 2 | 3 | 4; data: SetupData }) {
+export function SetupWizard({ step, data }: { step: 1 | 2 | 3 | 4 | 5; data: SetupData }) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
@@ -37,7 +38,7 @@ export function SetupWizard({ step, data }: { step: 1 | 2 | 3 | 4; data: SetupDa
 
   function run(
     work: () => Promise<{ ok: boolean; error?: string }>,
-    next?: 1 | 2 | 3 | 4,
+    next?: 1 | 2 | 3 | 4 | 5,
     returnLater = false
   ) {
     setError(null)
@@ -65,7 +66,7 @@ export function SetupWizard({ step, data }: { step: 1 | 2 | 3 | 4; data: SetupDa
         }
         router.refresh()
       } else {
-        const progress = await saveOnboardingStepAction(4)
+        const progress = await saveOnboardingStepAction(step)
         if (!progress.ok) {
           setError(progress.error ?? 'تعذّر حفظ تقدم الإعداد.')
           return
@@ -142,19 +143,29 @@ export function SetupWizard({ step, data }: { step: 1 | 2 | 3 | 4; data: SetupDa
       return
     }
     const saveLater = isSaveAndReturn(event)
-    run(() => saveWeeklyHoursAction(schedule).then((result) => ({ ok: result.ok, error: result.error })), undefined, saveLater)
+    run(() => saveWeeklyHoursAction(schedule).then((result) => ({ ok: result.ok, error: result.error })), saveLater ? undefined : 5, saveLater)
   }
 
-  const onSubmit = [submitBasics, submitService, submitLocation, submitHours][step - 1]
+  function submitTrialPlan(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const saveLater = isSaveAndReturn(event)
+    run(
+      () => saveLater ? Promise.resolve({ ok: true }) : selectTrialPlanAction(),
+      undefined,
+      saveLater
+    )
+  }
+
+  const onSubmit = [submitBasics, submitService, submitLocation, submitHours, submitTrialPlan][step - 1]
 
   return (
     <section className="mx-auto w-full max-w-2xl rounded-3xl border border-border bg-surface p-5 shadow-sm sm:p-8">
       <div className="flex items-center justify-between gap-3">
-        <span className="text-xs font-semibold text-text-muted">الخطوة {step} من 4</span>
+        <span className="text-xs font-semibold text-text-muted">الخطوة {step} من 5</span>
         <span className="text-xs font-semibold text-primary">{titles[step - 1]}</span>
       </div>
       <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-background" aria-hidden="true">
-        <div className="h-full rounded-full bg-primary transition-[width]" style={{ width: `${step * 25}%` }} />
+        <div className="h-full rounded-full bg-primary transition-[width]" style={{ width: `${step * 20}%` }} />
       </div>
       <h1 className="mt-7 text-2xl font-bold tracking-tight text-text">{titles[step - 1]}</h1>
       <p className="mt-2 text-sm leading-6 text-text-muted">{[
@@ -162,6 +173,7 @@ export function SetupWizard({ step, data }: { step: 1 | 2 | 3 | 4; data: SetupDa
         'أضف خدمة واحدة على الأقل ليتمكن العملاء من اختيارها.',
         'أضف موقعاً واحداً ليستطيع العملاء معرفة مكان نشاطك.',
         'حدد أيام وساعات استقبال العملاء والحجوزات.',
+        'اختر الباقة المناسبة لبدء استخدام مساحة عملك.',
       ][step - 1]}</p>
 
       {!data.canManage ? <p className="mt-5 rounded-xl border border-warning/40 bg-warning/10 p-3 text-sm text-text">إكمال الإعداد متاح لمالك النشاط أو المسؤول فقط.</p> : null}
@@ -195,7 +207,52 @@ export function SetupWizard({ step, data }: { step: 1 | 2 | 3 | 4; data: SetupDa
           <Field label="المنطقة الزمنية" required><input dir="ltr" value={timezone} onChange={(event) => setTimezone(event.target.value)} className={`${inputClass} text-start`} placeholder="Asia/Aden" /></Field>
         </> : null}
 
-        {data.canManage ? <button type="submit" disabled={pending} className="mt-2 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary px-5 text-sm font-semibold text-primary-foreground transition hover:bg-primary-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:opacity-60">{pending ? <Loader2 size={17} className="animate-spin" aria-hidden="true" /> : null}{step === 4 ? 'إكمال الإعداد' : 'متابعة'}</button> : null}
+        {step === 5 ? data.currentPlan ? (
+          <div className="rounded-2xl border-2 border-border bg-background p-5">
+            <p className="text-xs font-semibold text-text-muted">الباقة المسجلة لهذا النشاط</p>
+            <h2 className="mt-2 text-lg font-bold text-text">{data.currentPlan.name}</h2>
+            <p className="mt-2 text-sm leading-6 text-text-muted">
+              سيتم الاحتفاظ بالباقة الحالية دون تغيير أو إعادة بدء فترة التجربة.
+            </p>
+            {data.currentPlan.trialEnd ? (
+              <p className="mt-3 text-xs font-medium text-text-muted">
+                نهاية الفترة التجريبية: {new Date(data.currentPlan.trialEnd).toLocaleDateString('ar', { dateStyle: 'long' })}
+              </p>
+            ) : null}
+          </div>
+        ) : (
+          <fieldset>
+            <legend className="mb-3 text-sm font-semibold text-text">الباقة المتاحة الآن</legend>
+            <label className="flex cursor-pointer gap-4 rounded-2xl border-2 border-primary bg-primary/5 p-5 shadow-sm focus-within:ring-2 focus-within:ring-primary focus-within:ring-offset-2">
+              <input
+                type="radio"
+                name="plan"
+                value="trial"
+                defaultChecked
+                className="mt-1 h-4 w-4 shrink-0 accent-primary"
+              />
+              <span className="min-w-0 flex-1">
+                <span className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-base font-bold text-text">الباقة التجريبية</span>
+                  <span className="text-xl font-bold text-primary">$0 <span className="text-sm font-medium text-text-muted">USD</span></span>
+                </span>
+                <span className="mt-2 block text-sm leading-6 text-text-muted">
+                  استخدام مجاني لمدة شهر واحد من تاريخ التفعيل، دون بطاقة دفع أو تجديد تلقائي.
+                </span>
+                <span className="mt-4 grid gap-2 border-t border-border pt-4 text-xs text-text-muted sm:grid-cols-3">
+                  <span>قناة واحدة</span>
+                  <span>100 رسالة ذكية</span>
+                  <span>30 دقيقة صوتية</span>
+                </span>
+              </span>
+            </label>
+            <p className="mt-3 text-xs leading-5 text-text-muted">
+              تنتهي مزايا الباقة عند اكتمال الشهر، ويمكنك مراجعة خيارات الاشتراك لاحقاً من لوحة الفوترة.
+            </p>
+          </fieldset>
+        ) : null}
+
+        {data.canManage ? <button type="submit" disabled={pending} className="mt-2 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary px-5 text-sm font-semibold text-primary-foreground transition hover:bg-primary-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:opacity-60">{pending ? <Loader2 size={17} className="animate-spin" aria-hidden="true" /> : null}{step === 4 ? 'اختيار الباقة' : step === 5 ? data.currentPlan ? 'متابعة' : 'تفعيل الباقة التجريبية' : 'متابعة'}</button> : null}
       </form>
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
         {step > 1 && data.canManage ? <button type="button" onClick={() => run(() => saveOnboardingStepAction((step - 1) as 1 | 2 | 3 | 4), (step - 1) as 1 | 2 | 3 | 4)} disabled={pending} className="min-h-10 rounded-lg px-3 text-sm font-semibold text-text-muted hover:bg-background">الخطوة السابقة</button> : <span />}

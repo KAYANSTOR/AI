@@ -18,6 +18,7 @@ import { connectWhatsAppChannel } from '@/lib/channels/connect-service'
 import { isPlausiblePhoneNumber } from '@/lib/channels/connect'
 import { tryAgentReply, type ReplyTestResult } from '@/lib/onboarding/reply-test'
 import { normalizeChannelNumber } from '@/lib/channels/management'
+import { addOneCalendarMonth } from '@/lib/billing/trial-period'
 import {
   buildPromptAddition,
   generateAgentSetupDraft,
@@ -214,7 +215,7 @@ export async function saveBasicsAction(input: {
 export async function saveOnboardingStepAction(step: number): Promise<OnboardingResult> {
   try {
     const org = await requireOnboardingAdmin()
-    if (!Number.isInteger(step) || step < 1 || step > 4) {
+    if (!Number.isInteger(step) || step < 1 || step > 5) {
       return { ok: false, error: 'خطوة إعداد غير صالحة.' }
     }
     const db = await createClient()
@@ -227,6 +228,115 @@ export async function saveOnboardingStepAction(step: number): Promise<Onboarding
     return { ok: true }
   } catch (error) {
     return { ok: false, error: actionErrorMessage(error, 'تعذّر حفظ تقدم الإعداد.') }
+  }
+}
+
+export async function selectTrialPlanAction(): Promise<OnboardingResult> {
+  try {
+    const org = await requireOnboardingAdmin()
+    const db = createAdminClient()
+    const { data: plan, error: planError } = await db
+      .from('plans')
+      .select('id')
+      .eq('code', 'trial')
+      .eq('is_active', true)
+      .maybeSingle()
+    if (planError) return { ok: false, error: dbActionError(planError) }
+    if (!plan) return { ok: false, error: 'الباقة التجريبية غير متاحة حالياً.' }
+
+    const { data: existing, error: subscriptionReadError } = await db
+      .from('subscriptions')
+      .select('id, plan_id, status, trial_start, trial_end')
+      .eq('organization_id', org.organizationId)
+      .maybeSingle()
+    if (subscriptionReadError) return { ok: false, error: dbActionError(subscriptionReadError) }
+
+    let subscriptionId = (existing?.id as string | undefined) ?? null
+    let trialEndsAt = (existing?.trial_end as string | null) ?? null
+    let startedTrial = false
+    if (existing) {
+      if (
+        existing.plan_id !== plan.id ||
+        existing.status !== 'trial' ||
+        !existing.trial_start
+      ) {
+        const { error: profileError } = await db
+          .from('business_profiles')
+          .update({ onboarding_step: 5, updated_at: new Date().toISOString() })
+          .eq('organization_id', org.organizationId)
+        if (profileError) return { ok: false, error: dbActionError(profileError) }
+        revalidatePath('/onboarding')
+        revalidatePath('/dashboard')
+        return { ok: true, message: 'تم الاحتفاظ بالباقة المسجلة دون تغيير.' }
+      }
+    } else {
+      const start = new Date()
+      const end = addOneCalendarMonth(start)
+      trialEndsAt = end.toISOString()
+      const { data: inserted, error: insertError } = await db
+        .from('subscriptions')
+        .insert({
+          organization_id: org.organizationId,
+          plan_id: plan.id,
+          status: 'trial',
+          trial_start: start.toISOString(),
+          trial_end: end.toISOString(),
+          current_period_start: start.toISOString(),
+          current_period_end: end.toISOString(),
+        })
+        .select('id')
+        .single()
+
+      if (insertError) {
+        const { data: racedSubscription } = await db
+          .from('subscriptions')
+          .select('id, plan_id, status, trial_start, trial_end')
+          .eq('organization_id', org.organizationId)
+          .maybeSingle()
+        if (
+          !racedSubscription ||
+          racedSubscription.plan_id !== plan.id ||
+          racedSubscription.status !== 'trial' ||
+          !racedSubscription.trial_start
+        ) {
+          return { ok: false, error: dbActionError(insertError) }
+        }
+        subscriptionId = String(racedSubscription.id)
+        trialEndsAt = (racedSubscription.trial_end as string | null) ?? null
+      } else {
+        subscriptionId = String(inserted.id)
+        startedTrial = true
+      }
+    }
+
+    const { error: profileError } = await db
+      .from('business_profiles')
+      .update({ onboarding_step: 5, updated_at: new Date().toISOString() })
+      .eq('organization_id', org.organizationId)
+    if (profileError) return { ok: false, error: dbActionError(profileError) }
+
+    if (startedTrial) {
+      await auditSetup(
+        org.organizationId,
+        null,
+        'subscription.trial_started',
+        'subscription',
+        subscriptionId,
+        { plan_code: 'trial', trial_end: trialEndsAt }
+      )
+    }
+
+    revalidatePath('/onboarding')
+    revalidatePath('/dashboard')
+    revalidatePath('/dashboard/billing')
+    return {
+      ok: true,
+      message: startedTrial
+        ? 'تم تفعيل الباقة التجريبية لمدة شهر واحد.'
+        : 'تم الاحتفاظ بالباقة الحالية دون تغيير أو تمديد.',
+    }
+  } catch (error) {
+    return { ok: false, error: actionErrorMessage(error, 'تعذّر تفعيل الباقة التجريبية.') }
   }
 }
 

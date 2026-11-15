@@ -12,9 +12,9 @@ export const metadata: Metadata = {
 
 export const dynamic = 'force-dynamic'
 
-function validStep(value: unknown): 1 | 2 | 3 | 4 {
+function validStep(value: unknown): 1 | 2 | 3 | 4 | 5 {
   const step = Number(value)
-  return step === 2 || step === 3 || step === 4 ? step : 1
+  return step === 2 || step === 3 || step === 4 || step === 5 ? step : 1
 }
 
 export default async function OnboardingPage() {
@@ -22,7 +22,7 @@ export default async function OnboardingPage() {
   if (!context) redirect('/login')
   const db = await createClient()
 
-  const [profileResult, businessResult, serviceResult, locationResult, hoursResult] = await Promise.all([
+  const [profileResult, businessResult, serviceResult, locationResult, hoursResult, subscriptionResult] = await Promise.all([
     db.from('business_profiles')
       .select('business_id, business_type_id, timezone, onboarding_step')
       .eq('organization_id', context.organizationId)
@@ -38,6 +38,8 @@ export default async function OnboardingPage() {
       : Promise.resolve({ data: null, error: null }),
     db.from('business_hours').select('day_of_week, open_time, close_time, is_closed')
       .eq('organization_id', context.organizationId).order('day_of_week'),
+    db.from('subscriptions').select('status, plan_tier, trial_end, plans(code, name)')
+      .eq('organization_id', context.organizationId).maybeSingle(),
   ])
 
   const hourRows = hoursResult.data ?? []
@@ -55,6 +57,14 @@ export default async function OnboardingPage() {
   const metadata = location?.metadata as { phone?: string } | null
   const service = serviceResult.data
   const business = businessResult.data
+  const subscription = subscriptionResult.data
+  const subscriptionPlan = subscription?.plans as { code?: string; name?: string } | null
+  const currentPlan = subscription ? {
+    code: String(subscriptionPlan?.code ?? subscription.plan_tier ?? 'trial'),
+    name: String(subscriptionPlan?.name ?? subscription.plan_tier ?? 'الباقة الحالية'),
+    status: String(subscription.status ?? 'active'),
+    trialEnd: (subscription.trial_end as string | null) ?? null,
+  } : null
   const onboardingStep = profileResult.error ? 1 : validStep(profileResult.data?.onboarding_step)
 
   return (
@@ -63,9 +73,9 @@ export default async function OnboardingPage() {
         <p className="text-sm font-bold text-primary">Kayan AI</p>
         <p className="mt-2 text-xs text-text-muted">إعداد مساحة عملك</p>
       </div>
-      {profileResult.error || businessResult.error || serviceResult.error || locationResult.error ? (
+      {profileResult.error || businessResult.error || serviceResult.error || locationResult.error || subscriptionResult.error ? (
         <p role="status" className="mx-auto mb-4 max-w-2xl rounded-xl border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-text">
-          قد تحتاج قاعدة البيانات إلى تطبيق الترحيل 0043 قبل حفظ بيانات الإعداد الجديدة.
+          قد تحتاج قاعدة البيانات إلى تطبيق ترحيلات الإعداد قبل حفظ البيانات الجديدة.
         </p>
       ) : null}
       <SetupWizard
@@ -92,6 +102,7 @@ export default async function OnboardingPage() {
           timezone: profileResult.data?.timezone && profileResult.data.timezone !== 'UTC'
             ? profileResult.data.timezone
             : 'Asia/Aden',
+          currentPlan,
           canManage: context.role === 'owner' || context.role === 'admin',
         }}
       />
