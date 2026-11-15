@@ -42,6 +42,20 @@ const baseArgs = {
   payload: { body: 'hello', conversation_id: 'conversation-1' },
 }
 
+function existingOutboxRow(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'outbox-1',
+    organization_id: baseArgs.organizationId,
+    business_id: baseArgs.businessId,
+    channel_id: baseArgs.channelId,
+    event_type: baseArgs.eventType,
+    idempotency_key: baseArgs.idempotencyKey,
+    recipient: baseArgs.recipient,
+    payload: baseArgs.payload,
+    ...overrides,
+  }
+}
+
 describe('durable outbound intent', () => {
   test('creates and claims an outbound intent before the network send', async () => {
     const fake = createFakeDb({
@@ -58,14 +72,12 @@ describe('durable outbound intent', () => {
   test('a duplicate intent already being processed is not sent a second time', async () => {
     const fake = createFakeDb({
       outbox_events: {
-        rows: [{
-          id: 'outbox-1',
-          ...baseArgs,
+        rows: [existingOutboxRow({
           status: 'processing',
           attempts: 1,
           scheduled_at: new Date().toISOString(),
           locked_at: new Date().toISOString(),
-        }],
+        })],
         unique: [['organization_id', 'idempotency_key']],
       },
     })
@@ -78,7 +90,7 @@ describe('durable outbound intent', () => {
   test('a previously sent intent is acknowledged without another send', async () => {
     const fake = createFakeDb({
       outbox_events: {
-        rows: [{ id: 'outbox-1', ...baseArgs, status: 'sent', attempts: 1, scheduled_at: new Date().toISOString() }],
+        rows: [existingOutboxRow({ status: 'sent', attempts: 1, scheduled_at: new Date().toISOString() })],
         unique: [['organization_id', 'idempotency_key']],
       },
     })
@@ -88,7 +100,7 @@ describe('durable outbound intent', () => {
   test('a permanent failure stays blocked instead of being retried', async () => {
     const fake = createFakeDb({
       outbox_events: {
-        rows: [{ id: 'outbox-1', ...baseArgs, status: 'dead_letter', attempts: 1, scheduled_at: new Date().toISOString() }],
+        rows: [existingOutboxRow({ status: 'dead_letter', attempts: 1, scheduled_at: new Date().toISOString() })],
         unique: [['organization_id', 'idempotency_key']],
       },
     })
@@ -98,13 +110,11 @@ describe('durable outbound intent', () => {
   test('a failed intent is reclaimed only after its scheduled retry time', async () => {
     const fake = createFakeDb({
       outbox_events: {
-        rows: [{
-          id: 'outbox-1',
-          ...baseArgs,
+        rows: [existingOutboxRow({
           status: 'failed',
           attempts: 1,
           scheduled_at: '2000-01-01T00:00:00.000Z',
-        }],
+        })],
         unique: [['organization_id', 'idempotency_key']],
       },
     })
