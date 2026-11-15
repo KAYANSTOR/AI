@@ -135,6 +135,12 @@ export async function saveChannelAction(input: {
     const org = await requireChannelAdmin()
     const spec = getChannelSpec(input.channelType)
     if (!spec) return { ok: false, error: 'نوع قناة غير معروف.' }
+    if (spec.type === 'whatsapp') {
+      return {
+        ok: false,
+        error: 'اربط واتساب عبر Meta ثم أكمل تسجيل رقم الإرسال باستخدام PIN. لا يمكن ربطه يدوياً.',
+      }
+    }
 
     const raw = input.identifier.trim()
     if (!raw) return { ok: false, error: 'أدخل ' + spec.bindingLabel + '.' }
@@ -291,12 +297,19 @@ export async function setChannelActiveAction(input: {
 
     const { data, error } = await db
       .from('channels')
-      .select('id, is_active')
+      .select('id, is_active, verification_status')
       .eq('organization_id', org.organizationId)
       .eq('channel_type', spec.type)
       .maybeSingle()
     if (error) throw new Error(error.message)
     if (!data) return { ok: false, error: 'القناة غير مربوطة بعد.' }
+
+    if (input.active && spec.type === 'whatsapp' && data.verification_status !== 'verified') {
+      return {
+        ok: false,
+        error: 'لا يمكن تفعيل واتساب قبل تسجيل رقم الإرسال لدى Meta باستخدام PIN.',
+      }
+    }
 
     if (input.active && !data.is_active) {
       try {
@@ -316,7 +329,14 @@ export async function setChannelActiveAction(input: {
       .from('channels')
       .update({
         is_active: input.active,
-        verification_status: input.active ? 'pending' : 'disabled',
+        // Preserve successful WhatsApp registration when temporarily disabling
+        // the channel. Other providers keep the existing pending/disabled policy.
+        verification_status:
+          spec.type === 'whatsapp'
+            ? data.verification_status
+            : input.active
+              ? 'pending'
+              : 'disabled',
         updated_at: new Date().toISOString(),
       })
       .eq('id', data.id)

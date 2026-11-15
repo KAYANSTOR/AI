@@ -37,7 +37,7 @@ function stateOf(card: ChannelCard): State {
 
 const stateCopy: Record<State, { title: string; hint: string }> = {
   not_connected: { title: 'غير مربوط', hint: 'ابدأ بالربط عبر Meta لاستقبال رسائل العملاء' },
-  pending: { title: 'تفويض Meta مكتمل — التسجيل معلّق', hint: 'أدخل PIN التحقق بخطوتين لإكمال تسجيل رقم الإرسال' },
+  pending: { title: 'إعداد WhatsApp غير مكتمل', hint: 'اربط الرقم عبر Meta ثم أكمل تسجيل Cloud API باستخدام PIN من 6 أرقام' },
   verified: { title: 'مربوط', hint: 'القناة جاهزة للتوجيه والرد' },
   disabled: { title: 'متوقف', hint: 'القناة موجودة لكنها غير مفعّلة' },
   error: { title: 'يحتاج إعادة محاولة', hint: 'راجع بيانات الربط ثم أعد المحاولة' },
@@ -380,15 +380,17 @@ function ChannelDialog({
                   {busy ? <Loader2 size={17} className="animate-spin" /> : <RefreshCw size={17} />}
                   إعادة فحص الاتصال
                 </button>
-                <button
-                  type="button"
-                  onClick={toggle}
-                  disabled={busy || !canManage}
-                  className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-border px-4 text-sm font-semibold text-text hover:bg-background disabled:opacity-50"
-                >
-                  <Power size={17} />
-                  {state === 'disabled' ? 'تفعيل' : 'إيقاف'}
-                </button>
+                {state !== 'pending' ? (
+                  <button
+                    type="button"
+                    onClick={toggle}
+                    disabled={busy || !canManage}
+                    className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-border px-4 text-sm font-semibold text-text hover:bg-background disabled:opacity-50"
+                  >
+                    <Power size={17} />
+                    {state === 'disabled' ? 'تفعيل' : 'إيقاف'}
+                  </button>
+                ) : null}
               </>
             ) : null}
           </div>
