@@ -1,10 +1,36 @@
 import type { DbClient } from '@/lib/db/client'
+import { createAdminClient } from '@/lib/db/admin'
 import { enqueueOutbound } from '@/lib/channels/outbox'
 import { CredentialConfigError, CredentialMissingError, requireCredential } from '@/lib/credentials/service'
 import { resolveChannelProviderCredentials } from '@/lib/credentials/resolve'
 import { MetaApiError, sendInstagramText, sendWhatsAppTemplate, sendWhatsAppText, type WhatsAppTemplateInput } from '@/lib/providers/meta'
 import { sendTwilioSms } from '@/lib/providers/twilio'
 import { markFirstResponse } from '@/lib/sla'
+
+/**
+ * Provider credentials are intentionally inaccessible through the tenant-scoped
+ * browser/server client (provider_credentials has no member SELECT policy).
+ * Resolve them with the service-role client only after verifying that the supplied
+ * channel belongs to the same organization and provider type.
+ */
+async function resolveOwnedChannelCredentials(channel: OutboundChannel): Promise<Record<string, string>> {
+  const admin = createAdminClient()
+  const { data, error } = await admin
+    .from('channels')
+    .select('id')
+    .eq('id', channel.id)
+    .eq('organization_id', channel.organizationId)
+    .eq('channel_type', channel.channelType)
+    .maybeSingle()
+
+  if (error) throw new Error('تعذّر التحقق من قناة الإرسال.')
+  if (!data) throw new Error('قناة الإرسال لا تتبع النشاط الحالي.')
+
+  return resolveChannelProviderCredentials(admin, {
+    channelId: data.id,
+    channelType: channel.channelType,
+  })
+}
 
 export type OutboundChannel = {
   id: string
@@ -42,10 +68,7 @@ export async function deliverOutbound(
 
   let credentials: Record<string, string>
   try {
-    credentials = await resolveChannelProviderCredentials(db, {
-      channelId: input.channel.id,
-      channelType: input.channel.channelType,
-    })
+    credentials = await resolveOwnedChannelCredentials(input.channel)
   } catch (error) {
     // Decryption failure / missing platform key: never retry, never pretend to send.
     if (error instanceof CredentialConfigError) throw error
@@ -111,10 +134,7 @@ export async function deliverWhatsAppTemplate(
     throw new CredentialMissingError('meta', 'phone_number_id')
   }
 
-  const credentials = await resolveChannelProviderCredentials(db, {
-    channelId: input.channel.id,
-    channelType: input.channel.channelType,
-  })
+  const credentials = await resolveOwnedChannelCredentials(input.channel)
 
   const result = await sendWhatsAppTemplate(
     {
