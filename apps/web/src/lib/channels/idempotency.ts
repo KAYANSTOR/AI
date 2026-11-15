@@ -6,8 +6,9 @@ export type IdempotencyResult =
   | { status: 'error'; message: string }
 
 /**
- * Insert webhook_events with UNIQUE(provider, external_event_id).
- * First writer wins; duplicates are ignored safely.
+ * Claims a webhook event atomically in Postgres. A processed or currently-running
+ * event is acknowledged as a duplicate; a failed or abandoned event can be claimed
+ * again without allowing two workers to process it concurrently.
  */
 export async function acquireWebhookEvent(
   db: DbClient,
@@ -17,29 +18,23 @@ export async function acquireWebhookEvent(
 ): Promise<IdempotencyResult> {
   const normalizedEventId = externalEventId.trim()
   if (!normalizedEventId) return { status: 'error', message: 'missing_provider_event_id' }
-  const { data, error } = await db
-    .from('webhook_events')
-    .insert({
-      provider,
-      external_event_id: normalizedEventId,
-      payload: payload as Record<string, unknown>,
-      processing_status: 'pending',
-    })
-    .select('id')
-    .maybeSingle()
 
-  if (error) {
-    if (error.code === '23505') {
-      return { status: 'duplicate' }
-    }
-    return { status: 'error', message: sanitizeStoredError(error.message) }
-  }
+  const { data, error } = await db.rpc('claim_webhook_event', {
+    p_provider: provider,
+    p_external_event_id: normalizedEventId,
+    p_payload: (payload ?? {}) as Record<string, unknown>,
+    p_stale_after_seconds: 300,
+  })
 
-  if (!data?.id) {
-    return { status: 'duplicate' }
-  }
+  if (error) return { status: 'error', message: sanitizeStoredError(error.message) }
 
-  return { status: 'acquired', eventRowId: data.id }
+  const row = (Array.isArray(data) ? data[0] : data) as
+    | { event_row_id?: string; claimed?: boolean; current_status?: string }
+    | null
+
+  if (!row?.event_row_id) return { status: 'error', message: 'webhook_event_claim_failed' }
+  if (row.claimed) return { status: 'acquired', eventRowId: row.event_row_id }
+  return { status: 'duplicate' }
 }
 
 export async function markWebhookProcessed(
@@ -52,6 +47,7 @@ export async function markWebhookProcessed(
     .from('webhook_events')
     .update({
       processing_status: status,
+      processing_started_at: null,
       error_message: errorMessage ? sanitizeStoredError(errorMessage) : null,
       processed_at: new Date().toISOString(),
     })

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { isAuthorizedCronRequest } from '@/lib/cron/auth'
 import { createAdminClient } from '@/lib/db/admin'
-import { deliverOutbound, recordDeliveredOutboundMessage } from '@/lib/runtime/outbound'
+import { deliverOutbound, isPermanentOutboundError, recordDeliveredOutboundMessage } from '@/lib/runtime/outbound'
 import { publicWebhookError } from '@/lib/runtime/security'
 import {
   OUTBOX_MAX_ATTEMPTS,
@@ -41,6 +41,7 @@ async function handle(req: NextRequest) {
 
   let sent = 0
   for (const event of events ?? []) {
+    let providerAccepted = false
     const claim = await db.from('outbox_events')
       .update({ status: 'processing', attempts: Number(event.attempts ?? 0) + 1, locked_at: new Date().toISOString() })
       .eq('id', event.id)
@@ -84,6 +85,17 @@ async function handle(req: NextRequest) {
         queueOnFailure: false,
       })
 
+      // The provider accepted the message. Mark the durable intent sent before
+      // maintaining the inbox projection, so a bookkeeping error never resends it.
+      providerAccepted = true
+      const { error: sentError } = await db.from('outbox_events').update({
+        status: 'sent',
+        sent_at: new Date().toISOString(),
+        locked_at: null,
+        updated_at: new Date().toISOString(),
+      }).eq('id', event.id).eq('status', 'processing')
+      if (sentError) throw new Error('outbox_sent_state_update_failed: ' + sentError.message)
+
       if (typeof payload.conversation_id === 'string' && payload.conversation_id) {
         await recordDeliveredOutboundMessage(db, {
           organizationId: event.organization_id,
@@ -93,15 +105,23 @@ async function handle(req: NextRequest) {
         })
       }
 
-      await db.from('outbox_events').update({ status: 'sent', sent_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('id', event.id)
       sent++
     } catch (error) {
       const message = error instanceof Error ? error.message : 'outbox delivery failed'
+      if (providerAccepted) {
+        console.error('Outbound provider accepted message but inbox projection failed', {
+          outboxEventId: event.id,
+          reason: message.slice(0, 240),
+        })
+        continue
+      }
+      const permanent = isPermanentOutboundError(error)
       const failure = nextOutboxFailureState(Number(event.attempts ?? 0) + 1)
       await db.from('outbox_events').update({
-        status: failure.status,
+        status: permanent ? 'dead_letter' : failure.status,
         last_error: message.slice(0, 500),
-        scheduled_at: failure.nextAttemptAt,
+        scheduled_at: permanent ? new Date().toISOString() : failure.nextAttemptAt,
+        locked_at: null,
         updated_at: new Date().toISOString(),
       }).eq('id', event.id)
     }

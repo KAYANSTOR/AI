@@ -128,7 +128,7 @@ async function handle(req: NextRequest) {
     }
 
     try {
-      await deliverOutbound(db, {
+      const delivery = await deliverOutbound(db, {
         channel: {
           id: channel.id,
           organizationId: channel.organization_id,
@@ -142,6 +142,16 @@ async function handle(req: NextRequest) {
         idempotencyKey: `followup:${advance.enrollmentId}:${advance.stepId}`,
         queueOnFailure: true,
       })
+
+      if (delivery === 'blocked') {
+        await exitFollowUp(db, {
+          organizationId: advance.organizationId,
+          enrollmentId: advance.enrollmentId,
+          reason: 'provider_rejected',
+        })
+        blocked++
+        continue
+      }
 
       const result = await completeFollowUpStep(db, {
         organizationId: advance.organizationId,

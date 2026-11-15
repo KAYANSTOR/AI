@@ -9,7 +9,6 @@ export async function enqueueOutbound(args: {
   idempotencyKey: string
   recipient: string
   payload: Record<string, unknown>
-  /** When set in the future, the outbox worker waits until this time. */
   scheduledAt?: string | Date | null
 }) {
   const scheduledAt =
@@ -65,4 +64,80 @@ export function nextOutboxFailureState(
     delayMs,
     nextAttemptAt: new Date(now.getTime() + delayMs).toISOString(),
   }
+}
+
+export type OutboundClaimResult =
+  | { status: 'claimed'; eventId: string; attempts: number }
+  | { status: 'sent' }
+  | { status: 'queued' }
+  | { status: 'blocked' }
+
+/**
+ * Creates a durable outbound intent before the network call, then atomically claims
+ * it for the inline sender. The unique organization/idempotency key prevents a
+ * webhook redelivery from sending the same customer reply twice.
+ */
+export async function claimOutboundEvent(
+  db: DbClient,
+  args: {
+    organizationId: string
+    businessId: string | null
+    channelId: string
+    eventType: string
+    idempotencyKey: string
+    recipient: string
+    payload: Record<string, unknown>
+  },
+  now: Date = new Date()
+): Promise<OutboundClaimResult> {
+  await enqueueOutbound({ db, ...args })
+
+  const { data: event, error } = await db
+    .from('outbox_events')
+    .select('id,status,attempts,scheduled_at')
+    .eq('organization_id', args.organizationId)
+    .eq('idempotency_key', args.idempotencyKey)
+    .maybeSingle()
+
+  if (error || !event) throw new Error(error?.message || 'outbound_intent_not_found')
+
+  const status = String(event.status ?? '')
+  if (status === 'sent') return { status: 'sent' }
+  if (status === 'dead_letter' || status === 'cancelled') return { status: 'blocked' }
+  if (status === 'processing') return { status: 'queued' }
+  if (status !== 'pending' && status !== 'failed') return { status: 'blocked' }
+
+  const attempts = Number(event.attempts ?? 0)
+  if (attempts >= OUTBOX_MAX_ATTEMPTS) {
+    await db
+      .from('outbox_events')
+      .update({ status: 'dead_letter', last_error: 'max_attempts_reached', locked_at: null, updated_at: now.toISOString() })
+      .eq('id', event.id)
+      .eq('status', status)
+    return { status: 'blocked' }
+  }
+
+  const scheduledAt = event.scheduled_at ? new Date(String(event.scheduled_at)).getTime() : 0
+  if (Number.isFinite(scheduledAt) && scheduledAt > now.getTime()) {
+    return { status: 'queued' }
+  }
+
+  const nextAttempts = attempts + 1
+  const { data: claim, error: claimError } = await db
+    .from('outbox_events')
+    .update({
+      status: 'processing',
+      attempts: nextAttempts,
+      locked_at: now.toISOString(),
+      updated_at: now.toISOString(),
+    })
+    .eq('id', event.id)
+    .eq('status', status)
+    .select('id')
+    .maybeSingle()
+
+  if (claimError) throw new Error(claimError.message)
+  if (!claim?.id) return { status: 'queued' }
+
+  return { status: 'claimed', eventId: String(event.id), attempts: nextAttempts }
 }

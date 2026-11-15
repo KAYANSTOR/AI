@@ -35,7 +35,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'invalid_request_body' }, { status: 400 })
   }
 
-  if (!process.env.GEMINI_API_KEY) {
+  if (!process.env.GEMINI_API_KEY?.trim() && !process.env.GROQ_API_KEY?.trim()) {
     return NextResponse.json({ error: 'ai_provider_not_configured' }, { status: 503 })
   }
 

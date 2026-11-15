@@ -133,5 +133,16 @@ export async function sendInstagramText(
       body: JSON.stringify({ recipient: { id: recipientId }, message: { text: body } }),
     }
   )
-  if (!response.ok) throw new Error('Instagram send failed: HTTP ' + response.status)
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => null)) as
+      | { error?: { message?: string; code?: number; error_user_title?: string; error_user_msg?: string } }
+      | null
+    const detail = payload?.error?.error_user_msg || payload?.error?.error_user_title || payload?.error?.message
+    const code = typeof payload?.error?.code === 'number' ? ' (رمز Meta ' + payload.error.code + ')' : ''
+    throw new MetaApiError(
+      'رفضت Meta إرسال رسالة Instagram (HTTP ' + response.status + ')' + code +
+        (detail ? '. ' + detail : '.'),
+      response.status
+    )
+  }
 }

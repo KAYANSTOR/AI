@@ -3,8 +3,7 @@ import { buildBusinessSystemPrompt } from '@/lib/ai/prompt'
 import { executeTool, getToolDefinitionsForAgent } from '@/lib/ai/tools'
 import { evaluateReplyGovernance, staffHandoffNotice, type GovernanceDecision } from '@/lib/ai/governance'
 import { getToolPolicy } from '@/lib/ai/registry'
-import { getProvider } from '@/lib/providers'
-import type { ModelMessage } from '@/lib/providers'
+import { callProvider, AIProviderError, type AIProviderName, type ModelMessage } from '@/lib/providers'
 import { createNotification } from '@/lib/notifications'
 
 export type AgentToolTrace = {
@@ -36,6 +35,8 @@ type AgentLoopResult = {
   toolTrace: AgentToolTrace[]
   inputTokens: number
   outputTokens: number
+  modelProvider: AIProviderName
+  model: string
 }
 
 export function simulateWriteToolResult(name: string, args: Record<string, unknown>) {
@@ -132,14 +133,18 @@ async function runAgentLoop(args: AgentLoopArgs): Promise<AgentLoopResult> {
   const toolTrace: AgentToolTrace[] = []
   let inputTokens = 0
   let outputTokens = 0
+  let activeProvider: AIProviderName = 'gemini'
+  let activeModel = process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite-preview'
 
   for (let round = 0; round < 5; round += 1) {
-    const provider = getProvider()
-    const result = await provider.call({
+    const generated = await callProvider({
       system: args.systemPrompt,
       messages,
       tools: args.toolSet,
-    })
+    }, activeProvider)
+    activeProvider = generated.provider
+    const result = generated.result
+    activeModel = result.model || activeModel
 
     inputTokens += result.inputTokens
     outputTokens += result.outputTokens
@@ -166,7 +171,14 @@ async function runAgentLoop(args: AgentLoopArgs): Promise<AgentLoopResult> {
         reply = staffHandoffNotice('ar')
       }
 
-      return { reply, toolTrace, inputTokens, outputTokens }
+      return {
+        reply,
+        toolTrace,
+        inputTokens,
+        outputTokens,
+        modelProvider: activeProvider,
+        model: activeModel,
+      }
     }
 
     messages.push({
@@ -273,7 +285,7 @@ export async function runAgentTurn(args: {
       conversation_id: args.conversationId,
       channel: args.channel,
       model_provider: 'gemini',
-      model: process.env.GEMINI_MODEL ?? 'gemini-3.8-flash',
+      model: process.env.GEMINI_MODEL ?? 'gemini-3.1-flash-lite-preview',
       prompt_version_id: promptVersion?.id ?? null,
       status: 'running',
     })
@@ -343,6 +355,8 @@ export async function runAgentTurn(args: {
       .from('agent_runs')
       .update({
         status: 'completed',
+        model_provider: loop.modelProvider,
+        model: loop.model,
         input_tokens: inputTokens,
         output_tokens: outputTokens,
         latency_ms: Date.now() - started,
@@ -360,7 +374,8 @@ export async function runAgentTurn(args: {
       metadata: {
         input_tokens: inputTokens,
         output_tokens: outputTokens,
-        model: process.env.GEMINI_MODEL ?? 'gemini-3.8-flash',
+        provider: loop.modelProvider,
+        model: loop.model,
       },
     })
 
@@ -370,6 +385,8 @@ export async function runAgentTurn(args: {
       .from('agent_runs')
       .update({
         status: 'failed',
+        model_provider: error instanceof AIProviderError ? error.provider : 'gemini',
+        model: error instanceof AIProviderError ? error.model : (process.env.GEMINI_MODEL ?? 'gemini-3.1-flash-lite-preview'),
         input_tokens: inputTokens,
         output_tokens: outputTokens,
         latency_ms: Date.now() - started,
@@ -389,7 +406,8 @@ export async function runAgentTurn(args: {
         metadata: {
           input_tokens: inputTokens,
           output_tokens: outputTokens,
-          model: process.env.GEMINI_MODEL ?? 'gemini-3.8-flash',
+          provider: error instanceof AIProviderError ? error.provider : 'gemini',
+          model: error instanceof AIProviderError ? error.model : (process.env.GEMINI_MODEL ?? 'gemini-3.1-flash-lite-preview'),
           failed: true,
         },
       })

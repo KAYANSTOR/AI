@@ -1,6 +1,6 @@
 import type { DbClient } from '@/lib/db/client'
 import { createAdminClient } from '@/lib/db/admin'
-import { enqueueOutbound } from '@/lib/channels/outbox'
+import { claimOutboundEvent, nextOutboxFailureState } from '@/lib/channels/outbox'
 import { CredentialConfigError, CredentialMissingError, requireCredential } from '@/lib/credentials/service'
 import { resolveChannelProviderCredentials } from '@/lib/credentials/resolve'
 import { MetaApiError, sendInstagramText, sendWhatsAppTemplate, sendWhatsAppText, type WhatsAppTemplateInput } from '@/lib/providers/meta'
@@ -53,6 +53,34 @@ export type OutboundChannel = {
  * The outbox worker reuses this function with queueOnFailure disabled, because the
  * worker itself is the retry path and must record its own failure state.
  */
+export function isPermanentOutboundError(error: unknown): boolean {
+  if (error instanceof CredentialMissingError || error instanceof CredentialConfigError) return true
+  if (error instanceof MetaApiError) {
+    return !([408, 425, 429].includes(error.status) || error.status >= 500)
+  }
+  if (error instanceof Error) {
+    if (error.name === 'AbortError' || error.name === 'TimeoutError' || error instanceof TypeError) return false
+    if (/(?:is required|are required|unsupported_outbound_channel:)/i.test(error.message)) return true
+    const status = /HTTP\s+(\d{3})/i.exec(error.message)?.[1]
+    if (status) {
+      const code = Number(status)
+      return !([408, 425, 429].includes(code) || code >= 500)
+    }
+  }
+  // Unknown failures (for example a transient database error while resolving
+  // credentials) are retried with a bounded policy rather than discarded.
+  return false
+}
+
+/**
+ * Durable outbound path:
+ * - reserve the unique idempotency key before sending;
+ * - only one inline request can claim that intent;
+ * - transient errors remain in the outbox for retry;
+ * - permanent provider/configuration errors are parked as dead letters.
+ *
+ * The outbox worker passes queueOnFailure=false because it has already claimed the row.
+ */
 export async function deliverOutbound(
   db: DbClient,
   input: {
@@ -63,41 +91,84 @@ export async function deliverOutbound(
     conversationId?: string | null
     queueOnFailure?: boolean
   }
-): Promise<'sent' | 'queued'> {
+): Promise<'sent' | 'queued' | 'blocked'> {
   const queueOnFailure = input.queueOnFailure !== false
+  const claim = queueOnFailure
+    ? await claimOutboundEvent(db, {
+        organizationId: input.channel.organizationId,
+        businessId: input.channel.businessId,
+        channelId: input.channel.id,
+        eventType: 'message.send',
+        idempotencyKey: input.idempotencyKey,
+        recipient: input.recipient,
+        payload: { body: input.body, conversation_id: input.conversationId ?? null },
+      })
+    : null
+
+  if (claim?.status === 'sent') return 'sent'
+  if (claim?.status === 'blocked') return 'blocked'
+  if (claim?.status === 'queued') return 'queued'
 
   let credentials: Record<string, string>
   try {
     credentials = await resolveOwnedChannelCredentials(input.channel)
-  } catch (error) {
-    // Decryption failure / missing platform key: never retry, never pretend to send.
-    if (error instanceof CredentialConfigError) throw error
-    throw error
-  }
-
-  try {
     await sendViaProvider(input.channel, credentials, input.recipient, input.body)
   } catch (error) {
-    if (
-      error instanceof CredentialMissingError ||
-      error instanceof CredentialConfigError ||
-      (error instanceof MetaApiError && error.status >= 400 && error.status < 500 && ![408, 425, 429].includes(error.status))
-    ) {
-      // Permanent: retrying cannot succeed. Fail closed and let the caller/operator act.
-      throw error
+    if (!queueOnFailure || !claim || claim.status !== 'claimed') throw error
+
+    const permanent = isPermanentOutboundError(error)
+    const retry = nextOutboxFailureState(claim.attempts)
+    const nextStatus = permanent ? 'dead_letter' : retry.status
+    const { error: stateError } = await db
+      .from('outbox_events')
+      .update({
+        status: nextStatus,
+        last_error: (error instanceof Error ? error.message : String(error)).slice(0, 500),
+        scheduled_at: permanent ? new Date().toISOString() : retry.nextAttemptAt,
+        locked_at: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', claim.eventId)
+      .eq('status', 'processing')
+
+    if (stateError) throw new Error('outbound_failure_state_update_failed: ' + stateError.message)
+
+    if (permanent) {
+      await db.from('audit_events').insert({
+        organization_id: input.channel.organizationId,
+        business_id: input.channel.businessId,
+        actor_type: 'provider',
+        action: 'message.delivery_blocked',
+        entity_type: 'conversation',
+        entity_id: input.conversationId ?? null,
+        metadata: {
+          channel_type: input.channel.channelType,
+          idempotency_key: input.idempotencyKey,
+          reason: (error instanceof Error ? error.message : String(error)).slice(0, 300),
+        },
+      })
     }
-    if (!queueOnFailure) throw error
-    await enqueueOutbound({
-      db,
-      organizationId: input.channel.organizationId,
-      businessId: input.channel.businessId,
-      channelId: input.channel.id,
-      eventType: 'message.send',
-      idempotencyKey: input.idempotencyKey,
-      recipient: input.recipient,
-      payload: { body: input.body, conversation_id: input.conversationId ?? null },
-    })
-    return 'queued'
+
+    return permanent || nextStatus === 'dead_letter' ? 'blocked' : 'queued'
+  }
+
+  if (queueOnFailure && claim?.status === 'claimed') {
+    const { data: markedSent, error: sentError } = await db
+      .from('outbox_events')
+      .update({
+        status: 'sent',
+        sent_at: new Date().toISOString(),
+        locked_at: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', claim.eventId)
+      .eq('status', 'processing')
+      .select('id')
+      .maybeSingle()
+
+    if (sentError || !markedSent?.id) {
+      throw new Error('outbound_sent_state_update_failed: ' + (sentError?.message ?? 'claim_lost'))
+    }
   }
 
   await db.from('usage_ledger').insert({

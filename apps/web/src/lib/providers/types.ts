@@ -1,3 +1,5 @@
+export type AIProviderName = 'gemini' | 'groq'
+
 export type ModelBlock =
   | { type: 'text'; text: string }
   | { type: 'tool_use'; id: string; name: string; input: Record<string, unknown> }
@@ -6,7 +8,7 @@ export type ModelBlock =
 export type ModelMessage = {
   role: 'user' | 'assistant'
   content: string | Record<string, unknown>[]
-  /** Provider-native payload preserved for the next turn when the provider requires exact history. */
+  /** Exact provider-native payload when a provider requires it for the next turn. */
   providerPayload?: unknown
 }
 
@@ -20,8 +22,32 @@ export type ModelResult = {
   content: ModelBlock[]
   inputTokens: number
   outputTokens: number
-  /** Exact provider response payload to preserve across tool turns. */
   providerPayload?: unknown
+  model?: string
+}
+
+export class AIProviderError extends Error {
+  readonly provider: AIProviderName
+  readonly status: number | null
+  readonly retryable: boolean
+  readonly model: string
+
+  constructor(
+    message: string,
+    options: {
+      provider: AIProviderName
+      status: number | null
+      retryable: boolean
+      model: string
+    }
+  ) {
+    super(message)
+    this.name = 'AIProviderError'
+    this.provider = options.provider
+    this.status = options.status
+    this.retryable = options.retryable
+    this.model = options.model
+  }
 }
 
 export interface AIProvider {

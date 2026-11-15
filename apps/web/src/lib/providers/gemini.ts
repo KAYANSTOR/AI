@@ -1,9 +1,10 @@
 import type { AIProvider, ModelBlock } from './types'
+import { AIProviderError } from './types'
 
 type GeminiPart = {
   text?: string
   functionCall?: { id?: string; name: string; args?: Record<string, unknown> }
-  functionResponse?: { id?: string; name: string; response: unknown }
+  functionResponse?: { id?: string; name?: string; response: unknown }
 }
 
 type GeminiContent = {
@@ -26,48 +27,54 @@ function cleanGeminiSchema(schema: unknown): unknown {
   delete copy.default
   if (copy.properties && typeof copy.properties === 'object') {
     const cleanProps: Record<string, unknown> = {}
-    for (const [k, v] of Object.entries(copy.properties as Record<string, unknown>)) {
-      cleanProps[k] = cleanGeminiSchema(v)
+    for (const [key, value] of Object.entries(copy.properties as Record<string, unknown>)) {
+      cleanProps[key] = cleanGeminiSchema(value)
     }
     copy.properties = cleanProps
   }
-  if (copy.items) {
-    copy.items = cleanGeminiSchema(copy.items)
-  }
+  if (copy.items) copy.items = cleanGeminiSchema(copy.items)
   return copy
+}
+
+function retryableStatus(status: number, message: string): boolean {
+  if ([401, 403, 404, 408, 409, 425, 429].includes(status) || status >= 500) return true
+  return status === 400 && /(api.?key|quota|resource_exhausted|rate.?limit|billing)/i.test(message)
 }
 
 export const geminiProvider: AIProvider = {
   async call(input) {
-    const apiKey = process.env.GEMINI_API_KEY
-    if (!apiKey) throw new Error('GEMINI_API_KEY is required')
+    const apiKey = process.env.GEMINI_API_KEY?.trim()
+    const configuredModel = process.env.GEMINI_MODEL?.trim() || 'gemini-3.1-flash-lite-preview'
+    if (!apiKey) {
+      throw new AIProviderError('GEMINI_API_KEY is required', {
+        provider: 'gemini',
+        status: null,
+        retryable: true,
+        model: configuredModel,
+      })
+    }
 
     const contents: GeminiContent[] = []
-    for (const msg of input.messages) {
-      if (msg.providerPayload && Array.isArray(msg.providerPayload)) {
+    for (const message of input.messages) {
+      if (message.providerPayload && Array.isArray(message.providerPayload)) {
         contents.push({
-          role: msg.role === 'user' ? 'user' : 'model',
-          parts: msg.providerPayload as GeminiPart[],
+          role: message.role === 'user' ? 'user' : 'model',
+          parts: message.providerPayload as GeminiPart[],
         })
-      } else if (typeof msg.content === 'string') {
+      } else if (typeof message.content === 'string') {
         contents.push({
-          role: msg.role === 'user' ? 'user' : 'model',
-          parts: [{ text: msg.content }],
+          role: message.role === 'user' ? 'user' : 'model',
+          parts: [{ text: message.content }],
         })
       } else {
         const parts: GeminiPart[] = []
-        for (const block of msg.content as ModelBlock[]) {
+        for (const block of message.content as ModelBlock[]) {
           if (block.type === 'text') {
             parts.push({ text: block.text })
           } else if (block.type === 'tool_use') {
-            parts.push({
-              functionCall: {
-                name: block.name,
-                args: block.input,
-              },
-            })
+            parts.push({ functionCall: { name: block.name, args: block.input } })
           } else if (block.type === 'tool_result') {
-            let parsedContent
+            let parsedContent: unknown
             try {
               parsedContent = JSON.parse(block.content)
             } catch {
@@ -82,52 +89,38 @@ export const geminiProvider: AIProvider = {
             })
           }
         }
-        contents.push({
-          role: msg.role === 'user' ? 'user' : 'model',
-          parts,
-        })
+        contents.push({ role: message.role === 'user' ? 'user' : 'model', parts })
       }
     }
 
-    const tools =
-      input.tools.length > 0
-        ? [
-            {
-              functionDeclarations: input.tools.map((t) => ({
-                name: t.name,
-                description: t.description,
-                parameters: cleanGeminiSchema(t.input_schema),
-              })),
-            },
-          ]
-        : undefined
-
-    const systemInstruction = input.system
-      ? {
-          parts: [{ text: input.system }],
-        }
+    const tools = input.tools.length
+      ? [{
+          functionDeclarations: input.tools.map((tool) => ({
+            name: tool.name,
+            description: tool.description,
+            parameters: cleanGeminiSchema(tool.input_schema),
+          })),
+        }]
       : undefined
 
-    const candidateModels = Array.from(
-      new Set([
-        process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite-preview',
-        'gemini-3.1-flash-lite-preview',
-        'gemini-3.5-flash',
-        'gemini-3-flash-preview',
-        'gemini-3.7-flash',
-      ])
-    )
+    const systemInstruction = input.system ? { parts: [{ text: input.system }] } : undefined
+    const candidateModels = Array.from(new Set([
+      configuredModel,
+      'gemini-3.1-flash-lite-preview',
+    ]))
 
-    let response: Response | null = null
-    let data: GeminiResponse | null = null
-    let lastError: string | null = null
+    let lastError = 'All candidate models failed'
     let lastStatus: number | null = null
-    let lastModel: string | null = null
+    let lastModel = configuredModel
+    let lastRetryable = true
 
-    for (const model of candidateModels) {
+    for (let index = 0; index < candidateModels.length; index += 1) {
+      const model = candidateModels[index]
+      lastModel = model
       try {
-        const res = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
+        const response = await fetch(
+          'https://generativelanguage.googleapis.com/v1beta/models/' +
+            encodeURIComponent(model) + ':generateContent',
           {
             method: 'POST',
             headers: {
@@ -138,62 +131,70 @@ export const geminiProvider: AIProvider = {
               systemInstruction,
               contents,
               tools,
-              generationConfig: {
-                maxOutputTokens: 1024,
-              },
+              generationConfig: { maxOutputTokens: 1024 },
             }),
+            signal: AbortSignal.timeout(15_000),
           }
         )
 
-        const json = (await res.json()) as GeminiResponse
-        if (res.ok) {
-          response = res
-          data = json
-          break
+        const payload = (await response.json()) as GeminiResponse
+        if (response.ok) {
+          const contentParts = payload.candidates?.[0]?.content?.parts ?? []
+          const content: ModelBlock[] = contentParts.flatMap((part): ModelBlock[] => {
+            if (part.text) return [{ type: 'text', text: part.text }]
+            if (part.functionCall) {
+              return [{
+                type: 'tool_use',
+                id: part.functionCall.id || 'call_' + crypto.randomUUID(),
+                name: part.functionCall.name,
+                input: part.functionCall.args || {},
+              }]
+            }
+            return []
+          })
+
+          if (!content.length) {
+            throw new AIProviderError('Gemini returned an empty response using ' + model, {
+              provider: 'gemini',
+              status: null,
+              retryable: true,
+              model,
+            })
+          }
+
+          return {
+            content,
+            inputTokens: payload.usageMetadata?.promptTokenCount ?? 0,
+            outputTokens: payload.usageMetadata?.candidatesTokenCount ?? 0,
+            providerPayload: contentParts,
+            model,
+          }
         }
-        lastError = json.error?.message || res.statusText
-        lastStatus = res.status
-        lastModel = model
-        // Only an unavailable model or a transient failure is worth trying the next model.
-        const retryable = res.status === 404 || res.status === 429 || res.status >= 500
-        if (!retryable) break
-      } catch (err) {
-        lastError = err instanceof Error ? err.message : String(err)
+
+        lastError = payload.error?.message || response.statusText || 'request_failed'
+        lastStatus = response.status
+        lastRetryable = retryableStatus(response.status, lastError)
+
+        // A quota or service outage is project-wide: do not waste time cycling models.
+        if (response.status !== 404 || index === candidateModels.length - 1) break
+      } catch (error) {
+        if (error instanceof AIProviderError) throw error
+        lastError = error instanceof Error ? error.message : String(error)
         lastStatus = null
-        lastModel = model
+        lastRetryable = true
+        break
       }
     }
 
-    if (!response || !data) {
-      const status = lastStatus ? ` (${lastStatus})` : ''
-      const model = lastModel ? ` using ${lastModel}` : ''
-      throw new Error(`Gemini API error${status}${model}: ${lastError ?? 'All candidate models failed'}`)
-    }
-
-    const firstCandidate = data.candidates?.[0]
-    const contentParts = firstCandidate?.content?.parts ?? []
-
-    const content: ModelBlock[] = contentParts.flatMap((p): ModelBlock[] => {
-      if (p.text) {
-        return [{ type: 'text', text: p.text }]
-      } else if (p.functionCall) {
-        return [
-          {
-            type: 'tool_use',
-            id: p.functionCall.id || `call_${crypto.randomUUID()}`,
-            name: p.functionCall.name,
-            input: p.functionCall.args || {},
-          },
-        ]
+    throw new AIProviderError(
+      'Gemini API error' + (lastStatus ? ' (' + lastStatus + ')' : '') +
+        ' using ' + lastModel + ': ' + lastError,
+      {
+        provider: 'gemini',
+        status: lastStatus,
+        retryable: lastRetryable,
+        model: lastModel,
       }
-      return []
-    })
-
-    return {
-      content,
-      inputTokens: data.usageMetadata?.promptTokenCount ?? 0,
-      outputTokens: data.usageMetadata?.candidatesTokenCount ?? 0,
-      providerPayload: contentParts,
-    }
+    )
   },
 }

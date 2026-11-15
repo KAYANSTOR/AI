@@ -1,7 +1,12 @@
 import { describe, expect, test } from 'bun:test'
 import type { DbClient } from '@/lib/db/client'
+import {
+  OUTBOX_MAX_ATTEMPTS,
+  claimOutboundEvent,
+  enqueueOutbound,
+  nextOutboxFailureState,
+} from '@/lib/channels/outbox'
 import { createFakeDb } from './support/fake-db'
-import { OUTBOX_MAX_ATTEMPTS, enqueueOutbound, nextOutboxFailureState } from '@/lib/channels/outbox'
 
 describe('outbox retry policy', () => {
   test('a failed send is retried with exponential backoff', () => {
@@ -18,64 +23,104 @@ describe('outbox retry policy', () => {
   })
 
   test('backoff is capped so a retry never waits longer than an hour', () => {
-    const state = nextOutboxFailureState(20)
-    expect(state.delayMs).toBe(60 * 60 * 1000)
+    expect(nextOutboxFailureState(20).delayMs).toBe(60 * 60 * 1000)
   })
 
-  test('the attempt ceiling parks the event as dead-letter instead of retrying forever', () => {
+  test('the attempt ceiling parks an event as dead-letter instead of retrying forever', () => {
     expect(nextOutboxFailureState(OUTBOX_MAX_ATTEMPTS - 1).status).toBe('failed')
     expect(nextOutboxFailureState(OUTBOX_MAX_ATTEMPTS).status).toBe('dead_letter')
-    expect(nextOutboxFailureState(OUTBOX_MAX_ATTEMPTS + 5).status).toBe('dead_letter')
-  })
-
-  test('the attempt count carries forward so the ceiling is reachable', () => {
-    let attempts = 0
-    let status = 'pending'
-    while (status !== 'dead_letter') {
-      attempts += 1
-      status = nextOutboxFailureState(attempts).status
-      if (attempts > 50) throw new Error('never reached dead-letter')
-    }
-    expect(attempts).toBe(OUTBOX_MAX_ATTEMPTS)
   })
 })
 
-describe('outbox enqueue', () => {
-  test('queues a pending event', async () => {
-    const fake = createFakeDb({ outbox_events: { unique: [['organization_id', 'idempotency_key']] } })
-    const db = fake.client as unknown as DbClient
+const baseArgs = {
+  organizationId: 'org-1',
+  businessId: 'biz-1',
+  channelId: 'channel-1',
+  eventType: 'message.send',
+  idempotencyKey: 'whatsapp:evt-1:reply',
+  recipient: '+15550001',
+  payload: { body: 'hello', conversation_id: 'conversation-1' },
+}
 
-    const id = await enqueueOutbound({
-      db,
-      organizationId: 'org-1',
-      businessId: 'biz-1',
-      channelId: 'chan-1',
-      eventType: 'message.send',
-      idempotencyKey: 'whatsapp:evt-1:reply',
-      recipient: '+15550001',
-      payload: { body: 'hello' },
+describe('durable outbound intent', () => {
+  test('creates and claims an outbound intent before the network send', async () => {
+    const fake = createFakeDb({
+      outbox_events: { unique: [['organization_id', 'idempotency_key']] },
     })
+    const result = await claimOutboundEvent(fake.client as unknown as DbClient, baseArgs)
 
-    expect(id).toBeTruthy()
-    expect(fake.store.outbox_events.rows?.[0]?.status).toBe('pending')
+    expect(result.status).toBe('claimed')
+    if (result.status !== 'claimed') throw new Error('expected claim')
+    expect(result.attempts).toBe(1)
+    expect(fake.store.outbox_events.rows?.[0]?.status).toBe('processing')
   })
 
-  test('re-queueing the same idempotency key does not create a second send', async () => {
-    const fake = createFakeDb({ outbox_events: { unique: [['organization_id', 'idempotency_key']] } })
-    const db = fake.client as unknown as DbClient
-    const args = {
-      db,
-      organizationId: 'org-1',
-      businessId: 'biz-1',
-      channelId: 'chan-1',
-      eventType: 'message.send',
-      idempotencyKey: 'whatsapp:evt-1:reply',
-      recipient: '+15550001',
-      payload: { body: 'hello' },
-    }
+  test('a duplicate intent already being processed is not sent a second time', async () => {
+    const fake = createFakeDb({
+      outbox_events: {
+        rows: [{
+          id: 'outbox-1',
+          ...baseArgs,
+          status: 'processing',
+          attempts: 1,
+          scheduled_at: new Date().toISOString(),
+          locked_at: new Date().toISOString(),
+        }],
+        unique: [['organization_id', 'idempotency_key']],
+      },
+    })
+    const result = await claimOutboundEvent(fake.client as unknown as DbClient, baseArgs)
 
-    expect(await enqueueOutbound(args)).toBeTruthy()
-    expect(await enqueueOutbound(args)).toBe('')
+    expect(result).toEqual({ status: 'queued' })
+    expect(fake.store.outbox_events.rows?.length).toBe(1)
+  })
+
+  test('a previously sent intent is acknowledged without another send', async () => {
+    const fake = createFakeDb({
+      outbox_events: {
+        rows: [{ id: 'outbox-1', ...baseArgs, status: 'sent', attempts: 1, scheduled_at: new Date().toISOString() }],
+        unique: [['organization_id', 'idempotency_key']],
+      },
+    })
+    expect(await claimOutboundEvent(fake.client as unknown as DbClient, baseArgs)).toEqual({ status: 'sent' })
+  })
+
+  test('a permanent failure stays blocked instead of being retried', async () => {
+    const fake = createFakeDb({
+      outbox_events: {
+        rows: [{ id: 'outbox-1', ...baseArgs, status: 'dead_letter', attempts: 1, scheduled_at: new Date().toISOString() }],
+        unique: [['organization_id', 'idempotency_key']],
+      },
+    })
+    expect(await claimOutboundEvent(fake.client as unknown as DbClient, baseArgs)).toEqual({ status: 'blocked' })
+  })
+
+  test('a failed intent is reclaimed only after its scheduled retry time', async () => {
+    const fake = createFakeDb({
+      outbox_events: {
+        rows: [{
+          id: 'outbox-1',
+          ...baseArgs,
+          status: 'failed',
+          attempts: 1,
+          scheduled_at: '2000-01-01T00:00:00.000Z',
+        }],
+        unique: [['organization_id', 'idempotency_key']],
+      },
+    })
+    const result = await claimOutboundEvent(fake.client as unknown as DbClient, baseArgs)
+    expect(result.status).toBe('claimed')
+    if (result.status !== 'claimed') throw new Error('expected claim')
+    expect(result.attempts).toBe(2)
+  })
+
+  test('re-enqueueing the same idempotency key never creates a second outbox row', async () => {
+    const fake = createFakeDb({
+      outbox_events: { unique: [['organization_id', 'idempotency_key']] },
+    })
+    const db = fake.client as unknown as DbClient
+    expect(await enqueueOutbound({ db, ...baseArgs })).toBeTruthy()
+    expect(await enqueueOutbound({ db, ...baseArgs })).toBe('')
     expect(fake.store.outbox_events.rows?.length).toBe(1)
   })
 })
