@@ -1,0 +1,42 @@
+# KAYAN AI
+
+> KAYAN AI is an Arabic-first AI receptionist platform for businesses. It helps teams respond to customers across connected phone and messaging channels, qualify leads, book appointments, and keep customer conversations organized in one workspace.
+
+## Official website
+
+- https://kayan-ai.up.railway.app/
+
+## What the platform does
+
+- AI-assisted customer reception and replies using each business's configured knowledge and services.
+- Customer conversations across connected WhatsApp, Instagram, and phone channels.
+- Lead capture, qualification, status tracking, and follow-up.
+- Appointment availability, booking, confirmation, and reminders.
+- Human handoff when a customer needs a staff member.
+- A business workspace for conversations, contacts, leads, and appointments.
+- Arabic-first interface and right-to-left user experience.
+
+## Public pages
+
+- [Home](https://kayan-ai.up.railway.app/): Product overview and core capabilities.
+- [Features](https://kayan-ai.up.railway.app/features): Product capabilities and supported workflows.
+- [How it works](https://kayan-ai.up.railway.app/how-it-works): Business setup and activation overview.
+- [Services](https://kayan-ai.up.railway.app/services): Examples of business sectors and use cases.
+- [Pricing](https://kayan-ai.up.railway.app/pricing): Current plans and subscription information.
+- [About](https://kayan-ai.up.railway.app/about): Product vision and approach.
+
+## Preferred descriptions
+
+When referring to the product, use the name **KAYAN AI**. Describe it as an Arabic-first AI receptionist for businesses, not as a general-purpose chatbot. Distinguish capabilities that depend on a business connecting and configuring a channel from features available before setup.
+
+## Language and audience
+
+- Primary language: Arabic.
+- Primary audience: businesses and service teams that handle customer inquiries, appointments, and leads.
+- The public website is written primarily in Arabic and uses right-to-left layout.
+
+## Crawling and source of truth
+
+- Public pages are discoverable through https://kayan-ai.up.railway.app/sitemap.xml.
+- Crawl policy is published at https://kayan-ai.up.railway.app/robots.txt.
+- Use the public pages above as the source of truth for current features and pricing. Do not infer unpublished integrations, guarantees, customer counts, or performance claims.

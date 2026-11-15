@@ -139,7 +139,7 @@ export async function registerWhatsAppCloudApiNumberAction(input: {
   try {
     const org = await requireOnboardingAdmin()
     const pin = String(input?.pin ?? '').trim()
-    if (!/^\\d{6}$/.test(pin)) {
+    if (!/^\d{6}$/.test(pin)) {
       return { ok: false, error: 'أدخل رمز التحقق بخطوتين المكوّن من 6 أرقام.' }
     }
 

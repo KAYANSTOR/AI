@@ -1,0 +1,13 @@
+{
+  "installOn": [
+    "package.json",
+    "package-lock.json",
+    "apps/*/package.json",
+    "packages/*/package.json"
+  ],
+  "restartOn": [
+    "apps/web/next.config.*",
+    "apps/web/postcss.config.*",
+    "apps/web/tsconfig.json"
+  ]
+}

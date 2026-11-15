@@ -176,7 +176,7 @@ function ChannelDialog({
 
   function registerWhatsAppNumber() {
     if (!canManage || card.type !== 'whatsapp') return
-    if (!/^\\d{6}$/.test(registrationPin)) {
+    if (!/^\d{6}$/.test(registrationPin)) {
       setNotice({ ok: false, text: 'أدخل PIN التحقق بخطوتين المكوّن من 6 أرقام.' })
       return
     }
@@ -251,7 +251,7 @@ function ChannelDialog({
                 <input
                   type="password"
                   value={registrationPin}
-                  onChange={(event) => setRegistrationPin(event.target.value.replace(/\\D/g, '').slice(0, 6))}
+                  onChange={(event) => setRegistrationPin(event.target.value.replace(/\D/g, '').slice(0, 6))}
                   inputMode="numeric"
                   autoComplete="off"
                   maxLength={6}

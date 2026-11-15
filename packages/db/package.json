@@ -1,0 +1,15 @@
+{
+  "name": "@kayan-ai/db",
+  "version": "1.0.0",
+  "private": true,
+  "description": "KAYAN AI database: SQL migrations, bootstrap and data tooling.",
+  "type": "module",
+  "license": "UNLICENSED",
+  "scripts": {
+    "migrate": "node scripts/migrate.mjs up",
+    "migrate:status": "node scripts/migrate.mjs status"
+  },
+  "dependencies": {
+    "postgres": "^3.4.9"
+  }
+}
