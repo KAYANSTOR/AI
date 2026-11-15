@@ -129,12 +129,27 @@ export async function saveBasicsAction(input: {
   businessTypeId?: string
   phone?: string
   timezone?: string
+  city?: string
+  websiteUrl?: string
 }): Promise<OnboardingResult> {
   try {
     const org = await requireOnboardingAdmin()
     const name = input.name?.trim()
     if (name.length < 2) return { ok: false, error: 'اكتب اسم النشاط (حرفان على الأقل).' }
     if (name.length > 120) return { ok: false, error: 'اسم النشاط طويل جدًا.' }
+    const city = input.city?.trim() ?? ''
+    if (city.length > 120) return { ok: false, error: 'اسم المدينة طويل جدًا.' }
+    const websiteUrl = input.websiteUrl?.trim() ?? ''
+    if (websiteUrl) {
+      try {
+        const parsedUrl = new URL(websiteUrl)
+        if (!['http:', 'https:'].includes(parsedUrl.protocol) || parsedUrl.username || parsedUrl.password) {
+          return { ok: false, error: 'اكتب رابطاً يبدأ بـ https:// أو http://.' }
+        }
+      } catch {
+        return { ok: false, error: 'اكتب رابط موقع صحيحاً.' }
+      }
+    }
     const businessTypeId = input.businessTypeId?.trim()
     if (businessTypeId && !isBusinessTypeId(businessTypeId)) {
       return { ok: false, error: 'نوع النشاط غير معروف.' }
@@ -157,9 +172,9 @@ export async function saveBasicsAction(input: {
     if (profileError) return { ok: false, error: dbActionError(profileError) }
     const businessId = (profile?.business_id as string | null) ?? null
     const profilePatch: Record<string, unknown> = {
-      public_phone_number: publicPhone,
       updated_at: new Date().toISOString(),
     }
+    if (input.phone !== undefined) profilePatch.public_phone_number = publicPhone
     if (timezone && (!profile?.timezone || profile.timezone === 'UTC')) profilePatch.timezone = timezone
     if (businessTypeId && businessTypeId !== profile?.business_type_id) {
       await applyBusinessType(db, org.organizationId, businessTypeId)
@@ -172,7 +187,12 @@ export async function saveBasicsAction(input: {
     if (businessId) {
       const { error: businessError } = await db
         .from('businesses')
-        .update({ name, ...(timezone ? { timezone } : {}) })
+        .update({
+          name,
+          city: city || null,
+          website_url: websiteUrl || null,
+          ...(timezone ? { timezone } : {}),
+        })
         .eq('id', businessId)
       if (businessError) return { ok: false, error: dbActionError(businessError) }
     }
@@ -188,6 +208,25 @@ export async function saveBasicsAction(input: {
     return { ok: true, message: 'تم الحفظ.' }
   } catch (error) {
     return { ok: false, error: actionErrorMessage(error, 'تعذّر الحفظ. حاول مرة أخرى.') }
+  }
+}
+
+export async function saveOnboardingStepAction(step: number): Promise<OnboardingResult> {
+  try {
+    const org = await requireOnboardingAdmin()
+    if (!Number.isInteger(step) || step < 1 || step > 4) {
+      return { ok: false, error: 'خطوة إعداد غير صالحة.' }
+    }
+    const db = await createClient()
+    const { error } = await db
+      .from('business_profiles')
+      .update({ onboarding_step: step, updated_at: new Date().toISOString() })
+      .eq('organization_id', org.organizationId)
+    if (error) return { ok: false, error: dbActionError(error) }
+    revalidatePath('/onboarding')
+    return { ok: true }
+  } catch (error) {
+    return { ok: false, error: actionErrorMessage(error, 'تعذّر حفظ تقدم الإعداد.') }
   }
 }
 

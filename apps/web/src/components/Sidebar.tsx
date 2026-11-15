@@ -25,6 +25,7 @@ import {
   ShieldAlert,
   Building2,
   UserRound,
+  FileText,
 } from 'lucide-react'
 import { useEffect, useRef } from 'react'
 import { BrandMark } from '@/components/site/brand'
@@ -85,6 +86,7 @@ const navSections: NavSection[] = [
       { name: 'الردود الجاهزة', href: '/dashboard/settings/canned-replies', icon: MessageSquareText, capability: 'inbox' },
       { name: 'سياسات التصعيد', href: '/dashboard/settings/escalation', icon: ShieldAlert, capability: 'inbox' },
       { name: 'إعداد النشاط', href: '/dashboard/setup', icon: Settings, capability: null },
+      { name: 'صفحات الموقع', href: '/dashboard/website-pages', icon: FileText, capability: null },
     ],
   },
   {

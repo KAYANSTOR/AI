@@ -19,7 +19,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   return (
     <DashboardShell
-      userEmail={context.email}
+      userEmail={context.email ?? context.phone ?? 'حساب هاتفي'}
       organizationName={context.organizationName}
       sidebar={
         <Sidebar
@@ -32,10 +32,10 @@ export default async function DashboardLayout({ children }: { children: React.Re
       {!context.setupComplete && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-accent/30 bg-accent-light/60 px-4 py-3 text-sm text-text">
           <span>
-            <span className="font-semibold">الإعداد لم يكتمل بعد.</span> أكمل خطوات التفعيل حتى يبدأ الوكيل باستقبال العملاء.
+            <span className="font-semibold">بقيت خطوات التفعيل اللاحقة.</span> اربط قناة التواصل وجهّز الوكيل واختبره قبل استقبال العملاء.
           </span>
-          <Link href="/onboarding" className="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:bg-primary-dark">
-            متابعة الإعداد
+          <Link href="/onboarding/activation" className="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:bg-primary-dark">
+            قائمة التفعيل
           </Link>
         </div>
       )}
