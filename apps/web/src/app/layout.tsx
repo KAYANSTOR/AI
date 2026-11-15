@@ -1,22 +1,7 @@
 import type { Metadata, Viewport } from 'next'
-import { Cairo, IBM_Plex_Mono } from 'next/font/google'
 import { siteDescription } from '@/lib/site-metadata'
 import { themeBootScript } from '@/components/theme/theme-script'
 import './globals.css'
-
-const cairo = Cairo({
-  variable: '--font-cairo',
-  subsets: ['arabic', 'latin'],
-  weight: ['400', '500', '600', '700'],
-  display: 'swap',
-})
-
-const plexMono = IBM_Plex_Mono({
-  variable: '--font-plex-mono',
-  subsets: ['latin'],
-  weight: ['400', '500'],
-  display: 'swap',
-})
 
 /** Absolute base URL for canonical and Open Graph metadata. */
 const siteUrl =
@@ -70,7 +55,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       lang="ar"
       dir="rtl"
       suppressHydrationWarning
-      className={`${cairo.variable} ${plexMono.variable} h-full antialiased`}
+      className="h-full antialiased"
     >
       <head>
         {/* Applies the saved or system theme before first paint. */}

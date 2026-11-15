@@ -54,9 +54,10 @@
   --shadow-card: var(--k-shadow-card);
   --shadow-raised: var(--k-shadow-raised);
 
-  --font-sans: var(--font-cairo), ui-sans-serif, system-ui, sans-serif;
-  --font-display: var(--font-cairo), ui-sans-serif, system-ui, sans-serif;
-  --font-mono: var(--font-plex-mono), ui-monospace, monospace;
+  /* Use local system fonts so production builds never depend on Google Fonts availability. */
+  --font-sans: Tahoma, Arial, ui-sans-serif, system-ui, sans-serif;
+  --font-display: Tahoma, Arial, ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Courier New", ui-monospace, monospace;
 }
 
 @theme static {
