@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { groqProvider } from '@/lib/providers/groq'
+import { AIProviderError } from '@/lib/providers/types'
 
 const originalKey = process.env.GROQ_API_KEY
 const originalModel = process.env.GROQ_MODEL
@@ -77,7 +78,9 @@ describe('Groq provider contract', () => {
     expect(body.model).toBe('openai/gpt-oss-120b')
     expect(body.messages[0]).toEqual({ role: 'system', content: 'أنت وكيل خدمة عملاء.' })
     expect(body.messages[1].tool_calls[0].id).toBe('call_1')
-    expect(body.messages[2]).toMatchObject({ role: 'tool', tool_call_id: 'call_1', name: 'lookup' })
+    expect(body.messages[2].role).toBe('tool')
+    expect(body.messages[2].tool_call_id).toBe('call_1')
+    expect(body.messages[2].name).toBe('lookup')
     expect(body.tools[0].function.name).toBe('lookup')
 
     expect(result.model).toBe('openai/gpt-oss-120b')
@@ -97,10 +100,19 @@ describe('Groq provider contract', () => {
       { status: 429, headers: { 'content-type': 'application/json' } }
     )) as typeof fetch
 
-    await expect(groqProvider.call({
-      system: 'system',
-      messages: [{ role: 'user', content: 'hello' }],
-      tools: [],
-    })).rejects.toMatchObject({ provider: 'groq', status: 429, retryable: true })
+    try {
+      await groqProvider.call({
+        system: 'system',
+        messages: [{ role: 'user', content: 'hello' }],
+        tools: [],
+      })
+      throw new Error('expected Groq to reject a rate-limited request')
+    } catch (error) {
+      expect(error).toBeInstanceOf(AIProviderError)
+      if (!(error instanceof AIProviderError)) throw error
+      expect(error.provider).toBe('groq')
+      expect(error.status).toBe(429)
+      expect(error.retryable).toBe(true)
+    }
   })
 })
