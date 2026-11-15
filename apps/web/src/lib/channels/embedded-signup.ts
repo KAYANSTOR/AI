@@ -468,7 +468,7 @@ export async function completeEmbeddedSignup(input: {
     const admin = createAdminClient()
     const businessId = await ensureBusinessId(admin, input.organizationId, input.businessId, input.organizationName)
 
-    // Verify the Meta phone and webhook subscription before making the channel routable.
+    // Verify the Meta phone and webhook subscription before preparing the channel for registration.
     await verifyPhoneBelongsToWaba(wabaId, phoneNumberId, businessToken)
     const displayFromApi = await fetchVerifiedPhoneNumber(phoneNumberId, businessToken)
     await subscribeAppToWaba(wabaId, businessToken)
