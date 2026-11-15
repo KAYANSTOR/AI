@@ -51,16 +51,25 @@ function redirectToChannels(request: NextRequest, status: 'meta_success' | 'meta
 export async function GET(request: NextRequest) {
   const params = request.nextUrl.searchParams
   const code = params.get('code')?.trim()
+  const state = params.get('state')?.trim()
   const session = parseSessionInfo(params.get('session_info') ?? params.get('sessionInfo'))
   const phoneNumberId = session.phone_number_id ?? params.get('phone_number_id')
   const wabaId = session.waba_id ?? params.get('waba_id')
   const businessPortfolioId = session.business_id ?? params.get('business_id')
 
-  if (!code || params.get('error')) return redirectToChannels(request, 'meta_error')
+  if (!code || !state || params.get('error')) {
+    console.warn('Meta embedded signup callback did not contain a usable authorization response', {
+      hasCode: Boolean(code),
+      hasState: Boolean(state),
+      hasProviderError: Boolean(params.get('error')),
+    })
+    return redirectToChannels(request, 'meta_error')
+  }
 
   try {
     const result = await completeWhatsAppEmbeddedSignupAction({
       code,
+      state,
       phoneNumberId: phoneNumberId ?? null,
       wabaId: wabaId ?? null,
       businessPortfolioId: businessPortfolioId ?? null,

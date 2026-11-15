@@ -4,7 +4,11 @@ import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/db/server'
 import { getCurrentOrg } from '@/lib/org'
 import { actionErrorMessage } from '@/lib/i18n/action-error'
-import { completeEmbeddedSignup } from '@/lib/channels/embedded-signup'
+import {
+  completeEmbeddedSignup,
+  createEmbeddedSignupOAuthState,
+  verifyEmbeddedSignupOAuthState,
+} from '@/lib/channels/embedded-signup'
 
 export type OnboardingResult = { ok: boolean; error?: string; message?: string }
 
@@ -44,14 +48,39 @@ async function auditSetup(
 /**
  * Completes Meta Embedded Signup after the customer finishes the Facebook popup.
  */
+/**
+ * Issues a short-lived OAuth state for the authenticated organization.
+ * The client receives no signing key; the callback validates the signature on the server.
+ */
+export async function createWhatsAppEmbeddedSignupOAuthStateAction(): Promise<
+  { ok: true; state: string; redirectUri: string } | { ok: false; error: string }
+> {
+  try {
+    const org = await requireOnboardingAdmin()
+    const result = createEmbeddedSignupOAuthState(org.organizationId)
+    return { ok: true, ...result }
+  } catch (error) {
+    return {
+      ok: false,
+      error: actionErrorMessage(error, 'تعذّر بدء الربط مع Meta. حدّث الصفحة وحاول مرة أخرى.'),
+    }
+  }
+}
+
 export async function completeWhatsAppEmbeddedSignupAction(input: {
   code: string
+  state: string
   phoneNumberId?: string | null
   wabaId?: string | null
   businessPortfolioId?: string | null
 }): Promise<OnboardingResult> {
   try {
     const org = await requireOnboardingAdmin()
+    const oauthState = verifyEmbeddedSignupOAuthState(input.state, org.organizationId)
+    if (!oauthState) {
+      return { ok: false, error: 'انتهت صلاحية جلسة Meta أو لم تتطابق مع الحساب الحالي. أعد بدء الربط.' }
+    }
+
     const db = await createClient()
 
     const { data: profile } = await db
@@ -69,6 +98,7 @@ export async function completeWhatsAppEmbeddedSignupAction(input: {
         phoneNumberId: input.phoneNumberId ?? null,
         wabaId: input.wabaId ?? null,
         businessPortfolioId: input.businessPortfolioId ?? null,
+        redirectUri: oauthState.redirectUri,
       },
     })
 

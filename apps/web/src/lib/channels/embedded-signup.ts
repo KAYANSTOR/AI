@@ -9,12 +9,107 @@
  *
  * All Graph calls are server-to-server. Nothing secret reaches the browser.
  */
+import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
 import { createAdminClient } from '@/lib/db/admin'
 import type { DbClient } from '@/lib/db/client'
 import { deleteChannelCredential, loadChannelCredentials, saveChannelCredential } from '@/lib/credentials/service'
 import { normalizeChannelNumber } from '@/lib/channels/management'
 
 const GRAPH_VERSION = 'v26.0'
+
+const EMBEDDED_SIGNUP_CALLBACK_PATH = '/api/whatsapp/embedded-signup-callback'
+const EMBEDDED_SIGNUP_STATE_TTL_SECONDS = 30 * 60
+
+type EmbeddedSignupOAuthStatePayload = {
+  version: 1
+  organizationId: string
+  issuedAt: number
+  nonce: string
+  redirectUri: string
+}
+
+function oauthStateSecret(): string {
+  const secret = process.env.AUTH_SECRET?.trim()
+  if (!secret) throw new Error('AUTH_SECRET is not configured')
+  return secret
+}
+
+/**
+ * Always use Railway's active public hostname at runtime. The same canonical
+ * URI is signed into state, sent to Meta, and supplied again during code exchange.
+ */
+export function getMetaEmbeddedSignupRedirectUri(): string {
+  const railwayDomain = process.env.RAILWAY_PUBLIC_DOMAIN?.trim()
+  const configuredBase = railwayDomain
+    ? (railwayDomain.includes('://') ? railwayDomain : `https://${railwayDomain}`)
+    : (process.env.NEXT_PUBLIC_APP_URL?.trim() || process.env.NEXT_PUBLIC_SITE_URL?.trim())
+
+  if (!configuredBase) {
+    throw new Error('The public Railway application URL is not configured')
+  }
+
+  const base = new URL(configuredBase)
+  if (base.protocol !== 'https:' && base.hostname !== 'localhost') {
+    throw new Error('Meta OAuth callback must use HTTPS')
+  }
+  return new URL(EMBEDDED_SIGNUP_CALLBACK_PATH, base.origin).toString()
+}
+
+/** Creates a short-lived, signed OAuth state tied to the authenticated organization. */
+export function createEmbeddedSignupOAuthState(organizationId: string): {
+  state: string
+  redirectUri: string
+} {
+  const redirectUri = getMetaEmbeddedSignupRedirectUri()
+  const payload: EmbeddedSignupOAuthStatePayload = {
+    version: 1,
+    organizationId,
+    issuedAt: Math.floor(Date.now() / 1000),
+    nonce: randomBytes(24).toString('base64url'),
+    redirectUri,
+  }
+  const encoded = Buffer.from(JSON.stringify(payload)).toString('base64url')
+  const signature = createHmac('sha256', oauthStateSecret()).update(encoded).digest('base64url')
+  return { state: `${encoded}.${signature}`, redirectUri }
+}
+
+/** Verifies the callback state and returns only the redirect URI it authorizes. */
+export function verifyEmbeddedSignupOAuthState(
+  state: string,
+  organizationId: string
+): { redirectUri: string } | null {
+  try {
+    if (!state || state.length > 4096) return null
+    const [encoded, suppliedSignature, extra] = state.split('.')
+    if (!encoded || !suppliedSignature || extra !== undefined) return null
+
+    const expectedSignature = createHmac('sha256', oauthStateSecret()).update(encoded).digest()
+    const actualSignature = Buffer.from(suppliedSignature, 'base64url')
+    if (
+      actualSignature.length !== expectedSignature.length ||
+      !timingSafeEqual(actualSignature, expectedSignature)
+    ) return null
+
+    const payload = JSON.parse(Buffer.from(encoded, 'base64url').toString('utf8')) as Partial<EmbeddedSignupOAuthStatePayload>
+    const now = Math.floor(Date.now() / 1000)
+    if (
+      payload.version !== 1 ||
+      payload.organizationId !== organizationId ||
+      typeof payload.issuedAt !== 'number' ||
+      payload.issuedAt > now + 60 ||
+      now - payload.issuedAt > EMBEDDED_SIGNUP_STATE_TTL_SECONDS ||
+      typeof payload.nonce !== 'string' ||
+      payload.nonce.length < 16 ||
+      typeof payload.redirectUri !== 'string'
+    ) return null
+
+    const canonicalRedirectUri = getMetaEmbeddedSignupRedirectUri()
+    if (payload.redirectUri !== canonicalRedirectUri) return null
+    return { redirectUri: canonicalRedirectUri }
+  } catch {
+    return null
+  }
+}
 
 export function getMetaGraphBaseUrl(): string {
   const configured = process.env.META_GRAPH_BASE_URL?.trim()
@@ -49,6 +144,8 @@ export type EmbeddedSignupSession = {
   phoneNumberId?: string | null
   wabaId?: string | null
   businessPortfolioId?: string | null
+  /** Exact OAuth redirect URI used to obtain the authorization code. */
+  redirectUri?: string | null
   /** Optional display number if the client already knows it. */
   displayPhoneNumber?: string | null
 }
@@ -65,13 +162,14 @@ export type EmbeddedSignupResult =
   | { ok: false; error: string }
 
 /** Exchange the short-lived code from FB.login for a business integration token. */
-async function exchangeCodeForBusinessToken(code: string): Promise<string> {
+async function exchangeCodeForBusinessToken(code: string, redirectUri?: string | null): Promise<string> {
   const appId = requireEnv('NEXT_PUBLIC_META_APP_ID')
   const appSecret = requireEnv('META_APP_SECRET')
   const url = new URL(`${getMetaGraphBaseUrl()}/oauth/access_token`)
   url.searchParams.set('client_id', appId)
   url.searchParams.set('client_secret', appSecret)
   url.searchParams.set('code', code)
+  if (redirectUri) url.searchParams.set('redirect_uri', redirectUri)
 
   const response = await fetchMeta(url.toString(), { method: 'GET' })
   if (!response.ok) {
@@ -365,7 +463,7 @@ export async function completeEmbeddedSignup(input: {
   }
 
   try {
-    const businessToken = await exchangeCodeForBusinessToken(code)
+    const businessToken = await exchangeCodeForBusinessToken(code, input.session.redirectUri)
     const { phoneNumberId, wabaId } = await resolveSignupResources(input.session, businessToken)
     const admin = createAdminClient()
     const businessId = await ensureBusinessId(admin, input.organizationId, input.businessId, input.organizationName)
