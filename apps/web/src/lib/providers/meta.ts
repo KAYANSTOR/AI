@@ -19,6 +19,74 @@ function requireGraphBase() {
   return value.replace(/\/+$/, '')
 }
 
+
+export type WhatsAppTemplateInput = {
+  name: string
+  languageCode: string
+  bodyParameters?: string[]
+}
+
+export class MetaApiError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message)
+    this.name = 'MetaApiError'
+  }
+}
+
+export function buildWhatsAppTemplatePayload(to: string, template: WhatsAppTemplateInput) {
+  const parameters = (template.bodyParameters ?? []).map((text) => ({ type: 'text' as const, text }))
+  return {
+    messaging_product: 'whatsapp',
+    to,
+    type: 'template',
+    template: {
+      name: template.name,
+      language: { code: template.languageCode },
+      ...(parameters.length ? { components: [{ type: 'body', parameters }] } : {}),
+    },
+  }
+}
+
+export async function sendWhatsAppTemplate(
+  credentials: MetaMessageCredentials,
+  to: string,
+  template: WhatsAppTemplateInput
+): Promise<{ messageId: string | null }> {
+  if (!credentials.access_token) throw new Error('بيانات اعتماد Meta غير مكتملة: Access Token.')
+  if (!credentials.phone_number_id) throw new Error('معرّف رقم واتساب غير مكتمل. أعد فحص ربط القناة.')
+
+  const response = await fetch(
+    requireGraphBase() + '/' + encodeURIComponent(credentials.phone_number_id) + '/messages',
+    {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer ' + credentials.access_token,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(buildWhatsAppTemplatePayload(to, template)),
+    }
+  )
+
+  const payload = (await response.json().catch(() => null)) as
+    | {
+        messages?: Array<{ id?: string }>
+        error?: { message?: string; error_user_title?: string; error_user_msg?: string; code?: number }
+      }
+    | null
+
+  if (!response.ok) {
+    const detail = payload?.error?.error_user_msg || payload?.error?.error_user_title || payload?.error?.message
+    const code = typeof payload?.error?.code === 'number' ? ' (رمز Meta ' + payload.error.code + ')' : ''
+    throw new MetaApiError(
+      'رفضت Meta إرسال قالب WhatsApp (HTTP ' + response.status + ')' + code +
+        (detail ? '. ' + detail : '. تحقق من اسم القالب ولغته وصلاحية رقم الاختبار.'),
+      response.status
+    )
+  }
+
+  return { messageId: payload?.messages?.[0]?.id ?? null }
+}
+
 export async function sendWhatsAppText(
   credentials: MetaMessageCredentials,
   to: string,
@@ -35,7 +103,18 @@ export async function sendWhatsAppText(
       body: JSON.stringify({ messaging_product: 'whatsapp', to, type: 'text', text: { body } }),
     }
   )
-  if (!response.ok) throw new Error('WhatsApp send failed: HTTP ' + response.status)
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => null)) as
+      | { error?: { message?: string; error_user_title?: string; error_user_msg?: string; code?: number } }
+      | null
+    const detail = payload?.error?.error_user_msg || payload?.error?.error_user_title || payload?.error?.message
+    const code = typeof payload?.error?.code === 'number' ? ' (رمز Meta ' + payload.error.code + ')' : ''
+    throw new MetaApiError(
+      'رفضت Meta إرسال الرسالة (HTTP ' + response.status + ')' + code +
+        (detail ? '. ' + detail : '. تحقق من صلاحية نافذة المحادثة والرقم المستلم.'),
+      response.status
+    )
+  }
 }
 
 export async function sendInstagramText(

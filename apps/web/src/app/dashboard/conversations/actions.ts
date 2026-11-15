@@ -1,12 +1,16 @@
 'use server'
 
+import { randomUUID } from 'node:crypto'
 import { revalidatePath } from 'next/cache'
 import { requireCapability, audit, type AuthorizedContext } from '@/lib/capabilities/guard'
 import { actionErrorMessage, dbActionError } from '@/lib/i18n/action-error'
 import { createNotification } from '@/lib/notifications'
 import { dispatchWorkflowTrigger } from '@/lib/workflows/triggers'
 import { getConsentStatus } from '@/lib/channels/consent'
-import { deliverOutbound, recordDeliveredOutboundMessage } from '@/lib/runtime/outbound'
+import { normalizeChannelNumber } from '@/lib/channels/management'
+import { resolveContactIdentity } from '@/lib/channels/contacts'
+import { ensureOpenConversation } from '@/lib/runtime/conversation'
+import { deliverOutbound, deliverWhatsAppTemplate, recordDeliveredOutboundMessage } from '@/lib/runtime/outbound'
 
 export type InboxResult = { ok: boolean; error?: string; message?: string }
 
@@ -464,5 +468,163 @@ export async function sendHumanReplyAction(
     }
   } catch (error) {
     return { ok: false, error: actionErrorMessage(error, 'تعذّر إرسال الرد.') }
+  }
+}
+
+
+export type StartWhatsAppConversationInput = {
+  phone: string
+  displayName?: string
+  templateName: string
+  languageCode: string
+  bodyParameters?: string[]
+  consentConfirmed: boolean
+}
+
+export type StartWhatsAppConversationResult = InboxResult & { conversationId?: string }
+
+/**
+ * Creates a manual WhatsApp conversation by first sending an approved template.
+ * A business-initiated conversation cannot begin with free-form text. The recipient
+ * must have opted in; the operator confirms that consent before this action proceeds.
+ */
+export async function startWhatsAppConversationAction(
+  input: StartWhatsAppConversationInput
+): Promise<StartWhatsAppConversationResult> {
+  let ctx: AuthorizedContext
+  try {
+    ctx = await requireCapability('inbox')
+  } catch (error) {
+    return { ok: false, error: actionErrorMessage(error, 'غير مصرح.') }
+  }
+
+  if (ctx.role === 'read_only') {
+    return { ok: false, error: 'صلاحية القراءة فقط لا تسمح ببدء محادثة.' }
+  }
+  if (!input || input.consentConfirmed !== true) {
+    return { ok: false, error: 'أكد موافقة المستلم على تلقي الرسائل قبل المتابعة.' }
+  }
+
+  const phone = normalizeChannelNumber(String(input.phone ?? ''))
+  if (!/^\+[1-9]\d{7,14}$/.test(phone)) {
+    return { ok: false, error: 'أدخل رقم واتساب صحيحاً مع مفتاح الدولة، مثل +967777123456.' }
+  }
+
+  const recipient = phone.replace(/\D/g, '')
+  const displayName = String(input.displayName ?? '').trim().slice(0, 120)
+  const templateName = String(input.templateName ?? '').trim()
+  const languageCode = String(input.languageCode ?? '').trim()
+  const bodyParameters = Array.isArray(input.bodyParameters)
+    ? input.bodyParameters.map((value) => String(value).trim())
+    : []
+
+  if (!/^[a-z0-9_]{1,512}$/.test(templateName)) {
+    return { ok: false, error: 'اسم القالب غير صحيح. استخدم الاسم المعتمد كما يظهر في Meta.' }
+  }
+  if (!/^[a-z]{2,3}(?:_[A-Z]{2})?$/.test(languageCode)) {
+    return { ok: false, error: 'رمز لغة القالب غير صحيح، مثال en_US أو ar.' }
+  }
+  if (bodyParameters.length > 10 || bodyParameters.some((value) => !value || value.length > 1024)) {
+    return { ok: false, error: 'تحقق من متغيرات القالب: لا تترك قيمة فارغة، والحد الأقصى 10 قيم.' }
+  }
+
+  let conversationId: string | undefined
+  try {
+    const { data: channel, error: channelError } = await ctx.db
+      .from('channels')
+      .select('id, organization_id, business_id, channel_type, provider_account_id, external_identifier, is_active, verification_status')
+      .eq('organization_id', ctx.organizationId)
+      .eq('channel_type', 'whatsapp')
+      .eq('is_active', true)
+      .eq('verification_status', 'verified')
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (channelError) return { ok: false, error: dbActionError(channelError) }
+    if (!channel) {
+      return { ok: false, error: 'لا توجد قناة WhatsApp متصلة وجاهزة. افتح صفحة القنوات وأكمل الربط أولاً.' }
+    }
+    if (!channel.provider_account_id) {
+      return { ok: false, error: 'القناة ظاهرة كمتصلة لكن معرّف رقم Meta غير محفوظ. أعد فحص ربط القناة.' }
+    }
+
+    const contact = await resolveContactIdentity(ctx.db, ctx.organizationId, {
+      channel: 'whatsapp',
+      externalUserId: recipient,
+      phone,
+      displayName: displayName || null,
+    })
+    const currentConsent = await getConsentStatus(ctx.db, contact.contactId, 'whatsapp')
+    if (currentConsent === 'opted_out') {
+      return { ok: false, error: 'هذا الرقم أوقف استقبال رسائل النشاط التجاري سابقاً، لذلك لن نرسل إليه.' }
+    }
+
+    const providerResult = await deliverWhatsAppTemplate(ctx.db, {
+      channel: {
+        id: channel.id,
+        organizationId: channel.organization_id,
+        businessId: channel.business_id,
+        channelType: 'whatsapp',
+        providerAccountId: channel.provider_account_id,
+        externalIdentifier: channel.external_identifier,
+      },
+      recipient,
+      template: { name: templateName, languageCode, bodyParameters },
+    })
+
+    const consent = await getConsentStatus(ctx.db, contact.contactId, 'whatsapp')
+    if (consent !== 'opted_in') {
+      const { error: consentError } = await ctx.db.from('consents').insert({
+        organization_id: ctx.organizationId,
+        contact_id: contact.contactId,
+        channel: 'whatsapp',
+        purpose: 'marketing',
+        status: 'opted_in',
+        source: 'dashboard_manual_outbound',
+        captured_at: new Date().toISOString(),
+      })
+      if (consentError) throw new Error(consentError.message)
+    }
+
+    conversationId = await ensureOpenConversation(ctx.db, {
+      organizationId: ctx.organizationId,
+      businessId: channel.business_id,
+      contactId: contact.contactId,
+      channelId: channel.id,
+    })
+
+    const idempotencyKey = 'manual-template:' + (providerResult.messageId || randomUUID())
+    await recordDeliveredOutboundMessage(ctx.db, {
+      organizationId: ctx.organizationId,
+      conversationId,
+      body: 'قالب WhatsApp: ' + templateName,
+      idempotencyKey,
+      externalMessageId: providerResult.messageId,
+    })
+
+    await audit(ctx, 'conversation.manual_template_sent', 'conversation', conversationId, {
+      channel_type: 'whatsapp',
+      template_name: templateName,
+      language_code: languageCode,
+      recipient_suffix: recipient.slice(-4),
+      consent_confirmed: true,
+      provider_message_id_received: Boolean(providerResult.messageId),
+    })
+
+    revalidatePath('/dashboard/conversations')
+    revalidatePath('/dashboard/conversations/' + conversationId)
+
+    return {
+      ok: true,
+      conversationId,
+      message: 'قبلت Meta طلب إرسال القالب، وحُفظت المحادثة في صندوق الوارد.',
+    }
+  } catch (error) {
+    return {
+      ok: false,
+      error: actionErrorMessage(error, 'تعذّر بدء المحادثة. تحقق من القالب وبيانات قناة Meta ثم حاول مجدداً.'),
+      conversationId,
+    }
   }
 }

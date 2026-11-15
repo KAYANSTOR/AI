@@ -2,7 +2,7 @@ import type { DbClient } from '@/lib/db/client'
 import { enqueueOutbound } from '@/lib/channels/outbox'
 import { CredentialConfigError, CredentialMissingError, requireCredential } from '@/lib/credentials/service'
 import { resolveChannelProviderCredentials } from '@/lib/credentials/resolve'
-import { sendInstagramText, sendWhatsAppText } from '@/lib/providers/meta'
+import { MetaApiError, sendInstagramText, sendWhatsAppTemplate, sendWhatsAppText, type WhatsAppTemplateInput } from '@/lib/providers/meta'
 import { sendTwilioSms } from '@/lib/providers/twilio'
 import { markFirstResponse } from '@/lib/sla'
 
@@ -55,7 +55,11 @@ export async function deliverOutbound(
   try {
     await sendViaProvider(input.channel, credentials, input.recipient, input.body)
   } catch (error) {
-    if (error instanceof CredentialMissingError || error instanceof CredentialConfigError) {
+    if (
+      error instanceof CredentialMissingError ||
+      error instanceof CredentialConfigError ||
+      (error instanceof MetaApiError && error.status >= 400 && error.status < 500 && ![408, 425, 429].includes(error.status))
+    ) {
       // Permanent: retrying cannot succeed. Fail closed and let the caller/operator act.
       throw error
     }
@@ -87,9 +91,56 @@ export async function deliverOutbound(
 }
 
 /** Persist a customer-visible outbound message only after the provider accepted it. */
+
+/**
+ * Sends the first business-initiated WhatsApp message as an approved template.
+ * Rejected templates are policy/configuration errors, not retryable queue items.
+ */
+export async function deliverWhatsAppTemplate(
+  db: DbClient,
+  input: {
+    channel: OutboundChannel
+    recipient: string
+    template: WhatsAppTemplateInput
+  }
+): Promise<{ messageId: string | null }> {
+  if (input.channel.channelType !== 'whatsapp') {
+    throw new Error('إرسال قوالب البداية متاح لقناة WhatsApp فقط.')
+  }
+  if (!input.channel.providerAccountId) {
+    throw new CredentialMissingError('meta', 'phone_number_id')
+  }
+
+  const credentials = await resolveChannelProviderCredentials(db, {
+    channelId: input.channel.id,
+    channelType: input.channel.channelType,
+  })
+
+  const result = await sendWhatsAppTemplate(
+    {
+      access_token: requireCredential(credentials, 'meta', 'access_token'),
+      phone_number_id: input.channel.providerAccountId,
+    },
+    input.recipient,
+    input.template
+  )
+
+  await db.from('usage_ledger').insert({
+    organization_id: input.channel.organizationId,
+    business_id: input.channel.businessId,
+    event_type: 'message_outbound',
+    units: 1,
+    reference_type: 'channel',
+    reference_id: input.channel.id,
+    metadata: { channel_type: 'whatsapp', message_kind: 'template' },
+  })
+
+  return result
+}
+
 export async function recordDeliveredOutboundMessage(
   db: DbClient,
-  input: { organizationId: string; conversationId: string; body: string; idempotencyKey: string; state?: string }
+  input: { organizationId: string; conversationId: string; body: string; idempotencyKey: string; state?: string; externalMessageId?: string | null }
 ) {
   const { error } = await db.from('messages').insert({
     organization_id: input.organizationId,
@@ -97,7 +148,7 @@ export async function recordDeliveredOutboundMessage(
     direction: 'outbound',
     message_type: 'text',
     content: input.body,
-    external_message_id: input.idempotencyKey,
+    external_message_id: input.externalMessageId || input.idempotencyKey,
   })
   if (error && error.code !== '23505') throw new Error('outbound_message_record_failed')
 

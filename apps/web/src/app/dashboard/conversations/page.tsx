@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation'
 import { ar } from '@/lib/i18n/ar'
 import { formatDateTime } from '@/lib/i18n/format'
 import { SaveViewForm } from './save-view-form'
+import { NewWhatsAppConversation } from './new-conversation'
 import { InboxSearchForm } from './search-form'
 import { Chip } from '@/components/ui/chip'
 import { SectionHeader } from '@/components/ui/section-header'
@@ -147,6 +148,14 @@ export default async function ConversationsPage({
 
   return (
     <div className="space-y-5">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-lg font-bold text-text">المحادثات</h1>
+          <p className="mt-1 text-xs text-text-muted">أضف رقماً وابدأ محادثة أو تابع رسائل عملائك.</p>
+        </div>
+        <NewWhatsAppConversation />
+      </div>
+
       {/* Search Bar */}
       <InboxSearchForm initialQ={q} unreadOnly={unreadOnly} view={view} />
 
@@ -199,7 +208,7 @@ export default async function ConversationsPage({
       {!filtered || filtered.length === 0 ? (
         <MobileEmptyState
           title="لا توجد محادثات بعد"
-          description="ستظهر رسائل واستفسارات عملائك هنا فور استقبال أول رسالة عبر القنوات المربوطة."
+          description="ابدأ بإضافة رقم وإرسال قالب WhatsApp معتمد، أو انتظر أول رسالة من عملائك عبر القناة المتصلة."
           actionLabel="ربط قناة واتساب"
           onAction={undefined}
           action={
