@@ -794,15 +794,10 @@ export async function completeEmbeddedSignup(input: unknown): Promise<EmbeddedSi
     }
 
     await subscribeAppToWaba(wabaId, businessToken)
-    const coexistenceSync = connectionMode === 'coexistence'
-      ? await requestCoexistenceDataSync(admin, {
-          organizationId,
-          channelId,
-          phoneNumberId,
-          accessToken: businessToken,
-        })
-      : undefined
 
+    // Activate the verified channel before requesting sync: Meta may deliver
+    // contact/history webhooks immediately after each smb_app_data call, and
+    // webhook resolution only accepts active verified channels.
     const activated = await admin.from('channels').update({
       verification_status: connectionMode === 'coexistence' ? 'verified' : 'pending',
       is_active: connectionMode === 'coexistence',
@@ -812,6 +807,15 @@ export async function completeEmbeddedSignup(input: unknown): Promise<EmbeddedSi
       console.error('EmbeddedSignup: unable to finalize channel state', { channelId, error: activated.error })
       throw new Error('تم حفظ التفويض، لكن تعذّر تأكيد حالة قناة واتساب. أعد المحاولة من صفحة القنوات.')
     }
+
+    const coexistenceSync = connectionMode === 'coexistence'
+      ? await requestCoexistenceDataSync(admin, {
+          organizationId,
+          channelId,
+          phoneNumberId,
+          accessToken: businessToken,
+        })
+      : undefined
 
     if (displayNumber) {
       const { error: profileUpdateError } = await admin.from('business_profiles')
