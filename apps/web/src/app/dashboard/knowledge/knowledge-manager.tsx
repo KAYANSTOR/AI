@@ -297,8 +297,18 @@ export function KnowledgeManager({ rows, documents, canManage, currentPage, tota
                       </button>
                     )}
                   </div>
-                  <p className="mt-2 text-sm font-medium text-text">{revision.title}</p>
-                  <p className="mt-1 whitespace-pre-wrap text-xs text-text-muted">{revision.content}</p>
+                  <div className="mt-3 grid gap-3 md:grid-cols-2">
+                    <div className="rounded-lg border border-border p-3">
+                      <p className="text-[11px] font-semibold text-text-muted">المحتوى في الإصدار {revision.revision_number}</p>
+                      <p className="mt-2 text-sm font-medium text-text">{revision.title}</p>
+                      <p className="mt-1 whitespace-pre-wrap text-xs text-text-muted">{revision.content}</p>
+                    </div>
+                    <div className="rounded-lg border border-border p-3">
+                      <p className="text-[11px] font-semibold text-text-muted">المحتوى الحالي</p>
+                      <p className="mt-2 text-sm font-medium text-text">{rows.find((row) => row.id === historyId)?.title ?? 'غير متاح في الصفحة الحالية'}</p>
+                      <p className="mt-1 whitespace-pre-wrap text-xs text-text-muted">{rows.find((row) => row.id === historyId)?.content ?? 'ارجع إلى صفحة المدخل الحالية لعرض المقارنة.'}</p>
+                    </div>
+                  </div>
                   {revision.change_reason && <p className="mt-2 text-xs text-text-muted">السبب: {revision.change_reason}</p>}
                 </li>
               ))}
