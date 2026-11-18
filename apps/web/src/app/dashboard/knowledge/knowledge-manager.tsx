@@ -1,12 +1,15 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { BookOpen, Loader2, Pencil, Plus, Search, Trash2, X } from 'lucide-react'
+import { BookOpen, Loader2, Pencil, Plus, Search, X } from 'lucide-react'
 import {
   saveKnowledgeAction,
   setKnowledgeActiveAction,
   deleteKnowledgeAction,
   previewKnowledgeAction,
+  getKnowledgeRevisionsAction,
+  restoreKnowledgeRevisionAction,
+  type KnowledgeRevision,
   type KnowledgeResult,
 } from './actions'
 import { KNOWLEDGE_CATEGORIES } from './categories'
@@ -28,6 +31,8 @@ export function KnowledgeManager({ rows, canManage }: { rows: KnowledgeRow[]; ca
   const [query, setQuery] = useState('')
   const [pending, startTransition] = useTransition()
   const [preview, setPreview] = useState<{ titles: string[]; error?: string } | null>(null)
+  const [historyId, setHistoryId] = useState<string | null>(null)
+  const [history, setHistory] = useState<KnowledgeRevision[]>([])
 
   function run(work: () => Promise<KnowledgeResult>, resetOnSuccess = false) {
     setResult(null)
@@ -44,6 +49,16 @@ export function KnowledgeManager({ rows, canManage }: { rows: KnowledgeRow[]; ca
    * Asks the server to run the agent's own retrieval, so the preview cannot drift from what
    * the agent would actually find.
    */
+  function runHistory(id: string) {
+    setHistoryId(id)
+    setHistory([])
+    startTransition(async () => {
+      const outcome = await getKnowledgeRevisionsAction(id)
+      if (outcome.ok) setHistory(outcome.revisions ?? [])
+      else setResult({ ok: false, error: outcome.error })
+    })
+  }
+
   function runPreview() {
     setPreview(null)
     startTransition(async () => {
@@ -144,11 +159,10 @@ export function KnowledgeManager({ rows, canManage }: { rows: KnowledgeRow[]; ca
                   <button
                     type="button"
                     disabled={pending}
-                    onClick={() => run(() => deleteKnowledgeAction(row.id))}
-                    className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg border border-border text-text-muted transition-colors hover:border-error/40 hover:text-error"
-                    aria-label="حذف"
+                    onClick={() => runHistory(row.id)}
+                    className="min-h-11 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-text-muted"
                   >
-                    <Trash2 size={14} />
+                    سجل الإصدارات
                   </button>
                 </div>
               )}

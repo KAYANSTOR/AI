@@ -48,16 +48,18 @@ export async function saveKnowledgeAction(input: KnowledgeInput): Promise<Knowle
   }
 
   if (input.id) {
-    const { data, error } = await ctx.db
-      .from('knowledge_base')
-      .update({ title: payload.title, content: payload.content, category: payload.category, updated_at: payload.updated_at })
-      .eq('id', input.id)
-      .eq('organization_id', ctx.organizationId)
-      .select('id')
-      .maybeSingle()
+    const { data, error } = await ctx.db.rpc('update_knowledge_with_revision', {
+      p_organization_id: ctx.organizationId,
+      p_knowledge_id: input.id,
+      p_title: payload.title,
+      p_content: payload.content,
+      p_category: payload.category,
+      p_change_reason: 'تعديل يدوي من لوحة المعرفة',
+      p_change_type: 'update',
+    })
     if (error) return { ok: false, error: dbActionError(error) }
     if (!data) return { ok: false, error: 'لم يتم العثور على المدخل.' }
-    await audit(ctx, 'knowledge.updated', 'knowledge_base', data.id, { category: payload.category })
+    await audit(ctx, 'knowledge.updated', 'knowledge_base', input.id, { category: payload.category, revisioned: true })
     revalidatePath('/dashboard/knowledge')
     return { ok: true, message: 'تم تحديث المدخل.' }
   }
@@ -79,17 +81,16 @@ export async function setKnowledgeActiveAction(id: string, isActive: boolean): P
     return { ok: false, error: actionErrorMessage(error, 'غير مصرح.') }
   }
 
-  const { data, error } = await ctx.db
-    .from('knowledge_base')
-    .update({ is_active: isActive, updated_at: new Date().toISOString() })
-    .eq('id', id)
-    .eq('organization_id', ctx.organizationId)
-    .select('id')
-    .maybeSingle()
+  const { data, error } = await ctx.db.rpc('set_knowledge_active_with_revision', {
+    p_organization_id: ctx.organizationId,
+    p_knowledge_id: id,
+    p_is_active: isActive,
+    p_change_reason: isActive ? 'إعادة تفعيل من لوحة المعرفة' : 'أرشفة من لوحة المعرفة',
+  })
   if (error) return { ok: false, error: dbActionError(error) }
   if (!data) return { ok: false, error: 'لم يتم العثور على المدخل.' }
 
-  await audit(ctx, isActive ? 'knowledge.activated' : 'knowledge.deactivated', 'knowledge_base', id)
+  await audit(ctx, isActive ? 'knowledge.activated' : 'knowledge.archived', 'knowledge_base', id)
   revalidatePath('/dashboard/knowledge')
   return { ok: true, message: isActive ? 'تم تفعيل المدخل.' : 'تم تعطيل المدخل، ولن يستخدمه الوكيل.' }
 }
@@ -123,14 +124,78 @@ export async function deleteKnowledgeAction(id: string): Promise<KnowledgeResult
     return { ok: false, error: actionErrorMessage(error, 'غير مصرح.') }
   }
 
-  const { error } = await ctx.db
-    .from('knowledge_base')
-    .delete()
-    .eq('id', id)
-    .eq('organization_id', ctx.organizationId)
+  const { data, error } = await ctx.db.rpc('set_knowledge_active_with_revision', {
+    p_organization_id: ctx.organizationId,
+    p_knowledge_id: id,
+    p_is_active: false,
+    p_change_reason: 'أرشفة من لوحة المعرفة',
+  })
   if (error) return { ok: false, error: dbActionError(error) }
+  if (!data) return { ok: false, error: 'لم يتم العثور على المدخل.' }
 
-  await audit(ctx, 'knowledge.deleted', 'knowledge_base', id)
+  await audit(ctx, 'knowledge.archived', 'knowledge_base', id)
   revalidatePath('/dashboard/knowledge')
-  return { ok: true, message: 'تم حذف المدخل.' }
+  return { ok: true, message: 'تمت أرشفة المدخل مع الاحتفاظ بسجله.' }
+}
+
+
+export type KnowledgeRevision = {
+  id: string
+  revision_number: number
+  title: string
+  content: string
+  category: string
+  is_active: boolean
+  change_type: string
+  change_reason: string | null
+  created_at: string
+}
+
+export async function getKnowledgeRevisionsAction(id: string): Promise<{ ok: boolean; revisions?: KnowledgeRevision[]; error?: string }> {
+  try {
+    const ctx = await requireAdminCapability('knowledge_base')
+    const { data, error } = await ctx.db
+      .from('knowledge_revisions')
+      .select('id, revision_number, title, content, category, is_active, change_type, change_reason, created_at')
+      .eq('organization_id', ctx.organizationId)
+      .eq('knowledge_id', id)
+      .order('revision_number', { ascending: false })
+      .limit(30)
+    if (error) return { ok: false, error: dbActionError(error) }
+    return { ok: true, revisions: (data ?? []) as KnowledgeRevision[] }
+  } catch (error) {
+    return { ok: false, error: actionErrorMessage(error, 'تعذّر تحميل سجل الإصدارات.') }
+  }
+}
+
+export async function restoreKnowledgeRevisionAction(id: string, revisionId: string): Promise<KnowledgeResult> {
+  try {
+    const ctx = await requireAdminCapability('knowledge_base')
+    const { data: revision, error: revisionError } = await ctx.db
+      .from('knowledge_revisions')
+      .select('title, content, category')
+      .eq('id', revisionId)
+      .eq('knowledge_id', id)
+      .eq('organization_id', ctx.organizationId)
+      .maybeSingle()
+    if (revisionError) return { ok: false, error: dbActionError(revisionError) }
+    if (!revision) return { ok: false, error: 'الإصدار المطلوب غير موجود.' }
+
+    const { data, error } = await ctx.db.rpc('update_knowledge_with_revision', {
+      p_organization_id: ctx.organizationId,
+      p_knowledge_id: id,
+      p_title: revision.title,
+      p_content: revision.content,
+      p_category: revision.category,
+      p_change_reason: `استعادة الإصدار ${revisionId}`,
+      p_change_type: 'restore',
+    })
+    if (error) return { ok: false, error: dbActionError(error) }
+    if (!data) return { ok: false, error: 'تعذّرت استعادة الإصدار.' }
+    await audit(ctx, 'knowledge.restored', 'knowledge_base', id, { revisionId })
+    revalidatePath('/dashboard/knowledge')
+    return { ok: true, message: 'تمت استعادة الإصدار مع الاحتفاظ بالحالة السابقة في السجل.' }
+  } catch (error) {
+    return { ok: false, error: actionErrorMessage(error, 'تعذّرت استعادة الإصدار.') }
+  }
 }
