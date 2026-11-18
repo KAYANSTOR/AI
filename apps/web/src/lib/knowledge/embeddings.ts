@@ -23,7 +23,7 @@ export async function embedKnowledgeText(
   title?: string
 ): Promise<number[] | null> {
   const apiKey = process.env.GEMINI_API_KEY?.trim()
-  if (!apiKey || process.env.NODE_ENV === 'test' || !text.trim()) return null
+  if (process.env.KNOWLEDGE_EMBEDDING_ENABLED !== 'true' || !apiKey || process.env.NODE_ENV === 'test' || !text.trim()) return null
 
   try {
     const response = await fetch(

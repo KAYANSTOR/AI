@@ -214,7 +214,7 @@ export function KnowledgeManager({ rows, canManage }: { rows: KnowledgeRow[]; ca
       {canManage && (
         <section className="rounded-xl border border-border bg-surface p-4">
           <h2 className="text-sm font-semibold text-text">تفعيل البحث الدلالي للمعلومات السابقة</h2>
-          <p className="mt-1 text-xs text-text-muted">يعالج هذا الإجراء المعلومات القديمة التي لم تُنشأ لها متجهات بحث بعد. تتم المعالجة على دفعات صغيرة مع بقاء البحث النصّي متاحاً.</p>
+          <p className="mt-1 text-xs text-text-muted">يعالج هذا الإجراء المعلومات القديمة التي لم تُنشأ لها متجهات بحث بعد. تتم المعالجة على دفعات صغيرة مع بقاء البحث النصّي متاحاً. يتطلب ذلك تفعيل KNOWLEDGE_EMBEDDING_ENABLED في الخادم بعد مراجعة سياسة بيانات Gemini.</p>
           <div className="mt-3 flex flex-wrap items-center gap-3">
             <button type="button" disabled={pending} onClick={runEmbeddingBackfill} className="min-h-10 rounded-lg border border-border px-3 py-2 text-xs font-medium text-text disabled:opacity-60">
               {pending ? 'جارٍ الفهرسة…' : 'فهرسة دفعة من المعلومات'}

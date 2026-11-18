@@ -193,6 +193,7 @@ export async function restoreKnowledgeRevisionAction(id: string, revisionId: str
     if (revisionError) return { ok: false, error: dbActionError(revisionError) }
     if (!revision) return { ok: false, error: 'الإصدار المطلوب غير موجود.' }
 
+    const restoredEmbedding = await embedKnowledgeText(revision.content, 'document', revision.title)
     const { data, error } = await ctx.db.rpc('update_knowledge_with_revision', {
       p_organization_id: ctx.organizationId,
       p_knowledge_id: id,
@@ -200,8 +201,8 @@ export async function restoreKnowledgeRevisionAction(id: string, revisionId: str
       p_content: revision.content,
       p_category: revision.category,
       p_content_hash: knowledgeContentHash(revision.content),
-      p_content_embedding: await embedKnowledgeText(revision.content, 'document', revision.title),
-      p_embedding_model: KNOWLEDGE_EMBEDDING_MODEL,
+      p_content_embedding: restoredEmbedding,
+      p_embedding_model: restoredEmbedding ? KNOWLEDGE_EMBEDDING_MODEL : null,
       p_change_reason: `استعادة الإصدار ${revisionId}`,
       p_change_type: 'restore',
     })
@@ -360,8 +361,8 @@ export async function indexLegacyKnowledgeEmbeddingsAction(): Promise<{
 }> {
   try {
     const ctx = await requireAdminCapability('knowledge_base')
-    if (!process.env.GEMINI_API_KEY?.trim()) {
-      return { ok: false, error: 'أضف GEMINI_API_KEY إلى إعدادات الخادم لتفعيل الفهرسة الدلالية.' }
+    if (process.env.KNOWLEDGE_EMBEDDING_ENABLED !== 'true' || !process.env.GEMINI_API_KEY?.trim()) {
+      return { ok: false, error: 'فعّل KNOWLEDGE_EMBEDDING_ENABLED=true في الخادم، وتأكد من إعداد Gemini API بسياسة بيانات مناسبة قبل إرسال معلومات المؤسسة للتضمين.' }
     }
     const { data: rows, error } = await ctx.db
       .from('knowledge_base')

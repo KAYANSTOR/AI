@@ -93,3 +93,27 @@ describe('cumulative knowledge writes', () => {
     expect(fake.store.knowledge_base?.rows).toHaveLength(0)
   })
 })
+
+
+describe('hybrid knowledge search integration', () => {
+  test('sends tenant scope and hybrid query parameters to the database ranking function', async () => {
+    const fake = createFakeDb({}, {
+      search_knowledge_hybrid(args) {
+        expect(args.p_organization_id).toBe(ORG_A)
+        expect(args.p_query).toBe('الغاء الحجز')
+        expect(args.p_query_embedding).toBeNull()
+        expect(args.p_limit).toBe(8)
+        return [{
+          id: 'semantic-hit',
+          title: 'سياسة الحجز',
+          category: 'policy',
+          content: 'يمكن تعديل الحجز قبل الموعد.',
+          score: 0.81,
+        }]
+      },
+    })
+    const db = fake.client as unknown as DbClient
+    const matches = await searchKnowledge(db, ORG_A, 'إلغاء الحجز')
+    expect(matches.map((match) => match.id)).toEqual(['semantic-hit'])
+  })
+})
