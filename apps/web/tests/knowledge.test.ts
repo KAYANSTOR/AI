@@ -164,6 +164,6 @@ describe('context-budgeted knowledge retrieval', () => {
     }))
     const small = await retrieveContextualKnowledge(dbWith(rows), ORG_A, 'السياسة', { contextTokenBudget: 80 })
     const large = await retrieveContextualKnowledge(dbWith(rows), ORG_A, 'السياسة', { contextTokenBudget: 1800 })
-    expect(large.matchedKnowledge.length).toBeGreaterThanOrEqual(small.matchedKnowledge.length)
+    expect(large.matchedKnowledge.length >= small.matchedKnowledge.length).toBe(true)
   })
 })
