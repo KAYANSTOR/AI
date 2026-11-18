@@ -116,6 +116,7 @@ class Builder implements PromiseLike<PostgrestResult> {
   private filters: Filter[] = []
   private orderBy: { column: string; ascending: boolean } | null = null
   private limitN: number | null = null
+  private offsetN = 0
   private kind: 'select' | 'insert' | 'update' | 'upsert' | 'delete' = 'select'
   private current: Row | null = null
   private patch: Row | null = null
@@ -232,6 +233,12 @@ class Builder implements PromiseLike<PostgrestResult> {
     return this
   }
 
+  range(from: number, to: number) {
+    this.offsetN = Math.max(0, from)
+    this.limitN = Math.max(0, to - from + 1)
+    return this
+  }
+
   maybeSingle() {
     return this.run('maybeSingle')
   }
@@ -256,6 +263,7 @@ class Builder implements PromiseLike<PostgrestResult> {
         return ascending ? order : -order
       })
     }
+    if (this.offsetN > 0) rows = rows.slice(this.offsetN)
     if (this.limitN !== null) rows = rows.slice(0, this.limitN)
     return rows
   }

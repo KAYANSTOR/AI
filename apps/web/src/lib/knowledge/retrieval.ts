@@ -1,6 +1,8 @@
 import type { DbClient } from '@/lib/db/client'
-import { normalizeKnowledgeText } from './layer'
 export type KnowledgeMatch = { id: string; title: string; category: string; content: string; score: number }
+function normalizeKnowledgeText(value: string): string {
+  return value.normalize('NFKC').toLocaleLowerCase('ar').replace(/[\u064B-\u065F\u0670\u0640]/g, '').replace(/[أإآٱ]/g, 'ا').replace(/ى/g, 'ي').replace(/[\u200B-\u200F\uFEFF]/g, '').replace(/[^\p{L}\p{N}]+/gu, ' ').trim().replace(/\s+/g, ' ')
+}
 const STOP_WORDS = new Set(['the','and','for','are','you','your','with','what','when','how','does','can','should','would','about','from','have','has','this','that','هل','ما','من','في','على','عن','الي','هو','هي','كيف','متي','اين'])
 export function tokenize(query: string): string[] { return normalizeKnowledgeText(query).split(' ').filter((t) => t.length >= 2 && !STOP_WORDS.has(t)) }
 function lexicalScore(title: string, content: string, tokens: string[], query: string): number {

@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import type { DbClient } from '@/lib/db/client'
 import { createFakeDb } from './support/fake-db'
 import { searchKnowledge, tokenize } from '@/lib/knowledge/retrieval'
+import { knowledgeContentHash, normalizeKnowledgeText, saveValidatedKnowledge } from '@/lib/knowledge/layer'
 
 const ORG_A = 'aaaaaaaa-0000-4000-8000-00000000000a'
 const ORG_B = 'bbbbbbbb-0000-4000-8000-00000000000b'
@@ -58,5 +59,37 @@ describe('knowledge retrieval', () => {
     expect(tokenize('ما هي سياسة الإلغاء')).not.toContain('ما')
     expect(tokenize('ما هي سياسة الإلغاء')).toContain('سياسة')
     expect(tokenize('')).toEqual([])
+  })
+})
+
+
+describe('cumulative knowledge writes', () => {
+  test('normalizes Arabic variants and diacritics for stable content identity', () => {
+    expect(normalizeKnowledgeText('إِلغاءُ الحجز')).toBe(normalizeKnowledgeText('الغاء الحجز'))
+    expect(knowledgeContentHash('السعر ١٠٠')).toBe(knowledgeContentHash('السعر ١٠٠'))
+  })
+
+  test('keeps different facts with similar titles and skips only exact normalized duplicates', async () => {
+    const fake = createFakeDb({
+      knowledge_base: { rows: [], unique: [{ columns: ['organization_id', 'content_hash'] }] },
+    })
+    const db = fake.client as unknown as DbClient
+    const saved = await saveValidatedKnowledge(db, ORG_A, [
+      { title: 'ساعات العمل', category: 'business_info', content: 'الدوام من الأحد إلى الخميس من التاسعة صباحاً.' },
+      { title: 'ساعات العمل', category: 'business_info', content: 'الدوام يوم الجمعة من الرابعة إلى العاشرة مساءً.' },
+      { title: 'مواعيد الدوام', category: 'business_info', content: 'الدوام من الأحد إلى الخميس من التاسعة صباحاً.' },
+    ])
+    expect(saved.map((item) => item.action)).toEqual(['inserted', 'inserted', 'duplicate'])
+    expect(fake.store.knowledge_base?.rows).toHaveLength(2)
+  })
+
+  test('does not persist facts marked as needing confirmation', async () => {
+    const fake = createFakeDb({ knowledge_base: { rows: [] } })
+    const db = fake.client as unknown as DbClient
+    const saved = await saveValidatedKnowledge(db, ORG_A, [
+      { title: 'سعر غير مؤكد', category: 'pricing', content: 'قد يكون السعر 100 ريال', confidence: 'needs_confirmation' },
+    ])
+    expect(saved).toEqual([])
+    expect(fake.store.knowledge_base?.rows).toHaveLength(0)
   })
 })
