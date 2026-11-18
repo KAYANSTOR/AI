@@ -1,8 +1,12 @@
 import { describe, expect, test } from 'bun:test'
 import type { DbClient } from '@/lib/db/client'
 import {
+  CompleteEmbeddedSignupInputSchema,
+  EmbeddedSignupSessionSchema,
   createEmbeddedSignupOAuthState,
+  debugCustomerAccessToken,
   ensureBusinessId,
+  hasMetaWabaAccess,
   verifyEmbeddedSignupOAuthState,
 } from '@/lib/channels/embedded-signup'
 import { createFakeDb } from './support/fake-db'
@@ -142,5 +146,109 @@ describe('WhatsApp Embedded Signup OAuth callback state', () => {
       Date.now = realNow
       restoreTestEnvironment()
     }
+  })
+})
+
+
+describe('WhatsApp Embedded Signup input validation', () => {
+  const validInput = {
+    organizationId: ORG,
+    businessId: EXISTING_BUSINESS,
+    organizationName: 'Kayan',
+    session: {
+      code: 'single-use-meta-code',
+      phoneNumberId: '123456789012345',
+      wabaId: '987654321098765',
+      businessPortfolioId: '111222333444555',
+      redirectUri: 'https://kayan-ai.up.railway.app/api/whatsapp/embedded-signup-callback',
+      primaryWaacIds: ['123456789'],
+    },
+  }
+
+  test('accepts well-formed tenant-bound signup data', () => {
+    expect(CompleteEmbeddedSignupInputSchema.safeParse(validInput).success).toBe(true)
+  })
+
+  test('rejects malformed provider identifiers and unexpected fields', () => {
+    expect(EmbeddedSignupSessionSchema.safeParse({ code: 'code', phoneNumberId: 'not-a-meta-id' }).success).toBe(false)
+    expect(CompleteEmbeddedSignupInputSchema.safeParse({
+      ...validInput,
+      unexpectedAccessToken: 'must-not-be-accepted',
+    }).success).toBe(false)
+  })
+})
+
+describe('Meta access-token validation', () => {
+  const originalFetch = globalThis.fetch
+  const originalAppId = process.env.NEXT_PUBLIC_META_APP_ID
+  const originalAppSecret = process.env.META_APP_SECRET
+
+  function restore() {
+    globalThis.fetch = originalFetch
+    if (originalAppId === undefined) delete process.env.NEXT_PUBLIC_META_APP_ID
+    else process.env.NEXT_PUBLIC_META_APP_ID = originalAppId
+    if (originalAppSecret === undefined) delete process.env.META_APP_SECRET
+    else process.env.META_APP_SECRET = originalAppSecret
+  }
+
+  function mockDebugToken(data: Record<string, unknown>) {
+    globalThis.fetch = (async () => new Response(JSON.stringify({ data }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    })) as typeof fetch
+  }
+
+  function validDebugData(overrides: Record<string, unknown> = {}) {
+    return {
+      is_valid: true,
+      app_id: '2178786043520227',
+      scopes: ['whatsapp_business_management', 'whatsapp_business_messaging'],
+      expires_at: 0,
+      granular_scopes: [{
+        scope: 'whatsapp_business_management',
+        target_ids: ['987654321098765'],
+      }],
+      ...overrides,
+    }
+  }
+
+  test('accepts a valid token for the expected app and WABA', async () => {
+    process.env.NEXT_PUBLIC_META_APP_ID = '2178786043520227'
+    process.env.META_APP_SECRET = 'test-meta-app-secret'
+    mockDebugToken(validDebugData())
+    try {
+      const debug = await debugCustomerAccessToken(Buffer.from('temporary-access-token'))
+      expect(hasMetaWabaAccess(debug, '987654321098765')).toBe(true)
+      expect(hasMetaWabaAccess(debug, '000000000000000')).toBe(false)
+    } finally { restore() }
+  })
+
+  test('rejects a token issued to a different Meta application', async () => {
+    process.env.NEXT_PUBLIC_META_APP_ID = '2178786043520227'
+    process.env.META_APP_SECRET = 'test-meta-app-secret'
+    mockDebugToken(validDebugData({ app_id: '999999999999999' }))
+    try {
+      await expect(debugCustomerAccessToken(Buffer.from('temporary-access-token'))).rejects.toThrow('لا يتبع تطبيق Kayan AI الحالي')
+    } finally { restore() }
+  })
+
+  test('rejects missing WhatsApp permissions and expired tokens', async () => {
+    process.env.NEXT_PUBLIC_META_APP_ID = '2178786043520227'
+    process.env.META_APP_SECRET = 'test-meta-app-secret'
+    mockDebugToken(validDebugData({ scopes: ['whatsapp_business_management'] }))
+    try {
+      await expect(debugCustomerAccessToken(Buffer.from('temporary-access-token'))).rejects.toThrow('لم تمنح Meta جميع صلاحيات WhatsApp المطلوبة')
+      mockDebugToken(validDebugData({ expires_at: Math.floor(Date.now() / 1000) - 60 }))
+      await expect(debugCustomerAccessToken(Buffer.from('temporary-access-token'))).rejects.toThrow('انتهت صلاحية التفويض')
+    } finally { restore() }
+  })
+
+  test('rejects token responses without a WhatsApp asset grant', async () => {
+    process.env.NEXT_PUBLIC_META_APP_ID = '2178786043520227'
+    process.env.META_APP_SECRET = 'test-meta-app-secret'
+    mockDebugToken(validDebugData({ granular_scopes: [] }))
+    try {
+      await expect(debugCustomerAccessToken(Buffer.from('temporary-access-token'))).rejects.toThrow('تعذّر تأكيد صلاحية الوصول إلى حساب WhatsApp Business')
+    } finally { restore() }
   })
 })

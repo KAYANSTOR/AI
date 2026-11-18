@@ -15,6 +15,7 @@ import type { DbClient } from '@/lib/db/client'
 import { deleteChannelCredential, loadChannelCredentials, saveChannelCredential } from '@/lib/credentials/service'
 import { normalizeChannelNumber } from '@/lib/channels/management'
 import { resolveWhatsAppConnectionMode } from '@/lib/channels/whatsapp-connection-mode'
+import { z } from 'zod'
 
 const GRAPH_VERSION = 'v26.0'
 
@@ -153,6 +154,24 @@ export type EmbeddedSignupSession = {
   primaryWaacIds?: string[]
 }
 
+export const EmbeddedSignupSessionSchema = z.object({
+  code: z.string().trim().min(1).max(4096),
+  phoneNumberId: z.string().trim().regex(/^\d{1,40}$/).nullable().optional(),
+  wabaId: z.string().trim().regex(/^\d{1,40}$/).nullable().optional(),
+  businessPortfolioId: z.string().trim().regex(/^\d{1,40}$/).nullable().optional(),
+  redirectUri: z.string().url().max(2048).nullable().optional(),
+  displayPhoneNumber: z.string().trim().max(40).nullable().optional(),
+  isOnBusinessApp: z.boolean().optional(),
+  primaryWaacIds: z.array(z.string().regex(/^\d{1,40}$/)).max(100).optional(),
+}).strict()
+
+export const CompleteEmbeddedSignupInputSchema = z.object({
+  organizationId: z.string().uuid(),
+  businessId: z.string().uuid().nullable(),
+  organizationName: z.string().trim().max(200).nullable().optional(),
+  session: EmbeddedSignupSessionSchema,
+}).strict()
+
 export type EmbeddedSignupResult =
   | {
       ok: true
@@ -166,7 +185,7 @@ export type EmbeddedSignupResult =
   | { ok: false; error: string }
 
 /** Exchange the short-lived code from FB.login for a business integration token. */
-async function exchangeCodeForBusinessToken(code: string, redirectUri?: string | null): Promise<string> {
+async function exchangeCodeForBusinessToken(code: string, redirectUri?: string | null): Promise<Buffer> {
   const appId = requireEnv('NEXT_PUBLIC_META_APP_ID')
   const appSecret = requireEnv('META_APP_SECRET')
   const url = new URL(`${getMetaGraphBaseUrl()}/oauth/access_token`)
@@ -177,8 +196,8 @@ async function exchangeCodeForBusinessToken(code: string, redirectUri?: string |
 
   const response = await fetchMeta(url.toString(), { method: 'GET' })
   if (!response.ok) {
-    const body = await response.text().catch(() => '')
-    console.error('EmbeddedSignup: code exchange failed', response.status, body)
+    // Do not log provider response bodies; they may contain sensitive OAuth data.
+    console.error('EmbeddedSignup: code exchange failed', { status: response.status })
     throw new Error('تعذّر إتمام الربط مع Meta. حاول مرة أخرى.')
   }
 
@@ -187,7 +206,7 @@ async function exchangeCodeForBusinessToken(code: string, redirectUri?: string |
   if (contentType.includes('application/json')) {
     const json = (await response.json()) as { access_token?: string }
     if (!json.access_token) throw new Error('تعذّر إتمام الربط مع Meta. حاول مرة أخرى.')
-    return json.access_token
+    return Buffer.from(json.access_token, 'utf8')
   }
 
   const text = (await response.text()).trim()
@@ -196,15 +215,15 @@ async function exchangeCodeForBusinessToken(code: string, redirectUri?: string |
   if (text.startsWith('{')) {
     const json = JSON.parse(text) as { access_token?: string }
     if (!json.access_token) throw new Error('تعذّر إتمام الربط مع Meta. حاول مرة أخرى.')
-    return json.access_token
+    return Buffer.from(json.access_token, 'utf8')
   }
   if (text.includes('access_token=')) {
     const params = new URLSearchParams(text)
     const token = params.get('access_token')
     if (!token) throw new Error('تعذّر إتمام الربط مع Meta. حاول مرة أخرى.')
-    return token
+    return Buffer.from(token, 'utf8')
   }
-  return text
+  return Buffer.from(text, 'utf8')
 }
 
 async function subscribeAppToWaba(wabaId: string, businessToken: string): Promise<void> {
@@ -274,57 +293,90 @@ async function verifyPhoneBelongsToWaba(
 
 type GraphListResponse<T> = { data?: T[]; error?: { message?: string } }
 
-/** Resolve resources from explicit session data or the token's granted WABA scopes. */
-async function resolveSignupResources(
-  session: EmbeddedSignupSession,
-  businessToken: string
-): Promise<{ phoneNumberId: string; wabaId: string }> {
-  if (session.phoneNumberId && session.wabaId) {
-    return { phoneNumberId: session.phoneNumberId, wabaId: session.wabaId }
-  }
+export type MetaTokenDebugResult = {
+  scopes: string[]
+  expiresAt: number | null
+  granularScopes: Array<{ scope?: string; target_ids?: string[] }>
+  grantedWabaIds: string[]
+}
 
+/** Always validate the exchanged token, even when IDs came from the browser. */
+export async function debugCustomerAccessToken(tokenBuffer: Buffer): Promise<MetaTokenDebugResult> {
+  if (!Buffer.isBuffer(tokenBuffer) || tokenBuffer.length === 0) {
+    throw new Error('تعذّر التحقق من التفويض الذي أعادته Meta. أعد الربط.')
+  }
   const appId = requireEnv('NEXT_PUBLIC_META_APP_ID')
   const appSecret = requireEnv('META_APP_SECRET')
-  const appAccessToken = `${appId}|${appSecret}`
-  const debugUrl = new URL(`${getMetaGraphBaseUrl()}/debug_token`)
-  debugUrl.searchParams.set('input_token', businessToken)
-  const debugResponse = await fetchMeta(debugUrl.toString(), {
-    headers: { Authorization: `Bearer ${appAccessToken}` },
-    cache: 'no-store',
-  })
-  const debugBody = await debugResponse.json().catch(() => null) as {
+  const url = new URL(getMetaGraphBaseUrl() + '/debug_token')
+  url.searchParams.set('input_token', tokenBuffer.toString('utf8'))
+  url.searchParams.set('access_token', appId + '|' + appSecret)
+
+  const response = await fetchMeta(url.toString(), { cache: 'no-store' })
+  const body = await response.json().catch(() => null) as {
     data?: {
       is_valid?: boolean
+      app_id?: string | number
+      scopes?: string[]
+      expires_at?: number
       granular_scopes?: Array<{ scope?: string; target_ids?: string[] }>
     }
     error?: { message?: string }
   } | null
 
-  if (!debugResponse.ok || debugBody?.data?.is_valid !== true) {
+  if (!response.ok || !body?.data) {
     console.error('EmbeddedSignup: token debug failed', {
-      status: debugResponse.status,
-      error: debugBody?.error?.message ?? 'Meta did not validate the exchanged token',
+      status: response.status,
+      error: body?.error?.message ?? 'Meta returned no token debug data',
     })
     throw new Error('تعذّر التحقق من صلاحية التفويض الذي أعادته Meta. أعد الربط.')
   }
+  const data = body.data
+  if (data.is_valid !== true) {
+    throw new Error('تعذّر التحقق من صلاحية التفويض الذي أعادته Meta. أعد الربط.')
+  }
+  if (String(data.app_id ?? '') !== appId) {
+    throw new Error('رفضت Meta التفويض لأنه لا يتبع تطبيق Kayan AI الحالي. أعد الربط من التطبيق الصحيح.')
+  }
 
-  // For Embedded Signup, Meta's token debugger exposes the assets actually
-  // granted to this token. Never treat /me.id as a Business Portfolio ID.
-  const grantedWabaIds = (debugBody.data.granular_scopes ?? [])
-    .filter((scope) => scope.scope === 'whatsapp_business_management')
-    .flatMap((scope) => scope.target_ids ?? [])
+  const scopes = Array.isArray(data.scopes) ? data.scopes : []
+  const required = ['whatsapp_business_management', 'whatsapp_business_messaging']
+  if (required.some((scope) => !scopes.includes(scope))) {
+    throw new Error('لم تمنح Meta جميع صلاحيات WhatsApp المطلوبة. أعد الربط ووافق على صلاحيات إدارة وإرسال الرسائل.')
+  }
+
+  const expiresAt = typeof data.expires_at === 'number' ? data.expires_at : null
+  if (expiresAt !== null && expiresAt !== 0 && expiresAt < Math.floor(Date.now() / 1000)) {
+    throw new Error('انتهت صلاحية التفويض الذي أعادته Meta. أعد ربط الرقم.')
+  }
+
+  const granularScopes = Array.isArray(data.granular_scopes) ? data.granular_scopes : []
+  const managementGrant = granularScopes.find((grant) => grant.scope === 'whatsapp_business_management')
+  if (!managementGrant) {
+    throw new Error('تعذّر تأكيد صلاحية الوصول إلى حساب WhatsApp Business. أعد الربط.')
+  }
+  const grantedWabaIds = (managementGrant.target_ids ?? [])
     .filter((id, index, all) => Boolean(id) && all.indexOf(id) === index)
+  return { scopes, expiresAt, granularScopes, grantedWabaIds }
+}
 
-  // The session's business_id is a real Business Portfolio ID supplied by
-  // Meta. Query its owned and client WABAs; never substitute /me.id here.
+export function hasMetaWabaAccess(debug: MetaTokenDebugResult, wabaId: string): boolean {
+  const grant = debug.granularScopes.find((scope) => scope.scope === 'whatsapp_business_management')
+  return Boolean(grant && (!grant.target_ids || grant.target_ids.includes(wabaId)))
+}
+
+async function resolveSignupResources(
+  session: EmbeddedSignupSession,
+  businessToken: string,
+  grantedWabaIds: string[]
+): Promise<{ phoneNumberId: string; wabaId: string }> {
   const businessWabaIds: string[] = []
   if (session.businessPortfolioId && !session.wabaId) {
     for (const edge of ['owned_whatsapp_business_accounts', 'client_whatsapp_business_accounts']) {
-      const businessUrl = new URL(`${getMetaGraphBaseUrl()}/${encodeURIComponent(session.businessPortfolioId)}/${edge}`)
+      const businessUrl = new URL(getMetaGraphBaseUrl() + '/' + encodeURIComponent(session.businessPortfolioId) + '/' + edge)
       businessUrl.searchParams.set('fields', 'id')
       businessUrl.searchParams.set('limit', '100')
       const businessResponse = await fetchMeta(businessUrl.toString(), {
-        headers: { Authorization: `Bearer ${businessToken}` },
+        headers: { Authorization: 'Bearer ' + businessToken },
         cache: 'no-store',
       })
       const businessBody = await businessResponse.json().catch(() => null) as GraphListResponse<{ id?: string }> | null
@@ -344,31 +396,27 @@ async function resolveSignupResources(
   }
 
   for (const wabaId of wabaIds) {
-    const url = new URL(`${getMetaGraphBaseUrl()}/${encodeURIComponent(wabaId)}/phone_numbers`)
+    const url = new URL(getMetaGraphBaseUrl() + '/' + encodeURIComponent(wabaId) + '/phone_numbers')
     url.searchParams.set('fields', 'id')
     url.searchParams.set('limit', '100')
     const response = await fetchMeta(url.toString(), {
-      headers: { Authorization: `Bearer ${businessToken}` },
+      headers: { Authorization: 'Bearer ' + businessToken },
       cache: 'no-store',
     })
     const body = await response.json().catch(() => null) as GraphListResponse<{ id?: string }> | null
     if (!response.ok) {
       console.error('EmbeddedSignup: phone discovery failed', {
         status: response.status,
-        error: (body as { error?: { message?: string } } | null)?.error?.message ?? 'Meta denied access to WABA phone numbers',
+        error: body?.error?.message ?? 'Meta denied access to WABA phone numbers',
       })
       continue
     }
-
     const phones = (body?.data ?? []).map((phone) => phone.id).filter((id): id is string => Boolean(id))
     const phoneNumberId = session.phoneNumberId
       ? phones.find((id) => id === session.phoneNumberId)
       : phones.length === 1 ? phones[0] : undefined
-
-    // Do not silently choose a phone when a WABA contains multiple numbers.
     if (phoneNumberId) return { phoneNumberId, wabaId }
   }
-
   throw new Error('لم تتمكن Meta من تحديد رقم الهاتف بشكل مؤكد. أعد الربط من نافذة Meta.')
 }
 
@@ -457,88 +505,88 @@ export async function ensureBusinessId(
  * Completes onboarding after Embedded Signup returns session data + code.
  * Idempotent for the same organization + phone_number_id.
  */
-export async function completeEmbeddedSignup(input: {
-  organizationId: string
-  businessId: string | null
-  organizationName?: string | null
-  session: EmbeddedSignupSession
-}): Promise<EmbeddedSignupResult> {
-  const { code } = input.session
-  if (!code) {
-    return { ok: false, error: 'بيانات الربط من Meta غير مكتملة. حاول مرة أخرى.' }
+export async function completeEmbeddedSignup(input: unknown): Promise<EmbeddedSignupResult> {
+  const parsedInput = CompleteEmbeddedSignupInputSchema.safeParse(input)
+  if (!parsedInput.success) {
+    return { ok: false, error: 'بيانات الربط من Meta غير مكتملة أو غير صالحة. أعد بدء الربط.' }
   }
+  const { organizationId, businessId: suppliedBusinessId, organizationName, session } = parsedInput.data
+  let tokenBuffer: Buffer | null = null
 
   try {
-    const businessToken = await exchangeCodeForBusinessToken(code, input.session.redirectUri)
-    const { phoneNumberId, wabaId } = await resolveSignupResources(input.session, businessToken)
-    const admin = createAdminClient()
-    const businessId = await ensureBusinessId(admin, input.organizationId, input.businessId, input.organizationName)
+    tokenBuffer = await exchangeCodeForBusinessToken(session.code, session.redirectUri)
+    const tokenDebug = await debugCustomerAccessToken(tokenBuffer)
+    const businessToken = tokenBuffer.toString('utf8')
+    const resources = await resolveSignupResources(session, businessToken, tokenDebug.grantedWabaIds)
+    const phoneNumberId = resources.phoneNumberId
+    const wabaId = resources.wabaId
+    if (!hasMetaWabaAccess(tokenDebug, wabaId)) {
+      throw new Error('تعذّر تأكيد أن التفويض يسمح بالوصول إلى حساب WhatsApp المختار. أعد الربط واختر الحساب الصحيح.')
+    }
 
-    // Verify the Meta phone and webhook subscription before preparing the channel for registration.
+    const admin = createAdminClient()
+    const resolvedBusinessId = await ensureBusinessId(admin, organizationId, suppliedBusinessId, organizationName)
     await verifyPhoneBelongsToWaba(wabaId, phoneNumberId, businessToken)
     const phoneState = await fetchVerifiedPhoneNumber(phoneNumberId, businessToken)
     const connectionMode = resolveWhatsAppConnectionMode({
       isOnBizApp: phoneState.isOnBizApp,
       platformType: phoneState.platformType,
-      sessionMarkedCoexistence: input.session.isOnBusinessApp === true,
+      sessionMarkedCoexistence: session.isOnBusinessApp === true,
     })
-    await subscribeAppToWaba(wabaId, businessToken)
     const displayNumber = phoneState.displayPhoneNumber ??
-      (input.session.displayPhoneNumber ? normalizeChannelNumber(input.session.displayPhoneNumber) : null)
-    const primaryWaacIds = Array.from(new Set((input.session.primaryWaacIds ?? [])
+      (session.displayPhoneNumber ? normalizeChannelNumber(session.displayPhoneNumber) : null)
+    const primaryWaacIds = Array.from(new Set((session.primaryWaacIds ?? [])
       .map((id) => String(id).trim()).filter((id) => /^\d{1,40}$/.test(id)))).slice(0, 100)
 
     const { data: existing, error: readError } = await admin.from('channels').select('id')
-      .eq('organization_id', input.organizationId).eq('channel_type', 'whatsapp').maybeSingle()
+      .eq('organization_id', organizationId).eq('channel_type', 'whatsapp').maybeSingle()
     if (readError) throw new Error('تعذّر قراءة قناة واتساب الحالية.')
 
-    // Pending/inactive until every required encrypted credential is safely stored.
-    const patch = {
-      business_id: businessId,
+    const pendingPatch = {
+      business_id: resolvedBusinessId,
       provider_account_id: phoneNumberId,
       external_identifier: displayNumber,
-      verification_status: connectionMode === 'coexistence' ? 'verified' : 'pending',
-      is_active: connectionMode === 'coexistence',
+      verification_status: 'pending',
+      is_active: false,
       waba_id: wabaId,
       connection_mode: connectionMode,
       primary_waac_ids: primaryWaacIds,
       updated_at: new Date().toISOString(),
     }
     const written = existing
-      ? await admin.from('channels').update(patch).eq('id', existing.id).select('id').single()
+      ? await admin.from('channels').update(pendingPatch).eq('id', existing.id).select('id').single()
       : await admin.from('channels').insert({
-          organization_id: input.organizationId,
+          organization_id: organizationId,
           channel_type: 'whatsapp',
-          ...patch,
+          ...pendingPatch,
         }).select('id').single()
     if (written.error || !written.data) {
-      console.error('EmbeddedSignup: failed to save channel', written.error)
+      console.error('EmbeddedSignup: failed to save pending channel', written.error)
       throw new Error('تعذّر حفظ قناة واتساب. حاول مرة أخرى.')
     }
 
     const channelId = written.data.id as string
-    // Persist each encrypted field before activation. If any write fails,
-    // remove the partial set and leave the channel pending/inactive.
     try {
+      // Save the encrypted token before webhook subscription; the exchanged
+      // single-use OAuth code must not be the only durable authorization copy.
       await saveChannelCredential(admin, {
-        organizationId: input.organizationId, channelId, provider: 'meta',
+        organizationId, channelId, provider: 'meta',
         credentialType: 'access_token', value: businessToken,
       })
       await saveChannelCredential(admin, {
-        organizationId: input.organizationId, channelId, provider: 'meta',
+        organizationId, channelId, provider: 'meta',
         credentialType: 'business_account_id', value: wabaId,
       })
       await saveChannelCredential(admin, {
-        organizationId: input.organizationId, channelId, provider: 'meta',
+        organizationId, channelId, provider: 'meta',
         credentialType: 'phone_number_id', value: phoneNumberId,
       })
     } catch (credentialWriteError) {
-      const cleanup = await deleteChannelCredential(admin, {
-        organizationId: input.organizationId, channelId, provider: 'meta',
+      await deleteChannelCredential(admin, {
+        organizationId, channelId, provider: 'meta',
       }).catch((cleanupError) => {
         console.error('EmbeddedSignup: partial credential cleanup failed', cleanupError)
       })
-      void cleanup
       throw credentialWriteError
     }
 
@@ -551,14 +599,21 @@ export async function completeEmbeddedSignup(input: {
       throw new Error('تعذّر التحقق من حفظ بيانات اعتماد Meta المشفّرة.')
     }
 
-    // Standard Cloud API remains pending until /register completes. Meta has
-    // already registered Coexistence numbers during Embedded Signup; activate
-    // only after Graph confirms is_on_biz_app=true and platform_type=CLOUD_API.
+    await subscribeAppToWaba(wabaId, businessToken)
+    const activated = await admin.from('channels').update({
+      verification_status: connectionMode === 'coexistence' ? 'verified' : 'pending',
+      is_active: connectionMode === 'coexistence',
+      updated_at: new Date().toISOString(),
+    }).eq('id', channelId).eq('organization_id', organizationId).select('id').single()
+    if (activated.error || !activated.data) {
+      console.error('EmbeddedSignup: unable to finalize channel state', { channelId, error: activated.error })
+      throw new Error('تم حفظ التفويض، لكن تعذّر تأكيد حالة قناة واتساب. أعد المحاولة من صفحة القنوات.')
+    }
 
     if (displayNumber) {
       const { error: profileUpdateError } = await admin.from('business_profiles')
         .update({ public_phone_number: displayNumber, updated_at: new Date().toISOString() })
-        .eq('organization_id', input.organizationId)
+        .eq('organization_id', organizationId)
       if (profileUpdateError) console.warn('EmbeddedSignup: could not sync public phone number', profileUpdateError.message)
     }
 
@@ -566,7 +621,7 @@ export async function completeEmbeddedSignup(input: {
       ok: true,
       phoneNumberId,
       wabaId,
-      businessId,
+      businessId: resolvedBusinessId,
       displayNumber,
       isOnBusinessApp: connectionMode === 'coexistence',
       message: connectionMode === 'coexistence'
@@ -575,11 +630,13 @@ export async function completeEmbeddedSignup(input: {
     }
   } catch (error) {
     console.error('EmbeddedSignup: complete failed', error)
-    const message =
-      error instanceof Error && /^(تعذّر|لم تتمكن|لم تؤكد)/.test(error.message)
-        ? error.message
-        : 'تعذّر إتمام ربط واتساب. لم يتم تفعيل القناة لأن التحقق أو حفظ بيانات الربط لم يكتمل.'
+    const message = error instanceof Error && /^(تعذّر|لم تتمكن|لم تؤكد|رفضت Meta|انتهت|تم حفظ)/.test(error.message)
+      ? error.message
+      : 'تعذّر إتمام ربط واتساب. لم يتم تفعيل القناة لأن التحقق أو حفظ بيانات الربط لم يكتمل.'
     return { ok: false, error: message }
+  } finally {
+    // Buffers are mutable and cleared here. Transient JS strings cannot be erased reliably.
+    tokenBuffer?.fill(0)
   }
 }
 
