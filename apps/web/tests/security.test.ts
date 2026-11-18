@@ -22,6 +22,11 @@ describe('Meta webhook signature', () => {
     expect(verifyMetaSignature(body, headers)).toBe(true)
   })
 
+  test('accepts the exact raw request bytes before JSON decoding', () => {
+    const headers = new Headers({ 'x-hub-signature-256': metaSignature(body) })
+    expect(verifyMetaSignature(Buffer.from(body, 'utf8'), headers)).toBe(true)
+  })
+
   test('rejects a tampered body that keeps the original signature', () => {
     const headers = new Headers({ 'x-hub-signature-256': metaSignature(body) })
     expect(verifyMetaSignature(body + ' ', headers)).toBe(false)

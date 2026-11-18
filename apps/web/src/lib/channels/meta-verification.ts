@@ -30,6 +30,18 @@ export async function verifyMetaChannelConnection(input: {
   const checks: MetaCheck[] = []
   const admin = createAdminClient()
 
+  const { data: channel, error: channelReadError } = await admin
+    .from('channels')
+    .select('business_id, connection_mode')
+    .eq('id', input.channelId)
+    .eq('organization_id', input.organizationId)
+    .eq('channel_type', 'whatsapp')
+    .maybeSingle()
+  if (channelReadError || !channel) {
+    return [{ label: 'القناة مرتبطة بالنشاط الحالي', ok: false, detail: 'تعذّر تأكيد ملكية قناة WhatsApp.' }]
+  }
+  const connectionMode = String(channel.connection_mode ?? 'cloud_api')
+
   let credentials: Record<string, string>
   try {
     credentials = await loadChannelCredentials(admin, input.channelId, 'meta')
@@ -88,14 +100,32 @@ export async function verifyMetaChannelConnection(input: {
   })
   if (!storedPhoneIdMatches || !phoneNumberId) return checks
 
-  const phone = await graphGet<{ id?: string; error?: { message?: string } }>(
-    `${encodeURIComponent(phoneNumberId)}?fields=id`,
+  const phone = await graphGet<{
+    id?: string
+    is_on_biz_app?: boolean
+    platform_type?: string
+    error?: { message?: string }
+  }>(
+    `${encodeURIComponent(phoneNumberId)}?fields=id,is_on_biz_app,platform_type`,
     token
   )
   checks.push({
     label: 'Meta تؤكد صلاحية الوصول إلى رقم الهاتف',
     ok: phone.ok && phone.body?.id === phoneNumberId,
     detail: phone.ok && phone.body?.id === phoneNumberId ? 'الرقم قابل للقراءة من Meta' : `تعذّر الوصول إلى الرقم (HTTP ${phone.status})`,
+  })
+
+  const coexistenceConfirmed = phone.ok && phone.body?.is_on_biz_app === true &&
+    phone.body?.platform_type?.toUpperCase() === 'CLOUD_API'
+  const connectionModeMatches = connectionMode === 'coexistence'
+    ? coexistenceConfirmed
+    : phone.body?.is_on_biz_app !== true
+  checks.push({
+    label: 'وضع الاتصال مطابق لحالة الرقم لدى Meta',
+    ok: connectionModeMatches,
+    detail: connectionMode === 'coexistence'
+      ? (coexistenceConfirmed ? 'Meta تؤكد تشغيل التطبيق وCloud API على الرقم نفسه' : 'لم تؤكد Meta أن التطبيق وCloud API يعملان معاً')
+      : (connectionModeMatches ? 'الرقم يستخدم Cloud API دون Coexistence' : 'Meta تعرض الرقم كرقم Coexistence؛ أعد ربطه بالمسار الصحيح'),
   })
 
   const waba = await graphGet<{ data?: Array<{ id?: string }>; error?: { message?: string } }>(
@@ -124,9 +154,7 @@ export async function verifyMetaChannelConnection(input: {
       `Meta لا تعرض تطبيق KAYAN AI ضمن اشتراكات هذا الحساب (HTTP ${subscriptions.status})`,
   })
 
-  const { data: channel } = await admin.from('channels').select('business_id')
-    .eq('id', input.channelId).eq('organization_id', input.organizationId).maybeSingle()
-  const businessId = channel?.business_id as string | null
+  const businessId = channel.business_id as string | null
   if (!businessId) {
     checks.push({ label: 'القناة مرتبطة بنشاط الشركة', ok: false, detail: 'مرجع النشاط غير محفوظ في القناة' })
   } else {

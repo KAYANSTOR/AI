@@ -13,12 +13,12 @@ export function verifyVapiRequest(headers:Headers,expectedSecret=process.env.VAP
   return authorization?.startsWith('Bearer ') ? safeEqual(authorization.slice(7),expectedSecret) : false
 }
 
-export function verifyMetaSignature(rawBody:string,headers:Headers){
+export function verifyMetaSignature(rawBody:string | Uint8Array,headers:Headers){
   const secret=process.env.META_APP_SECRET ?? process.env.WHATSAPP_APP_SECRET
   const signature=headers.get('x-hub-signature-256')
-  if(!secret || !signature?.startsWith('sha256=')) return false
-  const expected=createHmac('sha256',secret).update(rawBody,'utf8').digest('hex')
-  return safeEqual(signature.slice(7),expected)
+  if(!secret || !signature || !/^sha256=[a-f0-9]{64}$/i.test(signature)) return false
+  const expected=createHmac('sha256',secret).update(rawBody).digest('hex')
+  return safeEqual(signature.slice(7).toLowerCase(),expected)
 }
 
 /** Verify Kapso's HMAC-SHA256 signature over the exact raw request body. */

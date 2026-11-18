@@ -231,13 +231,21 @@ export async function deliverWhatsAppTemplate(
 
 export async function recordDeliveredOutboundMessage(
   db: DbClient,
-  input: { organizationId: string; conversationId: string; body: string; idempotencyKey: string; state?: string; externalMessageId?: string | null }
+  input: {
+    organizationId: string
+    conversationId: string
+    body: string
+    idempotencyKey: string
+    state?: string
+    externalMessageId?: string | null
+    messageType?: 'text' | 'image' | 'audio' | 'video' | 'file'
+  }
 ) {
   const { error } = await db.from('messages').insert({
     organization_id: input.organizationId,
     conversation_id: input.conversationId,
     direction: 'outbound',
-    message_type: 'text',
+    message_type: input.messageType ?? 'text',
     content: input.body,
     external_message_id: input.externalMessageId || input.idempotencyKey,
   })
