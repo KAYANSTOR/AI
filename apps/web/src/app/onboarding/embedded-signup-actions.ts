@@ -152,7 +152,7 @@ export async function registerWhatsAppCloudApiNumberAction(input: {
     const admin = createAdminClient()
     const { data: channel, error: channelError } = await admin
       .from('channels')
-      .select('id, provider_account_id, business_id, channel_type, connection_mode')
+      .select('id, provider_account_id, business_id, channel_type, connection_mode, waba_id')
       .eq('organization_id', org.organizationId)
       .eq('channel_type', 'whatsapp')
       .maybeSingle()
@@ -186,6 +186,47 @@ export async function registerWhatsAppCloudApiNumberAction(input: {
         credentialPhoneNumberId: storedPhoneNumberId,
       })
       return { ok: false, error: 'رقم الإرسال المحفوظ لا يطابق بيانات تفويض Meta. أعد ربط القناة قبل التسجيل.' }
+    }
+
+    // Do not trust only the stored mode: legacy channel rows predate the
+    // Coexistence column. Re-read the phone from Meta before any /register call.
+    const phoneCheckResponse = await fetch(
+      `${getMetaGraphBaseUrl()}/${encodeURIComponent(phoneNumberId)}?fields=id,is_on_biz_app,platform_type`,
+      { headers: { Authorization: `Bearer ${accessToken}` }, cache: 'no-store', signal: AbortSignal.timeout(15_000) }
+    )
+    const phoneCheck = await phoneCheckResponse.json().catch(() => null) as {
+      id?: string
+      is_on_biz_app?: boolean
+      platform_type?: string
+      error?: { message?: string }
+    } | null
+    if (!phoneCheckResponse.ok || phoneCheck?.id !== phoneNumberId) {
+      console.error('WhatsApp registration: could not verify Meta phone mode', {
+        httpStatus: phoneCheckResponse.status,
+        metaMessage: phoneCheck?.error?.message ?? null,
+      })
+      return { ok: false, error: 'تعذّر التحقق من وضع الرقم لدى Meta. لم نرسل PIN ولم ننفذ التسجيل؛ أعد فحص الربط.' }
+    }
+    if (phoneCheck.is_on_biz_app === true) {
+      if (phoneCheck.platform_type?.toUpperCase() === 'CLOUD_API') {
+        const { error: coexistenceUpdateError } = await admin.from('channels').update({
+          connection_mode: 'coexistence',
+          waba_id: credentials.business_account_id?.trim() || credentials.waba_id?.trim() || channel.waba_id,
+          verification_status: 'verified',
+          is_active: true,
+          updated_at: new Date().toISOString(),
+        }).eq('id', channel.id).eq('organization_id', org.organizationId)
+        if (coexistenceUpdateError) {
+          console.error('WhatsApp registration: Coexistence was detected but channel state update failed', {
+            channelId: channel.id,
+            error: coexistenceUpdateError,
+          })
+          return { ok: false, error: 'أكدت Meta وضع الاستمرار مع التطبيق، لكن تعذّر تحديث حالة القناة. لم نرسل PIN.' }
+        }
+        revalidatePath('/dashboard/channels')
+        return { ok: false, error: 'أكدت Meta أن الرقم يعمل مع WhatsApp Business App وCloud API معاً. تم تصحيح وضع القناة؛ لا يحتاج هذا الاتصال إلى PIN أو تسجيل إضافي.' }
+      }
+      return { ok: false, error: 'أكدت Meta أن الرقم ما زال مرتبطاً بتطبيق WhatsApp Business. أوقفنا التسجيل التقليدي لحماية اتصال التطبيق.' }
     }
 
     const response = await fetch(
