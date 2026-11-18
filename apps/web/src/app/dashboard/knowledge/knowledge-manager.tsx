@@ -8,6 +8,7 @@ import {
   previewKnowledgeAction,
   getKnowledgeRevisionsAction,
   restoreKnowledgeRevisionAction,
+  uploadKnowledgeDocumentAction,
   type KnowledgeRevision,
   type KnowledgeResult,
 } from './actions'
@@ -32,6 +33,7 @@ export function KnowledgeManager({ rows, canManage }: { rows: KnowledgeRow[]; ca
   const [preview, setPreview] = useState<{ titles: string[]; error?: string } | null>(null)
   const [historyId, setHistoryId] = useState<string | null>(null)
   const [history, setHistory] = useState<KnowledgeRevision[]>([])
+  const [documentFile, setDocumentFile] = useState<File | null>(null)
 
   function run(work: () => Promise<KnowledgeResult>, resetOnSuccess = false) {
     setResult(null)
@@ -48,6 +50,18 @@ export function KnowledgeManager({ rows, canManage }: { rows: KnowledgeRow[]; ca
    * Asks the server to run the agent's own retrieval, so the preview cannot drift from what
    * the agent would actually find.
    */
+  function runUpload() {
+    if (!documentFile) return
+    const formData = new FormData()
+    formData.set('file', documentFile)
+    setResult(null)
+    startTransition(async () => {
+      const outcome = await uploadKnowledgeDocumentAction(formData)
+      setResult(outcome)
+      if (outcome.ok) setDocumentFile(null)
+    })
+  }
+
   function runHistory(id: string) {
     setHistoryId(id)
     setHistory([])
@@ -111,6 +125,18 @@ export function KnowledgeManager({ rows, canManage }: { rows: KnowledgeRow[]; ca
           </p>
         )}
       </section>
+
+      {canManage && (
+        <section className="rounded-xl border border-border bg-surface p-4">
+          <h2 className="text-sm font-semibold text-text">إضافة مستند إلى قاعدة المعرفة</h2>
+          <p className="mt-1 text-xs text-text-muted">يمكن رفع ملفات TXT وMD وCSV حتى 5 ميجابايت. يُحفظ النص الأصلي وتُنشأ مقاطع للبحث دون حذف المستندات السابقة.</p>
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <input type="file" accept=".txt,.md,.csv,text/plain,text/markdown,text/csv" onChange={(event) => setDocumentFile(event.target.files?.[0] ?? null)} className="min-h-11 min-w-0 flex-1 text-xs text-text" />
+            <button type="button" disabled={pending || !documentFile} onClick={runUpload} className="min-h-11 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-60">رفع وحفظ المستند</button>
+          </div>
+          {documentFile && <p className="mt-2 text-xs text-text-muted">{documentFile.name} · {(documentFile.size / 1024).toFixed(0)} كيلوبايت</p>}
+        </section>
+      )}
 
       {rows.length === 0 ? (
         <div className="rounded-xl border border-border bg-surface px-4 py-8 text-center text-sm text-text-muted">

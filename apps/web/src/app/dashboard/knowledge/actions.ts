@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { KNOWLEDGE_CATEGORIES } from './categories'
 import { requireAdminCapability, audit, type AuthorizedContext } from '@/lib/capabilities/guard'
 import { searchKnowledge } from '@/lib/knowledge/retrieval'
+import { knowledgeContentHash } from '@/lib/knowledge/layer'
 import { actionErrorMessage, dbActionError } from '@/lib/i18n/action-error'
 
 export type KnowledgeResult = { ok: boolean; error?: string; message?: string }
@@ -198,4 +199,78 @@ export async function restoreKnowledgeRevisionAction(id: string, revisionId: str
   } catch (error) {
     return { ok: false, error: actionErrorMessage(error, 'تعذّرت استعادة الإصدار.') }
   }
+}
+
+
+/** Imports plain-text knowledge files. Original text and all chunks commit atomically in PostgreSQL. */
+export async function uploadKnowledgeDocumentAction(formData: FormData): Promise<KnowledgeResult> {
+  let ctx: AuthorizedContext
+  try {
+    ctx = await requireAdminCapability('knowledge_base')
+  } catch (error) {
+    return { ok: false, error: actionErrorMessage(error, 'غير مصرح.') }
+  }
+
+  const file = formData.get('file')
+  if (!(file instanceof File)) return { ok: false, error: 'اختر ملفاً أولاً.' }
+  const extension = file.name.toLowerCase().split('.').pop()
+  const allowed = new Set(['txt', 'md', 'csv'])
+  if (!extension || !allowed.has(extension)) return { ok: false, error: 'الصيغ المدعومة حالياً: TXT وMD وCSV.' }
+  if (file.size <= 0 || file.size > 5 * 1024 * 1024) return { ok: false, error: 'حجم الملف يجب أن يكون أقل من 5 ميجابايت.' }
+
+  let originalText: string
+  try {
+    originalText = (await file.text()).replace(/^\uFEFF/, '').trim()
+  } catch {
+    return { ok: false, error: 'تعذّر قراءة الملف النصي.' }
+  }
+  if (!originalText) return { ok: false, error: 'الملف لا يحتوي على نص قابل للقراءة.' }
+
+  const contentHash = knowledgeContentHash(originalText)
+  const { data: existing, error: lookupError } = await ctx.db
+    .from('knowledge_documents')
+    .select('id')
+    .eq('organization_id', ctx.organizationId)
+    .eq('content_hash', contentHash)
+    .maybeSingle()
+  if (lookupError) return { ok: false, error: dbActionError(lookupError) }
+  if (existing?.id) return { ok: true, message: 'هذا المستند محفوظ مسبقاً ولم تتم إضافته مرة أخرى.' }
+
+  const paragraphs = originalText.split(/\n\s*\n/).map((part) => part.trim()).filter(Boolean)
+  const chunks: Array<{ chunk_index: number; content: string; content_hash: string }> = []
+  let current = ''
+  const pushChunk = () => {
+    if (!current.trim()) return
+    const content = current.trim()
+    chunks.push({ chunk_index: chunks.length, content, content_hash: knowledgeContentHash(content) })
+    current = ''
+  }
+  for (const paragraph of paragraphs.length ? paragraphs : [originalText]) {
+    if (paragraph.length > 1400) {
+      pushChunk()
+      for (let offset = 0; offset < paragraph.length; offset += 1250) {
+        const content = paragraph.slice(offset, offset + 1400).trim()
+        if (content) chunks.push({ chunk_index: chunks.length, content, content_hash: knowledgeContentHash(content) })
+      }
+      continue
+    }
+    if (current && current.length + paragraph.length + 2 > 1400) pushChunk()
+    current = current ? `${current}\n\n${paragraph}` : paragraph
+  }
+  pushChunk()
+
+  const { data, error } = await ctx.db.rpc('ingest_knowledge_document', {
+    p_organization_id: ctx.organizationId,
+    p_file_name: file.name,
+    p_mime_type: file.type || 'text/plain',
+    p_content_hash: contentHash,
+    p_original_text: originalText,
+    p_chunks: chunks,
+  })
+  if (error) return { ok: false, error: dbActionError(error) }
+  if (!data) return { ok: false, error: 'لم يتم حفظ المستند.' }
+
+  await audit(ctx, 'knowledge.document_ingested', 'knowledge_documents', String(data), { fileName: file.name, chunks: chunks.length })
+  revalidatePath('/dashboard/knowledge')
+  return { ok: true, message: `تم حفظ المستند وتقسيمه إلى ${chunks.length} مقطعاً قابلاً للبحث.` }
 }
