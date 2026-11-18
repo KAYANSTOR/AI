@@ -6,8 +6,8 @@ import {
 
 describe('WhatsApp Coexistence history mapping', () => {
   test('accepts Meta Unix timestamps in seconds and milliseconds', () => {
-    expect(parseWhatsAppHistoryTimestamp('1792800000')).toBe('2026-10-23T00:00:00.000Z')
-    expect(parseWhatsAppHistoryTimestamp(1792800000000)).toBe('2026-10-23T00:00:00.000Z')
+    expect(parseWhatsAppHistoryTimestamp('1792800000')).toBe('2026-10-24T00:00:00.000Z')
+    expect(parseWhatsAppHistoryTimestamp(1792800000000)).toBe('2026-10-24T00:00:00.000Z')
     expect(parseWhatsAppHistoryTimestamp('invalid')).toBeNull()
   })
 
