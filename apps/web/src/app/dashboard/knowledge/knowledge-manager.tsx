@@ -5,7 +5,6 @@ import { BookOpen, Loader2, Pencil, Plus, Search, X } from 'lucide-react'
 import {
   saveKnowledgeAction,
   setKnowledgeActiveAction,
-  deleteKnowledgeAction,
   previewKnowledgeAction,
   getKnowledgeRevisionsAction,
   restoreKnowledgeRevisionAction,
@@ -169,6 +168,36 @@ export function KnowledgeManager({ rows, canManage }: { rows: KnowledgeRow[]; ca
             </li>
           ))}
         </ul>
+      )}
+
+      {historyId && (
+        <section className="rounded-xl border border-border bg-surface p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-text">سجل الإصدارات</h2>
+            <button type="button" onClick={() => setHistoryId(null)} className="text-xs text-text-muted">إغلاق</button>
+          </div>
+          {history.length === 0 ? (
+            <p className="text-xs text-text-muted">لا توجد إصدارات سابقة لهذا المدخل بعد.</p>
+          ) : (
+            <ul className="space-y-3">
+              {history.map((revision) => (
+                <li key={revision.id} className="rounded-lg border border-border p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-xs font-semibold text-text">الإصدار {revision.revision_number} · {new Date(revision.created_at).toLocaleString('ar')}</p>
+                    {canManage && (
+                      <button type="button" disabled={pending} onClick={() => run(() => restoreKnowledgeRevisionAction(historyId, revision.id))} className="min-h-9 rounded-lg border border-border px-3 text-xs">
+                        استعادة هذا الإصدار
+                      </button>
+                    )}
+                  </div>
+                  <p className="mt-2 text-sm font-medium text-text">{revision.title}</p>
+                  <p className="mt-1 whitespace-pre-wrap text-xs text-text-muted">{revision.content}</p>
+                  {revision.change_reason && <p className="mt-2 text-xs text-text-muted">السبب: {revision.change_reason}</p>}
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
       )}
 
       {canManage && (
