@@ -22,6 +22,7 @@ type ChannelCard = {
   connected: boolean
   verificationStatus: string | null
   isActive: boolean
+  connectionMode: string | null
 }
 
 type State = 'not_connected' | 'pending' | 'verified' | 'disabled' | 'error'
@@ -84,7 +85,7 @@ export function ChannelsConsole({
             <UIChannelCard
               key={card.type}
               name={card.label}
-              description={card.publicNumber ? `${card.publicNumber} · ${card.provider}` : stateCopy[state].hint}
+              description={card.publicNumber ? `${card.publicNumber} · ${card.provider}` : card.connectionMode === 'coexistence' ? 'يعمل الرقم مع تطبيق WhatsApp Business وKayan AI معاً' : stateCopy[state].hint}
               status={status}
               icon={getChannelIcon()}
               iconBg={iconBg}
@@ -208,7 +209,9 @@ function ChannelDialog({
             <h2 id="channel-dialog-title" className="mt-1 text-lg font-bold text-text">
               {card.label}
             </h2>
-            <p className="mt-1 text-xs leading-5 text-text-muted">{stateCopy[state].hint}</p>
+            <p className="mt-1 text-xs leading-5 text-text-muted">
+              {card.connectionMode === 'coexistence' ? 'الرقم يعمل مع WhatsApp Business App وKayan AI معاً؛ لا يلزم إدخال PIN.' : stateCopy[state].hint}
+            </p>
           </div>
           <button
             type="button"
@@ -237,7 +240,17 @@ function ChannelDialog({
             </div>
           ) : null}
 
-          {card.type === 'whatsapp' ? (
+          {card.type === 'whatsapp' && card.connected && card.connectionMode === 'coexistence' ? (
+            <section className="space-y-2 rounded-2xl border border-success/30 bg-success/5 p-4">
+              <h3 className="text-sm font-bold text-text">الاستمرار باستخدام تطبيق WhatsApp Business</h3>
+              <p className="text-xs leading-6 text-text-muted">
+                أكدت Meta أن الرقم مسجل في Cloud API وما زال يعمل في تطبيق WhatsApp Business.
+                لا تستخدم تسجيل الرقم التقليدي ولا تدخل PIN لهذا الاتصال.
+              </p>
+            </section>
+          ) : null}
+
+          {card.type === 'whatsapp' && card.connected && card.connectionMode !== 'coexistence' && state !== 'verified' ? (
             <section className="space-y-3 rounded-2xl border border-warning/40 bg-warning/5 p-4">
               <div>
                 <h3 className="text-sm font-bold text-text">تسجيل رقم الإرسال على WhatsApp</h3>

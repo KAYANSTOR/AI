@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/db/server'
 import { createAdminClient } from '@/lib/db/admin'
 import { loadChannelCredentials } from '@/lib/credentials/service'
+import { canRegisterWhatsAppCloudApiNumber } from '@/lib/channels/whatsapp-connection-mode'
 import { getMetaGraphBaseUrl } from '@/lib/channels/embedded-signup'
 import { getCurrentOrg } from '@/lib/org'
 import { actionErrorMessage } from '@/lib/i18n/action-error'
@@ -148,14 +149,10 @@ export async function registerWhatsAppCloudApiNumberAction(input: {
   try {
     const org = await requireOnboardingAdmin()
     const pin = String(input?.pin ?? '').trim()
-    if (!/^\d{6}$/.test(pin)) {
-      return { ok: false, error: 'أدخل رمز التحقق بخطوتين المكوّن من 6 أرقام.' }
-    }
-
     const admin = createAdminClient()
     const { data: channel, error: channelError } = await admin
       .from('channels')
-      .select('id, provider_account_id, business_id, channel_type')
+      .select('id, provider_account_id, business_id, channel_type, connection_mode')
       .eq('organization_id', org.organizationId)
       .eq('channel_type', 'whatsapp')
       .maybeSingle()
@@ -166,6 +163,13 @@ export async function registerWhatsAppCloudApiNumberAction(input: {
     }
     if (!channel?.id || !channel.provider_account_id) {
       return { ok: false, error: 'لم يتم العثور على رقم إرسال مرتبط بالقناة. أعد ربط واتساب عبر Meta.' }
+    }
+
+    if (!canRegisterWhatsAppCloudApiNumber(String(channel.connection_mode ?? 'cloud_api'))) {
+      return { ok: false, error: 'هذا الرقم يعمل بوضع الاستمرار مع WhatsApp Business App. لا تستخدم تسجيل Cloud API التقليدي ولا تدخل PIN لهذا الرقم.' }
+    }
+    if (!/^\d{6}$/.test(pin)) {
+      return { ok: false, error: 'أدخل رمز التحقق بخطوتين المكوّن من 6 أرقام.' }
     }
 
     const phoneNumberId = String(channel.provider_account_id)

@@ -14,6 +14,7 @@ import { createAdminClient } from '@/lib/db/admin'
 import type { DbClient } from '@/lib/db/client'
 import { deleteChannelCredential, loadChannelCredentials, saveChannelCredential } from '@/lib/credentials/service'
 import { normalizeChannelNumber } from '@/lib/channels/management'
+import { resolveWhatsAppConnectionMode } from '@/lib/channels/whatsapp-connection-mode'
 
 const GRAPH_VERSION = 'v26.0'
 
@@ -224,15 +225,17 @@ async function subscribeAppToWaba(wabaId: string, businessToken: string): Promis
 async function fetchVerifiedPhoneNumber(
   phoneNumberId: string,
   businessToken: string
-): Promise<string | null> {
+): Promise<{ displayPhoneNumber: string | null; isOnBizApp: boolean; platformType: string | null }> {
   const url = new URL(`${getMetaGraphBaseUrl()}/${encodeURIComponent(phoneNumberId)}`)
-  url.searchParams.set('fields', 'id,display_phone_number,verified_name')
+  url.searchParams.set('fields', 'id,display_phone_number,verified_name,is_on_biz_app,platform_type')
   const response = await fetchMeta(url.toString(), {
     headers: { Authorization: `Bearer ${businessToken}` },
   })
   const body = await response.json().catch(() => null) as {
     id?: string
     display_phone_number?: string
+    is_on_biz_app?: boolean
+    platform_type?: string
     error?: { message?: string }
   } | null
   if (!response.ok || body?.id !== phoneNumberId) {
@@ -242,7 +245,7 @@ async function fetchVerifiedPhoneNumber(
     })
     throw new Error('لم تتمكن Meta من التحقق من رقم واتساب المرتبط. أعد الربط وتأكد من اختيار الرقم الصحيح.')
   }
-  return body.display_phone_number ?? null
+  return { displayPhoneNumber: body.display_phone_number ?? null, isOnBizApp: body.is_on_biz_app === true, platformType: body.platform_type ?? null }
 }
 
 async function verifyPhoneBelongsToWaba(
@@ -473,10 +476,17 @@ export async function completeEmbeddedSignup(input: {
 
     // Verify the Meta phone and webhook subscription before preparing the channel for registration.
     await verifyPhoneBelongsToWaba(wabaId, phoneNumberId, businessToken)
-    const displayFromApi = await fetchVerifiedPhoneNumber(phoneNumberId, businessToken)
+    const phoneState = await fetchVerifiedPhoneNumber(phoneNumberId, businessToken)
+    const connectionMode = resolveWhatsAppConnectionMode({
+      isOnBizApp: phoneState.isOnBizApp,
+      platformType: phoneState.platformType,
+      sessionMarkedCoexistence: input.session.isOnBusinessApp === true,
+    })
     await subscribeAppToWaba(wabaId, businessToken)
-    const displayNumber = displayFromApi ??
+    const displayNumber = phoneState.displayPhoneNumber ??
       (input.session.displayPhoneNumber ? normalizeChannelNumber(input.session.displayPhoneNumber) : null)
+    const primaryWaacIds = Array.from(new Set((input.session.primaryWaacIds ?? [])
+      .map((id) => String(id).trim()).filter((id) => /^\d{1,40}$/.test(id)))).slice(0, 100)
 
     const { data: existing, error: readError } = await admin.from('channels').select('id')
       .eq('organization_id', input.organizationId).eq('channel_type', 'whatsapp').maybeSingle()
@@ -487,8 +497,11 @@ export async function completeEmbeddedSignup(input: {
       business_id: businessId,
       provider_account_id: phoneNumberId,
       external_identifier: displayNumber,
-      verification_status: 'pending',
-      is_active: false,
+      verification_status: connectionMode === 'coexistence' ? 'verified' : 'pending',
+      is_active: connectionMode === 'coexistence',
+      waba_id: wabaId,
+      connection_mode: connectionMode,
+      primary_waac_ids: primaryWaacIds,
       updated_at: new Date().toISOString(),
     }
     const written = existing
@@ -538,10 +551,9 @@ export async function completeEmbeddedSignup(input: {
       throw new Error('تعذّر التحقق من حفظ بيانات اعتماد Meta المشفّرة.')
     }
 
-    // Meta Embedded Signup grants access to the WABA, but does not itself
-    // register the selected phone number for Cloud API messaging. Keep the
-    // channel inactive until the owner submits the number's 6-digit 2-step PIN
-    // to POST /{phone-number-id}/register.
+    // Standard Cloud API remains pending until /register completes. Meta has
+    // already registered Coexistence numbers during Embedded Signup; activate
+    // only after Graph confirms is_on_biz_app=true and platform_type=CLOUD_API.
 
     if (displayNumber) {
       const { error: profileUpdateError } = await admin.from('business_profiles')
@@ -556,10 +568,10 @@ export async function completeEmbeddedSignup(input: {
       wabaId,
       businessId,
       displayNumber,
-      isOnBusinessApp: input.session.isOnBusinessApp === true,
-      message: input.session.isOnBusinessApp === true
-        ? 'تم ربط رقم WhatsApp Business عبر مسار الاحتفاظ بالتطبيق (Coexistence) وحفظ بياناته مشفّرة. بقي إكمال تفعيل الرقم حسب حالة التسجيل التي تعرضها Meta.'
-        : 'تم تفويض Meta وحفظ بيانات القناة. بقي إكمال تسجيل رقم الإرسال برمز PIN المكوّن من 6 أرقام قبل التفعيل.',
+      isOnBusinessApp: connectionMode === 'coexistence',
+      message: connectionMode === 'coexistence'
+        ? 'أكدت Meta تشغيل الرقم مع تطبيق WhatsApp Business وCloud API معاً. لا يلزم إدخال PIN لهذا المسار.'
+        : 'تم تفويض Meta وحفظ بيانات القناة. أكمل تسجيل رقم الإرسال برمز PIN المكوّن من 6 أرقام قبل التفعيل.',
     }
   } catch (error) {
     console.error('EmbeddedSignup: complete failed', error)

@@ -18,6 +18,7 @@ type ChannelRow = {
   provider_account_id: string | null
   verification_status: string | null
   is_active: boolean | null
+  connection_mode: string | null
 }
 
 type ChannelViewData = {
@@ -29,6 +30,7 @@ type ChannelViewData = {
   connected: boolean
   verificationStatus: string | null
   isActive: boolean
+  connectionMode: string | null
 }
 
 export default async function ChannelsPage({
@@ -49,7 +51,7 @@ export default async function ChannelsPage({
   try {
     const result = await db
       .from('channels')
-      .select('id, channel_type, external_identifier, provider_account_id, verification_status, is_active')
+      .select('id, channel_type, external_identifier, provider_account_id, verification_status, is_active, connection_mode')
       .eq('organization_id', context.organizationId)
 
     if (result.error) {
@@ -134,6 +136,7 @@ export default async function ChannelsPage({
         connected: Boolean(row?.id),
         verificationStatus: row?.verification_status ?? null,
         isActive: row?.is_active === true,
+        connectionMode: row?.connection_mode ?? null,
       }
     })
 
@@ -180,7 +183,7 @@ export default async function ChannelsPage({
 
       {channelsError && <Notice tone="error" message={channelsError} />}
       {status === 'meta_success' && (
-        <Notice tone="success" message="تم تفويض حساب Meta وحفظ بيانات القناة. افتح بطاقة WhatsApp وأكمل تسجيل رقم الإرسال باستخدام PIN التحقق بخطوتين قبل إرسال الرسائل." />
+        <Notice tone="success" message="تم تفويض حساب Meta وحفظ بيانات القناة. افتح بطاقة WhatsApp لمراجعة حالة الربط والخطوة التالية المناسبة لنوع الاتصال." />
       )}
       {status === 'meta_error' && (
         <Notice tone="error" message="تعذّر إكمال ربط Meta. أعد المحاولة من بطاقة WhatsApp ثم استخدم إعادة فحص الاتصال." />
