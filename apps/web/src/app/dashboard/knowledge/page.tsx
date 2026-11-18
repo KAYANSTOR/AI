@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { requireCapability, CapabilityDisabledError } from '@/lib/capabilities/guard'
 import { ar } from '@/lib/i18n/ar'
-import { KnowledgeManager, type KnowledgeRow } from './knowledge-manager'
+import { KnowledgeManager, type KnowledgeDocumentRow, type KnowledgeRow } from './knowledge-manager'
 
 export default async function KnowledgePage({ searchParams }: { searchParams: Promise<{ page?: string }> }) {
   let ctx
@@ -39,15 +39,16 @@ export default async function KnowledgePage({ searchParams }: { searchParams: Pr
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize))
   const currentPage = Math.min(requestedPage, totalPages)
 
-  const [{ data }, { count: documentCount }, { count: chunkCount }] = await Promise.all([
+  const [{ data }, { count: documentCount }, { count: chunkCount }, { data: documents }] = await Promise.all([
     ctx.db
       .from('knowledge_base')
-      .select('id, title, content, category, is_active, created_at')
+      .select('id, title, content, category, is_active, created_at, source_type')
       .eq('organization_id', ctx.organizationId)
       .order('updated_at', { ascending: false })
       .range((currentPage - 1) * pageSize, currentPage * pageSize - 1),
     ctx.db.from('knowledge_documents').select('id', { count: 'exact', head: true }).eq('organization_id', ctx.organizationId),
     ctx.db.from('knowledge_chunks').select('id', { count: 'exact', head: true }).eq('organization_id', ctx.organizationId),
+    ctx.db.from('knowledge_documents').select('id, file_name, mime_type, status, created_at').eq('organization_id', ctx.organizationId).order('created_at', { ascending: false }).range(0, 9),
   ])
 
   const canManage = ctx.role === 'owner' || ctx.role === 'admin'
@@ -74,7 +75,7 @@ export default async function KnowledgePage({ searchParams }: { searchParams: Pr
         </div>
       </div>
 
-      <KnowledgeManager rows={(data ?? []) as KnowledgeRow[]} canManage={canManage} currentPage={currentPage} totalPages={totalPages} />
+      <KnowledgeManager rows={(data ?? []) as KnowledgeRow[]} documents={(documents ?? []) as KnowledgeDocumentRow[]} canManage={canManage} currentPage={currentPage} totalPages={totalPages} />
     </div>
   )
 }

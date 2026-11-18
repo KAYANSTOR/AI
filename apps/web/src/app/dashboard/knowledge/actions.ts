@@ -51,6 +51,7 @@ export async function saveKnowledgeAction(input: KnowledgeInput): Promise<Knowle
     content_hash: knowledgeContentHash(content),
     content_embedding: contentEmbedding,
     embedding_model: contentEmbedding ? KNOWLEDGE_EMBEDDING_MODEL : null,
+    source_type: 'manual',
     category: normalizeCategory(input.category),
     is_active: true,
     updated_at: new Date().toISOString(),

@@ -24,11 +24,20 @@ export type KnowledgeRow = {
   category: string
   is_active: boolean
   created_at?: string
+  source_type?: string
+}
+
+export type KnowledgeDocumentRow = {
+  id: string
+  file_name: string
+  mime_type: string
+  status: string
+  created_at: string
 }
 
 const EMPTY = { id: null as string | null, title: '', content: '', category: 'general' }
 
-export function KnowledgeManager({ rows, canManage, currentPage, totalPages }: { rows: KnowledgeRow[]; canManage: boolean; currentPage: number; totalPages: number }) {
+export function KnowledgeManager({ rows, documents, canManage, currentPage, totalPages }: { rows: KnowledgeRow[]; documents: KnowledgeDocumentRow[]; canManage: boolean; currentPage: number; totalPages: number }) {
   const [form, setForm] = useState(EMPTY)
   const [result, setResult] = useState<KnowledgeResult | null>(null)
   const [query, setQuery] = useState('')
@@ -175,6 +184,10 @@ export function KnowledgeManager({ rows, canManage, currentPage, totalPages }: {
                   )}
                 </p>
                 <p className="mt-1 line-clamp-2 text-xs text-text-muted">{row.content}</p>
+                <p className="mt-2 text-[11px] text-text-muted">
+                  {row.source_type === 'training' ? 'المصدر: تدريب الوكيل' : row.source_type === 'manual' ? 'المصدر: إضافة يدوية' : row.source_type === 'import' ? 'المصدر: استيراد' : 'المصدر: سجل سابق'}
+                  {row.created_at ? ` · أُضيف ${new Date(row.created_at).toLocaleDateString('ar')}` : ''}
+                </p>
               </div>
 
               {canManage && (
@@ -211,6 +224,26 @@ export function KnowledgeManager({ rows, canManage, currentPage, totalPages }: {
             </li>
           ))}
         </ul>
+      )}
+
+      {documents.length > 0 && (
+        <section className="rounded-xl border border-border bg-surface p-4">
+          <h2 className="text-sm font-semibold text-text">المستندات المرفوعة</h2>
+          <p className="mt-1 text-xs text-text-muted">آخر 10 مستندات محفوظة مع حالة المعالجة وتاريخ الرفع</p>
+          <ul className="mt-3 divide-y divide-border">
+            {documents.map((document) => (
+              <li key={document.id} className="flex flex-wrap items-center justify-between gap-2 py-3">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-text">{document.file_name}</p>
+                  <p className="mt-1 text-[11px] text-text-muted">{document.mime_type} · {new Date(document.created_at).toLocaleString('ar')}</p>
+                </div>
+                <span className="rounded-full bg-background px-2 py-1 text-xs text-text-muted">
+                  {document.status === 'completed' ? 'مكتمل' : document.status === 'processing' ? 'قيد المعالجة' : 'فشل'}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
 
       {totalPages > 1 && (
