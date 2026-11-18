@@ -117,3 +117,20 @@ describe('hybrid knowledge search integration', () => {
     expect(matches.map((match) => match.id)).toEqual(['semantic-hit'])
   })
 })
+
+
+describe('large knowledge retrieval', () => {
+  test('paginates beyond the first 200 rows without losing a late matching fact', async () => {
+    const rows = Array.from({ length: 1205 }, (_value, index) => ({
+      id: `k${index}`,
+      organization_id: ORG_A,
+      title: index === 1204 ? 'الضمان النهائي' : `معلومة عامة ${index}`,
+      content: index === 1204 ? 'يشمل الضمان الإصلاح والاستبدال.' : 'محتوى لا يطابق مصطلح البحث.',
+      category: 'general',
+      is_active: true,
+      updated_at: new Date(2026, 0, 1 + index).toISOString(),
+    }))
+    const matches = await searchKnowledge(dbWith(rows), ORG_A, 'الضمان')
+    expect(matches.map((match) => match.id)).toContain('k1204')
+  })
+})

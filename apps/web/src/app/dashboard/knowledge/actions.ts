@@ -389,15 +389,41 @@ export async function indexLegacyKnowledgeEmbeddingsAction(): Promise<{
       if (result.data?.length) indexed += 1
     }
 
-    const { count, error: countError } = await ctx.db
-      .from('knowledge_base')
-      .select('id', { count: 'exact', head: true })
-      .eq('organization_id', ctx.organizationId)
-      .eq('is_active', true)
-      .is('content_embedding', null)
-    if (countError) return { ok: false, error: dbActionError(countError) }
+    const remainingSlots = 10 - indexed
+    if (remainingSlots > 0) {
+      const { data: chunks, error: chunkError } = await ctx.db
+        .from('knowledge_chunks')
+        .select('id, content')
+        .eq('organization_id', ctx.organizationId)
+        .is('content_embedding', null)
+        .order('created_at', { ascending: true })
+        .limit(remainingSlots)
+      if (chunkError) return { ok: false, error: dbActionError(chunkError) }
+
+      for (const chunk of chunks ?? []) {
+        const vector = await embedKnowledgeText(String(chunk.content ?? ''), 'document', 'مستند')
+        if (!vector) break
+        const result = await ctx.db.rpc('update_knowledge_chunk_embedding', {
+          p_organization_id: ctx.organizationId,
+          p_chunk_id: chunk.id,
+          p_content_embedding: vector,
+          p_embedding_model: KNOWLEDGE_EMBEDDING_MODEL,
+        })
+        if (result.error) return { ok: false, error: dbActionError(result.error) }
+        if (result.data) indexed += 1
+      }
+    }
+
+    const [{ count: missingFacts, error: factCountError }, { count: missingChunks, error: chunkCountError }] = await Promise.all([
+      ctx.db.from('knowledge_base').select('id', { count: 'exact', head: true })
+        .eq('organization_id', ctx.organizationId).eq('is_active', true).is('content_embedding', null),
+      ctx.db.from('knowledge_chunks').select('id', { count: 'exact', head: true })
+        .eq('organization_id', ctx.organizationId).is('content_embedding', null),
+    ])
+    if (factCountError) return { ok: false, error: dbActionError(factCountError) }
+    if (chunkCountError) return { ok: false, error: dbActionError(chunkCountError) }
     revalidatePath('/dashboard/knowledge')
-    return { ok: true, indexed, remaining: count ?? 0 }
+    return { ok: true, indexed, remaining: (missingFacts ?? 0) + (missingChunks ?? 0) }
   } catch (error) {
     return { ok: false, error: actionErrorMessage(error, 'تعذّرت فهرسة السجلات القديمة.') }
   }
