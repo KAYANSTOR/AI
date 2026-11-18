@@ -61,7 +61,7 @@ export async function createWhatsAppEmbeddedSignupOAuthStateAction(): Promise<
 > {
   try {
     const org = await requireOnboardingAdmin()
-    const result = createEmbeddedSignupOAuthState(org.organizationId)
+    const result = await createEmbeddedSignupOAuthState(org.organizationId)
     return { ok: true, ...result }
   } catch (error) {
     return {
@@ -83,7 +83,7 @@ export async function completeWhatsAppEmbeddedSignupAction(input: {
 }): Promise<OnboardingResult> {
   try {
     const org = await requireOnboardingAdmin()
-    const oauthState = verifyEmbeddedSignupOAuthState(input.state, org.organizationId)
+    const oauthState = await verifyEmbeddedSignupOAuthState(input.state, org.organizationId)
     if (!oauthState) {
       return { ok: false, error: 'انتهت صلاحية جلسة Meta أو لم تتطابق مع الحساب الحالي. أعد بدء الربط.' }
     }

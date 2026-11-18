@@ -9,7 +9,7 @@
  *
  * All Graph calls are server-to-server. Nothing secret reaches the browser.
  */
-import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
+import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
 import { createAdminClient } from '@/lib/db/admin'
 import type { DbClient } from '@/lib/db/client'
 import { deleteChannelCredential, loadChannelCredentials, saveChannelCredential } from '@/lib/credentials/service'
@@ -57,33 +57,82 @@ export function getMetaEmbeddedSignupRedirectUri(): string {
   return new URL(EMBEDDED_SIGNUP_CALLBACK_PATH, base.origin).toString()
 }
 
-/** Creates a short-lived, signed OAuth state tied to the authenticated organization. */
-export function createEmbeddedSignupOAuthState(organizationId: string): {
-  state: string
-  redirectUri: string
-} {
+type OAuthNoncePersist = (organizationId: string, nonceHash: string, expiresAt: string) => Promise<void>
+type OAuthNonceConsume = (organizationId: string, nonceHash: string) => Promise<boolean>
+
+async function persistOAuthStateNonce(
+  organizationId: string,
+  nonceHash: string,
+  expiresAt: string
+): Promise<void> {
+  const admin = createAdminClient()
+  // Expired rows are safe to purge opportunistically; active nonces are untouched.
+  await admin.from('meta_embedded_signup_state_nonces')
+    .delete().lt('expires_at', new Date().toISOString())
+  const { error } = await admin.from('meta_embedded_signup_state_nonces').insert({
+    organization_id: organizationId,
+    nonce_hash: nonceHash,
+    expires_at: expiresAt,
+  })
+  if (error) throw new Error('تعذّر إنشاء جلسة ربط آمنة مع Meta. حاول مرة أخرى.')
+}
+
+async function consumeOAuthStateNonce(
+  organizationId: string,
+  nonceHash: string
+): Promise<boolean> {
+  const admin = createAdminClient()
+  const { data, error } = await admin.from('meta_embedded_signup_state_nonces')
+    .delete()
+    .eq('organization_id', organizationId)
+    .eq('nonce_hash', nonceHash)
+    .gt('expires_at', new Date().toISOString())
+    .select('id')
+    .maybeSingle()
+  return !error && Boolean(data?.id)
+}
+
+/** Creates signed, short-lived OAuth state and stores its nonce for one-time use. */
+export async function createEmbeddedSignupOAuthState(
+  organizationId: string,
+  persistNonce: OAuthNoncePersist = persistOAuthStateNonce
+): Promise<{ state: string; redirectUri: string }> {
   const redirectUri = getMetaEmbeddedSignupRedirectUri()
+  const issuedAt = Math.floor(Date.now() / 1000)
+  const nonce = randomBytes(24).toString('base64url')
   const payload: EmbeddedSignupOAuthStatePayload = {
     version: 1,
     organizationId,
-    issuedAt: Math.floor(Date.now() / 1000),
-    nonce: randomBytes(24).toString('base64url'),
+    issuedAt,
+    nonce,
     redirectUri,
   }
   const encoded = Buffer.from(JSON.stringify(payload)).toString('base64url')
   const signature = createHmac('sha256', oauthStateSecret()).update(encoded).digest('base64url')
-  return { state: `${encoded}.${signature}`, redirectUri }
+  const nonceHash = createHash('sha256').update(nonce).digest('hex')
+  await persistNonce(
+    organizationId,
+    nonceHash,
+    new Date((issuedAt + EMBEDDED_SIGNUP_STATE_TTL_SECONDS) * 1000).toISOString()
+  )
+  return { state: encoded + '.' + signature, redirectUri }
 }
 
-/** Verifies the callback state and returns only the redirect URI it authorizes. */
-export function verifyEmbeddedSignupOAuthState(
+/**
+ * Verifies the state and atomically consumes its persisted nonce. Replaying a
+ * valid signed state therefore fails even if Meta sends the same callback twice.
+ */
+export async function verifyEmbeddedSignupOAuthState(
   state: string,
-  organizationId: string
-): { redirectUri: string } | null {
+  organizationId: string,
+  consumeNonce: OAuthNonceConsume = consumeOAuthStateNonce
+): Promise<{ redirectUri: string } | null> {
   try {
     if (!state || state.length > 4096) return null
-    const [encoded, suppliedSignature, extra] = state.split('.')
-    if (!encoded || !suppliedSignature || extra !== undefined) return null
+    const parts = state.split('.')
+    if (parts.length !== 2 || !parts[0] || !parts[1]) return null
+    const encoded = parts[0]
+    const suppliedSignature = parts[1]
 
     const expectedSignature = createHmac('sha256', oauthStateSecret()).update(encoded).digest()
     const actualSignature = Buffer.from(suppliedSignature, 'base64url')
@@ -98,6 +147,7 @@ export function verifyEmbeddedSignupOAuthState(
       payload.version !== 1 ||
       payload.organizationId !== organizationId ||
       typeof payload.issuedAt !== 'number' ||
+      !Number.isSafeInteger(payload.issuedAt) ||
       payload.issuedAt > now + 60 ||
       now - payload.issuedAt > EMBEDDED_SIGNUP_STATE_TTL_SECONDS ||
       typeof payload.nonce !== 'string' ||
@@ -107,7 +157,10 @@ export function verifyEmbeddedSignupOAuthState(
 
     const canonicalRedirectUri = getMetaEmbeddedSignupRedirectUri()
     if (payload.redirectUri !== canonicalRedirectUri) return null
-    return { redirectUri: canonicalRedirectUri }
+
+    const nonceHash = createHash('sha256').update(payload.nonce).digest('hex')
+    const consumed = await consumeNonce(organizationId, nonceHash)
+    return consumed ? { redirectUri: canonicalRedirectUri } : null
   } catch {
     return null
   }

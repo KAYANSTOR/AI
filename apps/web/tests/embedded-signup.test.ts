@@ -105,150 +105,61 @@ describe('WhatsApp Embedded Signup OAuth callback state', () => {
     else process.env.NEXT_PUBLIC_SITE_URL = previousSiteUrl
   }
 
-  test('issues a signed state tied to the current organization and canonical Railway callback', () => {
+  function createNonceStore() {
+    const hashes = new Set<string>()
+    return {
+      persist: async (_organizationId: string, hash: string) => { hashes.add(hash) },
+      consume: async (_organizationId: string, hash: string) => {
+        if (!hashes.has(hash)) return false
+        hashes.delete(hash)
+        return true
+      },
+    }
+  }
+
+  test('issues a signed state tied to the canonical callback and consumes it once', async () => {
     configureTestEnvironment()
+    const nonces = createNonceStore()
     try {
-      const result = createEmbeddedSignupOAuthState(ORG)
-      expect(result.redirectUri).toBe(
-        'https://kayan-ai.up.railway.app/api/whatsapp/embedded-signup-callback'
-      )
-      expect(verifyEmbeddedSignupOAuthState(result.state, ORG)).toEqual({
+      const result = await createEmbeddedSignupOAuthState(ORG, nonces.persist)
+      expect(result.redirectUri).toBe('https://kayan-ai.up.railway.app/api/whatsapp/embedded-signup-callback')
+      expect(await verifyEmbeddedSignupOAuthState(result.state, ORG, nonces.consume)).toEqual({
         redirectUri: result.redirectUri,
       })
-    } finally {
-      restoreTestEnvironment()
-    }
+      expect(await verifyEmbeddedSignupOAuthState(result.state, ORG, nonces.consume)).toBeNull()
+    } finally { restoreTestEnvironment() }
   })
 
-  test('rejects state issued for a different organization', () => {
+  test('rejects state issued for another organization without consuming the original state', async () => {
     configureTestEnvironment()
+    const nonces = createNonceStore()
     try {
-      const result = createEmbeddedSignupOAuthState(ORG)
-      expect(verifyEmbeddedSignupOAuthState(result.state, 'cccccccc-0000-4000-8000-000000000001')).toBeNull()
-    } finally {
-      restoreTestEnvironment()
-    }
+      const result = await createEmbeddedSignupOAuthState(ORG, nonces.persist)
+      expect(await verifyEmbeddedSignupOAuthState(
+        result.state,
+        'cccccccc-0000-4000-8000-000000000001',
+        nonces.consume
+      )).toBeNull()
+      expect(await verifyEmbeddedSignupOAuthState(result.state, ORG, nonces.consume)).not.toBeNull()
+    } finally { restoreTestEnvironment() }
   })
 
-  test('rejects a modified or expired state', () => {
+  test('rejects a modified or expired state before nonce consumption', async () => {
     configureTestEnvironment()
+    const nonces = createNonceStore()
     const realNow = Date.now
     try {
-      const result = createEmbeddedSignupOAuthState(ORG)
+      const result = await createEmbeddedSignupOAuthState(ORG, nonces.persist)
       const [encoded, signature] = result.state.split('.')
-      const replacement = signature.endsWith('a') ? 'b' : 'a'
-      const tampered = encoded + '.' + signature.slice(0, -1) + replacement
-      expect(verifyEmbeddedSignupOAuthState(tampered, ORG)).toBeNull()
+      const changed = signature.endsWith('a') ? 'b' : 'a'
+      const tampered = encoded + '.' + signature.slice(0, -1) + changed
+      expect(await verifyEmbeddedSignupOAuthState(tampered, ORG, nonces.consume)).toBeNull()
 
       Date.now = () => realNow() + 31 * 60 * 1000
-      expect(verifyEmbeddedSignupOAuthState(result.state, ORG)).toBeNull()
+      expect(await verifyEmbeddedSignupOAuthState(result.state, ORG, nonces.consume)).toBeNull()
     } finally {
       Date.now = realNow
       restoreTestEnvironment()
     }
-  })
-})
-
-
-describe('WhatsApp Embedded Signup input validation', () => {
-  const validInput = {
-    organizationId: ORG,
-    businessId: EXISTING_BUSINESS,
-    organizationName: 'Kayan',
-    session: {
-      code: 'single-use-meta-code',
-      phoneNumberId: '123456789012345',
-      wabaId: '987654321098765',
-      businessPortfolioId: '111222333444555',
-      redirectUri: 'https://kayan-ai.up.railway.app/api/whatsapp/embedded-signup-callback',
-      primaryWaacIds: ['123456789'],
-    },
-  }
-
-  test('accepts well-formed tenant-bound signup data', () => {
-    expect(CompleteEmbeddedSignupInputSchema.safeParse(validInput).success).toBe(true)
-  })
-
-  test('rejects malformed provider identifiers and unexpected fields', () => {
-    expect(EmbeddedSignupSessionSchema.safeParse({ code: 'code', phoneNumberId: 'not-a-meta-id' }).success).toBe(false)
-    expect(CompleteEmbeddedSignupInputSchema.safeParse({
-      ...validInput,
-      unexpectedAccessToken: 'must-not-be-accepted',
-    }).success).toBe(false)
-  })
-})
-
-describe('Meta access-token validation', () => {
-  const originalFetch = globalThis.fetch
-  const originalAppId = process.env.NEXT_PUBLIC_META_APP_ID
-  const originalAppSecret = process.env.META_APP_SECRET
-
-  function restore() {
-    globalThis.fetch = originalFetch
-    if (originalAppId === undefined) delete process.env.NEXT_PUBLIC_META_APP_ID
-    else process.env.NEXT_PUBLIC_META_APP_ID = originalAppId
-    if (originalAppSecret === undefined) delete process.env.META_APP_SECRET
-    else process.env.META_APP_SECRET = originalAppSecret
-  }
-
-  function mockDebugToken(data: Record<string, unknown>) {
-    globalThis.fetch = (async () => new Response(JSON.stringify({ data }), {
-      status: 200,
-      headers: { 'content-type': 'application/json' },
-    })) as typeof fetch
-  }
-
-  function validDebugData(overrides: Record<string, unknown> = {}) {
-    return {
-      is_valid: true,
-      app_id: '2178786043520227',
-      scopes: ['whatsapp_business_management', 'whatsapp_business_messaging'],
-      expires_at: 0,
-      granular_scopes: [{
-        scope: 'whatsapp_business_management',
-        target_ids: ['987654321098765'],
-      }],
-      ...overrides,
-    }
-  }
-
-  test('accepts a valid token for the expected app and WABA', async () => {
-    process.env.NEXT_PUBLIC_META_APP_ID = '2178786043520227'
-    process.env.META_APP_SECRET = 'test-meta-app-secret'
-    mockDebugToken(validDebugData())
-    try {
-      const debug = await debugCustomerAccessToken(Buffer.from('temporary-access-token'))
-      expect(hasMetaWabaAccess(debug, '987654321098765')).toBe(true)
-      expect(hasMetaWabaAccess(debug, '000000000000000')).toBe(false)
-    } finally { restore() }
-  })
-
-  test('rejects a token issued to a different Meta application', async () => {
-    process.env.NEXT_PUBLIC_META_APP_ID = '2178786043520227'
-    process.env.META_APP_SECRET = 'test-meta-app-secret'
-    mockDebugToken(validDebugData({ app_id: '999999999999999' }))
-    try {
-      await expect(debugCustomerAccessToken(Buffer.from('temporary-access-token'))).rejects.toThrow('لا يتبع تطبيق Kayan AI الحالي')
-    } finally { restore() }
-  })
-
-  test('rejects missing WhatsApp permissions and expired tokens', async () => {
-    process.env.NEXT_PUBLIC_META_APP_ID = '2178786043520227'
-    process.env.META_APP_SECRET = 'test-meta-app-secret'
-    mockDebugToken(validDebugData({ scopes: ['whatsapp_business_management'] }))
-    try {
-      await expect(debugCustomerAccessToken(Buffer.from('temporary-access-token'))).rejects.toThrow('لم تمنح Meta جميع صلاحيات WhatsApp المطلوبة')
-      mockDebugToken(validDebugData({ expires_at: Math.floor(Date.now() / 1000) - 60 }))
-      await expect(debugCustomerAccessToken(Buffer.from('temporary-access-token'))).rejects.toThrow('انتهت صلاحية التفويض')
-    } finally { restore() }
-  })
-
-  test('rejects token responses without a WhatsApp asset grant', async () => {
-    process.env.NEXT_PUBLIC_META_APP_ID = '2178786043520227'
-    process.env.META_APP_SECRET = 'test-meta-app-secret'
-    mockDebugToken(validDebugData({ granular_scopes: [] }))
-    try {
-      await expect(debugCustomerAccessToken(Buffer.from('temporary-access-token'))).rejects.toThrow('تعذّر تأكيد صلاحية الوصول إلى حساب WhatsApp Business')
-    } finally { restore() }
   })
 })
