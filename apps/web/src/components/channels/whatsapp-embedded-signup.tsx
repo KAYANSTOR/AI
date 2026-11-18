@@ -74,7 +74,6 @@ export function WhatsAppEmbeddedSignupButton({
   useEffect(() => {
     mounted.current = true
     if (!appId) {
-      setSdkError('معرّف تطبيق Meta غير مضبوط على الخادم.')
       return () => { mounted.current = false }
     }
 
@@ -98,7 +97,9 @@ export function WhatsAppEmbeddedSignupButton({
 
     window.fbAsyncInit = initialize
     if (window.FB) {
-      initialize()
+      // Defer the React state notification when the SDK was already loaded
+      // before this component mounted; never set state synchronously in an effect.
+      queueMicrotask(initialize)
     } else {
       const existing = document.getElementById('facebook-jssdk') as HTMLScriptElement | null
       script = existing
