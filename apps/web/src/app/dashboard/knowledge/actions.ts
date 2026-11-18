@@ -137,20 +137,20 @@ export async function deleteKnowledgeAction(id: string): Promise<KnowledgeResult
     return { ok: false, error: actionErrorMessage(error, 'غير مصرح.') }
   }
 
+  // Backward-compatible action name: never hard-delete knowledge or revision history.
   const { data, error } = await ctx.db.rpc('set_knowledge_active_with_revision', {
     p_organization_id: ctx.organizationId,
     p_knowledge_id: id,
     p_is_active: false,
-    p_change_reason: 'أرشفة من لوحة المعرفة',
+    p_change_reason: 'أرشفة عبر إجراء الحذف القديم',
   })
   if (error) return { ok: false, error: dbActionError(error) }
   if (!data) return { ok: false, error: 'لم يتم العثور على المدخل.' }
 
-  await audit(ctx, 'knowledge.archived', 'knowledge_base', id)
+  await audit(ctx, 'knowledge.archived', 'knowledge_base', id, { compatibilityAction: 'delete' })
   revalidatePath('/dashboard/knowledge')
-  return { ok: true, message: 'تمت أرشفة المدخل مع الاحتفاظ بسجله.' }
+  return { ok: true, message: 'تمت أرشفة المدخل مع الاحتفاظ بكامل محتواه وإصداراته.' }
 }
-
 
 export type KnowledgeRevision = {
   id: string

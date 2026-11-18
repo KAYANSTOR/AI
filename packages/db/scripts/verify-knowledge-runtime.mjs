@@ -84,6 +84,16 @@ try {
       )
       assert.equal(indexedChunk[0]?.id, chunkId, 'chunk backfill RPC must update only the scoped row')
 
+      const aclRows = await tx.unsafe(
+        `SELECT
+          has_function_privilege('anon', 'public.search_knowledge_hybrid(uuid,text,jsonb,text,integer)', 'EXECUTE') AS anon_can_search,
+          has_function_privilege('authenticated', 'public.search_knowledge_hybrid(uuid,text,jsonb,text,integer)', 'EXECUTE') AS member_can_search,
+          has_function_privilege('anon', 'public.ingest_knowledge_document(uuid,text,text,text,text,text,jsonb)', 'EXECUTE') AS anon_can_ingest`
+      )
+      assert.equal(aclRows[0]?.anon_can_search, false, 'anonymous callers must not execute tenant knowledge search')
+      assert.equal(aclRows[0]?.member_can_search, true, 'authenticated tenant members must execute knowledge search subject to RLS')
+      assert.equal(aclRows[0]?.anon_can_ingest, false, 'anonymous callers must not ingest tenant documents')
+
       const factId = randomUUID()
       await tx.unsafe(
         `INSERT INTO public.knowledge_base
