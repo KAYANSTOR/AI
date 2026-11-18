@@ -1,5 +1,8 @@
 export async function extractPdfText(bytes: Uint8Array): Promise<string> {
   const apiKey = process.env.GEMINI_API_KEY?.trim()
+  if (process.env.KNOWLEDGE_DOCUMENT_EXTRACTION_ENABLED !== 'true') {
+    throw new Error('فعّل KNOWLEDGE_DOCUMENT_EXTRACTION_ENABLED=true بعد مراجعة سياسة إرسال المستندات إلى Gemini.')
+  }
   if (!apiKey) throw new Error('استخراج PDF يحتاج إلى إعداد مفتاح Gemini في الخادم.')
 
   const model = process.env.KNOWLEDGE_DOCUMENT_MODEL?.trim() || 'gemini-3.8-flash'

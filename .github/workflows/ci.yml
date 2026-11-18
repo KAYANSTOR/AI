@@ -61,5 +61,7 @@ jobs:
         run: npm ci
       - name: Apply migrations
         run: npm run db:migrate
+      - name: Verify knowledge runtime
+        run: node packages/db/scripts/verify-knowledge-runtime.mjs
       - name: Verify migrations
         run: npm run db:status

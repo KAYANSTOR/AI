@@ -144,7 +144,7 @@ export function KnowledgeManager({ rows, canManage }: { rows: KnowledgeRow[]; ca
       {canManage && (
         <section className="rounded-xl border border-border bg-surface p-4">
           <h2 className="text-sm font-semibold text-text">إضافة مستند إلى قاعدة المعرفة</h2>
-          <p className="mt-1 text-xs text-text-muted">يمكن رفع ملفات TXT وMD وCSV حتى 5 ميجابايت. تُحفظ النسخة الأصلية ويُستخرج النص وتُنشأ مقاطع للبحث. يتطلب PDF مفتاح Gemini.</p>
+          <p className="mt-1 text-xs text-text-muted">يمكن رفع ملفات TXT وMD وCSV حتى 5 ميجابايت. تُحفظ النسخة الأصلية ويُستخرج النص وتُنشأ مقاطع للبحث. يُرسل PDF إلى Gemini لاستخراج النص، ويتطلب تفعيل KNOWLEDGE_DOCUMENT_EXTRACTION_ENABLED في الخادم.</p>
           <div className="mt-3 flex flex-wrap items-center gap-3">
             <input type="file" accept=".txt,.md,.csv,.docx,.pdf,text/plain,text/markdown,text/csv,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={(event) => setDocumentFile(event.target.files?.[0] ?? null)} className="min-h-11 min-w-0 flex-1 text-xs text-text" />
             <button type="button" disabled={pending || !documentFile} onClick={runUpload} className="min-h-11 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-60">رفع وحفظ المستند</button>
