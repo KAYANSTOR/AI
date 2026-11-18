@@ -9,6 +9,7 @@ import {
   type ValidatedFact,
   type ValidatedServiceDraft,
 } from '@/lib/knowledge/layer'
+import { searchKnowledge } from '@/lib/knowledge/retrieval'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -184,6 +185,24 @@ export async function POST(req: Request) {
 
   const businessName = business?.name || context.organizationName
   const missingSummary = readiness.missingItems.map((m) => m.label).join('، ')
+
+  // Ground the trainer in tenant-owned knowledge collected in earlier sessions.
+  const latestUserMessage = [...body.messages].reverse().find((message) => message.role === 'user')?.content?.trim() || ''
+  let priorKnowledgeSummary = 'لا توجد معلومة سابقة مرتبطة مباشرة بالرسالة الحالية.'
+  if (latestUserMessage) {
+    try {
+      const priorMatches = await searchKnowledge(db, context.organizationId, latestUserMessage, { limit: 8 })
+      if (priorMatches.length > 0) {
+        priorKnowledgeSummary = priorMatches
+          .map((item) => `- [${item.category}] ${item.title}: ${item.content.slice(0, 900)}`)
+          .join('\n')
+      }
+    } catch (knowledgeError) {
+      console.warn('Training prior-knowledge retrieval unavailable', {
+        reason: knowledgeError instanceof Error ? knowledgeError.name : 'unknown',
+      })
+    }
+  }
   const dayNames = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت']
   const hoursSummary = (hours ?? [])
     .map((h) => `${dayNames[h.day_of_week]}: ${h.open_time?.slice(0, 5)}–${h.close_time?.slice(0, 5)}`)
@@ -209,6 +228,15 @@ export async function POST(req: Request) {
 - أوقات العمل المسجلة: ${hoursSummary || 'غير محددة بعد'}
 - الجاهزية الحالية: ${readiness.score}%
 - أبرز النواقص التي يُنصح بالسؤال عنها: ${missingSummary || 'اكتملت المعلومات الأساسية'}
+
+المعرفة المؤكدة المحفوظة من جلسات التدريب السابقة والمرتبطة برسالة المستخدم الأخيرة:
+${priorKnowledgeSummary}
+
+قواعد التراكم:
+- استخدم المعرفة السابقة مرجعاً قبل طرح سؤال سبق أن أُجيب عنه.
+- لا تستبدل معلومة سابقة لمجرد أن العنوان مشابه؛ احفظ المعلومة الجديدة المستقلة كسجل منفصل.
+- إذا خالفت المعلومة الجديدة معلومة محفوظة، لا ترجّح إحداهما ولا تعدّل السجل السابق؛ اطلب تأكيد صاحب النشاط.
+- لا تحفظ المعلومة السابقة مرة ثانية ما لم يذكر المستخدم تحديثاً مؤكداً لها.
 
 طريقة الإخراج الإلزامية:
 أولاً: اكتب ردك العربي المباشر لصاحب الشركة بشكل طبيعي جداً.
