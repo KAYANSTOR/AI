@@ -4,7 +4,7 @@ import { requireCapability, CapabilityDisabledError } from '@/lib/capabilities/g
 import { ar } from '@/lib/i18n/ar'
 import { KnowledgeManager, type KnowledgeRow } from './knowledge-manager'
 
-export default async function KnowledgePage() {
+export default async function KnowledgePage({ searchParams }: { searchParams: Promise<{ page?: string }> }) {
   let ctx
   try {
     ctx = await requireCapability('knowledge_base')
@@ -26,13 +26,26 @@ export default async function KnowledgePage() {
     redirect('/login')
   }
 
+  const params = await searchParams
+  const requestedPage = Math.max(1, Number.parseInt(params.page ?? '1', 10) || 1)
+  const pageSize = 50
+  const { count: knowledgeCount, error: knowledgeCountError } = await ctx.db
+    .from('knowledge_base')
+    .select('id', { count: 'exact', head: true })
+    .eq('organization_id', ctx.organizationId)
+  if (knowledgeCountError) throw new Error(knowledgeCountError.message)
+
+  const totalCount = knowledgeCount ?? 0
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize))
+  const currentPage = Math.min(requestedPage, totalPages)
+
   const [{ data }, { count: documentCount }, { count: chunkCount }] = await Promise.all([
     ctx.db
       .from('knowledge_base')
-      .select('id, title, content, category, is_active')
+      .select('id, title, content, category, is_active, created_at')
       .eq('organization_id', ctx.organizationId)
       .order('updated_at', { ascending: false })
-      .range(0, 99),
+      .range((currentPage - 1) * pageSize, currentPage * pageSize - 1),
     ctx.db.from('knowledge_documents').select('id', { count: 'exact', head: true }).eq('organization_id', ctx.organizationId),
     ctx.db.from('knowledge_chunks').select('id', { count: 'exact', head: true }).eq('organization_id', ctx.organizationId),
   ])
@@ -48,8 +61,8 @@ export default async function KnowledgePage() {
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <div className="rounded-xl border border-border bg-surface p-4">
-          <p className="text-xs text-text-muted">المعلومات المحفوظة (أول 100 في القائمة)</p>
-          <p className="mt-1 text-2xl font-semibold text-text tabular-nums">{(data ?? []).length}</p>
+          <p className="text-xs text-text-muted">إجمالي المعلومات المحفوظة</p>
+          <p className="mt-1 text-2xl font-semibold text-text tabular-nums">{totalCount}</p>
         </div>
         <div className="rounded-xl border border-border bg-surface p-4">
           <p className="text-xs text-text-muted">المستندات</p>
@@ -61,7 +74,7 @@ export default async function KnowledgePage() {
         </div>
       </div>
 
-      <KnowledgeManager rows={(data ?? []) as KnowledgeRow[]} canManage={canManage} />
+      <KnowledgeManager rows={(data ?? []) as KnowledgeRow[]} canManage={canManage} currentPage={currentPage} totalPages={totalPages} />
     </div>
   )
 }

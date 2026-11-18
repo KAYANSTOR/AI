@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import Link from 'next/link'
 import { BookOpen, Loader2, Pencil, Plus, Search, X } from 'lucide-react'
 import {
   saveKnowledgeAction,
@@ -22,11 +23,12 @@ export type KnowledgeRow = {
   content: string
   category: string
   is_active: boolean
+  created_at?: string
 }
 
 const EMPTY = { id: null as string | null, title: '', content: '', category: 'general' }
 
-export function KnowledgeManager({ rows, canManage }: { rows: KnowledgeRow[]; canManage: boolean }) {
+export function KnowledgeManager({ rows, canManage, currentPage, totalPages }: { rows: KnowledgeRow[]; canManage: boolean; currentPage: number; totalPages: number }) {
   const [form, setForm] = useState(EMPTY)
   const [result, setResult] = useState<KnowledgeResult | null>(null)
   const [query, setQuery] = useState('')
@@ -209,6 +211,24 @@ export function KnowledgeManager({ rows, canManage }: { rows: KnowledgeRow[]; ca
             </li>
           ))}
         </ul>
+      )}
+
+      {totalPages > 1 && (
+        <nav aria-label="صفحات قاعدة المعرفة" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-surface px-4 py-3">
+          <p className="text-xs text-text-muted">الصفحة {currentPage} من {totalPages} · {rows.length} معلومة في هذه الصفحة</p>
+          <div className="flex items-center gap-2">
+            {currentPage > 1 ? (
+              <Link href={`/dashboard/knowledge?page=${currentPage - 1}`} className="inline-flex min-h-10 items-center rounded-lg border border-border px-3 text-xs font-medium text-text">السابق</Link>
+            ) : (
+              <span className="inline-flex min-h-10 items-center rounded-lg border border-border px-3 text-xs text-text-muted opacity-50">السابق</span>
+            )}
+            {currentPage < totalPages ? (
+              <Link href={`/dashboard/knowledge?page=${currentPage + 1}`} className="inline-flex min-h-10 items-center rounded-lg border border-border px-3 text-xs font-medium text-text">التالي</Link>
+            ) : (
+              <span className="inline-flex min-h-10 items-center rounded-lg border border-border px-3 text-xs text-text-muted opacity-50">التالي</span>
+            )}
+          </div>
+        </nav>
       )}
 
       {canManage && (
