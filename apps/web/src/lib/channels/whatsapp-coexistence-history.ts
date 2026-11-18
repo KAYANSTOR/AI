@@ -139,8 +139,18 @@ export async function importWhatsAppCoexistenceHistory(
 
       for (const entry of prepared) {
         const inbound = entry.parsed
-        const messageType = inbound.kind === 'media' ? inbound.messageType : 'text'
-        const content = inbound.kind === 'media' ? inbound.content : inbound.text
+        let messageType: 'text' | 'image' | 'audio' | 'video' | 'file'
+        let content: string
+        if (inbound.kind === 'text') {
+          messageType = 'text'
+          content = inbound.text
+        } else if (inbound.kind === 'media') {
+          messageType = inbound.messageType
+          content = inbound.content
+        } else {
+          result.skipped++
+          continue
+        }
         const { error } = await db.from('messages').insert({
           organization_id: input.organizationId,
           conversation_id: conversationId,
