@@ -9,6 +9,7 @@ import {
   getKnowledgeRevisionsAction,
   restoreKnowledgeRevisionAction,
   uploadKnowledgeDocumentAction,
+  indexLegacyKnowledgeEmbeddingsAction,
   type KnowledgeRevision,
   type KnowledgeResult,
 } from './actions'
@@ -34,6 +35,7 @@ export function KnowledgeManager({ rows, canManage }: { rows: KnowledgeRow[]; ca
   const [historyId, setHistoryId] = useState<string | null>(null)
   const [history, setHistory] = useState<KnowledgeRevision[]>([])
   const [documentFile, setDocumentFile] = useState<File | null>(null)
+  const [embeddingProgress, setEmbeddingProgress] = useState<{ indexed: number; remaining: number } | null>(null)
 
   function run(work: () => Promise<KnowledgeResult>, resetOnSuccess = false) {
     setResult(null)
@@ -50,6 +52,19 @@ export function KnowledgeManager({ rows, canManage }: { rows: KnowledgeRow[]; ca
    * Asks the server to run the agent's own retrieval, so the preview cannot drift from what
    * the agent would actually find.
    */
+  function runEmbeddingBackfill() {
+    setResult(null)
+    setEmbeddingProgress(null)
+    startTransition(async () => {
+      const outcome = await indexLegacyKnowledgeEmbeddingsAction()
+      if (!outcome.ok) { setResult({ ok: false, error: outcome.error }); return }
+      setEmbeddingProgress({ indexed: outcome.indexed ?? 0, remaining: outcome.remaining ?? 0 })
+      setResult({ ok: true, message: outcome.remaining === 0
+        ? `اكتملت الفهرسة الدلالية. تمت معالجة ${outcome.indexed ?? 0} معلومة في هذه الدفعة.`
+        : `تمت فهرسة ${outcome.indexed ?? 0} معلومة. المتبقي: ${outcome.remaining ?? 0}. اضغط مجدداً للمتابعة.` })
+    })
+  }
+
   function runUpload() {
     if (!documentFile) return
     const formData = new FormData()
@@ -129,9 +144,9 @@ export function KnowledgeManager({ rows, canManage }: { rows: KnowledgeRow[]; ca
       {canManage && (
         <section className="rounded-xl border border-border bg-surface p-4">
           <h2 className="text-sm font-semibold text-text">إضافة مستند إلى قاعدة المعرفة</h2>
-          <p className="mt-1 text-xs text-text-muted">يمكن رفع ملفات TXT وMD وCSV حتى 5 ميجابايت. يُحفظ النص الأصلي وتُنشأ مقاطع للبحث دون حذف المستندات السابقة.</p>
+          <p className="mt-1 text-xs text-text-muted">يمكن رفع ملفات TXT وMD وCSV حتى 5 ميجابايت. تُحفظ النسخة الأصلية ويُستخرج النص وتُنشأ مقاطع للبحث. يتطلب PDF مفتاح Gemini.</p>
           <div className="mt-3 flex flex-wrap items-center gap-3">
-            <input type="file" accept=".txt,.md,.csv,text/plain,text/markdown,text/csv" onChange={(event) => setDocumentFile(event.target.files?.[0] ?? null)} className="min-h-11 min-w-0 flex-1 text-xs text-text" />
+            <input type="file" accept=".txt,.md,.csv,.docx,.pdf,text/plain,text/markdown,text/csv,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={(event) => setDocumentFile(event.target.files?.[0] ?? null)} className="min-h-11 min-w-0 flex-1 text-xs text-text" />
             <button type="button" disabled={pending || !documentFile} onClick={runUpload} className="min-h-11 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-60">رفع وحفظ المستند</button>
           </div>
           {documentFile && <p className="mt-2 text-xs text-text-muted">{documentFile.name} · {(documentFile.size / 1024).toFixed(0)} كيلوبايت</p>}
@@ -194,6 +209,19 @@ export function KnowledgeManager({ rows, canManage }: { rows: KnowledgeRow[]; ca
             </li>
           ))}
         </ul>
+      )}
+
+      {canManage && (
+        <section className="rounded-xl border border-border bg-surface p-4">
+          <h2 className="text-sm font-semibold text-text">تفعيل البحث الدلالي للمعلومات السابقة</h2>
+          <p className="mt-1 text-xs text-text-muted">يعالج هذا الإجراء المعلومات القديمة التي لم تُنشأ لها متجهات بحث بعد. تتم المعالجة على دفعات صغيرة مع بقاء البحث النصّي متاحاً.</p>
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <button type="button" disabled={pending} onClick={runEmbeddingBackfill} className="min-h-10 rounded-lg border border-border px-3 py-2 text-xs font-medium text-text disabled:opacity-60">
+              {pending ? 'جارٍ الفهرسة…' : 'فهرسة دفعة من المعلومات'}
+            </button>
+            {embeddingProgress && <span className="text-xs text-text-muted">تمت معالجة {embeddingProgress.indexed} · المتبقي {embeddingProgress.remaining}</span>}
+          </div>
+        </section>
       )}
 
       {historyId && (

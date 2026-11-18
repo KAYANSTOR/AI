@@ -1,4 +1,5 @@
 import type { DbClient } from '@/lib/db/client'
+import { embedKnowledgeText } from './embeddings'
 export type KnowledgeMatch = { id: string; title: string; category: string; content: string; score: number }
 function normalizeKnowledgeText(value: string): string {
   return value.normalize('NFKC').toLocaleLowerCase('ar').replace(/[\u064B-\u065F\u0670\u0640]/g, '').replace(/[أإآٱ]/g, 'ا').replace(/ى/g, 'ي').replace(/[\u200B-\u200F\uFEFF]/g, '').replace(/[^\p{L}\p{N}]+/gu, ' ').trim().replace(/\s+/g, ' ')
@@ -15,8 +16,32 @@ export async function searchKnowledge(db: DbClient, organizationId: string, quer
   const normalized = normalizeKnowledgeText(query), tokens = tokenize(query)
   if (!tokens.length) return []
   const limit = Math.max(1, Math.min(options.limit ?? 8, 50))
-  const { data: indexed, error } = await db.rpc('search_knowledge_base', { p_organization_id: organizationId, p_query: normalized, p_category: options.category ?? null, p_limit: limit })
-  if (!error && Array.isArray(indexed)) return indexed.map((r: Record<string, unknown>) => ({ id: String(r.id), title: String(r.title ?? ''), category: String(r.category ?? 'general'), content: String(r.content ?? ''), score: Number(r.score ?? 0) }))
+  const queryEmbedding = await embedKnowledgeText(query, 'query')
+  const { data: hybrid, error: hybridError } = await db.rpc('search_knowledge_hybrid', {
+    p_organization_id: organizationId,
+    p_query: normalized,
+    p_query_embedding: queryEmbedding,
+    p_category: options.category ?? null,
+    p_limit: limit,
+  })
+  if (!hybridError && Array.isArray(hybrid)) {
+    const matches = hybrid.map((r: Record<string, unknown>) => ({
+      id: String(r.id), title: String(r.title ?? ''), category: String(r.category ?? 'general'),
+      content: String(r.content ?? ''), score: Number(r.score ?? 0),
+    }))
+    if (matches.length > 0 || queryEmbedding) return matches
+  }
+
+  const { data: indexed, error } = await db.rpc('search_knowledge_base', {
+    p_organization_id: organizationId, p_query: normalized,
+    p_category: options.category ?? null, p_limit: limit,
+  })
+  if (!error && Array.isArray(indexed) && indexed.length > 0) {
+    return indexed.map((r: Record<string, unknown>) => ({
+      id: String(r.id), title: String(r.title ?? ''), category: String(r.category ?? 'general'),
+      content: String(r.content ?? ''), score: Number(r.score ?? 0),
+    }))
+  }
   // Fallback during staged deployments; page through all tenant rows rather than truncating at 200.
   const pageSize = 500, rows: Record<string, unknown>[] = []
   for (let offset = 0; ; offset += pageSize) {

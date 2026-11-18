@@ -1,10 +1,14 @@
 'use server'
 
+import { createHash } from 'node:crypto'
 import { revalidatePath } from 'next/cache'
 import { KNOWLEDGE_CATEGORIES } from './categories'
 import { requireAdminCapability, audit, type AuthorizedContext } from '@/lib/capabilities/guard'
 import { searchKnowledge } from '@/lib/knowledge/retrieval'
 import { knowledgeContentHash } from '@/lib/knowledge/layer'
+import { embedKnowledgeText, KNOWLEDGE_EMBEDDING_MODEL } from '@/lib/knowledge/embeddings'
+import { extractDocxText } from '@/lib/knowledge/document-parser'
+import { extractPdfText } from '@/lib/knowledge/pdf-extractor'
 import { actionErrorMessage, dbActionError } from '@/lib/i18n/action-error'
 
 export type KnowledgeResult = { ok: boolean; error?: string; message?: string }
@@ -39,10 +43,14 @@ export async function saveKnowledgeAction(input: KnowledgeInput): Promise<Knowle
   if (!content) return { ok: false, error: 'المحتوى مطلوب.' }
   if (title.length > MAX_TITLE) return { ok: false, error: 'العنوان طويل جدًا.' }
 
+  const contentEmbedding = await embedKnowledgeText(content, 'document', title)
   const payload = {
     organization_id: ctx.organizationId,
     title: title.slice(0, MAX_TITLE),
     content,
+    content_hash: knowledgeContentHash(content),
+    content_embedding: contentEmbedding,
+    embedding_model: contentEmbedding ? KNOWLEDGE_EMBEDDING_MODEL : null,
     category: normalizeCategory(input.category),
     is_active: true,
     updated_at: new Date().toISOString(),
@@ -55,6 +63,9 @@ export async function saveKnowledgeAction(input: KnowledgeInput): Promise<Knowle
       p_title: payload.title,
       p_content: payload.content,
       p_category: payload.category,
+      p_content_hash: payload.content_hash,
+      p_content_embedding: payload.content_embedding,
+      p_embedding_model: payload.embedding_model,
       p_change_reason: 'تعديل يدوي من لوحة المعرفة',
       p_change_type: 'update',
     })
@@ -188,6 +199,9 @@ export async function restoreKnowledgeRevisionAction(id: string, revisionId: str
       p_title: revision.title,
       p_content: revision.content,
       p_category: revision.category,
+      p_content_hash: knowledgeContentHash(revision.content),
+      p_content_embedding: await embedKnowledgeText(revision.content, 'document', revision.title),
+      p_embedding_model: KNOWLEDGE_EMBEDDING_MODEL,
       p_change_reason: `استعادة الإصدار ${revisionId}`,
       p_change_type: 'restore',
     })
@@ -214,19 +228,43 @@ export async function uploadKnowledgeDocumentAction(formData: FormData): Promise
   const file = formData.get('file')
   if (!(file instanceof File)) return { ok: false, error: 'اختر ملفاً أولاً.' }
   const extension = file.name.toLowerCase().split('.').pop()
-  const allowed = new Set(['txt', 'md', 'csv'])
-  if (!extension || !allowed.has(extension)) return { ok: false, error: 'الصيغ المدعومة حالياً: TXT وMD وCSV.' }
-  if (file.size <= 0 || file.size > 5 * 1024 * 1024) return { ok: false, error: 'حجم الملف يجب أن يكون أقل من 5 ميجابايت.' }
+  const allowed = new Set(['txt', 'md', 'csv', 'docx', 'pdf'])
+  if (!extension || !allowed.has(extension)) {
+    return { ok: false, error: 'الصيغ المدعومة: TXT وMD وCSV وDOCX وPDF.' }
+  }
+  if (file.size <= 0 || file.size > 5 * 1024 * 1024) {
+    return { ok: false, error: 'حجم الملف يجب ألا يتجاوز 5 ميجابايت.' }
+  }
 
+  let fileBytes: Buffer
   let originalText: string
   try {
-    originalText = (await file.text()).replace(/^\uFEFF/, '').trim()
-  } catch {
-    return { ok: false, error: 'تعذّر قراءة الملف النصي.' }
+    fileBytes = Buffer.from(await file.arrayBuffer())
+    if (extension === 'pdf') {
+      if (fileBytes.subarray(0, 5).toString('ascii') !== '%PDF-') {
+        return { ok: false, error: 'محتوى الملف لا يطابق صيغة PDF.' }
+      }
+      originalText = await extractPdfText(fileBytes)
+    } else if (extension === 'docx') {
+      if (fileBytes.length < 4 || fileBytes.readUInt32LE(0) !== 0x04034b50) {
+        return { ok: false, error: 'محتوى الملف لا يطابق صيغة DOCX.' }
+      }
+      originalText = extractDocxText(fileBytes)
+    } else {
+      if (fileBytes.includes(0)) return { ok: false, error: 'الملف النصي يحتوي على بيانات ثنائية غير مدعومة.' }
+      originalText = new TextDecoder('utf-8', { fatal: true }).decode(fileBytes).replace(/^\uFEFF/, '')
+    }
+    originalText = originalText.trim()
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : 'تعذّرت قراءة محتوى المستند.' }
   }
-  if (!originalText) return { ok: false, error: 'الملف لا يحتوي على نص قابل للقراءة.' }
 
-  const contentHash = knowledgeContentHash(originalText)
+  if (!originalText) return { ok: false, error: 'الملف لا يحتوي على نص قابل للقراءة.' }
+  if (originalText.length > 200_000) {
+    return { ok: false, error: 'المستند كبير جداً بعد استخراج النص. قسّمه إلى ملفات أصغر (حد النص 200 ألف حرف).' }
+  }
+
+  const contentHash = createHash('sha256').update(fileBytes).digest('hex')
   const { data: existing, error: lookupError } = await ctx.db
     .from('knowledge_documents')
     .select('id')
@@ -234,43 +272,132 @@ export async function uploadKnowledgeDocumentAction(formData: FormData): Promise
     .eq('content_hash', contentHash)
     .maybeSingle()
   if (lookupError) return { ok: false, error: dbActionError(lookupError) }
-  if (existing?.id) return { ok: true, message: 'هذا المستند محفوظ مسبقاً ولم تتم إضافته مرة أخرى.' }
+  if (existing?.id) return { ok: true, message: 'هذا الملف محفوظ مسبقاً ولم تتم إضافته مرة أخرى.' }
 
   const paragraphs = originalText.split(/\n\s*\n/).map((part) => part.trim()).filter(Boolean)
   const chunks: Array<{ chunk_index: number; content: string; content_hash: string }> = []
   let current = ''
   const pushChunk = () => {
     if (!current.trim()) return
-    const content = current.trim()
-    chunks.push({ chunk_index: chunks.length, content, content_hash: knowledgeContentHash(content) })
+    const chunkContent = current.trim()
+    chunks.push({ chunk_index: chunks.length, content: chunkContent, content_hash: knowledgeContentHash(chunkContent) })
     current = ''
   }
   for (const paragraph of paragraphs.length ? paragraphs : [originalText]) {
-    if (paragraph.length > 1400) {
+    if (paragraph.length > 3000) {
       pushChunk()
-      for (let offset = 0; offset < paragraph.length; offset += 1250) {
-        const content = paragraph.slice(offset, offset + 1400).trim()
-        if (content) chunks.push({ chunk_index: chunks.length, content, content_hash: knowledgeContentHash(content) })
+      for (let offset = 0; offset < paragraph.length; offset += 2700) {
+        const chunkContent = paragraph.slice(offset, offset + 3000).trim()
+        if (chunkContent) chunks.push({ chunk_index: chunks.length, content: chunkContent, content_hash: knowledgeContentHash(chunkContent) })
       }
       continue
     }
-    if (current && current.length + paragraph.length + 2 > 1400) pushChunk()
+    if (current && current.length + paragraph.length + 2 > 3000) pushChunk()
     current = current ? `${current}\n\n${paragraph}` : paragraph
   }
   pushChunk()
 
+  const indexedChunks: Array<{
+    chunk_index: number
+    content: string
+    content_hash: string
+    content_embedding: number[] | null
+    embedding_model: string | null
+  }> = []
+  for (let offset = 0; offset < chunks.length; offset += 3) {
+    const batch = await Promise.all(chunks.slice(offset, offset + 3).map(async (chunk) => {
+      const vector = await embedKnowledgeText(chunk.content, 'document', file.name)
+      return {
+        ...chunk,
+        content_embedding: vector,
+        embedding_model: vector ? KNOWLEDGE_EMBEDDING_MODEL : null,
+      }
+    }))
+    indexedChunks.push(...batch)
+  }
+
+  const mimeType = extension === 'pdf'
+    ? 'application/pdf'
+    : extension === 'docx'
+      ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+      : extension === 'csv'
+        ? 'text/csv'
+        : extension === 'md'
+          ? 'text/markdown'
+          : 'text/plain'
+
   const { data, error } = await ctx.db.rpc('ingest_knowledge_document', {
     p_organization_id: ctx.organizationId,
     p_file_name: file.name,
-    p_mime_type: file.type || 'text/plain',
+    p_mime_type: mimeType,
     p_content_hash: contentHash,
     p_original_text: originalText,
-    p_chunks: chunks,
+    p_original_file_base64: fileBytes.toString('base64'),
+    p_chunks: indexedChunks,
   })
   if (error) return { ok: false, error: dbActionError(error) }
   if (!data) return { ok: false, error: 'لم يتم حفظ المستند.' }
 
-  await audit(ctx, 'knowledge.document_ingested', 'knowledge_documents', String(data), { fileName: file.name, chunks: chunks.length })
+  const embeddedCount = indexedChunks.filter((chunk) => chunk.content_embedding).length
+  await audit(ctx, 'knowledge.document_ingested', 'knowledge_documents', String(data), {
+    fileName: file.name,
+    chunks: chunks.length,
+    embeddedChunks: embeddedCount,
+  })
   revalidatePath('/dashboard/knowledge')
-  return { ok: true, message: `تم حفظ المستند وتقسيمه إلى ${chunks.length} مقطعاً قابلاً للبحث.` }
+  return {
+    ok: true,
+    message: `تم حفظ الملف الأصلي واستخراج النص وتقسيمه إلى ${chunks.length} مقطعاً. تمت فهرسة ${embeddedCount} مقطعاً دلالياً.`,
+  }
+}
+
+
+export async function indexLegacyKnowledgeEmbeddingsAction(): Promise<{
+  ok: boolean
+  indexed?: number
+  remaining?: number
+  error?: string
+}> {
+  try {
+    const ctx = await requireAdminCapability('knowledge_base')
+    if (!process.env.GEMINI_API_KEY?.trim()) {
+      return { ok: false, error: 'أضف GEMINI_API_KEY إلى إعدادات الخادم لتفعيل الفهرسة الدلالية.' }
+    }
+    const { data: rows, error } = await ctx.db
+      .from('knowledge_base')
+      .select('id, title, content')
+      .eq('organization_id', ctx.organizationId)
+      .eq('is_active', true)
+      .is('content_embedding', null)
+      .order('created_at', { ascending: true })
+      .limit(10)
+    if (error) return { ok: false, error: dbActionError(error) }
+
+    let indexed = 0
+    for (const row of rows ?? []) {
+      const vector = await embedKnowledgeText(String(row.content ?? ''), 'document', String(row.title ?? ''))
+      if (!vector) break
+      const result = await ctx.db
+        .from('knowledge_base')
+        .update({ content_embedding: vector, embedding_model: KNOWLEDGE_EMBEDDING_MODEL })
+        .eq('id', row.id)
+        .eq('organization_id', ctx.organizationId)
+        .is('content_embedding', null)
+        .select('id')
+      if (result.error) return { ok: false, error: dbActionError(result.error) }
+      if (result.data?.length) indexed += 1
+    }
+
+    const { count, error: countError } = await ctx.db
+      .from('knowledge_base')
+      .select('id', { count: 'exact', head: true })
+      .eq('organization_id', ctx.organizationId)
+      .eq('is_active', true)
+      .is('content_embedding', null)
+    if (countError) return { ok: false, error: dbActionError(countError) }
+    revalidatePath('/dashboard/knowledge')
+    return { ok: true, indexed, remaining: count ?? 0 }
+  } catch (error) {
+    return { ok: false, error: actionErrorMessage(error, 'تعذّرت فهرسة السجلات القديمة.') }
+  }
 }

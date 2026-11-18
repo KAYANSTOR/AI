@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto'
+import { embedKnowledgeText, KNOWLEDGE_EMBEDDING_MODEL } from './embeddings'
 import type { DbClient } from '@/lib/db/client'
 import { searchKnowledge, type KnowledgeMatch } from './retrieval'
 
@@ -55,10 +56,11 @@ export async function saveValidatedKnowledge(db: DbClient, organizationId: strin
     if (content.length < 5) continue
     const category = ['business_info','service_info','pricing','policy','faq','general'].includes(fact.category) ? fact.category : 'general'
     const contentHash = knowledgeContentHash(content)
+    const contentEmbedding = await embedKnowledgeText(content, 'document', title)
     const { data: existing, error: lookupError } = await db.from('knowledge_base').select('id').eq('organization_id', organizationId).eq('content_hash', contentHash).maybeSingle()
     if (lookupError) throw new Error(lookupError.message)
     if (existing?.id) { results.push({ title, category, action: 'duplicate' }); continue }
-    const { error } = await db.from('knowledge_base').insert({ organization_id: organizationId, title, content, content_hash: contentHash, category, is_active: true, updated_at: new Date().toISOString() })
+    const { error } = await db.from('knowledge_base').insert({ organization_id: organizationId, title, content, content_hash: contentHash, content_embedding: contentEmbedding, embedding_model: contentEmbedding ? KNOWLEDGE_EMBEDDING_MODEL : null, category, is_active: true, updated_at: new Date().toISOString() })
     if (error) {
       if (error.code === '23505') { results.push({ title, category, action: 'duplicate' }); continue }
       throw new Error(error.message)
