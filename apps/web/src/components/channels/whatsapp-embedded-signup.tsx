@@ -22,7 +22,11 @@ type FacebookLoginOptions = {
   auth_type: 'rerequest'
   response_type: 'code'
   override_default_response_type: true
-  extras: { version: 'v5' }
+  extras: {
+    featureType: 'whatsapp_business_app_onboarding'
+    sessionInfoVersion: '3'
+    version: 'v4'
+  }
 }
 
 type FacebookSdk = {
@@ -250,9 +254,12 @@ export function WhatsAppEmbeddedSignupButton({
         auth_type: 'rerequest',
         response_type: 'code',
         override_default_response_type: true,
-        // Embedded Signup v5 enables WhatsApp Business App onboarding (Coexistence)
-        // by default. sessionInfoVersion and the v4 featureType are intentionally omitted.
-        extras: { version: 'v5' },
+        // Match the Meta-hosted Tech Provider configuration for WhatsApp Business App onboarding (Coexistence).
+        extras: {
+          featureType: 'whatsapp_business_app_onboarding',
+          sessionInfoVersion: '3',
+          version: 'v4',
+        },
       })
     } catch (error) {
       pendingSignup.current = null
