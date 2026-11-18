@@ -5,6 +5,7 @@ import { normalizeE164, resolveContactIdentity } from '@/lib/channels/contacts'
 import { ensureOpenConversation } from '@/lib/runtime/conversation'
 import { processInboundMessage, recordInboundMediaMessage } from '@/lib/runtime/process-inbound'
 import { parseWhatsAppInbound } from '@/lib/channels/whatsapp-inbound'
+import { importWhatsAppCoexistenceHistory, updateWhatsAppHistorySyncProgress } from '@/lib/channels/whatsapp-coexistence-history'
 import { resolveChannelExact } from '@/lib/runtime/tenant'
 import {
   publicWebhookError,
@@ -39,6 +40,8 @@ type NormalizedWebhookValue = {
   messages?: Array<Record<string, unknown>>
   message_echoes?: Array<Record<string, unknown>>
   state_sync?: Array<Record<string, unknown>>
+  history?: Array<Record<string, unknown>>
+  errors?: Array<Record<string, unknown>>
 }
 
 function normalizeKapsoPayload(payload: Record<string, unknown>): NormalizedWebhookValue {
@@ -155,9 +158,11 @@ export async function POST(req: NextRequest) {
         ? await resolveChannelExact(db, { channelType: 'whatsapp', providerAccountId: phoneNumberId })
         : null
 
-      // Keep app-originated message history as outbound events; never invoke the agent.
+      // The dedicated smb_message_echoes field is always outbound, even when
+      // Meta uses the generic "messages" property in its envelope.
+      const isAppEchoField = field === 'smb_message_echoes'
       const messages = [
-        ...(value.messages ?? []).map((message) => ({ message, isAppEcho: false })),
+        ...(value.messages ?? []).map((message) => ({ message, isAppEcho: isAppEchoField })),
         ...(value.message_echoes ?? []).map((message) => ({ message, isAppEcho: true })),
       ]
 
@@ -170,8 +175,32 @@ export async function POST(req: NextRequest) {
         await db.from('webhook_events').update({
           organization_id: channelForSync?.organizationId ?? null,
           channel_id: channelForSync?.id ?? null,
-          event_type: 'coexistence.history_received_for_import',
+          event_type: 'coexistence.history_importing',
           signature_verified: true,
+        }).eq('id', eventRowId)
+
+        if (!channelForSync) {
+          await markWebhookProcessed(db, eventRowId, 'failed', 'unmapped_whatsapp_number')
+          eventRowId = null
+          continue
+        }
+
+        await updateWhatsAppHistorySyncProgress(db, {
+          channelId: channelForSync.id,
+          phoneNumberId,
+          history: value.history ?? [],
+          errors: value.errors ?? [],
+        })
+        await importWhatsAppCoexistenceHistory(db, {
+          organizationId: channelForSync.organizationId,
+          businessId: channelForSync.businessId,
+          channelId: channelForSync.id,
+          businessPhoneNumber: channelForSync.externalIdentifier,
+          history: value.history ?? [],
+        })
+
+        await db.from('webhook_events').update({
+          event_type: 'coexistence.history_imported',
         }).eq('id', eventRowId)
         await markWebhookProcessed(db, eventRowId, 'processed')
         eventRowId = null
@@ -189,13 +218,34 @@ export async function POST(req: NextRequest) {
           if (acquired.status === 'duplicate') continue
           if (acquired.status === 'error') throw new Error(acquired.message)
           eventRowId = acquired.eventRowId
-          const fullName = String(contactData.full_name ?? contactData.first_name ?? '').trim()
-          await resolveContactIdentity(db, channelForSync.organizationId, {
-            channel: 'whatsapp', externalUserId: phone, phone: normalizeE164(phone), displayName: fullName || null,
-          })
+          const action = String(syncItem.action ?? 'add').trim().toLowerCase()
+
+          if (action === 'remove' || action === 'delete') {
+            const { data: identity, error: identityReadError } = await db.from('contact_identities')
+              .select('id, contacts!inner(organization_id)')
+              .eq('channel', 'whatsapp')
+              .eq('external_user_id', phone)
+              .eq('contacts.organization_id', channelForSync.organizationId)
+              .maybeSingle()
+            if (identityReadError) throw new Error(identityReadError.message)
+            if (identity?.id) {
+              const { error: identityDeleteError } = await db.from('contact_identities')
+                .delete().eq('id', identity.id)
+              if (identityDeleteError) throw new Error(identityDeleteError.message)
+            }
+          } else {
+            const fullName = String(contactData.full_name ?? contactData.first_name ?? '').trim()
+            await resolveContactIdentity(db, channelForSync.organizationId, {
+              channel: 'whatsapp', externalUserId: phone, phone: normalizeE164(phone), displayName: fullName || null,
+            })
+          }
+
           await db.from('webhook_events').update({
             organization_id: channelForSync.organizationId, channel_id: channelForSync.id,
-            event_type: 'contact.whatsapp_app_synced', signature_verified: true,
+            event_type: action === 'remove' || action === 'delete'
+              ? 'contact.whatsapp_app_removed'
+              : 'contact.whatsapp_app_synced',
+            signature_verified: true,
           }).eq('id', eventRowId)
           await markWebhookProcessed(db, eventRowId, 'processed')
           eventRowId = null

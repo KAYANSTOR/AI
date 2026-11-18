@@ -234,6 +234,10 @@ export type EmbeddedSignupResult =
       displayNumber: string | null
       isOnBusinessApp: boolean
       message: string
+      coexistenceSync?: {
+        contacts: { status: string; requestId: string | null; errorCode: number | null }
+        history: { status: string; requestId: string | null; errorCode: number | null }
+      }
     }
   | { ok: false; error: string }
 
@@ -292,6 +296,143 @@ async function subscribeAppToWaba(wabaId: string, businessToken: string): Promis
     })
     throw new Error('لم تؤكد Meta تفعيل استقبال إشعارات واتساب. تحقق من صلاحيات التطبيق ثم أعد الربط.')
   }
+}
+
+export type CoexistenceSyncRequestResult = {
+  status: string
+  requestId: string | null
+  errorCode: number | null
+}
+
+/**
+ * Ask Meta to sync contacts and chat history once after Coexistence onboarding.
+ * A durable unique row is written before the API call so an OAuth callback retry
+ * cannot accidentally submit a second one-time request.
+ */
+async function requestCoexistenceSync(
+  admin: ReturnType<typeof createAdminClient>,
+  input: {
+    organizationId: string
+    channelId: string
+    phoneNumberId: string
+    accessToken: string
+    syncType: 'smb_app_state_sync' | 'history'
+  }
+): Promise<CoexistenceSyncRequestResult> {
+  const { data: claim, error: claimError } = await admin
+    .from('whatsapp_coexistence_sync_requests')
+    .insert({
+      organization_id: input.organizationId,
+      channel_id: input.channelId,
+      phone_number_id: input.phoneNumberId,
+      sync_type: input.syncType,
+      status: 'requesting',
+    })
+    .select('id')
+    .single()
+
+  if (claimError?.code === '23505') {
+    const { data: existing, error: readError } = await admin
+      .from('whatsapp_coexistence_sync_requests')
+      .select('status, request_id, error_code')
+      .eq('channel_id', input.channelId)
+      .eq('phone_number_id', input.phoneNumberId)
+      .eq('sync_type', input.syncType)
+      .maybeSingle()
+    if (readError) throw new Error('تعذّر قراءة حالة مزامنة WhatsApp Business.')
+    return {
+      status: String(existing?.status ?? 'unknown'),
+      requestId: typeof existing?.request_id === 'string' ? existing.request_id : null,
+      errorCode: typeof existing?.error_code === 'number' ? existing.error_code : null,
+    }
+  }
+  if (claimError || !claim?.id) {
+    console.error('EmbeddedSignup: coexistence sync claim failed', claimError)
+    throw new Error('تعذّر تجهيز مزامنة WhatsApp Business.')
+  }
+
+  try {
+    const url = new URL(
+      getMetaGraphBaseUrl() + '/' + encodeURIComponent(input.phoneNumberId) + '/smb_app_data'
+    )
+    const response = await fetchMeta(url.toString(), {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer ' + input.accessToken,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        sync_type: input.syncType,
+      }),
+      cache: 'no-store',
+    })
+    const body = await response.json().catch(() => null) as {
+      request_id?: string
+      data?: { request_id?: string }
+      error?: { code?: number; message?: string }
+    } | null
+    const requestId = body?.request_id ?? body?.data?.request_id ?? null
+    if (!response.ok || !requestId) {
+      const errorCode = typeof body?.error?.code === 'number' ? body.error.code : null
+      await admin.from('whatsapp_coexistence_sync_requests').update({
+        status: 'failed',
+        error_code: errorCode,
+        error_message: errorCode ? 'meta_error_' + errorCode : 'meta_sync_request_not_confirmed',
+        updated_at: new Date().toISOString(),
+      }).eq('id', claim.id)
+      return { status: 'failed', requestId: null, errorCode }
+    }
+
+    const { error: updateError } = await admin
+      .from('whatsapp_coexistence_sync_requests')
+      .update({
+        status: 'requested',
+        request_id: requestId,
+        requested_at: new Date().toISOString(),
+        error_code: null,
+        error_message: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', claim.id)
+    if (updateError) {
+      console.error('EmbeddedSignup: sync accepted by Meta but local request state was not saved', {
+        syncType: input.syncType,
+        error: updateError,
+      })
+      return { status: 'accepted_unrecorded', requestId, errorCode: null }
+    }
+    return { status: 'requested', requestId, errorCode: null }
+  } catch (error) {
+    const errorCode = error && typeof error === 'object' && 'code' in error &&
+      typeof (error as { code?: unknown }).code === 'number'
+      ? (error as { code: number }).code
+      : null
+    await admin.from('whatsapp_coexistence_sync_requests').update({
+      status: 'failed',
+      error_code: errorCode,
+      error_message: 'meta_sync_request_failed',
+      updated_at: new Date().toISOString(),
+    }).eq('id', claim.id)
+    console.error('EmbeddedSignup: coexistence sync request failed', {
+      syncType: input.syncType,
+      errorCode,
+    })
+    return { status: 'failed', requestId: null, errorCode }
+  }
+}
+
+/** Both one-time sync requests are independent; attempt each even if the other fails. */
+async function requestCoexistenceDataSync(
+  admin: ReturnType<typeof createAdminClient>,
+  input: { organizationId: string; channelId: string; phoneNumberId: string; accessToken: string }
+): Promise<{
+  contacts: CoexistenceSyncRequestResult
+  history: CoexistenceSyncRequestResult
+}> {
+  const contacts = await requestCoexistenceSync(admin, { ...input, syncType: 'smb_app_state_sync' })
+  const history = await requestCoexistenceSync(admin, { ...input, syncType: 'history' })
+  return { contacts, history }
 }
 
 async function fetchVerifiedPhoneNumber(
@@ -653,6 +794,15 @@ export async function completeEmbeddedSignup(input: unknown): Promise<EmbeddedSi
     }
 
     await subscribeAppToWaba(wabaId, businessToken)
+    const coexistenceSync = connectionMode === 'coexistence'
+      ? await requestCoexistenceDataSync(admin, {
+          organizationId,
+          channelId,
+          phoneNumberId,
+          accessToken: businessToken,
+        })
+      : undefined
+
     const activated = await admin.from('channels').update({
       verification_status: connectionMode === 'coexistence' ? 'verified' : 'pending',
       is_active: connectionMode === 'coexistence',
@@ -678,8 +828,11 @@ export async function completeEmbeddedSignup(input: unknown): Promise<EmbeddedSi
       displayNumber,
       isOnBusinessApp: connectionMode === 'coexistence',
       message: connectionMode === 'coexistence'
-        ? 'أكدت Meta تشغيل الرقم مع تطبيق WhatsApp Business وCloud API معاً. لا يلزم إدخال PIN لهذا المسار.'
+        ? (coexistenceSync?.contacts.status === 'requested' && coexistenceSync.history.status === 'requested'
+          ? 'تم ربط WhatsApp Business مع Kayan AI. طلبنا مزامنة جهات الاتصال وسجل المحادثات من Meta؛ لا يلزم إدخال PIN.'
+          : 'تم ربط WhatsApp Business مع Kayan AI، لكن طلب مزامنة البيانات لم يكتمل بالكامل. يمكنك استخدام القناة، ويمكن مراجعة حالة المزامنة من سجل الربط.')
         : 'تم تفويض Meta وحفظ بيانات القناة. أكمل تسجيل رقم الإرسال برمز PIN المكوّن من 6 أرقام قبل التفعيل.',
+      ...(coexistenceSync ? { coexistenceSync } : {}),
     }
   } catch (error) {
     console.error('EmbeddedSignup: complete failed', error)

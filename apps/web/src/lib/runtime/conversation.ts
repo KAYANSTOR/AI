@@ -31,6 +31,7 @@ export async function ensureOpenConversation(
     businessId: string | null
     contactId: string
     channelId: string
+    initialLastMessageAt?: string
   }
 ): Promise<string> {
   const existing = await db
@@ -55,7 +56,7 @@ export async function ensureOpenConversation(
       status: 'active',
       state: 'discovery',
       ai_enabled: true,
-      last_message_at: new Date().toISOString(),
+      last_message_at: input.initialLastMessageAt ?? new Date().toISOString(),
     })
     .select('id')
     .single()
