@@ -15,7 +15,6 @@ const sql = postgres(databaseUrl, {
 const rollback = new Error('ROLLBACK_KNOWLEDGE_RUNTIME_VERIFICATION')
 const organizationId = randomUUID()
 const vector = Array.from({ length: 768 }, (_value, index) => index === 0 ? 1 : 0)
-const vectorJson = JSON.stringify(vector)
 const fileBytes = Buffer.from('kayan-knowledge-source-file', 'utf8')
 const fileBase64 = fileBytes.toString('base64')
 const contentHash = 'a'.repeat(64)
@@ -39,7 +38,7 @@ try {
           contentHash,
           'Document content for semantic retrieval verification.',
           fileBase64,
-          JSON.stringify([{
+          sql.json([{
             chunk_index: 0,
             content: 'Document content for semantic retrieval verification.',
             content_hash: 'b'.repeat(64),
@@ -60,7 +59,7 @@ try {
       const semanticMatches = await tx.unsafe(
         `SELECT id, title, score
          FROM public.search_knowledge_hybrid($1::uuid, $2::text, $3::jsonb, NULL, 5)`,
-        [organizationId, 'a query with no literal overlap', vectorJson]
+        [organizationId, 'a query with no literal overlap', sql.json(vector)]
       )
       assert.equal(semanticMatches.length, 1, 'semantic similarity must retrieve a chunk without lexical overlap')
       assert.ok(Number(semanticMatches[0].score) > 0.7, 'an identical vector should receive a high similarity score')
@@ -74,7 +73,7 @@ try {
       )
       const indexedChunk = await tx.unsafe(
         'SELECT public.update_knowledge_chunk_embedding($1::uuid, $2::uuid, $3::jsonb, $4::text) AS id',
-        [organizationId, chunkId, vectorJson, 'gemini-embedding-2']
+        [organizationId, chunkId, sql.json(vector), 'gemini-embedding-2']
       )
       assert.equal(indexedChunk[0]?.id, chunkId, 'chunk backfill RPC must update only the scoped row')
 
@@ -92,7 +91,7 @@ try {
         ) AS id`,
         [
           organizationId, factId, 'Updated title', 'Updated content',
-          'general', 'e'.repeat(64), vectorJson, 'gemini-embedding-2',
+          'general', 'e'.repeat(64), sql.json(vector), 'gemini-embedding-2',
           'CI revision test', 'update',
         ]
       )
