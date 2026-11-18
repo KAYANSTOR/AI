@@ -148,6 +148,8 @@ export type EmbeddedSignupSession = {
   redirectUri?: string | null
   /** Optional display number if the client already knows it. */
   displayPhoneNumber?: string | null
+  isOnBusinessApp?: boolean
+  primaryWaacIds?: string[]
 }
 
 export type EmbeddedSignupResult =
@@ -157,6 +159,7 @@ export type EmbeddedSignupResult =
       wabaId: string
       businessId: string
       displayNumber: string | null
+      isOnBusinessApp: boolean
       message: string
     }
   | { ok: false; error: string }
@@ -553,7 +556,10 @@ export async function completeEmbeddedSignup(input: {
       wabaId,
       businessId,
       displayNumber,
-      message: 'تم تفويض Meta وحفظ بيانات القناة. بقي تسجيل رقم الإرسال برمز PIN المكوّن من 6 أرقام لإكمال التفعيل.',
+      isOnBusinessApp: input.session.isOnBusinessApp === true,
+      message: input.session.isOnBusinessApp === true
+        ? 'تم ربط رقم WhatsApp Business عبر مسار الاحتفاظ بالتطبيق (Coexistence) وحفظ بياناته مشفّرة. بقي إكمال تفعيل الرقم حسب حالة التسجيل التي تعرضها Meta.'
+        : 'تم تفويض Meta وحفظ بيانات القناة. بقي إكمال تسجيل رقم الإرسال برمز PIN المكوّن من 6 أرقام قبل التفعيل.',
     }
   } catch (error) {
     console.error('EmbeddedSignup: complete failed', error)

@@ -73,9 +73,12 @@ export async function createWhatsAppEmbeddedSignupOAuthStateAction(): Promise<
 export async function completeWhatsAppEmbeddedSignupAction(input: {
   code: string
   state: string
+  useFacebookSdk?: boolean
   phoneNumberId?: string | null
   wabaId?: string | null
   businessPortfolioId?: string | null
+  isOnBusinessApp?: boolean
+  primaryWaacIds?: string[]
 }): Promise<OnboardingResult> {
   try {
     const org = await requireOnboardingAdmin()
@@ -101,7 +104,11 @@ export async function completeWhatsAppEmbeddedSignupAction(input: {
         phoneNumberId: input.phoneNumberId ?? null,
         wabaId: input.wabaId ?? null,
         businessPortfolioId: input.businessPortfolioId ?? null,
-        redirectUri: oauthState.redirectUri,
+        isOnBusinessApp: input.isOnBusinessApp === true,
+        primaryWaacIds: Array.isArray(input.primaryWaacIds) ? input.primaryWaacIds : [],
+        // FB.login's code exchange does not use a redirect URI. Keep the explicit
+        // URI only for the legacy server callback fallback.
+        redirectUri: input.useFacebookSdk === true ? null : oauthState.redirectUri,
       },
     })
 
@@ -117,6 +124,8 @@ export async function completeWhatsAppEmbeddedSignupAction(input: {
         phone_number_id: result.phoneNumberId,
         waba_id: result.wabaId,
         display_number: result.displayNumber,
+        connection_mode: result.isOnBusinessApp ? 'coexistence' : 'standard',
+        primary_waac_ids: Array.isArray(input.primaryWaacIds) ? input.primaryWaacIds : [],
       }
     )
 

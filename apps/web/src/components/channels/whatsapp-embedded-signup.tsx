@@ -1,8 +1,45 @@
 'use client'
 
-import { useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Loader2, MessageCircle } from 'lucide-react'
-import { createWhatsAppEmbeddedSignupOAuthStateAction } from '@/app/onboarding/embedded-signup-actions'
+import { createWhatsAppEmbeddedSignupOAuthStateAction, completeWhatsAppEmbeddedSignupAction } from '@/app/onboarding/embedded-signup-actions'
+import {
+  isTrustedMetaEmbeddedSignupOrigin,
+  parseMetaEmbeddedSignupEvent,
+  type MetaEmbeddedSignupSession,
+} from '@/lib/channels/embedded-signup-session'
+
+const META_GRAPH_VERSION = 'v26.0'
+
+type FacebookLoginResponse = {
+  authResponse?: { code?: string } | null
+  status?: string
+  error?: { message?: string }
+}
+
+type FacebookLoginOptions = {
+  config_id: string
+  auth_type: 'rerequest'
+  response_type: 'code'
+  override_default_response_type: true
+  extras: { version: 'v5' }
+}
+
+type FacebookSdk = {
+  init(options: { appId: string; cookie: boolean; xfbml: boolean; version: string }): void
+  login(
+    callback: (response: FacebookLoginResponse) => void,
+    options: FacebookLoginOptions
+  ): void
+}
+
+declare global {
+  interface Window {
+    FB?: FacebookSdk
+    fbAsyncInit?: () => void
+    __kayanMetaSdkAppId?: string
+  }
+}
 
 type Props = {
   disabled?: boolean
@@ -12,27 +49,163 @@ type Props = {
   className?: string
 }
 
-const META_LOGIN_VERSION = 'v26.0'
+type PendingSignup = {
+  state: string
+  code: string | null
+  session: MetaEmbeddedSignupSession | null
+  completing: boolean
+}
 
-/**
- * Meta Embedded Signup v4 using the explicit OAuth redirect flow.
- *
- * Unlike FB.login's popup callback, this flow returns the authorization code
- * to our same-origin Railway callback on mobile and desktop browsers alike.
- */
 export function WhatsAppEmbeddedSignupButton({
   disabled,
+  onSuccess,
   onError,
+  onRefresh,
   className,
 }: Props) {
   const appId = process.env.NEXT_PUBLIC_META_APP_ID?.trim() ?? ''
   const configId = process.env.NEXT_PUBLIC_META_EMBEDDED_CONFIG_ID?.trim() ?? ''
   const [busy, setBusy] = useState(false)
+  const [sdkReady, setSdkReady] = useState(false)
+  const [sdkError, setSdkError] = useState<string | null>(null)
+  const pendingSignup = useRef<PendingSignup | null>(null)
+  const mounted = useRef(true)
+
+  useEffect(() => {
+    mounted.current = true
+    if (!appId) {
+      setSdkError('معرّف تطبيق Meta غير مضبوط على الخادم.')
+      return () => { mounted.current = false }
+    }
+
+    let script: HTMLScriptElement | null = null
+    let onScriptLoad: (() => void) | null = null
+
+    const initialize = () => {
+      if (!window.FB || !mounted.current) return
+      if (window.__kayanMetaSdkAppId !== appId) {
+        window.FB.init({
+          appId,
+          cookie: true,
+          xfbml: false,
+          version: META_GRAPH_VERSION,
+        })
+        window.__kayanMetaSdkAppId = appId
+      }
+      setSdkReady(true)
+      setSdkError(null)
+    }
+
+    window.fbAsyncInit = initialize
+    if (window.FB) {
+      initialize()
+    } else {
+      const existing = document.getElementById('facebook-jssdk') as HTMLScriptElement | null
+      script = existing
+      if (existing) {
+        onScriptLoad = initialize
+        existing.addEventListener('load', onScriptLoad, { once: true })
+      } else {
+        script = document.createElement('script')
+        script.id = 'facebook-jssdk'
+        script.src = 'https://connect.facebook.net/en_US/sdk.js'
+        script.async = true
+        script.defer = true
+        script.onload = initialize
+        script.onerror = () => {
+          if (mounted.current) setSdkError('تعذّر تحميل خدمة تسجيل الدخول من Meta. تحقق من الاتصال ثم أعد المحاولة.')
+        }
+        document.head.appendChild(script)
+      }
+    }
+
+    return () => {
+      mounted.current = false
+      if (script && onScriptLoad) script.removeEventListener('load', onScriptLoad)
+      if (window.fbAsyncInit === initialize) delete window.fbAsyncInit
+    }
+  }, [appId])
+
+  const finishIfReady = useCallback(async () => {
+    const pending = pendingSignup.current
+    if (!pending || !pending.code || !pending.session || pending.completing) return
+    pending.completing = true
+
+    try {
+      const result = await completeWhatsAppEmbeddedSignupAction({
+        code: pending.code,
+        state: pending.state,
+        useFacebookSdk: true,
+        phoneNumberId: pending.session.phoneNumberId,
+        wabaId: pending.session.wabaId,
+        businessPortfolioId: pending.session.businessPortfolioId,
+        isOnBusinessApp: pending.session.isOnBusinessApp,
+        primaryWaacIds: pending.session.primaryWaacIds,
+      })
+
+      if (!mounted.current) return
+      pendingSignup.current = null
+      setBusy(false)
+
+      if (!result.ok) {
+        onError?.(result.error ?? 'تعذّر إكمال الربط مع Meta.')
+        return
+      }
+
+      const message = result.message ?? 'تم ربط حساب WhatsApp Business بنجاح.'
+      onSuccess?.(message)
+      if (onRefresh) onRefresh()
+    } catch (error) {
+      if (!mounted.current) return
+      pendingSignup.current = null
+      setBusy(false)
+      console.error('Meta Embedded Signup completion failed', error)
+      onError?.('انقطع الاتصال أثناء إكمال ربط واتساب. أعد بدء الربط من فضلك.')
+    }
+  }, [onError, onRefresh, onSuccess])
+
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (!isTrustedMetaEmbeddedSignupOrigin(event.origin)) return
+      const parsed = parseMetaEmbeddedSignupEvent(event.origin, event.data)
+      const pending = pendingSignup.current
+      if (!pending || parsed.kind === 'ignore') return
+
+      if (parsed.kind === 'cancel') {
+        pendingSignup.current = null
+        setBusy(false)
+        onError?.(
+          parsed.currentStep
+            ? 'تم إلغاء ربط واتساب عند خطوة: ' + parsed.currentStep
+            : 'تم إلغاء ربط واتساب قبل اكتمال العملية.'
+        )
+        return
+      }
+
+      if (parsed.kind === 'error') {
+        pendingSignup.current = null
+        setBusy(false)
+        console.error('Meta Embedded Signup reported an error', { code: parsed.code })
+        onError?.(parsed.message)
+        return
+      }
+
+      pending.session = parsed.session
+      void finishIfReady()
+    }
+
+    window.addEventListener('message', handleMessage)
+    return () => window.removeEventListener('message', handleMessage)
+  }, [finishIfReady, onError])
 
   async function launch() {
     if (busy || disabled) return
     if (!appId || !configId) {
-      onError?.('ربط واتساب عبر Meta غير مُفعّل بعد. تواصل مع الدعم.')
+      onError?.('ربط واتساب عبر Meta غير مُفعّل بعد. أكمل App ID وConfiguration ID في إعدادات المنصة.')
+      return
+    }
+    if (!sdkReady || !window.FB) {
+      onError?.(sdkError ?? 'خدمة Meta لم تجهز بعد. انتظر حتى يكتمل تحميلها ثم حاول مرة أخرى.')
       return
     }
 
@@ -45,20 +218,43 @@ export function WhatsAppEmbeddedSignupButton({
         return
       }
 
-      const oauthUrl = new URL('https://www.facebook.com/' + META_LOGIN_VERSION + '/dialog/oauth')
-      oauthUrl.searchParams.set('client_id', appId)
-      oauthUrl.searchParams.set('config_id', configId)
-      oauthUrl.searchParams.set('redirect_uri', stateResult.redirectUri)
-      oauthUrl.searchParams.set('response_type', 'code')
-      oauthUrl.searchParams.set('override_default_response_type', 'true')
-      oauthUrl.searchParams.set('auth_type', 'rerequest')
-      oauthUrl.searchParams.set('state', stateResult.state)
-      oauthUrl.searchParams.set('extras', JSON.stringify({ setup: {} }))
+      pendingSignup.current = {
+        state: stateResult.state,
+        code: null,
+        session: null,
+        completing: false,
+      }
 
-      // Full-page navigation is intentional: Meta returns the authorization code
-      // to our server callback, so success does not depend on popup closure or postMessage.
-      window.location.assign(oauthUrl.toString())
+      window.FB.login((response) => {
+        const code = response.authResponse?.code?.trim()
+        if (!code) {
+          // The session event may already have reported a cancellation or error.
+          if (!pendingSignup.current) return
+          pendingSignup.current = null
+          setBusy(false)
+          onError?.(
+            response.error?.message
+              ? 'رفضت Meta تسجيل الدخول: ' + response.error.message
+              : 'لم تُرجع Meta رمز التفويض. أعد المحاولة وأكمل جميع خطوات الموافقة.'
+          )
+          return
+        }
+
+        const pending = pendingSignup.current
+        if (!pending) return
+        pending.code = code
+        void finishIfReady()
+      }, {
+        config_id: configId,
+        auth_type: 'rerequest',
+        response_type: 'code',
+        override_default_response_type: true,
+        // Embedded Signup v5 enables WhatsApp Business App onboarding (Coexistence)
+        // by default. sessionInfoVersion and the v4 featureType are intentionally omitted.
+        extras: { version: 'v5' },
+      })
     } catch (error) {
+      pendingSignup.current = null
       setBusy(false)
       console.error('Meta Embedded Signup launch failed', error)
       onError?.('تعذّر بدء الربط مع Meta. تحقّق من اتصال الإنترنت ثم حاول مرة أخرى.')
@@ -68,22 +264,25 @@ export function WhatsAppEmbeddedSignupButton({
   if (!appId || !configId) return null
 
   return (
-    <button
-      type="button"
-      onClick={launch}
-      disabled={disabled || busy}
-      className={
-        className ??
-        'inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#1877F2] px-6 text-base font-semibold text-white transition-colors hover:bg-[#166FE5] disabled:opacity-60'
-      }
-    >
-      {busy ? (
-        <Loader2 size={18} className="animate-spin" aria-hidden="true" />
-      ) : (
-        <MessageCircle size={18} aria-hidden="true" />
-      )}
-      {busy ? 'جارٍ الانتقال إلى Meta…' : 'ربط واتساب عبر Meta'}
-    </button>
+    <div className="space-y-2">
+      <button
+        type="button"
+        onClick={launch}
+        disabled={disabled || busy || !sdkReady}
+        className={
+          className ??
+          'inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#1877F2] px-6 text-base font-semibold text-white transition-colors hover:bg-[#166FE5] disabled:opacity-60'
+        }
+      >
+        {busy || (!sdkReady && !sdkError) ? (
+          <Loader2 size={18} className="animate-spin" aria-hidden="true" />
+        ) : (
+          <MessageCircle size={18} aria-hidden="true" />
+        )}
+        {busy ? 'جارٍ إكمال الربط مع Meta…' : !sdkReady ? 'جارٍ تجهيز Meta…' : 'ربط واتساب عبر Meta'}
+      </button>
+      {sdkError ? <p role="status" className="text-xs text-error">{sdkError}</p> : null}
+    </div>
   )
 }
 

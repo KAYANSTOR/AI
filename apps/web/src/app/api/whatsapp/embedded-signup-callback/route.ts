@@ -7,7 +7,10 @@ export const runtime = 'nodejs'
 type SessionInfo = {
   phone_number_id?: string
   waba_id?: string
+  messaging_account_ids?: string[] | string
   business_id?: string
+  is_on_biz_app?: boolean
+  primary_waac_ids?: string[]
 }
 
 function parseSessionInfo(value: string | null): SessionInfo {
@@ -54,7 +57,10 @@ export async function GET(request: NextRequest) {
   const state = params.get('state')?.trim()
   const session = parseSessionInfo(params.get('session_info') ?? params.get('sessionInfo'))
   const phoneNumberId = session.phone_number_id ?? params.get('phone_number_id')
-  const wabaId = session.waba_id ?? params.get('waba_id')
+  const messagingAccountId = Array.isArray(session.messaging_account_ids)
+    ? session.messaging_account_ids[0]
+    : session.messaging_account_ids
+  const wabaId = session.waba_id ?? messagingAccountId ?? params.get('waba_id')
   const businessPortfolioId = session.business_id ?? params.get('business_id')
 
   if (!code || !state || params.get('error')) {
@@ -73,6 +79,8 @@ export async function GET(request: NextRequest) {
       phoneNumberId: phoneNumberId ?? null,
       wabaId: wabaId ?? null,
       businessPortfolioId: businessPortfolioId ?? null,
+      isOnBusinessApp: session.is_on_biz_app === true,
+      primaryWaacIds: session.primary_waac_ids ?? [],
     })
 
     if (!result.ok) {
