@@ -64,6 +64,13 @@ try {
       assert.equal(semanticMatches.length, 1, 'semantic similarity must retrieve a chunk without lexical overlap')
       assert.ok(Number(semanticMatches[0].score) > 0.7, 'an identical vector should receive a high similarity score')
 
+      const unrelatedVector = Array.from({ length: 768 }, (_value, index) => index === 1 ? 1 : 0)
+      const unrelatedMatches = await tx.unsafe(
+        `SELECT id FROM public.search_knowledge_hybrid($1::uuid, $2::text, $3::jsonb, NULL, 5)`,
+        [organizationId, 'a completely unrelated query', sql.json(unrelatedVector)]
+      )
+      assert.equal(unrelatedMatches.length, 0, 'unrelated semantic vectors must not create weak false-positive matches')
+
       const chunkId = randomUUID()
       await tx.unsafe(
         `INSERT INTO public.knowledge_chunks

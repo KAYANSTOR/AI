@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import type { DbClient } from '@/lib/db/client'
 import { createFakeDb } from './support/fake-db'
 import { searchKnowledge, tokenize } from '@/lib/knowledge/retrieval'
-import { knowledgeContentHash, normalizeKnowledgeText, saveValidatedKnowledge } from '@/lib/knowledge/layer'
+import { knowledgeContentHash, normalizeKnowledgeText, retrieveContextualKnowledge, saveValidatedKnowledge } from '@/lib/knowledge/layer'
 
 const ORG_A = 'aaaaaaaa-0000-4000-8000-00000000000a'
 const ORG_B = 'bbbbbbbb-0000-4000-8000-00000000000b'
@@ -132,5 +132,38 @@ describe('large knowledge retrieval', () => {
     }))
     const matches = await searchKnowledge(dbWith(rows), ORG_A, 'الضمان')
     expect(matches.map((match) => match.id)).toContain('k1204')
+  })
+})
+
+
+describe('context-budgeted knowledge retrieval', () => {
+  test('selects only the highest-ranked facts that fit the configured context budget', async () => {
+    const rows = [
+      { id: 'k1', organization_id: ORG_A, title: 'سياسة الحجز', content: 'تسمح المؤسسة بتعديل الحجز قبل الموعد بمدة يوم كامل، ويجب تأكيد التعديل عبر موظف الاستقبال.', category: 'policy', is_active: true, updated_at: '2026-11-18T12:00:00.000Z' },
+      { id: 'k2', organization_id: ORG_A, title: 'سياسة الحجز الإضافية', content: 'يمكن تغيير اسم المستفيد بعد التحقق من هوية صاحب الحجز المسجل في النظام.', category: 'policy', is_active: true, updated_at: '2026-11-17T12:00:00.000Z' },
+      { id: 'k3', organization_id: ORG_A, title: 'سياسة الحجز القديمة', content: 'لا يمكن تعديل الحجوزات التي انتهت بالفعل.', category: 'policy', is_active: true, updated_at: '2026-11-16T12:00:00.000Z' },
+    ]
+    const result = await retrieveContextualKnowledge(dbWith(rows), ORG_A, 'سياسة الحجز', {
+      maxMatches: 10,
+      contextTokenBudget: 64,
+    })
+    expect(result.matchedKnowledge.length).toBeGreaterThan(0)
+    expect(result.matchedKnowledge.length).toBeLessThan(3)
+    expect(result.matchedKnowledge[0].id).toBe('k1')
+  })
+
+  test('allows callers to raise the context budget to include more related facts', async () => {
+    const rows = Array.from({ length: 6 }, (_value, index) => ({
+      id: `k${index}`,
+      organization_id: ORG_A,
+      title: `معلومات السياسة ${index}`,
+      content: `توضح هذه السياسة رقم ${index} أحكام التعديل والحجز والمواعيد المعتمدة.`,
+      category: 'policy',
+      is_active: true,
+      updated_at: new Date(2026, 0, 1 + index).toISOString(),
+    }))
+    const small = await retrieveContextualKnowledge(dbWith(rows), ORG_A, 'السياسة', { contextTokenBudget: 80 })
+    const large = await retrieveContextualKnowledge(dbWith(rows), ORG_A, 'السياسة', { contextTokenBudget: 1800 })
+    expect(large.matchedKnowledge.length).toBeGreaterThanOrEqual(small.matchedKnowledge.length)
   })
 })

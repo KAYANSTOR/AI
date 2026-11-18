@@ -22,29 +22,81 @@ export function knowledgeContentHash(content: string): string {
   return createHash('sha256').update(normalizeKnowledgeText(content), 'utf8').digest('hex')
 }
 
-export async function retrieveContextualKnowledge(db: DbClient, organizationId: string, userQuery: string, options: { maxMatches?: number } = {}): Promise<ContextualKnowledgeResult> {
+export async function retrieveContextualKnowledge(
+  db: DbClient,
+  organizationId: string,
+  userQuery: string,
+  options: { maxMatches?: number; contextTokenBudget?: number } = {}
+): Promise<ContextualKnowledgeResult> {
   const queryLower = normalizeKnowledgeText(userQuery)
-  const matches = await searchKnowledge(db, organizationId, userQuery, { limit: options.maxMatches ?? 8 })
-  const asksServices = ['خدم','سعر','اسعار','باقة','منتج','تكلف','service','price'].some((term) => queryLower.includes(normalizeKnowledgeText(term)))
-  let relevantServices: Array<{ name: string; price: string; duration: number }> = []
-  if (asksServices || matches.some((m) => m.category === 'service_info' || m.category === 'pricing')) {
-    const { data } = await db.from('services').select('name, description, price_amount, price_currency, duration_minutes').eq('organization_id', organizationId).eq('is_active', true).limit(6)
-    relevantServices = (data ?? []).map((s) => ({ name: s.name, price: s.price_amount != null ? `${Number(s.price_amount)} ${s.price_currency || 'SAR'}` : 'حسب الطلب', duration: s.duration_minutes ?? 30 }))
+  // Retrieve a broad candidate set, then choose the top-K that fits the turn's context budget.
+  const maxCandidates = Math.max(1, Math.min(options.maxMatches ?? 20, 50))
+  const contextTokenBudget = Math.max(64, Math.min(options.contextTokenBudget ?? 1800, 8000))
+  const knowledgeTokenBudget = Math.floor(contextTokenBudget * 0.7)
+  const knowledgeCharacterBudget = knowledgeTokenBudget * 3
+  const candidates = await searchKnowledge(db, organizationId, userQuery, { limit: maxCandidates })
+
+  const matchedKnowledge: KnowledgeMatch[] = []
+  let usedKnowledgeChars = 0
+  for (const match of candidates) {
+    const line = `• [${match.title}]: ${match.content}`
+    const cost = line.length + 1
+    if (usedKnowledgeChars + cost > knowledgeCharacterBudget) continue
+    matchedKnowledge.push(match)
+    usedKnowledgeChars += cost
   }
-  const asksHours = ['وقت','ساع','متي','يوم','ايام','اجاز','مفتوح','دوام','hour','open'].some((term) => queryLower.includes(normalizeKnowledgeText(term)))
+
+  const asksServices = ['خدم', 'سعر', 'اسعار', 'باقة', 'منتج', 'تكلف', 'service', 'price']
+    .some((term) => queryLower.includes(normalizeKnowledgeText(term)))
+  let relevantServices: Array<{ name: string; price: string; duration: number }> = []
+  if (asksServices || matchedKnowledge.some((m) => m.category === 'service_info' || m.category === 'pricing')) {
+    const { data } = await db
+      .from('services')
+      .select('name, description, price_amount, price_currency, duration_minutes')
+      .eq('organization_id', organizationId)
+      .eq('is_active', true)
+      .limit(6)
+    relevantServices = (data ?? []).map((s) => ({
+      name: s.name,
+      price: s.price_amount != null ? `${Number(s.price_amount)} ${s.price_currency || 'SAR'}` : 'حسب الطلب',
+      duration: s.duration_minutes ?? 30,
+    }))
+  }
+
+  const asksHours = ['وقت', 'ساع', 'متي', 'يوم', 'ايام', 'اجاز', 'مفتوح', 'دوام', 'hour', 'open']
+    .some((term) => queryLower.includes(normalizeKnowledgeText(term)))
   let relevantHours: string | undefined
   if (asksHours) {
-    const { data } = await db.from('business_hours').select('day_of_week, open_time, close_time, is_closed').eq('organization_id', organizationId).order('day_of_week')
+    const { data } = await db
+      .from('business_hours')
+      .select('day_of_week, open_time, close_time, is_closed')
+      .eq('organization_id', organizationId)
+      .order('day_of_week')
     if (data?.length) {
-      const days = ['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت']
-      relevantHours = data.map((h) => h.is_closed ? `${days[h.day_of_week]}: مغلق` : `${days[h.day_of_week]}: ${h.open_time?.slice(0,5)}–${h.close_time?.slice(0,5)}`).join('، ')
+      const days = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت']
+      relevantHours = data
+        .map((h) => h.is_closed ? `${days[h.day_of_week]}: مغلق` : `${days[h.day_of_week]}: ${h.open_time?.slice(0, 5)}–${h.close_time?.slice(0, 5)}`)
+        .join('، ')
     }
   }
+
   const lines: string[] = []
-  if (matches.length) { lines.push('معلومات مؤكدة ذات صلة بسؤال العميل:'); for (const m of matches) lines.push(`• [${m.title}]: ${m.content}`) }
-  if (relevantServices.length) { lines.push('الخدمات والأسعار المعتمدة:'); for (const s of relevantServices) lines.push(`• ${s.name}: ${s.price} (${s.duration} دقيقة)`) }
+  if (matchedKnowledge.length) {
+    lines.push('معلومات مؤكدة ذات صلة بسؤال العميل:')
+    for (const match of matchedKnowledge) lines.push(`• [${match.title}]: ${match.content}`)
+  }
+  if (relevantServices.length) {
+    lines.push('الخدمات والأسعار المعتمدة:')
+    for (const service of relevantServices) lines.push(`• ${service.name}: ${service.price} (${service.duration} دقيقة)`)
+  }
   if (relevantHours) lines.push(`أوقات وساعات العمل المعتمدة: ${relevantHours}`)
-  return { matchedKnowledge: matches, relevantServices, relevantHours, compactContext: lines.join('\n') }
+
+  return {
+    matchedKnowledge,
+    relevantServices,
+    relevantHours,
+    compactContext: lines.join('\n'),
+  }
 }
 
 /** Append-only training: similar titles never overwrite older facts. */
