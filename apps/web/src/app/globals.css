@@ -343,3 +343,26 @@
 .dashboard-workspace-card{border:1px solid color-mix(in srgb,var(--brand-primary) 18%,var(--brand-secondary));border-radius:24px;background:var(--k-primary-dark);padding:16px;box-shadow:0 12px 28px color-mix(in srgb,var(--brand-secondary) 15%,transparent)}
 @media(min-width:768px){.dashboard-viewport{padding-block:18px}.dashboard-app-shell{height:calc(100dvh - 36px);min-height:calc(100dvh - 36px);border:1px solid var(--k-border);border-radius:28px}.dashboard-home-header{border-radius:27px 27px 26px 26px}}
 @media(max-width:359px){.dashboard-main-scroll{padding-inline:10px}.dashboard-home-header{padding-inline:11px}.dashboard-quick-sheet{padding-inline:11px}.dashboard-quick-action{padding:8px}}
+
+
+/* Branded entry animation: shown only when the authenticated dashboard shell mounts. */
+.kayan-entry-splash{position:fixed;z-index:1000;inset:0;display:grid;place-items:center;overflow:hidden;background:var(--k-background);color:var(--k-text);animation:kayanSplashExit 2.05s cubic-bezier(.22,1,.36,1) 1 forwards}
+.kayan-entry-splash:before,.kayan-entry-splash:after{position:absolute;width:min(78vw,560px);aspect-ratio:1;border:1px solid color-mix(in srgb,var(--k-secondary) 10%,transparent);border-radius:50%;content:"";pointer-events:none}
+.kayan-entry-splash:after{width:min(58vw,410px);border-color:color-mix(in srgb,var(--k-secondary) 8%,transparent)}
+.kayan-entry-splash__content{position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;padding:28px;text-align:center;animation:kayanSplashContent 850ms cubic-bezier(.16,1,.3,1) both}
+.kayan-entry-splash__mark-wrap{position:relative;display:grid;width:132px;height:132px;place-items:center;margin-bottom:27px}
+.kayan-entry-splash__mark{position:relative;z-index:2;width:92px;height:92px;border-radius:29px;box-shadow:0 18px 42px color-mix(in srgb,var(--k-secondary) 18%,transparent);animation:kayanMarkFloat 2.2s ease-in-out infinite}
+.kayan-entry-splash__orbit{position:absolute;inset:3px;border:1px solid color-mix(in srgb,var(--k-secondary) 19%,transparent);border-radius:36px;transform:rotate(45deg);animation:kayanOrbit 3.6s linear infinite}
+.kayan-entry-splash__glow{position:absolute;inset:16px;border-radius:50%;background:var(--k-primary);filter:blur(25px);opacity:.58;animation:kayanGlow 1.8s ease-in-out infinite alternate}
+.kayan-entry-splash__wordmark{font-size:clamp(25px,6vw,31px);font-weight:800;letter-spacing:.12em;color:var(--k-secondary)}
+.kayan-entry-splash__tagline{margin-top:8px;font-size:13px;font-weight:500;color:var(--k-text-muted)}
+.kayan-entry-splash__progress{width:116px;height:3px;margin-top:34px;overflow:hidden;border-radius:999px;background:var(--k-border)}
+.kayan-entry-splash__progress span{display:block;width:42%;height:100%;border-radius:inherit;background:var(--k-accent);animation:kayanProgress 1.15s cubic-bezier(.4,0,.2,1) infinite}
+.kayan-entry-splash__hint{margin-top:12px;font-size:11px;color:var(--k-text-muted)}
+@keyframes kayanSplashExit{0%,72%{opacity:1;visibility:visible}100%{opacity:0;visibility:hidden;pointer-events:none}}
+@keyframes kayanSplashContent{from{opacity:0;transform:translateY(13px) scale(.97)}to{opacity:1;transform:translateY(0) scale(1)}}
+@keyframes kayanMarkFloat{0%,100%{transform:translateY(0) rotate(0)}50%{transform:translateY(-5px) rotate(-2deg)}}
+@keyframes kayanOrbit{to{transform:rotate(405deg)}}
+@keyframes kayanGlow{from{opacity:.35;transform:scale(.88)}to{opacity:.7;transform:scale(1.08)}}
+@keyframes kayanProgress{from{transform:translateX(260%)}to{transform:translateX(-260%)}}
+@media(prefers-reduced-motion:reduce){.kayan-entry-splash{animation:kayanSplashExit 650ms ease-out both}.kayan-entry-splash__content,.kayan-entry-splash__mark,.kayan-entry-splash__orbit,.kayan-entry-splash__glow,.kayan-entry-splash__progress span{animation:none!important}.kayan-entry-splash__content{opacity:1}}
