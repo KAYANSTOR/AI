@@ -106,7 +106,7 @@ export async function POST(
       channelId: exactChannel.id,
       channelType: 'telegram',
       provider: 'telegram',
-      externalEventId: String(message.message_id ?? updateId),
+      externalEventId,
       externalUserId: chatId,
       senderUsername: message.from?.username ?? message.chat.username ?? null,
       displayName: displayName || message.chat.title || null,
