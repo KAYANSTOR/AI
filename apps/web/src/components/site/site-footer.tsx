@@ -8,6 +8,7 @@ const ACCOUNT_LINKS = [
   { label: 'الأسئلة الشائعة', href: '/faq' },
   { label: 'التواصل والدعم', href: '/contact' },
   { label: 'سياسة الخصوصية', href: '/privacy' },
+  { label: 'شروط الاستخدام', href: '/terms' },
 ] as const
 
 export function SiteFooter() {
