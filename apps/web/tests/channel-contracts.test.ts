@@ -8,6 +8,9 @@ import {
   CHANNEL_CREDENTIAL_CONTRACTS,
   WHATSAPP_CONNECTION_MODES,
   WHATSAPP_QR_SESSION_CREDENTIAL,
+  isChannelConnectionMode,
+  isProviderChannelType,
+  isWhatsAppConnectionMode,
   type ProviderChannelType,
 } from '../src/lib/channels/contracts'
 
@@ -17,6 +20,9 @@ describe('provider channel contracts', () => {
     expect(types).toEqual(['telegram', 'messenger'])
     expect(CHANNEL_CREDENTIAL_CONTRACTS.telegram?.provider).toBe('telegram')
     expect(CHANNEL_CREDENTIAL_CONTRACTS.messenger?.provider).toBe('meta')
+    expect(isProviderChannelType('telegram')).toBe(true)
+    expect(isProviderChannelType('messenger')).toBe(true)
+    expect(isProviderChannelType('unknown')).toBe(false)
   })
 
   test('catalogues provider secrets without exposing values', () => {
@@ -42,5 +48,9 @@ describe('provider channel contracts', () => {
       'qr_unofficial',
     ])
     expect(WHATSAPP_CONNECTION_MODES.find((mode) => mode.value === 'qr_unofficial')?.official).toBe(false)
+    expect(isWhatsAppConnectionMode('cloud_api')).toBe(true)
+    expect(isWhatsAppConnectionMode('native')).toBe(false)
+    expect(isChannelConnectionMode('native')).toBe(true)
+    expect(isChannelConnectionMode('invalid')).toBe(false)
   })
 })
