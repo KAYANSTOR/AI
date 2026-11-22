@@ -480,7 +480,7 @@ export async function connectTelegramChannelAction(input: {
       await db.from('channels').update({
         is_active: false, verification_status: 'failed', updated_at: new Date().toISOString(),
       }).eq('id', channelId).eq('organization_id', org.organizationId)
-      await deleteChannelCredential({ db, organizationId: org.organizationId, channelId, provider: 'telegram' } as never).catch(() => {})
+      await deleteChannelCredential(db, { organizationId: org.organizationId, channelId, provider: 'telegram' }).catch(() => {})
       throw error
     }
 
