@@ -330,7 +330,7 @@ export async function setChannelActiveAction(input: {
         // Preserve successful WhatsApp registration when temporarily disabling
         // the channel. Other providers keep the existing pending/disabled policy.
         verification_status:
-          spec.type === 'whatsapp'
+          spec.type === 'whatsapp' || spec.type === 'telegram'
             ? data.verification_status
             : input.active
               ? 'pending'
