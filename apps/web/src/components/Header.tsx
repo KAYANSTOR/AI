@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import {
@@ -11,6 +11,7 @@ import {
 import { BrandMark, BRAND_NAME, BRAND_TAGLINE } from '@/components/site/brand'
 import { GlobalSearch } from '@/components/dashboard/global-search'
 import { NotificationsBell } from '@/components/dashboard/notifications-bell'
+import { getLocalDateLabel } from '@/lib/i18n/current-date'
 
 const PAGE_META = [
   { prefix: '/dashboard/contacts', title: 'جهات الاتصال', subtitle: 'إدارة بيانات العملاء ووسائل التواصل', icon: Contact },
@@ -32,17 +33,14 @@ const PAGE_META = [
 ]
 
 export function Header({
-  userEmail,
   organizationName,
   timezone,
 }: {
-  userEmail: string
   organizationName: string
   timezone: string
 }) {
   const pathname = usePathname()
   const router = useRouter()
-  const [today, setToday] = useState('')
   const [searchOpen, setSearchOpen] = useState(false)
   const isHome = pathname === '/dashboard'
   const meta = PAGE_META
@@ -51,13 +49,7 @@ export function Header({
   const page = meta ?? { title: 'مساحة العمل', subtitle: 'إدارة نشاطك من مكان واحد', icon: Activity }
   const PageIcon = page.icon
 
-  useEffect(() => {
-    try {
-      setToday(new Intl.DateTimeFormat('ar', { weekday: 'long', day: 'numeric', month: 'long', timeZone: timezone || undefined }).format(new Date()))
-    } catch {
-      setToday(new Intl.DateTimeFormat('ar', { dateStyle: 'medium' }).format(new Date()))
-    }
-  }, [timezone])
+  const today = getLocalDateLabel(timezone)
 
   if (isHome) {
     return (
