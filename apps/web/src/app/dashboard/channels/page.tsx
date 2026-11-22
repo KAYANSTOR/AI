@@ -41,7 +41,6 @@ export default async function ChannelsPage({
       .from('channels')
       .select('id, channel_type, external_identifier, provider_account_id, verification_status, is_active, connection_mode')
       .eq('organization_id', context.organizationId)
-      .eq('channel_type', 'whatsapp')
 
     if (result.error) {
       logDatabaseError('channels page: load channels', result.error)
@@ -70,11 +69,8 @@ export default async function ChannelsPage({
   }
 
   const byType = new Map(rows.map((row) => [row.channel_type, row]))
-  // Focused release: WhatsApp is the only customer-facing messaging channel.
-  // Instagram and SMS remain backend-compatible but are intentionally not surfaced.
-  const cards = CHANNEL_SPECS
-    .filter((spec) => spec.type === 'whatsapp')
-    .map((spec) => {
+  // Render only channel types backed by an existing server-side integration.
+  const cards = CHANNEL_SPECS.map((spec) => {
       const row = byType.get(spec.type)
       return {
         type: spec.type,
@@ -100,19 +96,18 @@ export default async function ChannelsPage({
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-secondary">Kayan Connect</p>
           <h1 className="mt-1 text-2xl font-bold tracking-tight text-text">{ar.channels.title}</h1>
           <p className="mt-1 max-w-3xl text-sm leading-6 text-text-muted">
-            ابدأ بربط WhatsApp الذي يتواصل من خلاله عملاؤك، وسنتولى حفظ الربط والتحقق منه دون عرض
-            المعرّفات السرية أو التقنية في المسار العادي.
+            اربط قنوات التواصل التي يستخدمها عملاؤك، وأدر حالة كل قناة من مكان واحد. تظهر هنا القنوات المدعومة فعلياً في حسابك.
           </p>
         </div>
 
         <div className="rounded-2xl border border-primary-light/60 bg-primary-light/20 p-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="text-xs font-semibold text-secondary">النشاط المتصل</p>
+              <p className="text-xs font-semibold text-secondary">قنوات نشاطك التجاري</p>
               <p className="mt-1 text-sm font-bold text-text">{businessName}</p>
             </div>
             <div className="rounded-xl border border-border bg-surface px-4 py-3 text-center">
-              <p className="text-xs text-text-muted">قناة التواصل الأساسية</p>
+              <p className="text-xs text-text-muted">القنوات الجاهزة</p>
               <p className="mt-0.5 text-xl font-bold text-text">{formatNumber(verifiedCount)} / {formatNumber(cards.length)}</p>
             </div>
           </div>
