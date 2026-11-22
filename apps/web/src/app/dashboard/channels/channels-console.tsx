@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useState, useTransition } from 'react'
-import { CheckCircle2, CircleAlert, Link2, Loader2, MessageSquare, Phone, Power, RefreshCw, X } from 'lucide-react'
+import { CheckCircle2, CircleAlert, Link2, Loader2, MessageSquare, Phone, Power, RefreshCw, ArrowRight, Bot } from 'lucide-react'
 import {
   saveChannelAction,
   setChannelActiveAction,
@@ -56,6 +56,8 @@ export function ChannelsConsole({
   const [busyType, setBusyType] = useState<ChannelType | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const openCard = useMemo(() => cards.find((card) => card.type === openType) ?? null, [cards, openType])
+
+  if (openCard) return <ChannelDialog card={openCard} canManage={canManage} onClose={() => setOpenType(null)} />
 
   return (
     <div className="space-y-6">
@@ -161,9 +163,6 @@ export function ChannelsConsole({
         </div>
       </section>
 
-      {openCard ? (
-        <ChannelDialog card={openCard} canManage={canManage} onClose={() => setOpenType(null)} />
-      ) : null}
     </div>
   )
 }
@@ -264,34 +263,28 @@ function ChannelDialog({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/40 p-4" role="presentation">
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="channel-dialog-title"
-        className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-3xl border border-border bg-surface shadow-2xl"
-      >
-        <header className="sticky top-0 z-10 flex items-start justify-between gap-3 border-b border-border bg-surface px-5 py-4">
+    <main className="mx-auto w-full max-w-4xl space-y-6">
+      <div className="overflow-hidden rounded-3xl border border-border bg-surface shadow-sm">
+        <header className="flex items-start gap-3 border-b border-border bg-surface px-5 py-5 sm:px-7">
           <div>
-            <p className="text-xs font-semibold text-secondary">Kayan Connect</p>
-            <h2 id="channel-dialog-title" className="mt-1 text-lg font-bold text-text">
-              {card.label}
-            </h2>
-            <p className="mt-1 text-xs leading-5 text-text-muted">
-              {card.connectionMode === 'coexistence' ? 'الرقم يعمل مع WhatsApp Business App وKayan AI معاً؛ لا يلزم إدخال PIN.' : stateCopy[state].hint}
+            <p className="text-xs font-semibold text-secondary">إعدادات القنوات</p>
+            <h1 id="channel-dialog-title" className="mt-1 text-2xl font-bold text-text">
+              {card.type === 'telegram' ? 'إعدادات تيليجرام' : `إعدادات ${card.label}`}
+            </h1>
+            <p className="mt-2 inline-flex items-center gap-2 rounded-full border border-border bg-background px-3 py-1 text-xs font-semibold text-text-muted">
+              <span className={`h-2 w-2 rounded-full ${state === 'verified' ? 'bg-success' : 'bg-text-muted'}`} />
+              {state === 'verified' ? 'متصل' : 'غير متصل'}
+            </p>
+            <p className="mt-3 text-sm leading-6 text-text-muted">
+              {card.type === 'telegram' ? 'اربط بوت تيليجرام ليرد مساعدك على الرسائل التي يرسلها العملاء إليه.' : card.connectionMode === 'coexistence' ? 'الرقم يعمل مع WhatsApp Business App وKayan AI معاً؛ لا يلزم إدخال PIN.' : stateCopy[state].hint}
             </p>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-full border border-border p-2 text-text hover:bg-background"
-            aria-label="إغلاق"
-          >
-            <X size={18} />
+          <button type="button" onClick={onClose} className="inline-flex shrink-0 items-center gap-2 rounded-xl border border-border px-3 py-2 text-sm font-semibold text-text hover:bg-background" aria-label="العودة إلى القنوات">
+            <ArrowRight size={17} /> رجوع
           </button>
         </header>
 
-        <div className="space-y-4 px-5 py-5">
+        <div className="space-y-6 px-5 py-6 sm:px-7">
           {card.type === 'whatsapp' && state !== 'verified' ? (
             <div className="space-y-2">
               <WhatsAppEmbeddedSignupButton
@@ -360,21 +353,38 @@ function ChannelDialog({
           ) : null}
 
           {card.type === 'telegram' ? (
-            <label className="block">
-              <span className="text-sm font-semibold text-text">رمز بوت تيليجرام</span>
-              <span className="mt-1 block text-xs leading-5 text-text-muted">يُستخدم مرة واحدة للتحقق وضبط Webhook، ثم يُحفظ مشفّراً ولا يُعرض مجدداً.</span>
-              <input
-                type="password"
-                value={telegramBotToken}
-                onChange={(event) => setTelegramBotToken(event.target.value)}
-                dir="ltr"
-                autoComplete="new-password"
-                spellCheck={false}
-                placeholder="123456789:AA..."
-                className="mt-2 min-h-12 w-full rounded-xl border border-border bg-background px-3 text-base text-text outline-none focus:border-secondary focus:ring-2 focus:ring-accent/40"
-                disabled={busy || !canManage}
-              />
-            </label>
+            <section className="space-y-5">
+              <div className="rounded-2xl border border-border bg-background p-5">
+                <div className="flex items-center gap-3">
+                  <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#229ED9]/10 text-[#229ED9]"><Bot size={24} /></span>
+                  <div><h2 className="text-base font-bold text-text">أنشئ البوت في تيليجرام</h2><p className="mt-1 text-xs text-text-muted">اتبع الخطوات التالية للحصول على مفتاح الربط</p></div>
+                </div>
+                <ol className="mt-5 space-y-4 text-sm leading-6 text-text">
+                  <li className="flex gap-3"><span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">1</span><span>افتح <bdi dir="ltr" className="font-semibold">@BotFather</bdi> في تيليجرام وأرسل <code dir="ltr">/newbot</code>.</span></li>
+                  <li className="flex gap-3"><span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">2</span><span>اختر اسمًا ومعرّفًا للبوت.</span></li>
+                  <li className="flex gap-3"><span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">3</span><span>انسخ المفتاح الذي يرسله إليك والصقه أدناه.</span></li>
+                </ol>
+                <a href="https://t.me/BotFather" target="_blank" rel="noopener noreferrer" className="mt-5 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#229ED9] px-4 text-sm font-bold text-white hover:opacity-90">
+                  <Bot size={18} /> إنشاء البوت في BotFather
+                </a>
+              </div>
+              <label className="block">
+                <span className="text-sm font-semibold text-text">مفتاح البوت</span>
+                <input
+                  type="password"
+                  value={telegramBotToken}
+                  onChange={(event) => setTelegramBotToken(event.target.value)}
+                  dir="ltr"
+                  autoComplete="new-password"
+                  spellCheck={false}
+                  placeholder="أدخل مفتاح البوت من @BotFather"
+                  className="mt-2 min-h-12 w-full rounded-xl border border-border bg-background px-3 text-base text-text outline-none focus:border-secondary focus:ring-2 focus:ring-accent/40"
+                  disabled={busy || !canManage}
+                />
+                <span className="mt-2 block text-xs leading-5 text-text-muted">الصيغة: <code dir="ltr">123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11</code></span>
+                <span className="mt-1 block text-xs text-text-muted">يُحفظ المفتاح مشفّرًا ولا يظهر مجددًا بعد نجاح الربط.</span>
+              </label>
+            </section>
           ) : (
             <label className="block">
               <span className="text-sm font-semibold text-text">
@@ -504,6 +514,6 @@ function ChannelDialog({
           ) : null}
         </div>
       </div>
-    </div>
+    </main>
   )
 }
