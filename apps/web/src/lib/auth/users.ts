@@ -97,7 +97,7 @@ export async function createUser(input: {
   const hash = await hashPassword(input.password)
   const rows = await getSql().unsafe<UserRow[]>(
     `insert into auth.users (email, phone, encrypted_password, email_confirmed_at, raw_user_meta_data)
-     values ($1, $2, case when $1 is null then null else now() end, $3, $4::text::jsonb)
+     values ($1, $2, $3, case when $1 is null then null else now() end, $4::text::jsonb)
      returning ${USER_COLUMNS}`,
     [input.email ? normalizeEmail(input.email) : null, input.phone, hash, JSON.stringify(input.metadata)]
   )
