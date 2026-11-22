@@ -82,6 +82,7 @@ const signUpSchema = z.object({
   email: z.string().trim().email().optional(),
   phone: z.string().trim().optional(),
   password: z.string().min(MIN_PASSWORD_LENGTH).max(200),
+  acceptedTerms: z.literal(true),
 }).refine(
   (value) =>
     (Boolean(value.email) && !value.phone) ||
@@ -97,6 +98,7 @@ export async function signUpAction(input: z.input<typeof signUpSchema>): Promise
     if (field === 'companyName') return { ok: false, error: AUTH_MESSAGES.companyRequired }
     if (field === 'email' || field === 'phone') return { ok: false, error: 'اكتب بريداً إلكترونياً أو رقم هاتف دولياً صحيحاً.' }
     if (field === 'password') return { ok: false, error: AUTH_MESSAGES.weakPassword }
+    if (field === 'acceptedTerms') return { ok: false, error: 'يجب الموافقة على الشروط وسياسة الخصوصية لإنشاء الحساب.' }
     return { ok: false, error: AUTH_MESSAGES.generic }
   }
 
@@ -117,6 +119,9 @@ export async function signUpAction(input: z.input<typeof signUpSchema>): Promise
       phone,
       password: parsed.data.password,
       metadata: { organization_name: parsed.data.companyName, business_type_id: businessTypeId },
+      termsAcceptedAt: new Date(),
+      termsVersion: '2026-11-22',
+      privacyPolicyVersion: '2026-11-11',
     })
     await startSession(user)
     return { ok: true, redirectTo: '/onboarding' }
