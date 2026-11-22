@@ -58,7 +58,7 @@
   --k-primary: var(--brand-primary);
   --k-primary-dark: var(--brand-secondary);
   --k-primary-light: var(--brand-primary);
-  --k-primary-foreground: #FFFFFF;
+  --k-primary-foreground: var(--brand-secondary);
   --k-secondary: var(--brand-secondary);
   --k-accent: var(--brand-accent);
   --k-accent-light: color-mix(in srgb, var(--brand-accent) 22%, white);
