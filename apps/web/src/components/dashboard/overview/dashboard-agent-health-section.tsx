@@ -23,7 +23,6 @@ export async function DashboardAgentHealthSection({
   
   const channelMap = {
     whatsapp: channels.find((c) => c.channel_type === 'whatsapp'),
-    phone: channels.find((c) => c.channel_type === 'phone'),
   }
   const agentReady = enabledCapabilities.length > 0 && channels.some((c) => c.is_active)
 
@@ -133,27 +132,7 @@ export async function DashboardAgentHealthSection({
             </span>
           </div>
 
-          {/* Voice Phone */}
-          <div className="flex items-center justify-between rounded-xl border border-border/70 p-3">
-            <div className="flex items-center gap-3">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/15 text-secondary font-bold text-xs">
-                TEL
-              </div>
-              <div>
-                <span className="block text-xs font-bold text-text">المكالمات الهاتفية</span>
-                <span className="text-[11px] text-text-muted">الرد على المكالمات بصوت طبيعي وحجز المواعيد</span>
-              </div>
-            </div>
-            <span
-              className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold ${
-                channelMap.phone?.is_active
-                  ? 'bg-success/15 text-success'
-                  : 'bg-background text-text-muted'
-              }`}
-            >
-              {channelMap.phone?.is_active ? 'متصل' : 'جاهز للربط'}
-            </span>
-          </div>
+
 
         </div>
 
