@@ -1,11 +1,9 @@
 import { redirect } from 'next/navigation'
-import { Info } from 'lucide-react'
 import { createClient } from '@/lib/db/server'
 import { getDashboardContext } from '@/lib/dashboard/context'
 import { CHANNEL_SPECS } from '@/lib/channels/management'
 import { ChannelsConsole } from './channels-console'
 import { ar } from '@/lib/i18n/ar'
-import { formatNumber } from '@/lib/i18n/format'
 import { databaseErrorMessage, logDatabaseError } from '@/lib/db/errors'
 
 export const dynamic = 'force-dynamic'
@@ -53,21 +51,6 @@ export default async function ChannelsPage({
     channelsError = databaseErrorMessage(error, ar.errors.load)
   }
 
-  let businessName = context.organizationName
-  try {
-    const { data: business } = await db
-      .from('businesses')
-      .select('id, name')
-      .eq('organization_id', context.organizationId)
-      .order('created_at', { ascending: true })
-      .limit(1)
-      .maybeSingle()
-
-    if (business?.name) businessName = String(business.name)
-  } catch (error) {
-    console.error('Unable to load business summary', error)
-  }
-
   const byType = new Map(rows.map((row) => [row.channel_type, row]))
   // Render only channel types backed by an existing server-side integration.
   const cards = CHANNEL_SPECS.map((spec) => {
@@ -85,10 +68,6 @@ export default async function ChannelsPage({
       }
     })
 
-  const verifiedCount = cards.filter(
-    (card) => card.verificationStatus === 'verified' && card.isActive
-  ).length
-
   return (
     <div className="space-y-6">
       <header className="space-y-4 rounded-[1.15rem] border border-border bg-background/55 p-5 sm:p-6">
@@ -100,18 +79,6 @@ export default async function ChannelsPage({
           </p>
         </div>
 
-        <div className="rounded-2xl border border-primary-light/60 bg-primary-light/20 p-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="text-xs font-semibold text-secondary">قنوات نشاطك التجاري</p>
-              <p className="mt-1 text-sm font-bold text-text">{businessName}</p>
-            </div>
-            <div className="rounded-xl border border-border bg-surface px-4 py-3 text-center">
-              <p className="text-xs text-text-muted">القنوات الجاهزة</p>
-              <p className="mt-0.5 text-xl font-bold text-text">{formatNumber(verifiedCount)} / {formatNumber(cards.length)}</p>
-            </div>
-          </div>
-        </div>
       </header>
 
       {!canManage && (
@@ -127,19 +94,6 @@ export default async function ChannelsPage({
       {status === 'meta_error' && (
         <Notice tone="error" message="تعذّر إكمال ربط Meta. أعد المحاولة من بطاقة WhatsApp ثم استخدم إعادة فحص الاتصال." />
       )}
-
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <SummaryTile label="جاهزة" value={formatNumber(verifiedCount)} />
-        <SummaryTile label="قيد الإعداد" value={formatNumber(cards.filter((card) => card.connected && card.verificationStatus !== 'verified').length)} />
-        <SummaryTile label="الحالة" value={verifiedCount > 0 ? 'متصلة' : 'تحتاج ربطًا'} />
-      </div>
-
-      <p className="flex items-start gap-2 rounded-xl border border-border bg-surface px-4 py-3 text-xs leading-relaxed text-text">
-        <Info size={16} className="mt-0.5 shrink-0 text-secondary" aria-hidden="true" />
-        <span>
-          مفاتيح المزودين والأسرار لا تُعرض هنا. شاشة القنوات تتعامل مع الربط فقط، بينما تظل بيانات الاعتماد في الخادم.
-        </span>
-      </p>
 
       <ChannelsConsole cards={cards} canManage={canManage} />
 
@@ -161,11 +115,3 @@ function Notice({ tone, message }: { tone: 'error' | 'warning' | 'success'; mess
   )
 }
 
-function SummaryTile({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-xl border border-border bg-surface p-5">
-      <p className="text-xs font-medium text-text-muted">{label}</p>
-      <p className="mt-1 truncate text-xl font-bold tracking-tight text-text">{value}</p>
-    </div>
-  )
-}
