@@ -27,9 +27,8 @@ import {
   UserRound,
   FileText,
 } from 'lucide-react'
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { BrandMark } from '@/components/site/brand'
-import { useDashboardShell } from '@/components/dashboard/dashboard-shell'
 import { ar } from '@/lib/i18n/ar'
 import { roleLabel } from '@/lib/i18n/labels'
 
@@ -109,7 +108,8 @@ export function Sidebar({
   enabledCapabilities: string[]
 }) {
   const pathname = usePathname()
-  const { open, close } = useDashboardShell()
+  const [open, setOpen] = useState(false)
+  const close = () => setOpen(false)
   const drawerRef = useRef<HTMLElement>(null)
   const enabled = new Set(enabledCapabilities)
 
