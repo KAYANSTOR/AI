@@ -41,6 +41,7 @@ export default async function ChannelsPage({
       .from('channels')
       .select('id, channel_type, external_identifier, provider_account_id, verification_status, is_active, connection_mode')
       .eq('organization_id', context.organizationId)
+      .eq('channel_type', 'whatsapp')
 
     if (result.error) {
       logDatabaseError('channels page: load channels', result.error)
