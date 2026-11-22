@@ -56,6 +56,10 @@ function AccountMenu({ email }: { email: string }) {
             <KeyRound size={15} aria-hidden="true" className="text-text-muted" />
             تغيير كلمة المرور
           </Link>
+          <div className="flex items-center justify-between border-t border-border px-4 py-2.5">
+            <span className="text-sm text-text">المظهر</span>
+            <ThemeToggle />
+          </div>
           <form action={signOutAction}>
             <button
               role="menuitem"
@@ -109,9 +113,6 @@ export function Header({
             <InstallAppButton compact />
           </div>
           <div className="hidden lg:block">
-            <ThemeToggle />
-          </div>
-          <div className="lg:hidden">
             <ThemeToggle />
           </div>
           <NotificationsBell />
