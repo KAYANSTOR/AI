@@ -1,7 +1,7 @@
 import type { DbClient } from '@/lib/db/client'
 import { resolveChannelExact } from '@/lib/runtime/tenant'
 
-export type ChannelType = 'whatsapp' | 'instagram' | 'sms' | 'phone'
+export type ChannelType = 'whatsapp' | 'instagram' | 'sms' | 'phone' | 'telegram'
 
 export type ChannelSpec = {
   type: ChannelType
@@ -65,6 +65,24 @@ export const CHANNEL_SPECS: readonly ChannelSpec[] = [
       'أدخل الرقم بصيغة E.164 ثم اضغط ربط.',
     ],
     testScope: 'أن الرقم محفوظ ونشط وأن النظام يوجّه رسائل هذا الرقم إلى شركتك.',
+  },
+
+  {
+    type: 'telegram',
+    label: 'تيليجرام',
+    provider: 'Telegram Bot API',
+    bindingColumn: 'provider_account_id',
+    bindingLabel: 'معرّف بوت تيليجرام',
+    bindingPlaceholder: 'سيُحدد تلقائياً بعد التحقق من رمز البوت',
+    bindingHint: 'اربط بوتاً تملكه عبر BotFather. يتحقق Kayan AI من الرمز ثم يضبط Webhook آمناً لاستقبال الرسائل.',
+    publicNumberLabel: null,
+    setup: [
+      'أنشئ بوتاً عبر @BotFather وانسخ رمز API.',
+      'أدخل الرمز لإجراء تحقق مباشر مع Telegram.',
+      'سيضبط النظام Webhook بعنوان آمن خاص بهذه القناة.',
+      'أرسل رسالة إلى البوت للتأكد من وصولها إلى صندوق الوارد.',
+    ],
+    testScope: 'التحقق من هوية البوت وصلاحية الرمز وتسجيل Webhook الخاص بالقناة.',
   },
   {
     type: 'phone',
