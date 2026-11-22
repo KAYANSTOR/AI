@@ -46,7 +46,7 @@ export function StageConnect({
 
   const whatsapp = data.whatsapp
   const whatsappState = whatsapp?.state ?? 'not_connected'
-  const connected = whatsappState === 'verified' || whatsappState === 'pending'
+  const connected = whatsappState === 'verified'
 
   async function handleConnect() {
     setBusy(true)
@@ -150,8 +150,7 @@ export function StageConnect({
         {whatsappState === 'pending' ? (
           <p className="mt-3 flex items-start gap-2 rounded-lg border border-success/30 bg-success/10 px-3 py-2 text-xs leading-5 text-text">
             <CheckCircle2 size={14} className="mt-0.5 shrink-0 text-success" aria-hidden="true" />
-            تم حفظ رقمك. يمكنك المتابعة الآن
-            {embeddedConfigured ? ' أو إكمال الربط الرسمي عبر زر Meta أعلاه.' : ' وسنكمل التحقق تلقائيًا.'}
+            تم حفظ الرقم فقط. لا يبدأ استقبال العملاء قبل اكتمال الربط والتحقق عبر Meta.
           </p>
         ) : null}
 
@@ -218,8 +217,8 @@ export function StageConnect({
       <div className="flex flex-col gap-3 border-t border-border pt-5 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-xs leading-5 text-text-muted">
           {connected
-            ? 'يمكنك المتابعة. التحقق الكامل من القناة يكتمل تلقائيًا.'
-            : 'اربط واتساب عبر Meta أو احفظ الرقم للمتابعة.'}
+            ? 'القناة موثقة وجاهزة. يمكنك متابعة إعداد الوكيل.'
+            : 'يمكنك متابعة إعداد الوكيل، لكن التشغيل سيبقى متوقفاً حتى توثيق قناة واتساب.'}
         </p>
         <button
           type="button"
