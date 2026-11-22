@@ -16,7 +16,8 @@ export async function DashboardAgentHealthSection({
     db
       .from('channels')
       .select('id, channel_type, is_active, verification_status')
-      .eq('organization_id', organizationId),
+      .eq('organization_id', organizationId)
+      .eq('channel_type', 'whatsapp'),
   ])
 
   const channels = channelResult.data ?? []
@@ -24,7 +25,7 @@ export async function DashboardAgentHealthSection({
   const channelMap = {
     whatsapp: channels.find((c) => c.channel_type === 'whatsapp'),
   }
-  const agentReady = enabledCapabilities.length > 0 && channels.some((c) => c.is_active)
+  const agentReady = enabledCapabilities.length > 0 && channelMap.whatsapp?.is_active === true
 
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
