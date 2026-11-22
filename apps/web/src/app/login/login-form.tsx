@@ -9,7 +9,7 @@ import { NETWORK_ERROR_MESSAGE } from '@/lib/auth/messages'
 import { AuthProviderNotice } from '@/components/auth/provider-notice'
 import { FormError, TextField, submitClass, secondaryButtonClass } from '@/components/auth/field'
 
-export function LoginForm({ returnTo, authConfigured }: { returnTo: string; authConfigured: boolean }) {
+export function LoginForm({ returnTo, authConfigured, passwordReset }: { returnTo: string; authConfigured: boolean; passwordReset: boolean }) {
   const router = useRouter()
   const [identifier, setIdentifier] = useState('')
   const [password, setPassword] = useState('')
@@ -39,6 +39,7 @@ export function LoginForm({ returnTo, authConfigured }: { returnTo: string; auth
   return (
     <form className="space-y-4" method="post" onSubmit={onSubmit} noValidate={false}>
       <FormError message={error} />
+      {passwordReset ? <p role="status" className="rounded-xl border border-success/30 bg-success/[0.07] px-4 py-3 text-sm leading-6 text-success">تم تحديث كلمة المرور بنجاح. سجّل الدخول بكلمة المرور الجديدة.</p> : null}
 
       <div className="space-y-3.5">
         <TextField
