@@ -14,7 +14,7 @@ import {
   recordMeterUsage,
 } from '@/lib/billing/entitlements'
 
-export type RuntimeChannel = 'sms' | 'whatsapp' | 'instagram' | 'phone'
+export type RuntimeChannel = 'sms' | 'whatsapp' | 'instagram' | 'phone' | 'telegram'
 
 export type InboundMessageType = 'text' | 'image' | 'audio' | 'video' | 'file'
 
