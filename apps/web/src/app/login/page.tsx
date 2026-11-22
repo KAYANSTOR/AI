@@ -27,6 +27,7 @@ export default async function LoginPage({
 }) {
   const params = await searchParams
   const returnTo = sanitizeReturnTo(params.returnTo)
+  const passwordReset = params.passwordReset === '1'
   const authConfigured = isAuthConfigured()
 
   return (
@@ -35,7 +36,7 @@ export default async function LoginPage({
       subtitle="أهلًا بعودتك. ادخل إلى لوحة شركتك لمتابعة المحادثات والعملاء والمواعيد."
       hideFooterNotice
     >
-      <LoginForm returnTo={returnTo} authConfigured={authConfigured} />
+      <LoginForm returnTo={returnTo} authConfigured={authConfigured} passwordReset={passwordReset} />
     </AuthShell>
   )
 }
