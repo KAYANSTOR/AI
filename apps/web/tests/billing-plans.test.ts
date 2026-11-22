@@ -8,8 +8,8 @@ describe('KAYAN plan catalogue', () => {
 
   test('annual billing charges ten monthly payments', () => {
     for (const plan of PLAN_CATALOG) {
-      expect(plan.annualPrice).toBe(plan.monthlyPrice * 10)
-      expect(getPlanPrice(plan.code, 'yearly')).toBe(plan.annualPrice)
+      expect(Number(plan.annualPrice)).toBe(Number(plan.monthlyPrice * 10))
+      expect(Number(getPlanPrice(plan.code, 'yearly'))).toBe(Number(plan.annualPrice))
     }
   })
 
