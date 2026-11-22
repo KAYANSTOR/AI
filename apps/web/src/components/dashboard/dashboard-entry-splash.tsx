@@ -15,7 +15,9 @@ export function DashboardEntrySplash() {
       role="status"
       aria-live="polite"
       aria-label="جارٍ تجهيز مساحة العمل"
-      onAnimationEnd={() => setVisible(false)}
+      onAnimationEnd={(event) => {
+        if (event.target === event.currentTarget) setVisible(false)
+      }}
     >
       <div className="kayan-entry-splash__content">
         <div className="kayan-entry-splash__mark-wrap">
