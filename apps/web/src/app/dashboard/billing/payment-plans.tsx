@@ -125,7 +125,6 @@ export function PaymentPlans({
               <ul className="mt-4 flex-1 space-y-2 text-sm text-text-muted">
                 <li className="flex gap-2"><Check size={16} className="mt-0.5 shrink-0 text-success" />{plan.limits.ai_messages.toLocaleString('en-US')} رد ذكي شهرياً</li>
                 <li className="flex gap-2"><Check size={16} className="mt-0.5 shrink-0 text-success" />{plan.limits.channels} قنوات نشطة</li>
-                <li className="flex gap-2"><Check size={16} className="mt-0.5 shrink-0 text-success" />{plan.limits.voice_minutes.toLocaleString('en-US')} دقيقة صوت</li>
                 <li className="flex gap-2"><Check size={16} className="mt-0.5 shrink-0 text-success" />{plan.limits.automation_runs.toLocaleString('en-US')} تشغيل أتمتة</li>
                 <li className="flex gap-2"><Check size={16} className="mt-0.5 shrink-0 text-success" />{plan.limits.campaign_sends.toLocaleString('en-US')} إرسال حملة</li>
               </ul>
