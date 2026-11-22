@@ -46,6 +46,20 @@ The companion conversation reference is a unified inbox: channel identity and ph
 
 Railway production is connected to `feature/channels-expansion`; deployment `2625cbbb-4f72-415e-b048-53e7ee63d7f7` completed successfully. The first deployment attempt stopped before SQL because migration version `0061` was already occupied by `0061_auth_recovery_and_consent.sql`. The channel migration was moved to `0062`; the next pre-deploy run applied it and reported `Database is at version 0062`. `qatshi-staging` has no app or Postgres service configuration.
 
+## Phase 2 implementation — Telegram
+
+- [x] Telegram Bot API client: `getMe`, `setWebhook`, `getWebhookInfo`, `sendMessage`.
+- [x] Admin-only bot connection action verifies token with Telegram, stores it using the existing AES-256-GCM credential service, creates a per-channel webhook secret, and only activates after Telegram confirms the exact webhook URL.
+- [x] Tenant-scoped webhook endpoint at `/api/telegram/webhook/{channelId}` validates Telegram's `X-Telegram-Bot-Api-Secret-Token` using constant-time comparison before processing payloads.
+- [x] Inbound text and captions enter the existing unified conversation/message pipeline with globally unique Telegram update idempotency.
+- [x] Automated replies use the existing outbound outbox and are sent through Telegram Bot API; delivered replies are persisted in the inbox.
+- [x] Dashboard channel setup accepts a BotFather token without echoing it back; the token and webhook secret remain encrypted.
+- [x] Channel test checks bot identity and the exact registered webhook URL.
+- [ ] Run the full CI suite and deploy the latest phase 2 commit; then perform a live test with a real Telegram bot and customer chat.
+- [ ] Add media, callback queries, group privacy behavior, and webhook recovery/health monitoring in a later Telegram hardening pass.
+
+Telegram is a Bot API integration. It does not require a phone number, QR pairing, or a Telegram user-account session. A bot can receive private messages only after a customer starts the bot (or where group permissions allow it).
+
 ## Delivery sequence
 
 ### Phase 1 — Channel contracts and schema
