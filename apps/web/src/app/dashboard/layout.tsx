@@ -25,7 +25,6 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   return (
     <DashboardShell
-      userEmail={context.email ?? context.phone ?? 'حساب مساحة العمل'}
       organizationName={context.organizationName}
       timezone={context.timezone}
       setupBanner={setupBanner}
