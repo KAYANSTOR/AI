@@ -40,7 +40,7 @@ export async function sendPasswordReset(email: string): Promise<void> {
     )
   })
 
-  const baseUrl = (process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || '').trim().replace(/\\/$/, '')
+  const baseUrl = (process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || '').trim().replace(/\/$/, '')
   const resetUrl = new URL('/reset-password', baseUrl)
   resetUrl.searchParams.set('token', token)
   const response = await fetch('https://api.resend.com/emails', {
