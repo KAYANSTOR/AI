@@ -1,9 +1,9 @@
 import type { DbClient } from '@/lib/db/client'
 
 /**
- * Consent is a channel-level fact stored in `consents` (DB contract: consents).
- * The runtime only writes explicit customer opt-out and reads it before any
- * automated reply, so an opted-out contact is never messaged again by automation.
+ * Consent is a channel-level fact stored in `consents`.
+ * Marketing sends must use a marketing-purpose opt-in, not merely the absence
+ * of an opt-out record.
  */
 const OPT_OUT_KEYWORDS = new Set([
   'stop',
@@ -26,16 +26,27 @@ export function isOptOutMessage(text: string): boolean {
   return OPT_OUT_KEYWORDS.has(normalize(text))
 }
 
+export function isMarketingConsentGranted(
+  status: 'opted_in' | 'opted_out' | 'unknown' | null
+): boolean {
+  return status === 'opted_in'
+}
+
 export async function getConsentStatus(
   db: DbClient,
   contactId: string,
-  channel: string
+  channel: string,
+  purpose?: string
 ): Promise<'opted_in' | 'opted_out' | 'unknown' | null> {
-  const { data, error } = await db
+  let query = db
     .from('consents')
     .select('status')
     .eq('contact_id', contactId)
     .eq('channel', channel)
+
+  if (purpose) query = query.eq('purpose', purpose)
+
+  const { data, error } = await query
     .order('captured_at', { ascending: false })
     .limit(1)
     .maybeSingle()
@@ -77,8 +88,8 @@ export async function assertMarketingAllowed(
   db: DbClient,
   input: { contactId: string; channel: string }
 ): Promise<void> {
-  const status = await getConsentStatus(db, input.contactId, input.channel)
-  if (status === 'opted_out') {
-    throw new ConsentBlockedError('contact_opted_out')
+  const status = await getConsentStatus(db, input.contactId, input.channel, 'marketing')
+  if (!isMarketingConsentGranted(status)) {
+    throw new ConsentBlockedError(status === 'opted_out' ? 'contact_opted_out' : 'marketing_consent_required')
   }
 }

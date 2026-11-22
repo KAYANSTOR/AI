@@ -1,5 +1,5 @@
 import type { DbClient } from '@/lib/db/client'
-import { getConsentStatus } from '@/lib/channels/consent'
+import { getConsentStatus, isMarketingConsentGranted } from '@/lib/channels/consent'
 import { enqueueOutbound } from '@/lib/channels/outbox'
 import { resolveSegmentContactIds, type SegmentCriteria } from '@/lib/segments'
 import { recordMeterUsage } from '@/lib/billing/entitlements'
@@ -16,14 +16,19 @@ export async function materializeCampaignAudience(
   let contactIds: string[] = []
 
   if (input.segmentId) {
-    const { data: segment } = await db
+    const { data: segment, error } = await db
       .from('segments')
-      .select('criteria')
+      .select('criteria, is_active')
       .eq('id', input.segmentId)
       .eq('organization_id', input.organizationId)
       .maybeSingle()
 
-    const criteria = (segment?.criteria ?? input.criteria ?? {}) as SegmentCriteria
+    if (error) throw error
+    if (!segment || segment.is_active === false) {
+      throw new Error('campaign_segment_not_found_or_inactive')
+    }
+
+    const criteria = (segment.criteria ?? input.criteria ?? {}) as SegmentCriteria
     contactIds = await resolveSegmentContactIds(db, input.organizationId, criteria, 2000)
   } else if (input.criteria) {
     contactIds = await resolveSegmentContactIds(db, input.organizationId, input.criteria, 2000)
@@ -90,12 +95,16 @@ export async function processCampaignBatch(
 
   for (const row of recipients ?? []) {
     if (campaign.require_consent) {
-      const consent = await getConsentStatus(db, row.contact_id, campaign.channel)
-      if (consent === 'opted_out') {
+      const consent = await getConsentStatus(db, row.contact_id, campaign.channel, 'marketing')
+      if (!isMarketingConsentGranted(consent)) {
         await db
           .from('campaign_recipients')
-          .update({ status: 'skipped', skip_reason: 'opted_out' })
+          .update({
+            status: 'skipped',
+            skip_reason: consent === 'opted_out' ? 'opted_out' : 'marketing_consent_required',
+          })
           .eq('id', row.id)
+          .eq('organization_id', input.organizationId)
         skipped++
         continue
       }
@@ -106,6 +115,7 @@ export async function processCampaignBatch(
         .from('campaign_recipients')
         .update({ status: 'failed', error: 'channel_unavailable' })
         .eq('id', row.id)
+        .eq('organization_id', input.organizationId)
       failed++
       continue
     }
@@ -133,6 +143,7 @@ export async function processCampaignBatch(
         .from('campaign_recipients')
         .update({ status: 'skipped', skip_reason: 'missing_recipient' })
         .eq('id', row.id)
+        .eq('organization_id', input.organizationId)
       skipped++
       continue
     }
@@ -158,6 +169,7 @@ export async function processCampaignBatch(
         })
         .eq('id', row.id)
         .eq('status', 'pending')
+        .eq('organization_id', input.organizationId)
 
       queued++
       try {
@@ -173,6 +185,7 @@ export async function processCampaignBatch(
           error: err instanceof Error ? err.message.slice(0, 200) : 'enqueue_failed',
         })
         .eq('id', row.id)
+        .eq('organization_id', input.organizationId)
       failed++
     }
   }
@@ -181,6 +194,7 @@ export async function processCampaignBatch(
     .from('campaign_recipients')
     .select('id', { count: 'exact', head: true })
     .eq('campaign_id', campaign.id)
+    .eq('organization_id', input.organizationId)
     .eq('status', 'pending')
 
   const completed = (remaining ?? 0) === 0

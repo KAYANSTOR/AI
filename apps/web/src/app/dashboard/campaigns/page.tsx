@@ -25,14 +25,22 @@ export default async function CampaignsPage() {
   const db = await createClient()
   const canManage = context.role === 'owner' || context.role === 'admin'
 
-  const { data: campaigns } = await db
-    .from('campaigns')
-    .select(
-      'id, name, channel, status, scheduled_at, started_at, completed_at, updated_at, template_body'
-    )
-    .eq('organization_id', context.organizationId)
-    .order('updated_at', { ascending: false })
-    .limit(50)
+  const [{ data: campaigns }, { data: segments }] = await Promise.all([
+    db
+      .from('campaigns')
+      .select(
+        'id, name, channel, status, scheduled_at, started_at, completed_at, updated_at, template_body'
+      )
+      .eq('organization_id', context.organizationId)
+      .order('updated_at', { ascending: false })
+      .limit(50),
+    db
+      .from('segments')
+      .select('id, name')
+      .eq('organization_id', context.organizationId)
+      .eq('is_active', true)
+      .order('name', { ascending: true }),
+  ])
 
   const rows = campaigns ?? []
 
@@ -45,7 +53,7 @@ export default async function CampaignsPage() {
         </p>
       </div>
 
-      {canManage ? <CreateCampaignForm /> : null}
+      {canManage ? <CreateCampaignForm segments={segments ?? []} /> : null}
 
       {!rows.length ? (
         <MobileEmptyState
@@ -53,7 +61,7 @@ export default async function CampaignsPage() {
           title="لا توجد حملات"
           description={
             canManage
-              ? 'أنشئ حملة من النموذج أعلاه. لن تُرسل إلا بعد البدء ووجود جمهور/قناة.'
+              ? 'أنشئ حملة من النموذج أعلاه. لن تبدأ الحملة دون جمهور مؤهل وموافقة تسويقية صريحة.'
               : 'لم يُنشئ المسؤول أي حملات بعد.'
           }
         />
