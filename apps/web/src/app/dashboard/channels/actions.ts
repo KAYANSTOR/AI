@@ -15,6 +15,10 @@ import {
 import { assertWithinLimit, EntitlementExceededError } from '@/lib/billing/entitlements'
 import { connectWhatsAppChannel } from '@/lib/channels/connect-service'
 import { verifyMetaChannelConnection } from '@/lib/channels/meta-verification'
+import { randomBytes } from 'node:crypto'
+import { createAdminClient } from '@/lib/db/admin'
+import { saveChannelCredential, loadChannelCredentials, deleteChannelCredential } from '@/lib/credentials/service'
+import { configureTelegramWebhook, verifyTelegramBot, verifyTelegramWebhook } from '@/lib/providers/telegram'
 
 export type ChannelActionResult = {
   ok: boolean
@@ -397,3 +401,97 @@ export async function testChannelAction(input: {
     return { ok: false, error: actionErrorMessage(error, 'تعذّر تنفيذ الفحص. حاول مرة أخرى.') }
   }
 }
+\n
+export async function connectTelegramChannelAction(input: {
+  botToken: string
+}): Promise<ChannelActionResult> {
+  try {
+    const org = await requireChannelAdmin()
+    const token = input.botToken.trim()
+    if (!/^\d{5,15}:[A-Za-z0-9_-]{20,}$/.test(token)) {
+      return { ok: false, error: 'رمز بوت تيليجرام غير صالح. انسخه كاملاً من BotFather.' }
+    }
+
+    const bot = await verifyTelegramBot(token)
+    if (!bot.is_bot || !Number.isSafeInteger(bot.id)) {
+      return { ok: false, error: 'لم تؤكد Telegram هوية البوت.' }
+    }
+
+    const baseUrl = (process.env.NEXT_PUBLIC_APP_URL || (
+      process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : ''
+    )).replace(/\/$/, '')
+    if (!baseUrl || !/^https:\/\//i.test(baseUrl)) {
+      return { ok: false, error: 'عنوان التطبيق العام غير مضبوط على الخادم؛ تعذّر إعداد Webhook الآمن.' }
+    }
+
+    const db = createAdminClient()
+    const businessId = await ensurePrimaryBusinessId(org.organizationId, org.organizationName)
+    const { data: existing, error: readError } = await db.from('channels')
+      .select('id').eq('organization_id', org.organizationId)
+      .eq('channel_type', 'telegram').maybeSingle()
+    if (readError) throw new Error('تعذّر قراءة قناة تيليجرام الحالية.')
+
+    if (!existing) {
+      const tenantDb = await createClient()
+      await assertWithinLimit(tenantDb, org.organizationId, 'channels', 1)
+    }
+
+    const patch = {
+      business_id: businessId,
+      provider_account_id: String(bot.id),
+      external_identifier: bot.username ? '@' + bot.username : String(bot.id),
+      is_active: false,
+      verification_status: 'pending',
+      updated_at: new Date().toISOString(),
+    }
+    const written = existing
+      ? await db.from('channels').update(patch).eq('id', existing.id).select('id').single()
+      : await db.from('channels').insert({
+          organization_id: org.organizationId, channel_type: 'telegram', ...patch,
+        }).select('id').single()
+    if (written.error || !written.data?.id) throw new Error('تعذّر حفظ قناة تيليجرام.')
+
+    const channelId = written.data.id as string
+    const webhookSecret = randomBytes(32).toString('hex')
+    const webhookUrl = `${baseUrl}/api/telegram/webhook/${encodeURIComponent(channelId)}`
+
+    try {
+      await saveChannelCredential(db, {
+        organizationId: org.organizationId, channelId, provider: 'telegram',
+        credentialType: 'bot_token', value: token,
+      })
+      await saveChannelCredential(db, {
+        organizationId: org.organizationId, channelId, provider: 'telegram',
+        credentialType: 'webhook_secret', value: webhookSecret,
+      })
+      const saved = await loadChannelCredentials(db, channelId, 'telegram')
+      if (saved.bot_token !== token || saved.webhook_secret !== webhookSecret) {
+        throw new Error('تعذّر التحقق من حفظ بيانات تيليجرام المشفّرة.')
+      }
+      await configureTelegramWebhook({ token, webhookUrl, secretToken: webhookSecret })
+      if (!(await verifyTelegramWebhook(token, webhookUrl))) {
+        throw new Error('لم تؤكد Telegram تسجيل Webhook للقناة.')
+      }
+      const activated = await db.from('channels').update({
+        is_active: true, verification_status: 'verified', updated_at: new Date().toISOString(),
+      }).eq('id', channelId).eq('organization_id', org.organizationId).select('id').single()
+      if (activated.error || !activated.data) throw new Error('تم إعداد Webhook لكن تعذّر تفعيل القناة.')
+    } catch (error) {
+      await db.from('channels').update({
+        is_active: false, verification_status: 'failed', updated_at: new Date().toISOString(),
+      }).eq('id', channelId).eq('organization_id', org.organizationId)
+      await deleteChannelCredential({ db, organizationId: org.organizationId, channelId, provider: 'telegram' } as never).catch(() => {})
+      throw error
+    }
+
+    await audit(org.organizationId, businessId, 'channel.connected', 'channel', channelId, {
+      channel_type: 'telegram', provider: 'telegram', bot_id: String(bot.id),
+    })
+    revalidatePath('/dashboard/channels')
+    revalidatePath('/dashboard/integrations')
+    return { ok: true, message: `تم التحقق من البوت @${bot.username ?? bot.id} وإعداد Webhook بنجاح.` }
+  } catch (error) {
+    return { ok: false, error: actionErrorMessage(error, 'تعذّر ربط بوت تيليجرام.') }
+  }
+}
+
