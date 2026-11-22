@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { Bot, CheckCircle2, Loader2, MessageSquarePlus, UserCheck } from 'lucide-react'
+import { Bot, Check, CheckCircle2, ChevronDown, Loader2, MessageSquarePlus, UserCheck, X } from 'lucide-react'
 import {
   addNoteAction,
   closeConversationAction,
@@ -36,41 +36,37 @@ export function InboxControls({
 
   const closed = status === 'closed'
   const handedOff = status === 'handed_off'
+  const actionClass = 'inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition disabled:opacity-50'
 
   return (
-    <div className="space-y-3">
-      {result && (
-        <div
-          className={`rounded-xl border px-3 py-2 text-sm ${
-            result.ok ? 'border-success/40 bg-success/10 text-text' : 'border-error/40 bg-error/10 text-text'
-          }`}
-        >
-          {result.ok ? result.message : result.error}
-        </div>
-      )}
+    <div className="space-y-2">
+      <div className="flex items-center gap-2 overflow-x-auto pb-0.5">
+        <span className={`inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-xs font-semibold ${closed ? 'bg-error/10 text-error' : 'bg-primary-light text-secondary'}`}>
+          <span className={`h-2 w-2 rounded-full ${closed ? 'bg-error' : 'bg-success'}`} />
+          {closed ? 'مغلقة' : handedOff ? 'بانتظار الفريق' : 'مفتوحة'}
+        </span>
 
-      <div className="flex flex-wrap items-center gap-2">
-        {!handedOff && !closed && (
+        {!closed && !handedOff && (
           <button
             type="button"
             disabled={pending}
             onClick={() => run(() => takeOverAction(conversationId))}
-            className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-primary px-3 py-2 text-base font-medium text-primary-foreground transition-colors hover:bg-primary-dark disabled:opacity-60 md:text-sm"
+            className={`${actionClass} border-secondary/20 bg-surface text-text hover:bg-surface-muted`}
           >
-            {pending ? <Loader2 className="animate-spin" size={14} /> : <UserCheck size={14} />}
-            استلام المحادثة
+            {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <UserCheck className="h-3.5 w-3.5" />}
+            استلام
           </button>
         )}
 
-        {handedOff && (
+        {handedOff && !closed && (
           <button
             type="button"
             disabled={pending}
             onClick={() => run(() => resumeAiAction(conversationId))}
-            className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-primary px-3 py-2 text-base font-medium text-primary-foreground transition-colors hover:bg-primary-dark disabled:opacity-60 md:text-sm"
+            className={`${actionClass} border-secondary/20 bg-surface text-text hover:bg-surface-muted`}
           >
-            {pending ? <Loader2 className="animate-spin" size={14} /> : <Bot size={14} />}
-            إعادة الوكيل
+            {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Bot className="h-3.5 w-3.5" />}
+            إعادة تفعيل المساعد
           </button>
         )}
 
@@ -79,53 +75,63 @@ export function InboxControls({
             type="button"
             disabled={pending}
             onClick={() => run(() => reopenConversationAction(conversationId))}
-            className="min-h-11 rounded-lg border border-border px-3 py-2 text-base font-medium text-text transition-colors hover:border-primary/50 disabled:opacity-60 md:text-sm"
+            className={`${actionClass} border-success/30 bg-success/10 text-text hover:bg-success/15`}
           >
-            إعادة الفتح
+            <Check className="h-3.5 w-3.5" /> إعادة فتح
           </button>
         ) : (
           <button
             type="button"
             disabled={pending}
             onClick={() => run(() => closeConversationAction(conversationId))}
-            className="min-h-11 rounded-lg border border-border px-3 py-2 text-base font-medium text-text transition-colors hover:border-error/40 hover:text-error disabled:opacity-60 md:text-sm"
+            className={`${actionClass} border-border bg-surface text-text-muted hover:border-error/40 hover:text-error`}
           >
-            إغلاق المحادثة
+            <X className="h-3.5 w-3.5" /> إغلاق
           </button>
         )}
 
-        <span className="text-xs text-text-muted">
-          {closed ? 'مغلقة' : aiEnabled ? 'الوكيل يرد' : 'الوكيل متوقف'}
-        </span>
+        <details className="group relative ms-auto shrink-0">
+          <summary className="flex min-h-9 cursor-pointer list-none items-center gap-1 rounded-full border border-border px-3 text-xs font-semibold text-text-muted hover:bg-surface-muted">
+            المزيد <ChevronDown className="h-3.5 w-3.5 transition group-open:rotate-180" />
+          </summary>
+          <div className="absolute end-0 top-11 z-30 w-[min(86vw,320px)] rounded-2xl border border-border bg-surface p-3 shadow-raised">
+            <label className="block text-xs font-semibold text-text-muted">
+              ملاحظة داخلية
+              <textarea
+                value={note}
+                onChange={(event) => setNote(event.target.value)}
+                rows={3}
+                className="mt-2 min-h-20 w-full rounded-xl border border-border bg-background px-3 py-2 text-sm text-text outline-none focus:border-secondary/40"
+                placeholder="أضف ملاحظة للفريق..."
+              />
+            </label>
+            <button
+              type="button"
+              disabled={pending || !note.trim()}
+              onClick={() => run(() => addNoteAction(conversationId, note), true)}
+              className="mt-2 inline-flex min-h-9 items-center gap-2 rounded-lg bg-primary px-3 text-xs font-semibold text-primary-foreground disabled:opacity-50"
+            >
+              {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <MessageSquarePlus className="h-3.5 w-3.5" />}
+              حفظ الملاحظة
+            </button>
+            {!closed && <div className="mt-3 border-t border-border pt-3"><ScheduleMessageForm conversationId={conversationId} /></div>}
+          </div>
+        </details>
       </div>
 
-      <div>
-        <label className="text-xs text-text-muted">
-          ملاحظة داخلية (لا تُرسل للعميل)
-          <textarea
-            value={note}
-            onChange={(event) => setNote(event.target.value)}
-            rows={3}
-            className="mt-1 min-h-11 w-full rounded-lg border border-border px-2 py-1.5 text-base text-text md:text-sm"
-            placeholder="العميل يفضل الاتصال بعد الخامسة."
-          />
-        </label>
-        <button
-          type="button"
-          disabled={pending || !note.trim()}
-          onClick={() => run(() => addNoteAction(conversationId, note), true)}
-          className="mt-2 inline-flex min-h-11 items-center gap-2 rounded-lg border border-secondary px-3 py-1.5 text-base font-medium text-secondary transition-colors hover:bg-primary/10 disabled:opacity-60 md:text-sm"
+      {result && (
+        <div
+          role="status"
+          className={`rounded-xl border px-3 py-2 text-xs ${result.ok ? 'border-success/30 bg-success/10 text-text' : 'border-error/30 bg-error/10 text-text'}`}
         >
-          {pending ? <Loader2 className="animate-spin" size={14} /> : <MessageSquarePlus size={14} />}
-          إضافة ملاحظة
-        </button>
-      </div>
+          {result.ok ? result.message : result.error}
+        </div>
+      )}
 
-      {!closed && <ScheduleMessageForm conversationId={conversationId} />}
-
-      <p className="flex items-start gap-2 text-xs text-text-muted">
-        <CheckCircle2 size={13} className="mt-0.5 shrink-0 text-success" />
-        عند الاستلام يتوقف الوكيل فورًا، وتستمر رسائل العميل في نفس المحادثة.
+      <p className="flex items-center gap-1.5 text-[10px] text-text-muted">
+        <CheckCircle2 className="h-3 w-3 shrink-0 text-success" />
+        عند استلام المحادثة يتوقف المساعد الذكي حتى إعادة تفعيله
+        <span className="sr-only">{aiEnabled ? 'المساعد مفعّل حالياً' : 'المساعد متوقف حالياً'}</span>
       </p>
     </div>
   )
