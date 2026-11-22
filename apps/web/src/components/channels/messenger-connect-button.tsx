@@ -1,6 +1,6 @@
 'use client'
 import { useEffect,useState } from 'react'
-import { Facebook,Loader2 } from 'lucide-react'
+import { MessageCircle,Loader2 } from 'lucide-react'
 import { beginMessengerConnectionAction,createMessengerOAuthStateAction } from '@/app/dashboard/channels/actions'
 import type { FacebookLoginResponse,FacebookSdk } from '@/components/channels/whatsapp-embedded-signup'
 declare global{interface Window{FB?:FacebookSdk;fbAsyncInit?:()=>void;__kayanMetaSdkAppId?:string}}
@@ -51,7 +51,7 @@ export function MessengerConnectButton({disabled,onPages,onError}:{disabled?:boo
  return <div className="space-y-2">
   <button type="button" onClick={launch} disabled={disabled||busy||!ready}
    className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#0866FF] px-5 text-sm font-bold text-white hover:opacity-90 disabled:opacity-50">
-   {busy||(!ready&&!error)?<Loader2 size={18} className="animate-spin"/>:<Facebook size={18}/>}
+   {busy||(!ready&&!error)?<Loader2 size={18} className="animate-spin"/>:<MessageCircle size={18}/>}
    {busy?'جارٍ تفويض حساب فيسبوك…':'ربط صفحة Facebook'}
   </button>
   {error?<p role="status" className="text-xs text-error">{error}</p>:null}

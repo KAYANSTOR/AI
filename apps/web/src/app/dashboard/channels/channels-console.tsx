@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useState, useTransition } from 'react'
-import { CheckCircle2, CircleAlert, Link2, Loader2, MessageSquare, Phone, Power, RefreshCw, ArrowRight, Bot, Facebook } from 'lucide-react'
+import { CheckCircle2, CircleAlert, Link2, Loader2, MessageSquare, Phone, Power, RefreshCw, ArrowRight, Bot, MessageCircle } from 'lucide-react'
 import {
   saveChannelAction,
   setChannelActiveAction,
@@ -94,7 +94,7 @@ export function ChannelsConsole({
             if (card.type === 'sms') {
               return <MessageSquare className="h-6 w-6" aria-hidden="true" />
             }
-            if (card.type === 'messenger') return <Facebook className="h-6 w-6" aria-hidden="true" />
+            if (card.type === 'messenger') return <MessageCircle className="h-6 w-6" aria-hidden="true" />
             return <MessageSquare className="h-6 w-6" aria-hidden="true" />
           }
 

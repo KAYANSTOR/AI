@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { Phone, Smartphone, Globe, Send, Facebook } from 'lucide-react'
+import { Phone, Smartphone, Globe, Send, MessageCircle } from 'lucide-react'
 import { cx } from './cx'
 
 export type ConversationChannel = 'whatsapp' | 'instagram' | 'sms' | 'phone' | 'web' | 'telegram' | 'messenger'
@@ -33,7 +33,7 @@ function ChannelDot({ channel = 'whatsapp' }: { channel?: ConversationChannel })
     phone: <Phone className="h-2.5 w-2.5 text-white" />,
     web: <Globe className="h-2.5 w-2.5 text-white" />,
     telegram: <Send className="h-2.5 w-2.5 text-white" />,
-    messenger: <Facebook className="h-2.5 w-2.5 text-white" />,
+    messenger: <MessageCircle className="h-2.5 w-2.5 text-white" />,
   }[channel]
 
   const bg = {
