@@ -17,7 +17,7 @@ import { connectWhatsAppChannel } from '@/lib/channels/connect-service'
 import { verifyMetaChannelConnection } from '@/lib/channels/meta-verification'
 import { randomBytes } from 'node:crypto'
 import { createAdminClient } from '@/lib/db/admin'
-import { saveChannelCredential, loadChannelCredentials, deleteChannelCredential } from '@/lib/credentials/service'
+import { saveChannelCredential, loadChannelCredentials } from '@/lib/credentials/service'
 import { configureTelegramWebhook, verifyTelegramBot, verifyTelegramWebhook } from '@/lib/providers/telegram'
 
 export type ChannelActionResult = {
@@ -397,7 +397,7 @@ export async function testChannelAction(input: {
       try {
         const bot = await verifyTelegramBot(credentials.bot_token ?? '')
         botOk = bot.is_bot && String(bot.id) === String(data.provider_account_id)
-        const baseUrl = (process.env.NEXT_PUBLIC_APP_URL || (
+        const baseUrl = (process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_APP_URL || (
           process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : ''
         )).replace(/\/$/, '')
         const webhookUrl = `${baseUrl}/api/telegram/webhook/${encodeURIComponent(data.id)}`
@@ -502,7 +502,7 @@ export async function connectTelegramChannelAction(input: {
       await db.from('channels').update({
         is_active: false, verification_status: 'failed', updated_at: new Date().toISOString(),
       }).eq('id', channelId).eq('organization_id', org.organizationId)
-      await deleteChannelCredential(db, { organizationId: org.organizationId, channelId, provider: 'telegram' }).catch(() => {})
+      // Keep encrypted credentials for an explicit retry; the channel remains inactive and failed.
       throw error
     }
 
