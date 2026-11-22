@@ -39,14 +39,6 @@ export function isProviderChannelType(value: unknown): value is ProviderChannelT
   return typeof value === 'string' && (PROVIDER_CHANNEL_TYPES as readonly string[]).includes(value)
 }
 
-export function isWhatsAppConnectionMode(value: unknown): value is WhatsAppConnectionMode {
-  return typeof value === 'string' && WHATSAPP_CONNECTION_MODES.some((mode) => mode.value === value)
-}
-
-export function isChannelConnectionMode(value: unknown): value is ChannelConnectionMode {
-  return value === 'native' || isWhatsAppConnectionMode(value)
-}
-
 export type ChannelCredentialContract = {
   provider: 'meta' | 'telegram' | 'website' | 'twilio' | 'vapi' | 'whatsapp_web'
   credentialTypes: readonly string[]
@@ -114,3 +106,11 @@ export const WHATSAPP_CONNECTION_MODES: readonly {
   { value: 'coexistence', official: true, requiresMetaEmbeddedSignup: true },
   { value: 'qr_unofficial', official: false, requiresMetaEmbeddedSignup: false },
 ]
+
+export function isWhatsAppConnectionMode(value: unknown): value is WhatsAppConnectionMode {
+  return typeof value === 'string' && WHATSAPP_CONNECTION_MODES.some((mode) => mode.value === value)
+}
+
+export function isChannelConnectionMode(value: unknown): value is ChannelConnectionMode {
+  return value === 'native' || isWhatsAppConnectionMode(value)
+}
