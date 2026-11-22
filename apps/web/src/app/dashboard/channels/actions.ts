@@ -423,7 +423,7 @@ export async function testChannelAction(input: {
     return { ok: false, error: actionErrorMessage(error, 'تعذّر تنفيذ الفحص. حاول مرة أخرى.') }
   }
 }
-\n
+
 export async function connectTelegramChannelAction(input: {
   botToken: string
 }): Promise<ChannelActionResult> {
