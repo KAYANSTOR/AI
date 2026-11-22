@@ -17,8 +17,10 @@ import { connectWhatsAppChannel } from '@/lib/channels/connect-service'
 import { verifyMetaChannelConnection } from '@/lib/channels/meta-verification'
 import { randomBytes } from 'node:crypto'
 import { createAdminClient } from '@/lib/db/admin'
-import { saveChannelCredential, loadChannelCredentials } from '@/lib/credentials/service'
+import { saveChannelCredential, loadChannelCredentials, deleteChannelCredential } from '@/lib/credentials/service'
 import { configureTelegramWebhook, verifyTelegramBot, verifyTelegramWebhook } from '@/lib/providers/telegram'
+import { createEmbeddedSignupOAuthState, verifyEmbeddedSignupOAuthState } from '@/lib/channels/embedded-signup'
+import { ensureMessengerAppWebhook, exchangeMessengerCode, getMessengerPage, listMessengerPages, subscribeMessengerPage, verifyMessengerPage, verifyMessengerPermissions } from '@/lib/providers/messenger'
 
 export type ChannelActionResult = {
   ok: boolean
@@ -139,6 +141,7 @@ export async function saveChannelAction(input: {
     const org = await requireChannelAdmin()
     const spec = getChannelSpec(input.channelType)
     if (!spec) return { ok: false, error: 'نوع قناة غير معروف.' }
+    if (spec.type === 'messenger') return { ok: false, error: 'اربط Messenger بتسجيل الدخول إلى Facebook واختيار الصفحة؛ لا يمكن ربطه بمعرّف يدوي.' }
     if (spec.type === 'whatsapp') {
       return {
         ok: false,
@@ -302,7 +305,7 @@ export async function setChannelActiveAction(input: {
     if (error) throw new Error(error.message)
     if (!data) return { ok: false, error: 'القناة غير مربوطة بعد.' }
 
-    if (input.active && spec.type === 'whatsapp' && data.verification_status !== 'verified') {
+    if (input.active && (spec.type === 'whatsapp' || spec.type === 'messenger') && data.verification_status !== 'verified') {
       return {
         ok: false,
         error: 'لا يمكن تفعيل واتساب قبل تسجيل رقم الإرسال لدى Meta باستخدام PIN.',
@@ -330,7 +333,7 @@ export async function setChannelActiveAction(input: {
         // Preserve successful WhatsApp registration when temporarily disabling
         // the channel. Other providers keep the existing pending/disabled policy.
         verification_status:
-          spec.type === 'whatsapp' || spec.type === 'telegram'
+          spec.type === 'whatsapp' || spec.type === 'telegram' || spec.type === 'messenger'
             ? data.verification_status
             : input.active
               ? 'pending'
@@ -409,6 +412,19 @@ export async function testChannelAction(input: {
       result.checks.push(
         { label: 'هوية بوت تيليجرام', ok: botOk, detail: botOk ? 'تم التحقق عبر Telegram' : 'تعذّر التحقق من البوت أو الرمز' },
         { label: 'Webhook مسجل', ok: webhookOk, detail: webhookOk ? 'عنوان الاستقبال مطابق' : 'Webhook غير مضبوط أو تغيّر عنوان التطبيق' },
+      )
+      result.ok = result.checks.every((check) => check.ok)
+    } else if (spec.type === 'messenger') {
+      const credentials = await loadChannelCredentials(createAdminClient(), data.id, 'meta')
+      let pageOk = false, subscribed = false
+      try {
+        const checked = await verifyMessengerPage(String(data.provider_account_id ?? ''), credentials.page_access_token ?? '')
+        pageOk = checked.identityOk
+        subscribed = checked.subscriptionOk
+      } catch { pageOk = false; subscribed = false }
+      result.checks.push(
+        { label: 'هوية صفحة Facebook', ok: pageOk, detail: pageOk ? 'تم التحقق من الصفحة' : 'رمز الصفحة غير صالح أو انتهت صلاحيته' },
+        { label: 'اشتراك Webhook', ok: subscribed, detail: subscribed ? 'التطبيق مشترك في إشعارات الصفحة' : 'الصفحة غير مشتركة في Webhook' },
       )
       result.ok = result.checks.every((check) => check.ok)
     }
@@ -518,3 +534,102 @@ export async function connectTelegramChannelAction(input: {
   }
 }
 
+
+
+export type MessengerPageOption = { id: string; name: string }
+
+export async function createMessengerOAuthStateAction(): Promise<{ok:true;state:string}|{ok:false;error:string}> {
+  try {
+    const org = await requireChannelAdmin()
+    const state = await createEmbeddedSignupOAuthState(org.organizationId)
+    return {ok:true,state:state.state}
+  } catch(error) {
+    return {ok:false,error:actionErrorMessage(error,'تعذّر بدء تسجيل الدخول إلى Facebook.')}
+  }
+}
+
+export async function beginMessengerConnectionAction(input:{code:string;state:string}):Promise<{ok:boolean;error?:string;pages:MessengerPageOption[]}> {
+  try {
+    const org=await requireChannelAdmin()
+    const oauth=await verifyEmbeddedSignupOAuthState(input.state,org.organizationId)
+    if(!oauth)return{ok:false,error:'انتهت جلسة Facebook أو لم تتطابق مع حسابك. أعد بدء الربط.',pages:[]}
+    if(!input.code?.trim()||input.code.length>4096)return{ok:false,error:'لم يصل رمز تفويض صالح من Facebook.',pages:[]}
+    await ensureMessengerAppWebhook()
+    const userToken=await exchangeMessengerCode(input.code.trim(),oauth.redirectUri)
+    await verifyMessengerPermissions(userToken)
+    const pages=await listMessengerPages(userToken)
+    if(!pages.length)return{ok:false,error:'لم يعثر Facebook على صفحة تملك صلاحية الرسائل وإدارة الاشتراكات عليها.',pages:[]}
+    const db=createAdminClient()
+    const businessId=await ensurePrimaryBusinessId(org.organizationId,org.organizationName)
+    if(!businessId)return{ok:false,error:'أكمل إعداد النشاط التجاري قبل ربط Messenger.',pages:[]}
+    const {data:existing,error:readError}=await db.from('channels').select('id')
+      .eq('organization_id',org.organizationId).eq('channel_type','messenger').maybeSingle()
+    if(readError)throw new Error('تعذّر قراءة قناة Messenger الحالية.')
+    let channelId=existing?.id as string|undefined
+    if(!channelId){
+      const tenantDb=await createClient()
+      await assertWithinLimit(tenantDb,org.organizationId,'channels',1)
+      const {data:created,error}=await db.from('channels').insert({
+        organization_id:org.organizationId,business_id:businessId,channel_type:'messenger',
+        is_active:false,verification_status:'pending'
+      }).select('id').single()
+      if(error||!created?.id)throw new Error('تعذّر تجهيز قناة Messenger.')
+      channelId=created.id as string
+    }else{
+      await db.from('channels').update({business_id:businessId,is_active:false,verification_status:'pending',
+        updated_at:new Date().toISOString()}).eq('id',channelId).eq('organization_id',org.organizationId)
+    }
+    await saveChannelCredential(db,{organizationId:org.organizationId,channelId,provider:'meta',
+      credentialType:'oauth_user_token',value:userToken})
+    await audit(org.organizationId,businessId,'channel.messenger_authorization_started','channel',channelId,
+      {channel_type:'messenger',eligible_pages:pages.length})
+    revalidatePath('/dashboard/channels')
+    return{ok:true,pages:pages.map(page=>({id:page.id,name:page.name}))}
+  }catch(error){
+    const message=error instanceof Error?error.message:''
+    if(message.startsWith('messenger_permissions_missing_')){
+      return{ok:false,error:'لم يمنح Facebook الصلاحيات المطلوبة: '+message.replace('messenger_permissions_missing_','').replace(/_/g,'، ')+'.',pages:[]}
+    }
+    if(message==='messenger_webhook_callback_conflict')return{ok:false,error:'عنوان Webhook لصفحات Facebook مستخدم من تكامل آخر؛ لم نغيّر إعداداته.',pages:[]}
+    if(message==='messenger_verify_token_missing')return{ok:false,error:'أضف META_MESSENGER_VERIFY_TOKEN أو استخدم WHATSAPP_VERIFY_TOKEN في Railway.',pages:[]}
+    return{ok:false,error:actionErrorMessage(error,'تعذّر تفويض صفحات Facebook. تحقق من إعداد Meta والصلاحيات ثم أعد المحاولة.'),pages:[]}
+  }
+}
+
+export async function completeMessengerConnectionAction(input:{pageId:string}):Promise<ChannelActionResult>{
+  try{
+    const org=await requireChannelAdmin(),pageId=String(input.pageId??'').trim()
+    if(!/^\\d{5,30}$/.test(pageId))return{ok:false,error:'معرّف صفحة Facebook غير صالح.'}
+    const db=createAdminClient()
+    const {data:channel,error}=await db.from('channels').select('id,business_id')
+      .eq('organization_id',org.organizationId).eq('channel_type','messenger').maybeSingle()
+    if(error||!channel?.id)return{ok:false,error:'ابدأ تفويض Facebook أولاً ثم اختر الصفحة.'}
+    const credentials=await loadChannelCredentials(db,channel.id,'meta')
+    const userToken=credentials.oauth_user_token
+    if(!userToken)return{ok:false,error:'انتهت جلسة اختيار الصفحة. أعد الضغط على ربط صفحة Facebook.'}
+    const webhook=await ensureMessengerAppWebhook()
+    const page=await getMessengerPage(userToken,pageId)
+    await subscribeMessengerPage(page.id,page.access_token)
+    const checked=await verifyMessengerPage(page.id,page.access_token)
+    if(!checked.identityOk||!checked.subscriptionOk)return{ok:false,error:'لم تؤكد Meta اكتمال اشتراك الصفحة في Webhook. لم يتم تفعيل القناة.'}
+    await saveChannelCredential(db,{organizationId:org.organizationId,channelId:channel.id,provider:'meta',
+      credentialType:'page_access_token',value:page.access_token})
+    await deleteChannelCredential(db,{organizationId:org.organizationId,channelId:channel.id,
+      provider:'meta',credentialType:'oauth_user_token'})
+    const {error:updateError}=await db.from('channels').update({
+      business_id:channel.business_id,provider_account_id:page.id,external_identifier:page.name,
+      connection_mode:'native',is_active:true,verification_status:'verified',updated_at:new Date().toISOString()
+    }).eq('id',channel.id).eq('organization_id',org.organizationId).eq('channel_type','messenger')
+    if(updateError)throw new Error('تم ربط الصفحة لدى Meta لكن تعذّر تفعيل القناة محلياً.')
+    await audit(org.organizationId,channel.business_id,'channel.connected','channel',channel.id,
+      {channel_type:'messenger',page_id:page.id,page_name:page.name,webhook_url:webhook.callbackUrl})
+    revalidatePath('/dashboard/channels');revalidatePath('/dashboard/conversations');revalidatePath('/dashboard/integrations')
+    return{ok:true,message:'تم ربط صفحة '+page.name+' وتفعيل استقبال رسائل Messenger.'}
+  }catch(error){
+    const message=error instanceof Error?error.message:''
+    if(message==='messenger_page_access_denied')return{ok:false,error:'حسابك لا يملك صلاحية إدارة رسائل هذه الصفحة. اختر صفحة أخرى أو حدّث صلاحيات الحساب.'}
+    if(message==='messenger_webhook_callback_conflict')return{ok:false,error:'عنوان Webhook لصفحات Facebook مستخدم من تكامل آخر؛ لم نغيّر إعداداته.'}
+    if(message==='messenger_verify_token_missing')return{ok:false,error:'أضف META_MESSENGER_VERIFY_TOKEN أو استخدم WHATSAPP_VERIFY_TOKEN في Railway.'}
+    return{ok:false,error:actionErrorMessage(error,'تعذّر ربط صفحة Facebook. لم نفعّل القناة قبل اكتمال التحقق.')}
+  }
+}

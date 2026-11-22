@@ -1,16 +1,18 @@
 'use client'
 
 import { useMemo, useState, useTransition } from 'react'
-import { CheckCircle2, CircleAlert, Link2, Loader2, MessageSquare, Phone, Power, RefreshCw, ArrowRight, Bot } from 'lucide-react'
+import { CheckCircle2, CircleAlert, Link2, Loader2, MessageSquare, Phone, Power, RefreshCw, ArrowRight, Bot, Facebook } from 'lucide-react'
 import {
   saveChannelAction,
   setChannelActiveAction,
   testChannelAction,
   connectWhatsAppChannelAction,
   connectTelegramChannelAction,
+  completeMessengerConnectionAction,
 } from './actions'
 import { getChannelSpec, type ChannelType, type BindingTestResult } from '@/lib/channels/management'
 import { WhatsAppEmbeddedSignupButton } from '@/components/channels/whatsapp-embedded-signup'
+import { MessengerConnectButton } from '@/components/channels/messenger-connect-button'
 import { registerWhatsAppCloudApiNumberAction } from '@/app/onboarding/embedded-signup-actions'
 import { ChannelCard as UIChannelCard, type ChannelStatus } from '@/components/ui/channel-card'
 
@@ -92,10 +94,11 @@ export function ChannelsConsole({
             if (card.type === 'sms') {
               return <MessageSquare className="h-6 w-6" aria-hidden="true" />
             }
+            if (card.type === 'messenger') return <Facebook className="h-6 w-6" aria-hidden="true" />
             return <MessageSquare className="h-6 w-6" aria-hidden="true" />
           }
 
-          const iconBg = card.type === 'whatsapp' ? 'bg-[#25D366]' : 'bg-primary'
+          const iconBg = card.type === 'whatsapp' ? 'bg-[#25D366]' : card.type === 'messenger' ? 'bg-[#0866FF]' : 'bg-primary'
 
           const toggleChannel = async () => {
             if (!canManage || busyType) return
@@ -146,7 +149,7 @@ export function ChannelsConsole({
         <div className="grid gap-3 sm:grid-cols-2">
           {cards.filter((card) => !card.connected || card.verificationStatus !== 'verified').map((card) => {
             const state = stateOf(card)
-            const getIcon = () => card.type === 'phone' ? <Phone className="h-6 w-6" aria-hidden="true" /> : <MessageSquare className="h-6 w-6" aria-hidden="true" />
+            const getIcon = () => card.type === 'phone' ? <Phone className="h-6 w-6" aria-hidden="true" /> : card.type === 'messenger' ? <Facebook className="h-6 w-6" aria-hidden="true" /> : <MessageSquare className="h-6 w-6" aria-hidden="true" />
             return (
               <UIChannelCard
                 key={card.type}
@@ -154,7 +157,7 @@ export function ChannelsConsole({
                 description={getChannelSpec(card.type)?.bindingHint ?? stateCopy[state].hint}
                 status={state === 'pending' || state === 'error' ? 'needsSetup' : 'disconnected'}
                 icon={getIcon()}
-                iconBg="bg-primary"
+                iconBg={card.type === 'messenger' ? 'bg-[#0866FF]' : 'bg-primary'}
                 actionLabel="إعداد القناة"
                 onAction={() => setOpenType(card.type)}
               />
@@ -183,6 +186,8 @@ function ChannelDialog({
   const [testResult, setTestResult] = useState<BindingTestResult | null>(null)
   const [registrationPin, setRegistrationPin] = useState('')
   const [telegramBotToken, setTelegramBotToken] = useState('')
+  const [messengerPages, setMessengerPages] = useState<Array<{ id: string; name: string }>>([])
+  const [selectedMessengerPage, setSelectedMessengerPage] = useState('')
   const state = stateOf(card)
 
   if (!spec) return null
@@ -269,7 +274,7 @@ function ChannelDialog({
           <div>
             <p className="text-xs font-semibold text-secondary">إعدادات القنوات</p>
             <h1 id="channel-dialog-title" className="mt-1 text-2xl font-bold text-text">
-              {card.type === 'telegram' ? 'إعدادات تيليجرام' : `إعدادات ${card.label}`}
+              {card.type === 'telegram' ? 'إعدادات تيليجرام' : card.type === 'messenger' ? 'إعدادات Facebook Messenger' : `إعدادات ${card.label}`}
             </h1>
             <p className="mt-2 inline-flex items-center gap-2 rounded-full border border-border bg-background px-3 py-1 text-xs font-semibold text-text-muted">
               <span className={`h-2 w-2 rounded-full ${state === 'verified' ? 'bg-success' : 'bg-text-muted'}`} />
@@ -352,7 +357,44 @@ function ChannelDialog({
             </section>
           ) : null}
 
-          {card.type === 'telegram' ? (
+          {card.type === 'messenger' ? (
+            <section className="space-y-5">
+              <div className="rounded-2xl border border-border bg-background p-5">
+                <div className="flex items-center gap-3">
+                  <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#0866FF]/10 text-[#0866FF]"><Facebook size={24} /></span>
+                  <div><h2 className="text-base font-bold text-text">ربط صفحة Facebook</h2><p className="mt-1 text-xs leading-6 text-text-muted">سجّل الدخول بالحساب الذي يدير الصفحة ووافق على صلاحيات الرسائل وWebhooks.</p></div>
+                </div>
+                <ul className="mt-4 space-y-2 text-xs leading-6 text-text-muted">
+                  <li>اختر صفحة واحدة لربطها بصندوق الوارد.</li>
+                  <li>لا نطلب كلمة مرور Facebook؛ التفويض يتم من نافذة Meta الرسمية.</li>
+                  <li>يُحفظ رمز الصفحة مشفّراً على الخادم ولا يصل إلى المتصفح.</li>
+                </ul>
+              </div>
+              <MessengerConnectButton disabled={!canManage || busy}
+                onPages={(pages) => { setMessengerPages(pages); setSelectedMessengerPage(pages[0]?.id ?? ''); setNotice({ok:true,text:'تم التفويض. اختر الصفحة التي تريد ربطها.'}) }}
+                onError={(message) => setNotice({ok:false,text:message})} />
+              {messengerPages.length > 0 ? (
+                <div className="space-y-3 rounded-2xl border border-border bg-background p-4">
+                  <label className="block"><span className="text-sm font-semibold text-text">صفحة Facebook</span>
+                    <select value={selectedMessengerPage} onChange={(event)=>setSelectedMessengerPage(event.target.value)} disabled={busy}
+                      className="mt-2 min-h-12 w-full rounded-xl border border-border bg-surface px-3 text-sm text-text">
+                      {messengerPages.map(page=><option key={page.id} value={page.id}>{page.name}</option>)}
+                    </select>
+                  </label>
+                  <button type="button" onClick={()=>startTransition(async()=>{
+                    setNotice(null)
+                    const result=await completeMessengerConnectionAction({pageId:selectedMessengerPage})
+                    setNotice({ok:result.ok,text:result.ok?result.message??'تم ربط الصفحة.':result.error??'تعذّر ربط الصفحة.'})
+                    if(result.ok)window.location.reload()
+                  })} disabled={busy||!canManage||!selectedMessengerPage}
+                    className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#0866FF] px-4 text-sm font-bold text-white hover:opacity-90 disabled:opacity-50">
+                    {busy?<Loader2 size={18} className="animate-spin"/>:<Link2 size={17}/>} تأكيد ربط الصفحة
+                  </button>
+                </div>
+              ):null}
+              <p className="text-xs leading-5 text-text-muted">يتطلب الربط صلاحيات Meta ‏pages_show_list وpages_messaging وpages_manage_metadata. وقد تتطلب إتاحته لجميع العملاء مراجعة Meta.</p>
+            </section>
+          ) : card.type === 'telegram' ? (
             <section className="space-y-5">
               <div className="rounded-2xl border border-border bg-background p-5">
                 <div className="flex items-center gap-3">
@@ -463,7 +505,7 @@ function ChannelDialog({
           ) : null}
 
           <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-            {canManage ? (
+            {canManage && card.type !== 'messenger' ? (
               <button
                 type="button"
                 onClick={submit}

@@ -6,6 +6,7 @@ import { resolveChannelProviderCredentials } from '@/lib/credentials/resolve'
 import { MetaApiError, sendInstagramText, sendWhatsAppTemplate, sendWhatsAppText, type WhatsAppTemplateInput } from '@/lib/providers/meta'
 import { sendTwilioSms } from '@/lib/providers/twilio'
 import { sendTelegramText } from '@/lib/providers/telegram'
+import { sendMessengerText } from '@/lib/providers/messenger'
 import { markFirstResponse } from '@/lib/sla'
 
 /**
@@ -282,6 +283,17 @@ async function sendViaProvider(
   recipient: string,
   body: string
 ) {
+  if (channel.channelType === 'messenger') {
+    if (!channel.providerAccountId) throw new CredentialMissingError('meta', 'page_id')
+    await sendMessengerText({
+      pageId: channel.providerAccountId,
+      pageAccessToken: requireCredential(credentials, 'meta', 'page_access_token'),
+      recipientPsid: recipient,
+      text: body,
+    })
+    return
+  }
+
   if (channel.channelType === 'telegram') {
     await sendTelegramText({
       token: requireCredential(credentials, 'telegram', 'bot_token'),

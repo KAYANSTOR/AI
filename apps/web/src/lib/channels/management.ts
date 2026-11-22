@@ -1,7 +1,7 @@
 import type { DbClient } from '@/lib/db/client'
 import { resolveChannelExact } from '@/lib/runtime/tenant'
 
-export type ChannelType = 'whatsapp' | 'instagram' | 'sms' | 'phone' | 'telegram'
+export type ChannelType = 'whatsapp' | 'instagram' | 'sms' | 'phone' | 'telegram' | 'messenger'
 
 export type ChannelSpec = {
   type: ChannelType
@@ -83,6 +83,23 @@ export const CHANNEL_SPECS: readonly ChannelSpec[] = [
       'أرسل رسالة إلى البوت للتأكد من وصولها إلى صندوق الوارد.',
     ],
     testScope: 'التحقق من هوية البوت وصلاحية الرمز وتسجيل Webhook الخاص بالقناة.',
+  },
+  {
+    type: 'messenger',
+    label: 'Facebook Messenger',
+    provider: 'Meta',
+    bindingColumn: 'provider_account_id',
+    bindingLabel: 'صفحة Facebook',
+    bindingPlaceholder: 'اختر صفحة بعد تسجيل الدخول إلى Facebook',
+    bindingHint: 'اربط صفحة تملك صلاحية إدارة الرسائل عليها؛ سيتم حفظ رمز الصفحة مشفّراً.',
+    publicNumberLabel: null,
+    setup: [
+      'اضغط «ربط صفحة Facebook» وسجّل الدخول بالحساب الذي يدير الصفحة.',
+      'وافق على صلاحيات عرض الصفحات وإدارة الرسائل والاشتراك في Webhooks.',
+      'اختر الصفحة التي تريد ربطها.',
+      'سيتحقق Kayan AI من صلاحية الصفحة واشتراك Webhook قبل تفعيل القناة.',
+    ],
+    testScope: 'التحقق من هوية صفحة Facebook وصلاحية رمزها واشتراك التطبيق في إشعارات الرسائل.',
   },
   {
     type: 'phone',

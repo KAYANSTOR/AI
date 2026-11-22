@@ -11,13 +11,12 @@ import {
 
 const META_GRAPH_VERSION = 'v26.0'
 
-type FacebookLoginResponse = {
+export type FacebookLoginResponse = {
   authResponse?: { code?: string } | null
   status?: string
   error?: { message?: string }
 }
-
-type FacebookLoginOptions = {
+type WhatsAppFacebookLoginOptions = {
   config_id: string
   auth_type: 'rerequest'
   response_type: 'code'
@@ -28,12 +27,17 @@ type FacebookLoginOptions = {
     version: 'v4'
   }
 }
-
-type FacebookSdk = {
+type MessengerFacebookLoginOptions = {
+  scope: string
+  auth_type: 'rerequest'
+  response_type: 'code'
+  override_default_response_type: true
+}
+export type FacebookSdk = {
   init(options: { appId: string; cookie: boolean; xfbml: boolean; version: string }): void
   login(
     callback: (response: FacebookLoginResponse) => void,
-    options: FacebookLoginOptions
+    options: WhatsAppFacebookLoginOptions | MessengerFacebookLoginOptions
   ): void
 }
 
