@@ -71,7 +71,7 @@ export default async function ChannelsPage({
   const byType = new Map(rows.map((row) => [row.channel_type, row]))
   // Focused release: WhatsApp is the only customer-facing messaging channel.
   // Instagram and SMS remain backend-compatible but are intentionally not surfaced.
-  const cards: ChannelViewData[] = CHANNEL_SPECS
+  const cards = CHANNEL_SPECS
     .filter((spec) => spec.type === 'whatsapp')
     .map((spec) => {
       const row = byType.get(spec.type)
