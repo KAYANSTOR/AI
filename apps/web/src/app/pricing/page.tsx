@@ -6,11 +6,12 @@ import { FinalCta } from '@/components/site/final-cta'
 import { SiteFooter } from '@/components/site/site-footer'
 import { Section } from '@/components/site/section'
 import { CreditCard } from 'lucide-react'
+import { PLAN_CATALOG } from '@/lib/billing/plan-catalog'
 
 export const metadata: Metadata = {
   title: 'خطط الأسعار والاشتراكات | KAYAN AI',
   alternates: { canonical: '/pricing' },
-  description: 'خطط اشتراك شفافة ومرنة تناسب نشاطك التجاري. اختر الخطة المناسبة وابدأ في استقبال عملائك بالذكاء الاصطناعي.',
+  description: 'أربع خطط واضحة من المجاني إلى الأعمال، مع الدفع بالريال اليمني عبر المحافظ الإلكترونية المتاحة.',
 }
 
 const pricingStructuredData = {
@@ -19,12 +20,14 @@ const pricingStructuredData = {
     {
       '@type': 'Product',
       name: 'KAYAN AI Plans',
-      description: 'باقات اشتراك موظف الاستقبال الذكي لشركتك عبر الهاتف وواتساب.',
-      offers: [
-        { '@type': 'Offer', name: 'Starter', price: '49', priceCurrency: 'USD' },
-        { '@type': 'Offer', name: 'Growth', price: '99', priceCurrency: 'USD' },
-        { '@type': 'Offer', name: 'Pro', price: '199', priceCurrency: 'USD' },
-      ],
+      description: 'خطط اشتراك منصة KAYAN AI لاستقبال العملاء وإدارة المحادثات والأتمتة.',
+      offers: PLAN_CATALOG.map((plan) => ({
+        '@type': 'Offer',
+        name: plan.nameEn,
+        price: String(plan.monthlyPrice),
+        priceCurrency: 'USD',
+        billingDuration: 'P1M',
+      })),
     },
     {
       '@type': 'FAQPage',
@@ -43,29 +46,23 @@ export default function PricingPage() {
       <SiteHeader />
 
       <main className="flex-1">
-        {/* Pricing Page Hero Banner */}
         <Section tone="background" className="border-b border-border py-12 lg:py-16">
-          <div className="mx-auto max-w-3xl text-center space-y-4">
-            <div className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary-light/20 px-3.5 py-1 text-xs font-bold text-secondary">
+          <div className="mx-auto max-w-3xl space-y-4 text-center">
+            <div className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary-light/40 px-3.5 py-1 text-xs font-bold text-secondary">
               <CreditCard size={14} />
-              <span>أسعار واضحة بدون رسوم خفية</span>
+              <span>أربع خطط · أسعار واضحة · دفع محلي</span>
             </div>
             <h1 className="text-3xl font-extrabold tracking-tight text-text sm:text-4xl lg:text-5xl">
-              استثمار بسيط يعوضك عن فريق استقبال كامل
+              اختر خطة تنمو مع أعمالك
             </h1>
-            <p className="text-base text-text-muted leading-relaxed sm:text-lg">
-              اختر الخطة المناسبة لحجم اتصالات ورسائل شركتك. يمكنك الترقية أو تغيير الخطة في أي وقت بسهولة.
+            <p className="text-base leading-relaxed text-text-muted sm:text-lg">
+              ابدأ مجاناً، ثم انتقل إلى الخطة التي تناسب حجم استخدامك. الأسعار بالدولار المرجعي، والدفع عبر المحافظ اليمنية عند تفعيل حساب التاجر.
             </p>
           </div>
         </Section>
 
-        {/* Pricing Cards */}
         <Pricing />
-
-        {/* FAQ Section */}
         <Faq />
-
-        {/* Final CTA */}
         <FinalCta />
       </main>
 

@@ -1,12 +1,5 @@
 import type { DbClient } from '@/lib/db/client'
-
-export type PlanLimits = {
-  channels?: number
-  voice_minutes?: number
-  ai_messages?: number
-  automation_runs?: number
-  campaign_sends?: number
-}
+import { PLAN_LIMITS_BY_CODE, type PlanLimits } from '@/lib/billing/plan-catalog'
 
 export class EntitlementExceededError extends Error {
   readonly code = 'entitlement_exceeded' as const
@@ -20,13 +13,7 @@ export class EntitlementExceededError extends Error {
   }
 }
 
-const TRIAL_LIMITS: PlanLimits = {
-  channels: 1,
-  voice_minutes: 30,
-  ai_messages: 100,
-  automation_runs: 50,
-  campaign_sends: 50,
-}
+const TRIAL_LIMITS: PlanLimits = PLAN_LIMITS_BY_CODE.trial
 
 function periodBounds(now = new Date()) {
   const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
@@ -59,12 +46,7 @@ export async function getOrganizationPlanLimits(
 
   // Legacy subscriptions without plans join (0000 schema used plan_tier).
   const tier = String(sub.plan_tier ?? 'starter')
-  const tierLimits: Record<string, PlanLimits> = {
-    trial: TRIAL_LIMITS,
-    starter: { channels: 2, voice_minutes: 100, ai_messages: 1000, automation_runs: 200, campaign_sends: 200 },
-    growth: { channels: 5, voice_minutes: 500, ai_messages: 5000, automation_runs: 1000, campaign_sends: 2000 },
-    pro: { channels: 10, voice_minutes: 2000, ai_messages: 20000, automation_runs: 5000, campaign_sends: 10000 },
-  }
+  const tierLimits: Record<string, PlanLimits> = PLAN_LIMITS_BY_CODE
 
   return {
     status: String(sub.status ?? 'active'),

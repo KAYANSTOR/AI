@@ -3,7 +3,7 @@ import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { buttonClass } from '../src/components/ui/button'
 import { cx } from '../src/components/ui/cx'
-import { textDirections, themeColors } from '../src/lib/design-system/tokens'
+import { brandColors, textDirections, themeColors } from '../src/lib/design-system/tokens'
 
 describe('KAYAN AI design system', () => {
   test('combines conditional classes without leaking false values', () => {
@@ -17,9 +17,19 @@ describe('KAYAN AI design system', () => {
   })
 
   test('declares both supported themes and writing directions', () => {
-    expect(themeColors.light).toBe('#f4efe5')
-    expect(themeColors.dark).toBe('#0b0f0d')
+    expect(brandColors).toEqual({ primary: '#D8E2D0', secondary: '#1F3B22', accent: '#F2D600' })
+    expect(themeColors.light).toBe(brandColors.primary)
+    expect(themeColors.dark).toBe(brandColors.secondary)
     expect(textDirections).toEqual({ ar: 'rtl', en: 'ltr' })
+  })
+
+  test('global palette tokens resolve from the three official brand colors', () => {
+    const css = readFileSync(join(process.cwd(), 'src/app/globals.css'), 'utf8')
+    expect(css).toContain('--brand-primary: #D8E2D0')
+    expect(css).toContain('--brand-secondary: #1F3B22')
+    expect(css).toContain('--brand-accent: #F2D600')
+    expect(css).toContain('--k-primary: var(--brand-secondary)')
+    expect(css).toContain('--k-accent: var(--brand-accent)')
   })
 
   test('shared UI primitives do not contain raw hex colors', () => {

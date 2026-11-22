@@ -1,6 +1,13 @@
+export const brandColors = {
+  primary: '#D8E2D0',
+  secondary: '#1F3B22',
+  accent: '#F2D600',
+} as const
+
+/** Theme preview colors are derived from the brand palette, not duplicated. */
 export const themeColors = {
-  light: '#f4efe5',
-  dark: '#0b0f0d',
+  light: brandColors.primary,
+  dark: brandColors.secondary,
 } as const
 
 export const textDirections = {

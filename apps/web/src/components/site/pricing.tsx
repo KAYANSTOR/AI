@@ -1,141 +1,188 @@
-import { Check } from 'lucide-react'
-import { Chip, Section, SectionHeading } from './section'
-import { PrimaryCta, SecondaryCta } from './cta'
+'use client'
 
-type Plan = {
-  id: string
-  name: string
-  price: string
-  cadence: string
-  audience: string
-  features: readonly { label: string; soon?: boolean }[]
-  featured?: boolean
+import Link from 'next/link'
+import { useState } from 'react'
+import { Check, Wallet } from 'lucide-react'
+import { PLAN_CATALOG, type BillingCycle } from '@/lib/billing/plan-catalog'
+
+const METRICS = [
+  { key: 'ai_messages', label: 'ردود الذكاء الاصطناعي شهرياً' },
+  { key: 'channels', label: 'القنوات النشطة' },
+  { key: 'voice_minutes', label: 'دقائق المكالمات الصوتية' },
+  { key: 'automation_runs', label: 'تشغيلات الأتمتة شهرياً' },
+  { key: 'campaign_sends', label: 'إرسالات الحملات شهرياً' },
+] as const
+
+function priceLabel(value: number) {
+  return value === 0 ? 'مجاناً' : `$${value}`
 }
 
-const PLANS: readonly Plan[] = [
-  {
-    id: 'starter',
-    name: 'الأساسية',
-    price: '$49',
-    cadence: 'شهريًا',
-    audience: 'شركة صغيرة تبدأ بأول قناة تواصل',
-    features: [
-      { label: 'ردود الوكيل الذكي على واتساب' },
-      { label: 'صندوق موحّد وسجل محادثات' },
-      { label: 'الحجز والمواعيد' },
-      { label: 'حتى 300 دقيقة استخدام' },
-    ],
-  },
-  {
-    id: 'growth',
-    name: 'النمو',
-    price: '$99',
-    cadence: 'شهريًا',
-    audience: 'الشركات التي تعتمد على المكالمات والمواعيد',
-    featured: true,
-    features: [
-      { label: 'كل ما في الخطة الأساسية' },
-      { label: 'الوكيل الذكي على الهاتف' },
-      { label: 'إدارة العملاء المحتملين' },
-      { label: 'متابعة تلقائية للعملاء', soon: true },
-      { label: 'استعادة العملاء المفقودين', soon: true },
-      { label: 'حتى 600 دقيقة استخدام' },
-    ],
-  },
-  {
-    id: 'pro',
-    name: 'الاحترافية',
-    price: '$199',
-    cadence: 'شهريًا',
-    audience: 'عيادات وفروع متعددة وحجم محادثات أعلى',
-    features: [
-      { label: 'كل ما في خطة النمو' },
-      { label: 'محادثات غير محدودة' },
-      { label: 'مؤشرات الإيرادات والأداء' },
-      { label: 'دعم مباشر ذو أولوية' },
-      { label: 'فروع أو مواقع متعددة' },
-    ],
-  },
-] as const
-
-const ADD_ONS = [
-  { label: 'إعداد وتدريب أولي', value: '$149 لمرة واحدة' },
-  { label: 'استعادة حجز من الفرص القديمة', value: '$5 لكل حجز' },
-  { label: 'علامة تجارية خاصة للوكالات', value: '$299' },
-] as const
-
 export function Pricing() {
+  const [cycle, setCycle] = useState<BillingCycle>('monthly')
+
   return (
-    <Section id="pricing" tone="background" labelledBy="pricing-title">
-      <SectionHeading
-        id="pricing-title"
-        eyebrow="الأسعار"
-        title="خطط واضحة تناسب حجم شركتك"
-        description="ابدأ بالخطة التي تغطي قناة واحدة، وارتقِ عند إضافة قنوات ومتابعة تلقائية. كل خطة تشمل إنشاء حساب الشركة وإعداد ملفها."
-      />
-
-      <div className="mt-12 grid gap-6 lg:grid-cols-3">
-        {PLANS.map((plan) => (
-          <article
-            key={plan.id}
-            className={`flex flex-col rounded-2xl border bg-surface p-6 sm:p-8 ${
-              plan.featured ? 'border-accent/60 shadow-md' : 'border-border shadow-sm'
-            }`}
-          >
-            <div className="flex items-center justify-between gap-3">
-              <h3 className="text-lg font-bold text-text">{plan.name}</h3>
-              {plan.featured ? <Chip tone="gold">الأكثر مناسبة</Chip> : null}
-            </div>
-            <p className="mt-3 flex items-baseline gap-2">
-              <span className="text-3xl font-bold tracking-tight text-text">{plan.price}</span>
-              <span className="text-sm text-text-muted">{plan.cadence}</span>
-            </p>
-            <p className="mt-2 text-sm leading-7 text-text-muted">{plan.audience}</p>
-
-            <ul className="mt-6 flex-1 space-y-3">
-              {plan.features.map((feature) => (
-                <li key={feature.label} className="flex items-start gap-3 text-sm leading-7 text-text">
-                  <Check size={18} aria-hidden="true" className="mt-1 shrink-0 text-success" />
-                  <span>
-                    {feature.label}
-                    {feature.soon ? (
-                      <Chip tone="soon" className="ms-2 align-middle">
-                        قريبًا
-                      </Chip>
-                    ) : null}
-                  </span>
-                </li>
-              ))}
-            </ul>
-
-            <div className="mt-8">
-              {plan.featured ? (
-                <PrimaryCta href="/signup" className="w-full">
-                  إنشاء حساب للشركة
-                </PrimaryCta>
-              ) : (
-                <SecondaryCta href="/signup" className="w-full">
-                  إنشاء حساب للشركة
-                </SecondaryCta>
-              )}
-            </div>
-          </article>
-        ))}
-      </div>
-
-      <div className="mt-10 grid gap-4 rounded-2xl border border-border bg-surface p-6 sm:grid-cols-3">
-        {ADD_ONS.map((addOn) => (
-          <div key={addOn.label}>
-            <p className="text-xs text-text-muted">{addOn.label}</p>
-            <p className="mt-1 text-sm font-semibold text-text">{addOn.value}</p>
+    <section id="pricing" className="bg-background px-4 py-16 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-7xl">
+        <div className="mx-auto max-w-3xl text-center">
+          <p className="text-sm font-bold text-secondary">خطط KAYAN AI</p>
+          <h2 className="mt-3 text-3xl font-extrabold tracking-tight text-text sm:text-4xl">
+            اختر الخطة المناسبة لنمو أعمالك
+          </h2>
+          <p className="mt-4 text-base leading-8 text-text-muted">
+            أسعار واضحة بالدولار، مع إمكانية السداد بالريال اليمني عبر المحافظ المتاحة في حساب التاجر.
+          </p>
+          <div className="mt-7 inline-flex rounded-xl border border-border bg-surface p-1 shadow-card">
+            <button
+              type="button"
+              onClick={() => setCycle('monthly')}
+              aria-pressed={cycle === 'monthly'}
+              className={`rounded-lg px-5 py-2.5 text-sm font-bold transition ${cycle === 'monthly' ? 'bg-primary text-primary-foreground' : 'text-text-muted hover:text-text'}`}
+            >
+              شهري
+            </button>
+            <button
+              type="button"
+              onClick={() => setCycle('yearly')}
+              aria-pressed={cycle === 'yearly'}
+              className={`rounded-lg px-5 py-2.5 text-sm font-bold transition ${cycle === 'yearly' ? 'bg-primary text-primary-foreground' : 'text-text-muted hover:text-text'}`}
+            >
+              سنوي · شهران مجاناً
+            </button>
           </div>
-        ))}
-      </div>
+        </div>
 
-      <p className="mt-6 text-center text-xs leading-6 text-text-muted">
-        الأسعار المعتمدة في خطة الإطلاق. تفعيل الاشتراك والدفع داخل المنصة يأتي مع مرحلة الفوترة في
-        الخطة، وإنشاء الحساب اليوم لا يتطلب أي دفع.
-      </p>
-    </Section>
+        <div className="mt-12 grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
+          {PLAN_CATALOG.map((plan) => {
+            const selectedPrice = cycle === 'yearly' ? plan.annualPrice : plan.monthlyPrice
+            return (
+              <article
+                key={plan.code}
+                className={`relative flex flex-col rounded-2xl border bg-surface p-6 shadow-card transition-shadow hover:shadow-raised ${plan.featured ? 'border-accent ring-1 ring-accent' : 'border-border'}`}
+              >
+                {plan.featured ? (
+                  <span className="absolute -top-3 start-6 rounded-full bg-accent px-3 py-1 text-xs font-extrabold text-accent-foreground">
+                    الأكثر اختياراً
+                  </span>
+                ) : null}
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">{plan.nameEn}</p>
+                  <h3 className="mt-2 text-xl font-extrabold text-text">{plan.name}</h3>
+                  <p className="mt-2 min-h-12 text-sm leading-6 text-text-muted">{plan.description}</p>
+                  <div className="mt-5 flex items-baseline gap-2">
+                    <span className="text-4xl font-extrabold tracking-tight text-text">{priceLabel(selectedPrice)}</span>
+                    {selectedPrice > 0 ? (
+                      <span className="text-sm text-text-muted">{cycle === 'yearly' ? 'للسنة' : 'للشهر'}</span>
+                    ) : null}
+                  </div>
+                  {cycle === 'yearly' && plan.monthlyPrice > 0 ? (
+                    <p className="mt-1 text-xs text-text-muted">
+                      يعادل `$${(plan.annualPrice / 12).toFixed(2)}` شهرياً عند الدفع السنوي
+                    </p>
+                  ) : (
+                    <p className="mt-1 text-xs text-text-muted">
+                      {plan.monthlyPrice === 0 ? 'بدون رسوم اشتراك' : 'اشتراك شهري قابل للتجديد'}
+                    </p>
+                  )}
+                </div>
+
+                <div className="mt-6 flex-1 border-t border-border pt-5">
+                  <p className="mb-3 text-xs font-bold text-text">حدود الخطة</p>
+                  <ul className="space-y-3 text-sm text-text-muted">
+                    <li className="flex items-start gap-2">
+                      <Check size={17} className="mt-0.5 shrink-0 text-success" />
+                      {plan.limits.ai_messages.toLocaleString('en-US')} رد ذكي شهرياً
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <Check size={17} className="mt-0.5 shrink-0 text-success" />
+                      {plan.limits.channels} قنوات نشطة
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <Check size={17} className="mt-0.5 shrink-0 text-success" />
+                      {plan.limits.voice_minutes.toLocaleString('en-US')} دقيقة صوت شهرياً
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <Check size={17} className="mt-0.5 shrink-0 text-success" />
+                      {plan.limits.automation_runs.toLocaleString('en-US')} تشغيل أتمتة شهرياً
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <Check size={17} className="mt-0.5 shrink-0 text-success" />
+                      {plan.limits.campaign_sends.toLocaleString('en-US')} إرسال حملة شهرياً
+                    </li>
+                  </ul>
+                </div>
+
+                <Link
+                  href="/signup"
+                  className={`mt-7 inline-flex min-h-11 items-center justify-center rounded-xl px-4 py-3 text-sm font-bold transition ${plan.featured ? 'bg-primary text-primary-foreground hover:bg-primary-dark' : 'border border-border-strong bg-background text-text hover:border-primary hover:bg-primary-light/30'}`}
+                >
+                  {plan.monthlyPrice === 0 ? 'ابدأ مجاناً' : 'إنشاء حساب واختيار الخطة'}
+                </Link>
+              </article>
+            )
+          })}
+        </div>
+
+        <div className="mt-12 overflow-hidden rounded-2xl border border-border bg-surface shadow-card">
+          <div className="border-b border-border px-5 py-4 sm:px-6">
+            <h3 className="text-lg font-bold text-text">مقارنة حدود الخطط</h3>
+            <p className="mt-1 text-sm text-text-muted">هذه الحدود مطابقة لعدادات الاشتراك التي يطبقها خادم KAYAN AI.</p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[720px] border-collapse text-sm">
+              <thead className="bg-background text-text">
+                <tr>
+                  <th className="px-5 py-4 text-start font-bold">الميزة</th>
+                  {PLAN_CATALOG.map((plan) => (
+                    <th key={plan.code} className="px-4 py-4 text-center font-bold">{plan.name}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {METRICS.map((metric) => (
+                  <tr key={metric.key} className="border-t border-border">
+                    <th scope="row" className="px-5 py-4 text-start font-medium text-text-muted">{metric.label}</th>
+                    {PLAN_CATALOG.map((plan) => (
+                      <td key={plan.code} className="px-4 py-4 text-center font-semibold tabular-nums text-text">
+                        {plan.limits[metric.key].toLocaleString('en-US')}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+                <tr className="border-t border-border">
+                  <th scope="row" className="px-5 py-4 text-start font-medium text-text-muted">السعر الشهري</th>
+                  {PLAN_CATALOG.map((plan) => (
+                    <td key={plan.code} className="px-4 py-4 text-center font-bold text-text">{priceLabel(plan.monthlyPrice)}</td>
+                  ))}
+                </tr>
+                <tr className="border-t border-border">
+                  <th scope="row" className="px-5 py-4 text-start font-medium text-text-muted">السعر السنوي</th>
+                  {PLAN_CATALOG.map((plan) => (
+                    <td key={plan.code} className="px-4 py-4 text-center font-bold text-text">{priceLabel(plan.annualPrice)}</td>
+                  ))}
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="mt-8 rounded-2xl border border-border bg-primary-light/35 p-5 sm:p-6">
+          <div className="flex items-start gap-3">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground">
+              <Wallet size={20} />
+            </span>
+            <div>
+              <h3 className="font-bold text-text">الدفع بالمحافظ الإلكترونية اليمنية</h3>
+              <p className="mt-1 text-sm leading-7 text-text-muted">
+                تتم عملية التحصيل بالريال اليمني من المحافظ المفعّلة والمراقبة في حساب التاجر، وتظهر لك خيارات الدفع المتاحة فعلياً عند إتمام الاشتراك. تشمل شبكات الدفع التي تذكرها خدمة التحقق إيصالات: الكريمي، جيب، جوالي، فلوسك وOneCash.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <p className="mt-6 text-center text-xs leading-6 text-text-muted">
+          الأسعار بالدولار المرجعي. قيمة الريال اليمني النهائية تُحسب وفق سعر الصرف المعتمد في حساب التاجر وقت إنشاء طلب الدفع.
+        </p>
+      </div>
+    </section>
   )
 }

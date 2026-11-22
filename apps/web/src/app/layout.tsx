@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next'
 import { siteDescription } from '@/lib/site-metadata'
 import { themeBootScript } from '@/components/theme/theme-script'
+import { brandColors } from '@/lib/design-system/tokens'
 import './globals.css'
 
 /** Absolute base URL for canonical and Open Graph metadata. */
@@ -44,7 +45,7 @@ export const metadata: Metadata = {
 }
 
 export const viewport: Viewport = {
-  themeColor: '#f4efe5',
+  themeColor: brandColors.primary,
   colorScheme: 'light dark',
   viewportFit: 'cover',
 }

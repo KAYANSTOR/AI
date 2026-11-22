@@ -1,60 +1,39 @@
 @import "tailwindcss";
 
 /*
- * Design tokens. Components use these names only — never raw hex values.
- *
- * KAYAN palette and roles:
- *   #3E5A3F forest  — identity and primary buttons
- *   #8CA98C sage    — interactive elements and highlights
- *   #D9C7A3 sand    — light surfaces and featured text
- *   #B08D57 ochre   — gold touches and premium details
- *   #0B0F0D / #1F2A1F — dark base and deep surface
- *
- * Tokens resolve through the --k-* variables below, so one set of utility classes
- * serves both themes. `@theme inline` keeps the variable reference in each utility,
- * which lets `.theme-dark` re-scope a panel (sidebar, brand blocks) inside light mode.
- * Light-mode text shades of sage and ochre are deepened mixes of the same hues so
- * they meet WCAG AA on sand backgrounds. --k-error is the single functional
- * exception so destructive states stay distinguishable from warnings.
+ * KAYAN AI brand system.
+ * Components consume semantic Tailwind tokens; brand values live here once.
+ * Palette ratio: pastel green 50%, deep olive 30%, signal yellow 20%.
  */
 @theme inline {
   --color-primary: var(--k-primary);
   --color-primary-dark: var(--k-primary-dark);
   --color-primary-light: var(--k-primary-light);
   --color-primary-foreground: var(--k-primary-foreground);
-
   --color-secondary: var(--k-secondary);
-
   --color-accent: var(--k-accent);
   --color-accent-light: var(--k-accent-light);
   --color-accent-foreground: var(--k-accent-foreground);
   --color-accent-text: var(--k-accent-text);
-
   --color-background: var(--k-background);
   --color-surface: var(--k-surface);
   --color-surface-muted: var(--k-surface-muted);
-
   --color-text: var(--k-text);
   --color-text-muted: var(--k-text-muted);
   --color-border: var(--k-border);
   --color-border-strong: var(--k-border-strong);
-
   --color-success: var(--k-success);
   --color-warning: var(--k-warning);
   --color-error: var(--k-error);
   --color-error-soft: var(--k-error-soft);
   --color-info: var(--k-info);
-
   --color-dark: var(--k-dark);
   --color-dark-muted: var(--k-dark-muted);
   --color-whatsapp: var(--k-whatsapp);
   --color-instagram: var(--k-instagram);
   --color-sms: var(--k-sms);
-
   --shadow-card: var(--k-shadow-card);
   --shadow-raised: var(--k-shadow-raised);
-
-  /* Use local system fonts so production builds never depend on Google Fonts availability. */
   --font-sans: Tahoma, Arial, ui-sans-serif, system-ui, sans-serif;
   --font-display: Tahoma, Arial, ui-sans-serif, system-ui, sans-serif;
   --font-mono: "Courier New", ui-monospace, monospace;
@@ -66,71 +45,72 @@
   --radius-card: 0.875rem;
 }
 
-/* Light theme (default). Sand-based surfaces, forest identity. */
 :root {
   color-scheme: light;
+  --brand-primary: #D8E2D0;
+  --brand-secondary: #1F3B22;
+  --brand-accent: #F2D600;
   --motion-fast: 120ms;
   --motion-normal: 200ms;
   --motion-moderate: 280ms;
   --motion-slow: 400ms;
   --ease-standard: cubic-bezier(0.2, 0, 0, 1);
-  --k-primary: #3e5a3f;
-  --k-primary-dark: #2c3e2c;
-  --k-primary-light: #e1e4de;
-  --k-primary-foreground: #fcfbf8;
-  --k-secondary: #505950;
-  --k-accent: #b08d57;
-  --k-accent-light: #f0e9de;
-  --k-accent-foreground: #1f2a1f;
-  --k-accent-text: #7b653f;
-  --k-background: #f4efe5;
-  --k-surface: #fcfbf8;
-  --k-surface-muted: #eee6d6;
-  --k-text: #1f2a1f;
-  --k-text-muted: #505950;
-  --k-border: #e7dcc6;
-  --k-border-strong: #c7ad81;
-  --k-success: color-mix(in srgb, #8ca98c 45%, #1f2a1f);
-  --k-warning: color-mix(in srgb, #b08d57 68%, #0b0f0d);
-  --k-error: #a8402f;
-  --k-error-soft: #f6e1dc;
-  --k-info: #3e7cb1;
-  --k-whatsapp: #2fa866;
-  --k-instagram: #c13584;
-  --k-sms: #3e7cb1;
-  --k-dark: #1f2a1f;
-  --k-dark-muted: color-mix(in oklab, #3e5a3f 50%, #1f2a1f);
-  --k-shadow-card: 0 1px 2px rgb(31 42 31 / 0.06), 0 1px 1px rgb(31 42 31 / 0.04);
-  --k-shadow-raised: 0 24px 48px -24px rgb(31 42 31 / 0.28), 0 2px 6px rgb(31 42 31 / 0.08);
+  --k-primary: var(--brand-secondary);
+  --k-primary-dark: color-mix(in srgb, var(--brand-secondary) 82%, black);
+  --k-primary-light: var(--brand-primary);
+  --k-primary-foreground: #FFFFFF;
+  --k-secondary: var(--brand-secondary);
+  --k-accent: var(--brand-accent);
+  --k-accent-light: color-mix(in srgb, var(--brand-accent) 22%, white);
+  --k-accent-foreground: var(--brand-secondary);
+  --k-accent-text: var(--brand-secondary);
+  --k-background: color-mix(in srgb, var(--brand-primary) 48%, white);
+  --k-surface: #FFFFFF;
+  --k-surface-muted: color-mix(in srgb, var(--brand-primary) 72%, white);
+  --k-text: var(--brand-secondary);
+  --k-text-muted: color-mix(in srgb, var(--brand-secondary) 76%, white);
+  --k-border: color-mix(in srgb, var(--brand-secondary) 15%, var(--brand-primary));
+  --k-border-strong: color-mix(in srgb, var(--brand-secondary) 38%, var(--brand-primary));
+  --k-success: var(--brand-secondary);
+  --k-warning: color-mix(in srgb, var(--brand-accent) 76%, var(--brand-secondary));
+  --k-error: #A8402F;
+  --k-error-soft: #F6E1DC;
+  --k-info: #3E7CB1;
+  --k-whatsapp: #2FA866;
+  --k-instagram: #C13584;
+  --k-sms: #3E7CB1;
+  --k-dark: var(--brand-secondary);
+  --k-dark-muted: color-mix(in srgb, var(--brand-secondary) 78%, white);
+  --k-shadow-card: 0 1px 2px color-mix(in srgb, var(--brand-secondary) 7%, transparent), 0 1px 1px color-mix(in srgb, var(--brand-secondary) 4%, transparent);
+  --k-shadow-raised: 0 24px 48px -24px color-mix(in srgb, var(--brand-secondary) 28%, transparent), 0 2px 6px color-mix(in srgb, var(--brand-secondary) 8%, transparent);
 }
 
-/* Dark theme. Applied to <html> by the theme script, or to a single panel. */
 :root.dark,
 .theme-dark {
   color-scheme: dark;
-  --k-primary: #3e5a3f;
-  --k-primary-dark: #2c3e2c;
-  --k-primary-light: #2c3e2c;
-  --k-primary-foreground: #fcfbf8;
-  --k-secondary: #8ca98c;
-  --k-accent: #b08d57;
-  --k-accent-light: #363a28;
-  --k-accent-foreground: #0b0f0d;
-  --k-accent-text: #b08d57;
-  --k-background: #0b0f0d;
-  --k-surface: #161e18;
-  --k-surface-muted: #1f2a1f;
-  --k-text: #fcfbf8;
-  --k-text-muted: #aab4aa;
-  --k-border: #2b352d;
-  --k-border-strong: #48564a;
-  --k-success: #8ca98c;
-  --k-warning: #b08d57;
-  --k-error: #e08a7a;
-  --k-error-soft: #402621;
-  --k-info: #78a4ca;
-  --k-dark: #1f2a1f;
-  --k-dark-muted: color-mix(in oklab, #3e5a3f 50%, #1f2a1f);
+  --k-primary: var(--brand-primary);
+  --k-primary-dark: color-mix(in srgb, var(--brand-secondary) 78%, black);
+  --k-primary-light: color-mix(in srgb, var(--brand-secondary) 60%, var(--brand-primary));
+  --k-primary-foreground: var(--brand-secondary);
+  --k-secondary: var(--brand-primary);
+  --k-accent: var(--brand-accent);
+  --k-accent-light: color-mix(in srgb, var(--brand-accent) 18%, var(--brand-secondary));
+  --k-accent-foreground: var(--brand-secondary);
+  --k-accent-text: var(--brand-accent);
+  --k-background: color-mix(in srgb, var(--brand-secondary) 72%, black);
+  --k-surface: color-mix(in srgb, var(--brand-secondary) 58%, black);
+  --k-surface-muted: color-mix(in srgb, var(--brand-secondary) 34%, black);
+  --k-text: color-mix(in srgb, var(--brand-primary) 92%, white);
+  --k-text-muted: color-mix(in srgb, var(--brand-primary) 68%, white);
+  --k-border: color-mix(in srgb, var(--brand-primary) 18%, var(--brand-secondary));
+  --k-border-strong: color-mix(in srgb, var(--brand-primary) 32%, var(--brand-secondary));
+  --k-success: var(--brand-primary);
+  --k-warning: var(--brand-accent);
+  --k-error: #E08A7A;
+  --k-error-soft: color-mix(in srgb, #E08A7A 18%, var(--brand-secondary));
+  --k-info: #78A4CA;
+  --k-dark: var(--brand-secondary);
+  --k-dark-muted: color-mix(in srgb, var(--brand-primary) 34%, var(--brand-secondary));
   --k-shadow-card: 0 1px 2px rgb(0 0 0 / 0.35);
   --k-shadow-raised: 0 24px 48px -24px rgb(0 0 0 / 0.7), 0 2px 6px rgb(0 0 0 / 0.35);
 }
@@ -229,12 +209,12 @@
 
 /* Subtle dotted texture for dark brand panels. */
 .bg-grid-dark {
-  background-image: radial-gradient(rgb(217 199 163 / 0.06) 1px, transparent 1px);
+  background-image: radial-gradient(color-mix(in srgb, var(--brand-primary) 12%, transparent) 1px, transparent 1px);
   background-size: 22px 22px;
 }
 
 .bg-grid-light {
-  background-image: radial-gradient(rgb(62 90 63 / 0.07) 1px, transparent 1px);
+  background-image: radial-gradient(color-mix(in srgb, var(--brand-secondary) 9%, transparent) 1px, transparent 1px);
   background-size: 24px 24px;
 }
 

@@ -4,6 +4,12 @@ import { getDashboardContext } from '@/lib/dashboard/context'
 import { CreditCard, Zap, Phone, Radio, Workflow, Megaphone } from 'lucide-react'
 import { formatNumber } from '@/lib/i18n/format'
 import { loadBillingSnapshot } from '@/lib/billing/entitlements'
+import { PLAN_CATALOG } from '@/lib/billing/plan-catalog'
+import { isEsaalatPaymentConfigured, listEsaalatReceivingWallets } from '@/lib/billing/esaalat'
+import type { EsaalatWallet } from '@/lib/billing/esaalat'
+import { PaymentPlans } from './payment-plans'
+
+export const dynamic = 'force-dynamic'
 
 export default async function BillingPage() {
   const context = await getDashboardContext()
@@ -11,12 +17,24 @@ export default async function BillingPage() {
   const db = await createClient()
 
   const snapshot = await loadBillingSnapshot(db, context.organizationId)
+  const canManage = context.role === 'owner' || context.role === 'admin'
+  const currentPlan = PLAN_CATALOG.find((plan) => plan.code === snapshot.planCode)
+  const walletCheckoutConfigured = isEsaalatPaymentConfigured()
+  let wallets: EsaalatWallet[] = []
+
+  if (walletCheckoutConfigured) {
+    try {
+      wallets = await listEsaalatReceivingWallets()
+    } catch {
+      // The page stays usable; payment checkout remains unavailable without live wallet data.
+    }
+  }
 
   const meters = [
     {
       key: 'ai_messages',
-      title: 'رسائل الذكاء الاصطناعي',
-      hint: 'كل رد وكيل يُحسب رسالة',
+      title: 'ردود الذكاء الاصطناعي',
+      hint: 'كل رد صادر من الوكيل يُحسب ضمن الاستخدام',
       icon: Zap,
       color: 'bg-accent',
       used: snapshot.usage.ai_messages ?? 0,
@@ -25,7 +43,7 @@ export default async function BillingPage() {
     {
       key: 'voice_minutes',
       title: 'دقائق الصوت',
-      hint: 'مكالمات الوكيل الصوتي',
+      hint: 'استخدام الوكيل الصوتي',
       icon: Phone,
       color: 'bg-secondary',
       used: snapshot.usage.voice_minutes ?? 0,
@@ -34,7 +52,7 @@ export default async function BillingPage() {
     {
       key: 'channels',
       title: 'القنوات النشطة',
-      hint: 'WhatsApp / SMS / هاتف / إنستغرام',
+      hint: 'عدد القنوات المتصلة والمفعّلة',
       icon: Radio,
       color: 'bg-primary',
       used: snapshot.usage.channels ?? 0,
@@ -43,7 +61,7 @@ export default async function BillingPage() {
     {
       key: 'automation_runs',
       title: 'تشغيل الأتمتة',
-      hint: 'سير العمل المنشور',
+      hint: 'مرات تنفيذ التدفقات',
       icon: Workflow,
       color: 'bg-accent/70',
       used: snapshot.usage.automation_runs ?? 0,
@@ -52,7 +70,7 @@ export default async function BillingPage() {
     {
       key: 'campaign_sends',
       title: 'إرسال الحملات',
-      hint: 'رسائل الحملات التسويقية',
+      hint: 'إرسالات الحملات التسويقية',
       icon: Megaphone,
       color: 'bg-secondary/70',
       used: snapshot.usage.campaign_sends ?? 0,
@@ -64,7 +82,7 @@ export default async function BillingPage() {
     snapshot.status === 'active'
       ? 'نشط'
       : snapshot.status === 'trial'
-        ? 'تجريبي'
+        ? 'مجاني'
         : snapshot.status === 'past_due' || snapshot.status === 'grace_period'
           ? 'متأخر'
           : snapshot.status === 'suspended'
@@ -72,24 +90,24 @@ export default async function BillingPage() {
             : snapshot.status
 
   return (
-    <div className="mx-auto max-w-5xl space-y-8">
+    <div className="mx-auto max-w-6xl space-y-8">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight text-text">الباقات والاستهلاك</h1>
+        <h1 className="text-2xl font-bold tracking-tight text-text">الخطط والاشتراك</h1>
         <p className="mt-1 text-sm text-text-muted">
-          حدود الخطة تُفرض على الخادم — الواجهة تعرض الاستهلاك الفعلي فقط.
+          راجع باقتك الحالية واستهلاكك، ثم اختر الخطة وطريقة السداد المناسبة.
         </p>
       </div>
 
-      <div className="rounded-xl border border-border bg-surface p-6 shadow-sm">
+      <div className="rounded-xl border border-border bg-surface p-6 shadow-card">
         <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
           <div className="flex items-center gap-4">
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary-light/40">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary-light/50">
               <CreditCard className="text-secondary" size={24} />
             </div>
             <div>
               <p className="text-sm font-medium text-text-muted">الباقة الحالية</p>
               <h2 className="flex items-center gap-2 text-xl font-bold text-text">
-                {snapshot.planCode}
+                {currentPlan?.name ?? snapshot.planCode}
                 <span className="rounded-full bg-success/15 px-2 py-0.5 text-xs font-medium text-success">
                   {statusLabel}
                 </span>
@@ -102,38 +120,40 @@ export default async function BillingPage() {
       <div>
         <h3 className="mb-4 text-lg font-bold text-text">الاستهلاك الشهري</h3>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          {meters.map((m) => {
-            const percent = m.limit > 0 ? Math.min(100, Math.round((m.used / m.limit) * 100)) : 0
-            const Icon = m.icon
+          {meters.map((meter) => {
+            const percent = meter.limit > 0 ? Math.min(100, Math.round((meter.used / meter.limit) * 100)) : 0
+            const Icon = meter.icon
             return (
-              <div key={m.key} className="rounded-xl border border-border bg-surface p-5 shadow-sm">
+              <div key={meter.key} className="rounded-xl border border-border bg-surface p-5 shadow-card">
                 <div className="mb-4 flex items-start justify-between">
                   <div className="flex items-center gap-3">
                     <div className="rounded-lg bg-background p-2 text-text">
                       <Icon size={20} />
                     </div>
                     <div>
-                      <h4 className="font-semibold text-text">{m.title}</h4>
-                      <p className="text-xs text-text-muted">{m.hint}</p>
+                      <h4 className="font-semibold text-text">{meter.title}</h4>
+                      <p className="text-xs text-text-muted">{meter.hint}</p>
                     </div>
                   </div>
                   <span className="text-sm font-bold text-text">{percent}%</span>
                 </div>
                 <div className="h-2 w-full overflow-hidden rounded-full bg-border">
                   <div
-                    className={`h-full rounded-full ${percent > 90 ? 'bg-error' : m.color}`}
+                    className={`h-full rounded-full ${percent > 90 ? 'bg-error' : meter.color}`}
                     style={{ width: `${percent}%` }}
                   />
                 </div>
                 <div className="mt-2 flex justify-between text-xs font-medium text-text-muted">
-                  <span>{formatNumber(m.used)} مستخدم</span>
-                  <span>{formatNumber(m.limit)} كحد أقصى</span>
+                  <span>{formatNumber(meter.used)} مستخدم</span>
+                  <span>{formatNumber(meter.limit)} كحد أقصى</span>
                 </div>
               </div>
             )
           })}
         </div>
       </div>
+
+      <PaymentPlans wallets={wallets} configured={walletCheckoutConfigured} canManage={canManage} />
     </div>
   )
 }
