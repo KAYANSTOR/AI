@@ -3,6 +3,7 @@ import { getConsentStatus, isMarketingConsentGranted } from '@/lib/channels/cons
 import { enqueueOutbound } from '@/lib/channels/outbox'
 import { resolveSegmentContactIds, type SegmentCriteria } from '@/lib/segments'
 import { recordMeterUsage } from '@/lib/billing/entitlements'
+import { renderCampaignTemplate } from '@/lib/campaigns/template'
 
 export async function materializeCampaignAudience(
   db: DbClient,
@@ -122,7 +123,7 @@ export async function processCampaignBatch(
 
     const { data: contact } = await db
       .from('contacts')
-      .select('phone')
+      .select('phone, full_name')
       .eq('id', row.contact_id)
       .eq('organization_id', input.organizationId)
       .maybeSingle()
@@ -157,7 +158,7 @@ export async function processCampaignBatch(
         eventType: 'campaign.send',
         idempotencyKey: `campaign:${campaign.id}:${row.contact_id}`,
         recipient,
-        payload: { body: campaign.template_body, campaign_id: campaign.id },
+        payload: { body: renderCampaignTemplate(campaign.template_body, contact?.full_name as string | null), campaign_id: campaign.id },
       })
 
       await db
