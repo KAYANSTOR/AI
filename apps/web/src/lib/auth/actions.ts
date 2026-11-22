@@ -9,6 +9,7 @@ import { getCurrentUser } from './current-user'
 import { AUTH_MESSAGES } from './messages'
 import { burnPasswordCheck, MIN_PASSWORD_LENGTH, verifyPassword } from './password'
 import { isRateLimited } from './rate-limit'
+import { completePasswordReset, isPasswordRecoveryConfigured, sendPasswordReset } from './password-recovery'
 import { SESSION_COOKIE, sessionCookieOptions, signSession } from './session'
 import { createUser, findUserByEmail, findUserByPhone, findUserById, normalizeEmail, normalizePhone, recordSignIn, setPassword } from './users'
 
@@ -128,6 +129,54 @@ export async function signUpAction(input: z.input<typeof signUpSchema>): Promise
   } catch (error) {
     if ((error as { code?: string })?.code === '23505') return { ok: false, error: AUTH_MESSAGES.emailTaken }
     console.error('Sign-up failed', error)
+    return { ok: false, error: AUTH_MESSAGES.generic }
+  }
+}
+
+
+const passwordResetRequestSchema = z.object({ email: z.string().trim().email().max(254) })
+
+export async function requestPasswordResetAction(
+  input: z.input<typeof passwordResetRequestSchema>
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!isAuthConfigured() || !isPasswordRecoveryConfigured()) {
+    return { ok: false, error: 'خدمة استعادة كلمة المرور غير مهيأة بعد. يرجى التواصل مع الدعم.' }
+  }
+  const parsed = passwordResetRequestSchema.safeParse(input)
+  if (!parsed.success) return { ok: false, error: AUTH_MESSAGES.invalidEmail }
+  const ip = await clientIp()
+  const email = normalizeEmail(parsed.data.email)
+  if (isRateLimited(`password-reset:ip:${ip}`, 10, FIFTEEN_MINUTES) ||
+      isRateLimited(`password-reset:email:${email}`, 3, FIFTEEN_MINUTES)) {
+    return { ok: false, error: AUTH_MESSAGES.tooManyAttempts }
+  }
+  try {
+    await sendPasswordReset(email)
+    return { ok: true }
+  } catch (error) {
+    console.error('Password reset request failed', error)
+    return { ok: false, error: AUTH_MESSAGES.generic }
+  }
+}
+
+const completePasswordResetSchema = z.object({
+  token: z.string().min(32).max(200),
+  password: z.string().min(MIN_PASSWORD_LENGTH).max(200),
+})
+
+export async function completePasswordResetAction(
+  input: z.input<typeof completePasswordResetSchema>
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const parsed = completePasswordResetSchema.safeParse(input)
+  if (!parsed.success) return { ok: false, error: AUTH_MESSAGES.weakPassword }
+  try {
+    const completed = await completePasswordReset(parsed.data.token, parsed.data.password)
+    if (!completed) return { ok: false, error: 'الرابط غير صالح أو انتهت صلاحيته. اطلب رابطاً جديداً.' }
+    const store = await cookies()
+    store.delete(SESSION_COOKIE)
+    return { ok: true }
+  } catch (error) {
+    console.error('Password reset completion failed', error)
     return { ok: false, error: AUTH_MESSAGES.generic }
   }
 }
