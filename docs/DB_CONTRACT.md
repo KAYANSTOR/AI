@@ -20,6 +20,11 @@ businesses, business_locations, channels, ai_agents, agent_prompt_versions, agen
 - coexistence: official Meta-supported WhatsApp Business App + Cloud API flow, only when Meta confirms eligibility.
 - qr_unofficial: separate, explicitly unofficial WhatsApp Web session. It must never be represented as Meta-approved or merged with Cloud API/Coexistence credentials.
 
+## Migration and Railway deployment
+- Database changes are applied by the repository migration runner: `npm run db:migrate` (`packages/db/scripts/migrate.mjs`).
+- Railway production currently runs this command as its pre-deploy command. The migration is applied only when a deployment containing the migration is deployed; committing to a Git branch alone does not change the live schema.
+- The migration runner requires sequential four-digit migration versions and rejects edits to already-applied checksums. Add a new forward-only migration for every schema change.
+
 ## Tenant and lifecycle invariants
 - Every channel is scoped by organization_id; provider credentials are scoped to the owning channel and organization.
 - Provider tokens, webhook secrets, and session material are encrypted using CredentialService. Never place secrets in external_identifier, provider_account_id, or public metadata.
