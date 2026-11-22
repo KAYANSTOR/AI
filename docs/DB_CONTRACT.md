@@ -26,7 +26,7 @@ businesses, business_locations, channels, ai_agents, agent_prompt_versions, agen
 - The migration runner requires sequential four-digit migration versions and rejects edits to already-applied checksums. Add a new forward-only migration for every schema change.
 
 ## Tenant and lifecycle invariants
-- Every channel is scoped by organization_id; provider credentials are scoped to the owning channel and organization.
+- Every channel is scoped by organization_id; a unique `(organization_id, channel_type)` index enforces the current one-channel-per-type management contract after a duplicate-data preflight. Provider credentials are scoped to the owning channel and organization.
 - Provider tokens, webhook secrets, and session material are encrypted using CredentialService. Never place secrets in external_identifier, provider_account_id, or public metadata.
 - A channel remains pending until provider authorization, webhook/session setup, credential persistence, and real inbound/outbound checks succeed.
 - Adding a channel type to the schema does not make its provider integration operational.
