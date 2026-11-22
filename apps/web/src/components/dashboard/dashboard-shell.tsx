@@ -5,6 +5,7 @@ import { Header } from '@/components/Header'
 import { NavigationProgress } from './navigation-progress'
 import { MobileTabBar } from './mobile-tab-bar'
 import { OfflineBanner } from './offline-banner'
+import { DashboardEntrySplash } from './dashboard-entry-splash'
 
 export function DashboardShell({
   children,
@@ -19,6 +20,7 @@ export function DashboardShell({
 }) {
   return (
     <div className="dashboard-viewport" dir="rtl">
+      <DashboardEntrySplash />
       <OfflineBanner />
       <Suspense fallback={null}>
         <NavigationProgress />
