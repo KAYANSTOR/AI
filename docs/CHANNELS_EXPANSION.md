@@ -42,9 +42,9 @@ The companion conversation reference is a unified inbox: channel identity and ph
 - [x] Contract tests added in `apps/web/tests/channel-contracts.test.ts`.
 - [x] Railway migration lifecycle documented: production's pre-deploy command runs `npm run db:migrate`.
 - [ ] Run tests and typecheck in a branch build environment.
-- [ ] Apply the migration to Railway production after the migration runner and schema preflight pass.
+- [x] Apply migration `0062` to Railway production; the pre-deploy runner reported `Database is at version 0062`.
 
-Railway production is connected to `feature/channels-expansion`. The first deployment attempt stopped in the pre-deploy migration runner before applying SQL because this branch initially reused migration version `0061`, already occupied by `0061_auth_recovery_and_consent.sql`. The channel migration has been moved to the next version `0062`; the failed attempt did not proceed to SQL execution. `qatshi-staging` has no app or Postgres service configuration.
+Railway production is connected to `feature/channels-expansion`; deployment `2625cbbb-4f72-415e-b048-53e7ee63d7f7` completed successfully. The first deployment attempt stopped before SQL because migration version `0061` was already occupied by `0061_auth_recovery_and_consent.sql`. The channel migration was moved to `0062`; the next pre-deploy run applied it and reported `Database is at version 0062`. `qatshi-staging` has no app or Postgres service configuration.
 
 ## Delivery sequence
 
