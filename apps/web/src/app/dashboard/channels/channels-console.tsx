@@ -149,7 +149,7 @@ export function ChannelsConsole({
         <div className="grid gap-3 sm:grid-cols-2">
           {cards.filter((card) => !card.connected || card.verificationStatus !== 'verified').map((card) => {
             const state = stateOf(card)
-            const getIcon = () => card.type === 'phone' ? <Phone className="h-6 w-6" aria-hidden="true" /> : card.type === 'messenger' ? <Facebook className="h-6 w-6" aria-hidden="true" /> : <MessageSquare className="h-6 w-6" aria-hidden="true" />
+            const getIcon = () => card.type === 'phone' ? <Phone className="h-6 w-6" aria-hidden="true" /> : card.type === 'messenger' ? <MessageCircle className="h-6 w-6" aria-hidden="true" /> : <MessageSquare className="h-6 w-6" aria-hidden="true" />
             return (
               <UIChannelCard
                 key={card.type}
@@ -361,7 +361,7 @@ function ChannelDialog({
             <section className="space-y-5">
               <div className="rounded-2xl border border-border bg-background p-5">
                 <div className="flex items-center gap-3">
-                  <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#0866FF]/10 text-[#0866FF]"><Facebook size={24} /></span>
+                  <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#0866FF]/10 text-[#0866FF]"><MessageCircle size={24} /></span>
                   <div><h2 className="text-base font-bold text-text">ربط صفحة Facebook</h2><p className="mt-1 text-xs leading-6 text-text-muted">سجّل الدخول بالحساب الذي يدير الصفحة ووافق على صلاحيات الرسائل وWebhooks.</p></div>
                 </div>
                 <ul className="mt-4 space-y-2 text-xs leading-6 text-text-muted">
