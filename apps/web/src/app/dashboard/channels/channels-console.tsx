@@ -70,7 +70,7 @@ export function ChannelsConsole({
           </span>
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
-        {cards.filter((card) => card.connected).map((card) => {
+        {cards.filter((card) => card.connected && card.verificationStatus === 'verified').map((card) => {
           const state = stateOf(card)
           const status: ChannelStatus =
             state === 'verified' ? 'connected' : state === 'pending' || state === 'error' ? 'needsSetup' : 'disconnected'
@@ -112,7 +112,7 @@ export function ChannelsConsole({
               status={status}
               icon={getChannelIcon()}
               iconBg={iconBg}
-              actionLabel={state === 'verified' ? 'إدارة القناة' : state === 'pending' ? 'استكمال الربط' : 'ربط القناة'}
+              actionLabel={state === 'verified' ? 'إدارة القناة' : state === 'pending' ? 'استكمال الربط' : state === 'disabled' ? 'إعادة تفعيل القناة' : 'ربط القناة'}
               onAction={() => setOpenType(card.type)}
             />
               <div className="flex items-center justify-between rounded-xl border border-border bg-surface px-4 py-3">
@@ -141,15 +141,15 @@ export function ChannelsConsole({
           <p className="mt-1 text-xs text-text-muted">اختر قناة لإكمال إعدادها وربطها بحسابك</p>
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
-          {cards.filter((card) => !card.connected).map((card) => {
+          {cards.filter((card) => !card.connected || card.verificationStatus !== 'verified').map((card) => {
             const state = stateOf(card)
             const getIcon = () => card.type === 'phone' ? <Phone className="h-6 w-6" aria-hidden="true" /> : <MessageSquare className="h-6 w-6" aria-hidden="true" />
             return (
               <UIChannelCard
                 key={card.type}
                 name={card.label}
-                description={stateCopy[state].hint}
-                status="disconnected"
+                description={getChannelSpec(card.type)?.bindingHint ?? stateCopy[state].hint}
+                status={state === 'pending' || state === 'error' ? 'needsSetup' : 'disconnected'}
                 icon={getIcon()}
                 iconBg="bg-primary"
                 actionLabel="إعداد القناة"
