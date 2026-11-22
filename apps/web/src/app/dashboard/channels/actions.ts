@@ -389,6 +389,28 @@ export async function testChannelAction(input: {
       })
       result.checks.push(...liveChecks)
       result.ok = result.checks.every((check) => check.ok)
+    } else if (spec.type === 'telegram') {
+      const admin = createAdminClient()
+      const credentials = await loadChannelCredentials(admin, data.id, 'telegram')
+      let botOk = false
+      let webhookOk = false
+      try {
+        const bot = await verifyTelegramBot(credentials.bot_token ?? '')
+        botOk = bot.is_bot && String(bot.id) === String(data.provider_account_id)
+        const baseUrl = (process.env.NEXT_PUBLIC_APP_URL || (
+          process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : ''
+        )).replace(/\/$/, '')
+        const webhookUrl = `${baseUrl}/api/telegram/webhook/${encodeURIComponent(data.id)}`
+        webhookOk = Boolean(credentials.bot_token && await verifyTelegramWebhook(credentials.bot_token, webhookUrl))
+      } catch {
+        botOk = false
+        webhookOk = false
+      }
+      result.checks.push(
+        { label: 'هوية بوت تيليجرام', ok: botOk, detail: botOk ? 'تم التحقق عبر Telegram' : 'تعذّر التحقق من البوت أو الرمز' },
+        { label: 'Webhook مسجل', ok: webhookOk, detail: webhookOk ? 'عنوان الاستقبال مطابق' : 'Webhook غير مضبوط أو تغيّر عنوان التطبيق' },
+      )
+      result.ok = result.checks.every((check) => check.ok)
     }
 
     await audit(org.organizationId, data.business_id, 'channel.tested', 'channel', data.id, {
