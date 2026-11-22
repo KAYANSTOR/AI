@@ -17,59 +17,65 @@ export function ReplyComposer({
 
   if (closed) {
     return (
-      <p className="rounded-xl border border-border bg-background px-3 py-2 text-xs text-text-muted">
-        المحادثة مغلقة. استخدم «إعادة فتح» قبل إرسال رد.
-      </p>
+      <div className="rounded-2xl border border-border bg-surface-muted px-4 py-3 text-center text-xs text-text-muted">
+        هذه المحادثة مغلقة. أعد فتحها لإرسال رد جديد.
+      </div>
     )
   }
 
   return (
     <form
       className="space-y-2"
-      onSubmit={(e) => {
-        e.preventDefault()
+      onSubmit={(event) => {
+        event.preventDefault()
         const body = text.trim()
         if (!body || pending) return
         setFeedback(null)
         start(async () => {
-          const res = await sendHumanReplyAction(conversationId, body)
-          if (res.ok) {
+          const response = await sendHumanReplyAction(conversationId, body)
+          if (response.ok) {
             setText('')
-            setFeedback({ ok: true, text: res.message ?? 'تم الإرسال.' })
+            setFeedback({ ok: true, text: response.message ?? 'تم الإرسال.' })
           } else {
-            setFeedback({ ok: false, text: res.error ?? 'تعذّر الإرسال.' })
+            setFeedback({ ok: false, text: response.error ?? 'تعذّر الإرسال.' })
           }
         })
       }}
     >
-      <div className="flex items-center gap-2">
-        <input
-          type="text"
+      <div className="flex items-end gap-2 rounded-[22px] border border-border bg-background p-2 shadow-sm transition focus-within:border-secondary/35">
+        <textarea
           value={text}
-          onChange={(e) => setText(e.target.value)}
-          placeholder="اكتب رداً للعميل…"
+          onChange={(event) => setText(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' && !event.shiftKey) {
+              event.preventDefault()
+              event.currentTarget.form?.requestSubmit()
+            }
+          }}
+          placeholder="اكتب رداً..."
           disabled={pending}
-          className="h-11 flex-1 rounded-full border border-transparent bg-surface-muted px-4 text-sm text-text outline-none placeholder:text-text-muted focus:border-primary/40 disabled:opacity-60"
+          rows={1}
+          className="max-h-28 min-h-11 min-w-0 flex-1 resize-y bg-transparent px-2 py-2.5 text-sm leading-6 text-text outline-none placeholder:text-text-muted disabled:opacity-60"
           aria-label="نص الرد"
         />
         <button
           type="submit"
           disabled={pending || !text.trim()}
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm transition hover:bg-primary-dark active:scale-95 disabled:opacity-50"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-sm transition hover:bg-primary-dark active:scale-95 disabled:opacity-45"
           aria-label="إرسال الرد"
         >
-          {pending ? (
-            <Loader2 className="h-5 w-5 animate-spin" />
-          ) : (
-            <Send className="h-5 w-5 rtl:-scale-x-100" />
-          )}
+          {pending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5 rtl:-scale-x-100" />}
         </button>
       </div>
-      {feedback ? (
-        <p className={`text-xs ${feedback.ok ? 'text-success' : 'text-error'}`} role="status">
+      <div className="flex items-center justify-between px-2 text-[10px] text-text-muted">
+        <span>Enter للإرسال · Shift + Enter لسطر جديد</span>
+        <span>{text.length > 0 ? `${text.length} حرف` : 'الرد سيُرسل باسم فريق العمل'}</span>
+      </div>
+      {feedback && (
+        <p className={`px-2 text-xs ${feedback.ok ? 'text-success' : 'text-error'}`} role="status">
           {feedback.text}
         </p>
-      ) : null}
+      )}
     </form>
   )
 }
