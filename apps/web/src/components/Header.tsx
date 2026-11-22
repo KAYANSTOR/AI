@@ -8,22 +8,8 @@ import { ThemeToggle } from '@/components/theme/theme-toggle'
 import { useDashboardShell } from '@/components/dashboard/dashboard-shell'
 import { signOutAction } from '@/lib/auth/actions'
 import { ar } from '@/lib/i18n/ar'
-
-function SearchForm({ autoFocus = false }: { autoFocus?: boolean }) {
-  return (
-    <form action="/dashboard/conversations" method="get" role="search" className="relative w-full">
-      <Search size={16} aria-hidden="true" className="pointer-events-none absolute start-3 top-1/2 -translate-y-1/2 text-text-muted" />
-      <input
-        type="search"
-        name="q"
-        placeholder={ar.header.searchPlaceholder}
-        aria-label={ar.header.searchPlaceholder}
-        autoFocus={autoFocus}
-        className="min-h-10 w-full rounded-lg border border-border bg-background py-2 pe-3 ps-9 text-base transition focus:border-accent focus:bg-surface focus:outline-none focus:ring-4 focus:ring-accent/10 md:text-sm"
-      />
-    </form>
-  )
-}
+import { GlobalSearch } from '@/components/dashboard/global-search'
+import { NotificationsBell } from '@/components/dashboard/notifications-bell'
 
 function AccountMenu({ email }: { email: string }) {
   const [open, setOpen] = useState(false)
@@ -125,9 +111,13 @@ export function Header({
           <div className="hidden lg:block">
             <ThemeToggle />
           </div>
+          <div className="lg:hidden">
+            <ThemeToggle />
+          </div>
+          <NotificationsBell />
           <AccountMenu email={userEmail} />
-          <div className="hidden w-[min(280px,24vw)] lg:block">
-            <SearchForm />
+          <div className="hidden w-[min(320px,26vw)] lg:block">
+            <GlobalSearch />
           </div>
           <button
             type="button"
@@ -143,7 +133,7 @@ export function Header({
       </div>
       {searchOpen ? (
         <div id="mobile-dashboard-search" className="border-t border-border px-4 py-3 lg:hidden">
-          <SearchForm autoFocus />
+          <GlobalSearch autoFocus onNavigate={() => setSearchOpen(false)} />
         </div>
       ) : null}
     </header>
