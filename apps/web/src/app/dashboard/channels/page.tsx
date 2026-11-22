@@ -2,9 +2,8 @@ import { redirect } from 'next/navigation'
 import { Info } from 'lucide-react'
 import { createClient } from '@/lib/db/server'
 import { getDashboardContext } from '@/lib/dashboard/context'
-import { CHANNEL_SPECS, getChannelSpec, type ChannelType } from '@/lib/channels/management'
+import { CHANNEL_SPECS } from '@/lib/channels/management'
 import { ChannelsConsole } from './channels-console'
-import { PhonePanel } from './phone-panel'
 import { ar } from '@/lib/i18n/ar'
 import { formatNumber } from '@/lib/i18n/format'
 import { databaseErrorMessage, logDatabaseError } from '@/lib/db/errors'
@@ -21,17 +20,6 @@ type ChannelRow = {
   connection_mode: string | null
 }
 
-type ChannelViewData = {
-  type: ChannelType
-  label: string
-  provider: string
-  publicNumberLabel: string | null
-  publicNumber: string | null
-  connected: boolean
-  verificationStatus: string | null
-  isActive: boolean
-  connectionMode: string | null
-}
 
 export default async function ChannelsPage({
   searchParams,
@@ -80,46 +68,6 @@ export default async function ChannelsPage({
     console.error('Unable to load business summary', error)
   }
 
-  type PhoneConnection = {
-    existing_phone_number: string | null
-    internal_vapi_number: string | null
-    carrier_profile_id: string | null
-    forward_type: string | null
-    forwarding_status: string | null
-    last_verified_at: string | null
-  }
-  let phoneConnection: PhoneConnection | null = null
-
-  let carriers: Array<{
-    id: string
-    country_code: string
-    operator_name: string
-    forward_on_no_answer_code: string | null
-    forward_on_busy_code: string | null
-    forward_all_code: string | null
-    cancel_forward_code: string | null
-    setup_instructions_url: string | null
-  }> = []
-
-  try {
-    const [{ data: conn }, { data: carrierList }] = await Promise.all([
-      db
-        .from('phone_connections')
-        .select('existing_phone_number, internal_vapi_number, carrier_profile_id, forward_type, forwarding_status, last_verified_at')
-        .eq('organization_id', context.organizationId)
-        .maybeSingle(),
-      db
-        .from('carrier_profiles')
-        .select('id, country_code, operator_name, forward_on_no_answer_code, forward_on_busy_code, forward_all_code, cancel_forward_code, setup_instructions_url')
-        .order('country_code', { ascending: true })
-        .order('operator_name', { ascending: true }),
-    ])
-    phoneConnection = (conn ?? null) as unknown as PhoneConnection | null
-    carriers = (carrierList ?? []) as typeof carriers
-  } catch (error) {
-    console.error('Unable to load phone connection or carriers', error)
-  }
-
   const byType = new Map(rows.map((row) => [row.channel_type, row]))
   // Focused release: WhatsApp is the only customer-facing messaging channel.
   // Instagram and SMS remain backend-compatible but are intentionally not surfaced.
@@ -143,11 +91,6 @@ export default async function ChannelsPage({
   const verifiedCount = cards.filter(
     (card) => card.verificationStatus === 'verified' && card.isActive
   ).length
-
-  const phoneSpec = getChannelSpec('phone')
-
-  const phoneRow = byType.get('phone')
-  const resolvedVapiNumber = phoneConnection?.internal_vapi_number || null
 
   return (
     <div className="space-y-6">
@@ -204,34 +147,6 @@ export default async function ChannelsPage({
 
       <ChannelsConsole cards={cards} canManage={canManage} />
 
-      <section className="space-y-3">
-        <div>
-          <h2 className="text-lg font-bold text-text">المكالمات</h2>
-          <p className="text-sm text-text-muted">
-            احتفظ برقم شركتك الحالي، ثم فعّل التحويل إلى الوكيل من دون شراء رقم جديد للمنصة.
-          </p>
-        </div>
-
-        <PhonePanel
-          canManage={canManage}
-          timezone={context.timezone}
-          carriers={carriers}
-          instructions={phoneSpec?.setup ?? []}
-          initial={
-            phoneConnection || phoneRow
-              ? {
-                  existingPhoneNumber: phoneConnection?.existing_phone_number ?? null,
-                  vapiNumber: canManage ? resolvedVapiNumber : null,
-                  vapiPhoneNumberId: canManage ? phoneRow?.provider_account_id ?? null : null,
-                  carrierProfileId: phoneConnection?.carrier_profile_id ?? null,
-                  forwardType: phoneConnection?.forward_type ?? 'no_answer',
-                  forwardingStatus: phoneConnection?.forwarding_status ?? (phoneRow?.is_active ? 'active' : 'pending_test'),
-                  lastVerifiedAt: phoneConnection?.last_verified_at ?? null,
-                }
-              : null
-          }
-        />
-      </section>
     </div>
   )
 }
