@@ -93,13 +93,19 @@ export async function createUser(input: {
   phone: string | null
   password: string
   metadata: Record<string, unknown>
+  termsAcceptedAt: Date
+  termsVersion: string
+  privacyPolicyVersion: string
 }): Promise<AuthUser> {
   const hash = await hashPassword(input.password)
   const rows = await getSql().unsafe<UserRow[]>(
-    `insert into auth.users (email, phone, encrypted_password, email_confirmed_at, raw_user_meta_data)
-     values ($1, $2, $3, case when $1 is null then null else now() end, $4::text::jsonb)
+    `insert into auth.users (
+       email, phone, encrypted_password, email_confirmed_at, raw_user_meta_data,
+       terms_accepted_at, terms_version, privacy_policy_version
+     )
+     values ($1, $2, $3, case when $1 is null then null else now() end, $4::text::jsonb, $5, $6, $7)
      returning ${USER_COLUMNS}`,
-    [input.email ? normalizeEmail(input.email) : null, input.phone, hash, JSON.stringify(input.metadata)]
+    [input.email ? normalizeEmail(input.email) : null, input.phone, hash, JSON.stringify(input.metadata), input.termsAcceptedAt, input.termsVersion, input.privacyPolicyVersion]
   )
   return mapUser(rows[0])!
 }
