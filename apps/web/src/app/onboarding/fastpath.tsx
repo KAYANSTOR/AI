@@ -27,6 +27,7 @@ export type FastPathData = {
   savedDescription: string
   hasSavedAgentSetup: boolean
   canManage: boolean
+  completed: { basics: boolean; connect: boolean; agent: boolean; test: boolean }
 }
 
 /**
@@ -71,11 +72,21 @@ export function FastPath({
 
   return (
     <div className="space-y-6">
+      <div className="space-y-2">
+        <div className="flex items-center justify-between text-xs text-text-muted">
+          <span>إنجاز الإعداد</span>
+          <span>{[data.completed.basics, data.completed.connect, data.completed.agent, data.completed.test].filter(Boolean).length} من 4 مراحل مكتملة</span>
+        </div>
+        <div className="h-2 overflow-hidden rounded-full bg-background" role="progressbar" aria-valuemin={0} aria-valuemax={4} aria-valuenow={[data.completed.basics, data.completed.connect, data.completed.agent, data.completed.test].filter(Boolean).length}>
+          <div className="h-full rounded-full bg-primary-dark transition-[width]" style={{ width: `${[data.completed.basics, data.completed.connect, data.completed.agent, data.completed.test].filter(Boolean).length * 25}%` }} />
+        </div>
+      </div>
       <nav aria-label="مراحل الإعداد">
         <ol className="flex items-center gap-1 sm:gap-2">
           {ONBOARDING_STAGES.map((stage, index) => {
-            const isDone = stage < initialStage
+            const isDone = [data.completed.basics, data.completed.connect, data.completed.agent, data.completed.test][stage - 1]
             const isCurrent = stage === initialStage
+            const status = isDone ? 'مكتملة' : isCurrent ? 'قيد التنفيذ' : stage < initialStage ? 'تحتاج إجراء' : 'لم تبدأ'
             return (
               <li key={stage} className="flex min-w-0 flex-1 items-center gap-1 sm:gap-2">
                 <button
@@ -96,13 +107,10 @@ export function FastPath({
                   >
                     {isDone ? <Check size={14} aria-hidden="true" /> : stage}
                   </span>
-                  <span
-                    className={`w-full truncate text-center text-[11px] leading-4 sm:text-xs ${
-                      isCurrent ? 'font-semibold text-secondary' : 'text-text-muted'
-                    }`}
-                  >
+                  <span className={`w-full truncate text-center text-[11px] leading-4 sm:text-xs ${isCurrent ? 'font-semibold text-secondary' : 'text-text-muted'}`}>
                     {STAGE_DEFINITIONS[stage].name}
                   </span>
+                  <span className="text-[10px] text-text-muted">{status}</span>
                 </button>
                 {index < ONBOARDING_STAGES.length - 1 ? (
                   <span
