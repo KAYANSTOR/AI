@@ -1,5 +1,5 @@
 export type EligibilityInput = {
-  channel: 'whatsapp' | 'instagram' | 'sms' | 'phone'
+  channel: 'whatsapp' | 'instagram' | 'sms' | 'phone' | 'telegram'
   lastInboundAt?: string | null
   optedOut?: boolean
   quietHours?: { startHour: number; endHour: number; timezone?: string }
