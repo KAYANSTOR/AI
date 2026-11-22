@@ -29,22 +29,22 @@ The companion conversation reference is a unified inbox: channel identity and ph
 - Channel metadata and binding checks live in `apps/web/src/lib/channels/management.ts`.
 - Credential metadata is defined in `apps/web/src/lib/credentials/catalog.ts`; encrypted persistence is handled by the existing credential service.
 - WhatsApp Embedded Signup and Coexistence handling already exist and must be preserved.
-- Migration `0061_channel_provider_contracts.sql` expands the persisted channel constraint to include `telegram` and `messenger`, and adds indexes for organization/type/status queries plus explicit WhatsApp connection-mode lookup.
+- Migration `0062_channel_provider_contracts.sql` expands the persisted channel constraint to include `telegram` and `messenger`, and adds indexes for organization/type/status queries plus explicit WhatsApp connection-mode lookup.
 - `apps/web/src/lib/channels/contracts.ts` defines persisted provider types, Website Chat's widget contract, the three distinct WhatsApp modes, and a separate encrypted credential namespace for unofficial QR session data.
 - `apps/web/src/lib/credentials/catalog.ts` now defines Telegram, Messenger, and Website Chat credential fields. These are catalogue contracts only; they do not expose unimplemented channels in the dashboard or mark them connected.
 - Existing channel actions are not sufficient by themselves to implement Telegram, Messenger, website chat, or WhatsApp Web sessions. Each needs provider-specific credential handling, webhook/session lifecycle, inbound normalization, outbound delivery, status checks, and tests.
 
 ## Phase 1 implementation status (branch: `feature/channels-expansion`)
 
-- [x] Database migration source added as `packages/db/migrations/0061_channel_provider_contracts.sql`.
+- [x] Database migration source added as `packages/db/migrations/0062_channel_provider_contracts.sql`.
 - [x] Provider and WhatsApp connection contracts added.
 - [x] Telegram, Messenger, and Website Chat credential fields added to the client-safe credential catalogue; actual values continue to use the existing server-only AES-256-GCM CredentialService.
 - [x] Contract tests added in `apps/web/tests/channel-contracts.test.ts`.
 - [x] Railway migration lifecycle documented: production's pre-deploy command runs `npm run db:migrate`.
 - [ ] Run tests and typecheck in a branch build environment.
-- [ ] Apply the migration through a deployment containing this branch after a safe staging database is available.
+- [ ] Apply the migration to Railway production after the migration runner and schema preflight pass.
 
-The Railway production service is currently configured to deploy from `main`; the `qatshi-staging` environment has no app or Postgres service configuration. Therefore, this branch commit does not alter the live database or production deployment.
+Railway production is connected to `feature/channels-expansion`. The first deployment attempt stopped in the pre-deploy migration runner before applying SQL because this branch initially reused migration version `0061`, already occupied by `0061_auth_recovery_and_consent.sql`. The channel migration has been moved to the next version `0062`; the failed attempt did not proceed to SQL execution. `qatshi-staging` has no app or Postgres service configuration.
 
 ## Delivery sequence
 
