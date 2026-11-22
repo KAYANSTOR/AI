@@ -1,8 +1,8 @@
 import type { ReactNode } from 'react'
-import { Phone, Smartphone, Globe } from 'lucide-react'
+import { Phone, Smartphone, Globe, Send } from 'lucide-react'
 import { cx } from './cx'
 
-export type ConversationChannel = 'whatsapp' | 'instagram' | 'sms' | 'phone' | 'web'
+export type ConversationChannel = 'whatsapp' | 'instagram' | 'sms' | 'phone' | 'web' | 'telegram'
 
 export type ConversationItemProps = {
   name: string
@@ -32,6 +32,7 @@ function ChannelDot({ channel = 'whatsapp' }: { channel?: ConversationChannel })
     sms: <Smartphone className="h-2.5 w-2.5 text-white" />,
     phone: <Phone className="h-2.5 w-2.5 text-white" />,
     web: <Globe className="h-2.5 w-2.5 text-white" />,
+    telegram: <Send className="h-2.5 w-2.5 text-white" />,
   }[channel]
 
   const bg = {
@@ -40,6 +41,7 @@ function ChannelDot({ channel = 'whatsapp' }: { channel?: ConversationChannel })
     sms: 'bg-sms',
     phone: 'bg-secondary',
     web: 'bg-accent',
+    telegram: 'bg-[#229ED9]',
   }[channel]
 
   return (
