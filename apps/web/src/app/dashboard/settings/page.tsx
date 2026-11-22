@@ -1,205 +1,48 @@
+import { redirect } from 'next/navigation'
 import { getDashboardContext } from '@/lib/dashboard/context'
 import { createClient } from '@/lib/db/server'
-import { redirect } from 'next/navigation'
-import Link from 'next/link'
-import {
-  Bell,
-  Globe,
-  KeyRound,
-  LogOut,
-  Moon,
-  Radio,
-  Shield,
-  Sliders,
-  Users,
-  UserRound,
-  Zap,
-  ListTodo,
-} from 'lucide-react'
-import { PasswordForm } from './password-form'
-import { CapabilityManager } from './capability-manager'
-import { SectionHeader } from '@/components/ui/section-header'
-import { ListRow } from '@/components/ui/list-row'
-import { ThemeToggle } from '@/components/theme/theme-toggle'
-import { signOutAction } from '@/lib/auth/actions'
-import { roleLabel } from '@/lib/i18n/labels'
+import { loadBillingSnapshot } from '@/lib/billing/entitlements'
+import { PLAN_CATALOG } from '@/lib/billing/plan-catalog'
+import { SettingsHub } from './settings-hub'
+
+export const dynamic = 'force-dynamic'
 
 export default async function SettingsPage() {
   const context = await getDashboardContext()
   if (!context) redirect('/login')
-
   const db = await createClient()
-
-  const { data: allCaps } = await db
-    .from('capabilities')
-    .select('id, name, description')
-    .order('name')
-
+  const [{ data: allCaps }, snapshot] = await Promise.all([
+    db.from('capabilities').select('id, name, description').order('name'),
+    loadBillingSnapshot(db, context.organizationId),
+  ])
   const enabledMap = new Map(context.enabledCapabilities.map((id) => [id, true]))
-  const rows = (allCaps ?? []).map((capability) => ({
-    id: capability.id as string,
+  const capabilityRows = (allCaps ?? []).map((capability) => ({
+    id: String(capability.id),
     name: capability.name || capability.id,
     description: capability.description ?? '',
-    enabled: enabledMap.get(capability.id as string) ?? false,
+    enabled: enabledMap.get(String(capability.id)) ?? false,
   }))
-
-  const isAdmin = context.role === 'owner' || context.role === 'admin'
+  const plan = PLAN_CATALOG.find((item) => item.code === snapshot.planCode)
+  const statusLabels: Record<string, string> = {
+    active: 'نشط',
+    trial: 'تجريبي',
+    past_due: 'متأخر',
+    grace_period: 'مهلة سماح',
+    suspended: 'موقوف',
+    cancelled: 'ملغي',
+  }
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-text">الإعدادات والتفضيلات</h1>
-        <p className="mt-1 text-sm text-text-muted">
-          إدارة الحساب، الفريق، القنوات، ومظهر التطبيق.
-        </p>
-      </div>
-
-      <div className="space-y-3">
-        <SectionHeader title="الحساب والمنشأة" />
-
-        <div className="space-y-2.5">
-          <Link href="/dashboard/account" className="block">
-            <ListRow
-              title={context.organizationName}
-              subtitle={`الدور: ${roleLabel(context.role)} · ${context.email}`}
-              trailing="chevron"
-              icon={<UserRound className="h-5 w-5" />}
-            />
-          </Link>
-
-          <Link href="/dashboard/team" className="block">
-            <ListRow
-              title="الفريق والصلاحيات"
-              subtitle="الأعضاء والأدوار داخل المؤسسة"
-              trailing="chevron"
-              icon={<Users className="h-5 w-5" />}
-            />
-          </Link>
-
-          <Link href="/dashboard/tasks" className="block">
-            <ListRow
-              title="المهام والمتابعات"
-              subtitle="المحادثات والمواعيد التي تحتاج إجراءً"
-              trailing="chevron"
-              icon={<ListTodo className="h-5 w-5" />}
-            />
-          </Link>
-
-          <Link href="/dashboard/channels" className="block">
-            <ListRow
-              title="القنوات والربط"
-              subtitle="إدارة ربط واتساب والهاتف"
-              trailing="chevron"
-              icon={<Radio className="h-5 w-5" />}
-            />
-          </Link>
-
-          <Link href="/dashboard/integrations" className="block">
-            <ListRow
-              title="مركز التكاملات"
-              subtitle="حالة الاتصال والخدمات السحابية"
-              trailing="chevron"
-              icon={<Zap className="h-5 w-5" />}
-            />
-          </Link>
-        </div>
-      </div>
-
-      <div className="space-y-3">
-        <SectionHeader title="التفضيلات والمظهر" />
-
-        <div className="space-y-2.5">
-          <ListRow
-            title="اللغة"
-            subtitle="لغة الواجهة الأساسية"
-            trailing="meta"
-            meta="العربية (RTL)"
-            icon={<Globe className="h-5 w-5" />}
-          />
-
-          <div className="flex items-center justify-between rounded-[16px] border border-border bg-surface p-3.5">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-light text-primary">
-                <Moon className="h-5 w-5" />
-              </div>
-              <div>
-                <p className="text-[14px] font-semibold text-text">المظهر (داكن / فاتح)</p>
-                <p className="text-[12px] text-text-muted">تبديل وضع الألوان بسهولة</p>
-              </div>
-            </div>
-            <ThemeToggle />
-          </div>
-
-          <Link href="/dashboard/notifications" className="block">
-            <ListRow
-              title="مركز الإشعارات والتنبيهات"
-              subtitle="تخصيص تنبيهات المحادثات الجديدة والتصعيد"
-              trailing="chevron"
-              icon={<Bell className="h-5 w-5" />}
-            />
-          </Link>
-        </div>
-      </div>
-
-      {isAdmin && (
-        <div className="space-y-3">
-          <SectionHeader title="أدوات متقدمة والذكاء الاصطناعي" />
-
-          <div className="space-y-2.5">
-            <Link href="/dashboard/settings/canned-replies" className="block">
-              <ListRow
-                title="الردود الجاهزة"
-                subtitle="قوالب سريعة للرد على العملاء"
-                trailing="chevron"
-                icon={<Sliders className="h-5 w-5" />}
-              />
-            </Link>
-
-            <Link href="/dashboard/settings/escalation" className="block">
-              <ListRow
-                title="سياسات التصعيد ومستوى الخدمة (SLA)"
-                subtitle="قواعد تحويل المحادثات من الذكاء الاصطناعي للموظفين"
-                trailing="chevron"
-                icon={<Shield className="h-5 w-5" />}
-              />
-            </Link>
-
-            <Link href="/dashboard/settings/api-keys" className="block">
-              <ListRow
-                title="مفاتيح الربط البرمجي (API Keys)"
-                subtitle="توليد وإدارة مفاتيح التكاملات المخصصة"
-                trailing="chevron"
-                icon={<KeyRound className="h-5 w-5" />}
-              />
-            </Link>
-          </div>
-
-          <div className="mt-4 rounded-2xl border border-border bg-surface p-5">
-            <h3 className="mb-3 text-base font-semibold text-text">تفعيل وإلغاء مهام الوكيل الذكي</h3>
-            <CapabilityManager rows={rows} />
-          </div>
-        </div>
-      )}
-
-      <section id="security" className="rounded-2xl border border-border bg-surface p-5 space-y-4">
-        <div>
-          <h2 className="text-base font-semibold text-text">أمان الحساب</h2>
-          <p className="mt-0.5 text-xs text-text-muted">
-            تغيير كلمة المرور الخاصة بحسابك: <span dir="ltr" className="font-semibold">{context.email}</span>
-          </p>
-        </div>
-        <PasswordForm />
-      </section>
-
-      <form action={signOutAction} className="pt-2 pb-6">
-        <button
-          type="submit"
-          className="flex h-12 w-full items-center justify-center gap-2 rounded-xl border border-error/40 bg-error/5 text-[14px] font-semibold text-error transition hover:bg-error/10 active:scale-[0.99]"
-        >
-          <LogOut className="h-4 w-4" />
-          <span>تسجيل الخروج من الحساب</span>
-        </button>
-      </form>
-    </div>
+    <SettingsHub
+      organizationName={context.organizationName}
+      accountId={context.organizationId}
+      accountIdentity={context.email ?? context.phone ?? 'حساب مساحة العمل'}
+      role={context.role}
+      setupComplete={context.setupComplete}
+      planName={plan?.name ?? snapshot.planCode}
+      subscriptionStatus={statusLabels[snapshot.status] ?? snapshot.status}
+      capabilityRows={capabilityRows}
+      isAdmin={context.role === 'owner' || context.role === 'admin'}
+    />
   )
 }
