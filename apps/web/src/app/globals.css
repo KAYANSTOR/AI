@@ -55,8 +55,8 @@
   --motion-moderate: 280ms;
   --motion-slow: 400ms;
   --ease-standard: cubic-bezier(0.2, 0, 0, 1);
-  --k-primary: var(--brand-secondary);
-  --k-primary-dark: color-mix(in srgb, var(--brand-secondary) 82%, black);
+  --k-primary: var(--brand-primary);
+  --k-primary-dark: var(--brand-secondary);
   --k-primary-light: var(--brand-primary);
   --k-primary-foreground: #FFFFFF;
   --k-secondary: var(--brand-secondary);
@@ -89,7 +89,7 @@
 .theme-dark {
   color-scheme: dark;
   --k-primary: var(--brand-primary);
-  --k-primary-dark: color-mix(in srgb, var(--brand-secondary) 78%, black);
+  --k-primary-dark: var(--brand-secondary);
   --k-primary-light: color-mix(in srgb, var(--brand-secondary) 60%, var(--brand-primary));
   --k-primary-foreground: var(--brand-secondary);
   --k-secondary: var(--brand-primary);

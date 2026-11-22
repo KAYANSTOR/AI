@@ -28,7 +28,8 @@ describe('KAYAN AI design system', () => {
     expect(css).toContain('--brand-primary: #D8E2D0')
     expect(css).toContain('--brand-secondary: #1F3B22')
     expect(css).toContain('--brand-accent: #F2D600')
-    expect(css).toContain('--k-primary: var(--brand-secondary)')
+    expect(css).toContain('--k-primary: var(--brand-primary)')
+    expect(css).toContain('--k-primary-dark: var(--brand-secondary)')
     expect(css).toContain('--k-accent: var(--brand-accent)')
   })
 
