@@ -23,6 +23,30 @@ export type WhatsAppConnectionMode =
 
 export type ChannelConnectionMode = WhatsAppConnectionMode | 'native'
 
+/** All channel types accepted by the persisted channels schema. */
+export const PROVIDER_CHANNEL_TYPES: readonly ProviderChannelType[] = [
+  'phone',
+  'whatsapp',
+  'instagram',
+  'sms',
+  'website',
+  'email',
+  'telegram',
+  'messenger',
+]
+
+export function isProviderChannelType(value: unknown): value is ProviderChannelType {
+  return typeof value === 'string' && (PROVIDER_CHANNEL_TYPES as readonly string[]).includes(value)
+}
+
+export function isWhatsAppConnectionMode(value: unknown): value is WhatsAppConnectionMode {
+  return typeof value === 'string' && WHATSAPP_CONNECTION_MODES.some((mode) => mode.value === value)
+}
+
+export function isChannelConnectionMode(value: unknown): value is ChannelConnectionMode {
+  return value === 'native' || isWhatsAppConnectionMode(value)
+}
+
 export type ChannelCredentialContract = {
   provider: 'meta' | 'telegram' | 'website' | 'twilio' | 'vapi' | 'whatsapp_web'
   credentialTypes: readonly string[]
