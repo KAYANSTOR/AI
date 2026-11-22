@@ -60,7 +60,7 @@ export default async function OnboardingPage() {
   }
 
   const channel = channelResult.data
-  const channelState = channel ? describeChannelState(channel as ChannelRowLike) : null
+  const channelState = channel ? describeChannelState(channel as unknown as ChannelRowLike) : null
   const storedTest = profile?.smoke_test_result && typeof profile.smoke_test_result === 'object'
     ? profile.smoke_test_result as Record<string, unknown>
     : null
