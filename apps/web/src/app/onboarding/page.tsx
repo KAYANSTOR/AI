@@ -6,7 +6,7 @@ import { FastPath } from './fastpath'
 import { stageForStoredStep } from '@/lib/onboarding/stages'
 import type { SmokeTestOutcome } from '@/lib/onboarding/smoke-test'
 import type { ReplyTestResult } from '@/lib/onboarding/reply-test'
-import type { ChannelConnectionState } from '@/lib/channels/connect'
+import { describeChannelState } from '@/lib/channels/connect'
 
 export const metadata: Metadata = {
   title: 'إعداد النشاط وتشغيل الوكيل | Kayan AI',
@@ -60,11 +60,7 @@ export default async function OnboardingPage() {
   }
 
   const channel = channelResult.data
-  const channelState: ChannelConnectionState | null = channel
-    ? channel.verification_status === 'verified' && channel.is_active
-      ? 'verified'
-      : 'pending'
-    : null
+  const channelState = channel ? describeChannelState(channel) : null
   const storedTest = profile?.smoke_test_result && typeof profile.smoke_test_result === 'object'
     ? profile.smoke_test_result as Record<string, unknown>
     : null
