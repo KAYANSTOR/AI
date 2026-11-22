@@ -83,7 +83,7 @@ const signUpSchema = z.object({
   email: z.string().trim().email().optional(),
   phone: z.string().trim().optional(),
   password: z.string().min(MIN_PASSWORD_LENGTH).max(200),
-  acceptedTerms: z.literal(true),
+  acceptedTerms: z.boolean().refine((value) => value === true),
 }).refine(
   (value) =>
     (Boolean(value.email) && !value.phone) ||
