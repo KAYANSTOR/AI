@@ -448,6 +448,7 @@ export async function connectTelegramChannelAction(input: {
 
     const db = createAdminClient()
     const businessId = await ensurePrimaryBusinessId(org.organizationId, org.organizationName)
+    if (!businessId) return { ok: false, error: 'أكمل إعداد النشاط التجاري قبل ربط تيليجرام.' }
     const { data: existing, error: readError } = await db.from('channels')
       .select('id').eq('organization_id', org.organizationId)
       .eq('channel_type', 'telegram').maybeSingle()
