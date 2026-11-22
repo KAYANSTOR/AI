@@ -8,7 +8,6 @@ import { PLAN_CATALOG, type BillingCycle } from '@/lib/billing/plan-catalog'
 const METRICS = [
   { key: 'ai_messages', label: 'ردود الذكاء الاصطناعي شهرياً' },
   { key: 'channels', label: 'القنوات النشطة' },
-  { key: 'voice_minutes', label: 'دقائق المكالمات الصوتية' },
   { key: 'automation_runs', label: 'تشغيلات الأتمتة شهرياً' },
   { key: 'campaign_sends', label: 'إرسالات الحملات شهرياً' },
 ] as const
@@ -96,10 +95,7 @@ export function Pricing() {
                       <Check size={17} className="mt-0.5 shrink-0 text-success" />
                       {plan.limits.channels} قنوات نشطة
                     </li>
-                    <li className="flex items-start gap-2">
-                      <Check size={17} className="mt-0.5 shrink-0 text-success" />
-                      {plan.limits.voice_minutes.toLocaleString('en-US')} دقيقة صوت شهرياً
-                    </li>
+
                     <li className="flex items-start gap-2">
                       <Check size={17} className="mt-0.5 shrink-0 text-success" />
                       {plan.limits.automation_runs.toLocaleString('en-US')} تشغيل أتمتة شهرياً
