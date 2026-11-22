@@ -6,25 +6,14 @@ export const contentType = 'image/png'
 export default function AppleIcon() {
   return new ImageResponse(
     (
-      <div
-        style={{
-          display: 'flex',
-          width: '100%',
-          height: '100%',
-          alignItems: 'center',
-          justifyContent: 'center',
-          backgroundColor: '#D8E2D0',
-        }}
-      >
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
-          <g fill="none" stroke="#1F3B22" strokeWidth="78" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M151 385V127" />
-            <path d="M178 256L321 122" />
-            <path d="M178 256L348 397" />
-          </g>
-          <path fill="#F2D600" d="M384 66C396 105 407 116 446 128C407 140 396 151 384 190C372 151 361 140 322 128C361 116 372 105 384 66Z" />
-        </svg>
-      </div>
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+        <rect width="512" height="512" fill="#D9E5CF" />
+        <path d="M194 143 C194 138 189 138 184 140 L138 168 C124 177 118 190 118 206 L118 322 C118 328 122 329 127 324 L189 264 C193 260 194 256 194 249 Z" fill="#1E381B" />
+        <path d="M204 249 C198 240 196 222 206 209 L264 149 C272 141 281 139 293 139 L321 139 C326 139 327 144 326 151 C325 160 321 167 314 174 L270 218 C265 223 259 223 251 223 C232 223 216 234 204 249 Z" fill="#1E381B" />
+        <path d="M135 349 L235 253 C246 243 258 240 274 240 L324 240 C336 240 344 234 353 226 C359 221 366 222 368 227 C370 232 364 241 354 251 C339 266 322 277 303 284 L383 361 C387 365 385 368 379 368 L313 368 C297 368 287 363 277 353 L233 309 C228 304 222 303 214 303 L204 303 C197 303 194 306 194 313 L194 362 C194 366 191 368 187 368 L143 368 C131 368 126 358 135 349 Z" fill="#1E381B" />
+        <path d="M204 303 C240 303 274 295 303 284 C282 292 255 297 224 298 C210 298 199 300 194 309 C196 305 199 303 204 303 Z" fill="#152913" opacity="0.45" />
+        <path d="M366 132 C372 154 382 165 404 172 C382 179 372 190 366 212 C360 190 350 179 328 172 C350 165 360 154 366 132 Z" fill="#FFCC00" />
+      </svg>
     ),
     size,
   )
