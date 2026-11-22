@@ -7,6 +7,7 @@ import {
   setChannelActiveAction,
   testChannelAction,
   connectWhatsAppChannelAction,
+  connectTelegramChannelAction,
 } from './actions'
 import { getChannelSpec, type ChannelType, type BindingTestResult } from '@/lib/channels/management'
 import { WhatsAppEmbeddedSignupButton } from '@/components/channels/whatsapp-embedded-signup'
@@ -182,6 +183,7 @@ function ChannelDialog({
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null)
   const [testResult, setTestResult] = useState<BindingTestResult | null>(null)
   const [registrationPin, setRegistrationPin] = useState('')
+  const [telegramBotToken, setTelegramBotToken] = useState('')
   const state = stateOf(card)
 
   if (!spec) return null
@@ -194,7 +196,9 @@ function ChannelDialog({
       const result =
         card.type === 'whatsapp'
           ? await connectWhatsAppChannelAction({ number: identifier })
-          : await saveChannelAction({ channelType: card.type, identifier })
+          : card.type === 'telegram'
+            ? await connectTelegramChannelAction({ botToken: telegramBotToken })
+            : await saveChannelAction({ channelType: card.type, identifier })
       setNotice({
         ok: result.ok,
         text: result.ok ? result.message ?? 'تم حفظ الربط.' : result.error ?? 'تعذّر إكمال الربط.',
@@ -355,32 +359,50 @@ function ChannelDialog({
             </section>
           ) : null}
 
-          <label className="block">
-            <span className="text-sm font-semibold text-text">
-              {card.type === 'whatsapp'
-                ? 'رقم واتساب للأعمال (اختياري قبل الربط)'
-                : card.type === 'instagram'
-                  ? 'معرّف حساب Instagram Business'
-                  : 'رقم Twilio'}
-            </span>
-            <span className="mt-1 block text-xs leading-5 text-text-muted">
-              {card.type === 'whatsapp'
-                ? 'احفظ الرقم للمرجع فقط. الربط الرسمي عبر زر Meta أعلاه.'
-                : card.type === 'instagram'
-                  ? 'يُستخدم فقط لإنشاء الربط؛ لن نعرضه في الصفحة بعد الحفظ.'
-                  : 'اكتبه بصيغة دولية مثل +12025550123.'}
-            </span>
-            <input
-              value={identifier}
-              onChange={(event) => setIdentifier(event.target.value)}
-              dir="ltr"
-              autoComplete="off"
-              inputMode={card.type === 'whatsapp' || card.type === 'sms' ? 'tel' : 'numeric'}
-              placeholder={card.type === 'whatsapp' ? '+967777123456' : spec.bindingPlaceholder}
-              className="mt-2 min-h-12 w-full rounded-xl border border-border bg-background px-3 text-base text-text outline-none focus:border-secondary focus:ring-2 focus:ring-accent/40"
-              disabled={busy || !canManage}
-            />
-          </label>
+          {card.type === 'telegram' ? (
+            <label className="block">
+              <span className="text-sm font-semibold text-text">رمز بوت تيليجرام</span>
+              <span className="mt-1 block text-xs leading-5 text-text-muted">يُستخدم مرة واحدة للتحقق وضبط Webhook، ثم يُحفظ مشفّراً ولا يُعرض مجدداً.</span>
+              <input
+                type="password"
+                value={telegramBotToken}
+                onChange={(event) => setTelegramBotToken(event.target.value)}
+                dir="ltr"
+                autoComplete="new-password"
+                spellCheck={false}
+                placeholder="123456789:AA..."
+                className="mt-2 min-h-12 w-full rounded-xl border border-border bg-background px-3 text-base text-text outline-none focus:border-secondary focus:ring-2 focus:ring-accent/40"
+                disabled={busy || !canManage}
+              />
+            </label>
+          ) : (
+            <label className="block">
+              <span className="text-sm font-semibold text-text">
+                {card.type === 'whatsapp'
+                  ? 'رقم واتساب للأعمال (اختياري قبل الربط)'
+                  : card.type === 'instagram'
+                    ? 'معرّف حساب Instagram Business'
+                    : card.type === 'phone' ? 'معرّف رقم Vapi' : 'رقم Twilio'}
+              </span>
+              <span className="mt-1 block text-xs leading-5 text-text-muted">
+                {card.type === 'whatsapp'
+                  ? 'احفظ الرقم للمرجع فقط. الربط الرسمي عبر زر Meta أعلاه.'
+                  : card.type === 'instagram'
+                    ? 'يُستخدم فقط لإنشاء الربط؛ لن نعرضه في الصفحة بعد الحفظ.'
+                    : 'أدخل المعرّف أو الرقم المطلوب للقناة.'}
+              </span>
+              <input
+                value={identifier}
+                onChange={(event) => setIdentifier(event.target.value)}
+                dir="ltr"
+                autoComplete="off"
+                inputMode={card.type === 'whatsapp' || card.type === 'sms' ? 'tel' : 'numeric'}
+                placeholder={card.type === 'whatsapp' ? '+967777123456' : spec.bindingPlaceholder}
+                className="mt-2 min-h-12 w-full rounded-xl border border-border bg-background px-3 text-base text-text outline-none focus:border-secondary focus:ring-2 focus:ring-accent/40"
+                disabled={busy || !canManage}
+              />
+            </label>
+          )}
 
           <div className="rounded-2xl border border-border bg-background p-4">
             <div className="flex items-center justify-between gap-3">
@@ -435,7 +457,7 @@ function ChannelDialog({
               <button
                 type="button"
                 onClick={submit}
-                disabled={busy || !identifier.trim()}
+                disabled={busy || (card.type === 'telegram' ? !telegramBotToken.trim() : !identifier.trim())}
                 className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl border border-border bg-background px-4 text-sm font-semibold text-text hover:bg-surface disabled:opacity-50"
               >
                 {busy ? <Loader2 size={18} className="animate-spin" /> : <Link2 size={17} />}
