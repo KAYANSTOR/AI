@@ -5,6 +5,8 @@ import { SITE_NAV } from './nav'
 const ACCOUNT_LINKS = [
   { label: 'تسجيل الدخول', href: '/login' },
   { label: 'إنشاء حساب للشركة', href: '/signup' },
+  { label: 'الأسئلة الشائعة', href: '/faq' },
+  { label: 'التواصل والدعم', href: '/contact' },
   { label: 'سياسة الخصوصية', href: '/privacy' },
 ] as const
 

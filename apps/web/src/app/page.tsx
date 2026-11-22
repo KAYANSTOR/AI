@@ -8,6 +8,7 @@ import { FinalCta } from '@/components/site/final-cta'
 import { SiteFooter } from '@/components/site/site-footer'
 import { Section, SectionHeading } from '@/components/site/section'
 import { ArrowLeft, Briefcase, Check, CreditCard, PhoneForwarded, Sparkles, Workflow } from 'lucide-react'
+import { PLAN_CATALOG } from '@/lib/billing/plan-catalog'
 
 export const metadata: Metadata = {
   alternates: { canonical: '/' },
@@ -50,11 +51,13 @@ const structuredData = {
       description:
         'منصة يستقبل بها الذكاء الاصطناعي عملاء الشركات على الهاتف وواتساب: يفهم الطلب، يؤهّل العميل، يحجز الموعد، ويسجّل كل محادثة وفرصة في لوحة واحدة.',
       publisher: { '@id': organizationId },
-      offers: [
-        { '@type': 'Offer', name: 'Starter', price: '49', priceCurrency: 'USD' },
-        { '@type': 'Offer', name: 'Growth', price: '99', priceCurrency: 'USD' },
-        { '@type': 'Offer', name: 'Pro', price: '199', priceCurrency: 'USD' },
-      ],
+      offers: PLAN_CATALOG.map((plan) => ({
+        '@type': 'Offer',
+        name: plan.nameEn,
+        price: String(plan.monthlyPrice),
+        priceCurrency: 'USD',
+        billingDuration: 'P1M',
+      })),
     },
   ],
 }
