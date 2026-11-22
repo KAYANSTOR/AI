@@ -64,6 +64,10 @@ export function LoginForm({ returnTo, authConfigured }: { returnTo: string; auth
         />
       </div>
 
+      <div className="flex justify-end">
+        <Link href="/forgot-password" className="text-sm font-semibold text-secondary underline underline-offset-4">نسيت كلمة المرور؟</Link>
+      </div>
+
       <div className="pt-2">
         <button type="submit" disabled={pending} className={submitClass}>
           {pending ? (
