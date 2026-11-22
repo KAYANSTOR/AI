@@ -52,12 +52,25 @@ export function ChannelsConsole({
   canManage: boolean
 }) {
   const [openType, setOpenType] = useState<ChannelType | null>(null)
+  const [busyType, setBusyType] = useState<ChannelType | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
   const openCard = useMemo(() => cards.find((card) => card.type === openType) ?? null, [cards, openType])
 
   return (
-    <div className="space-y-4">
-      <div className="grid gap-3 sm:grid-cols-2">
-        {cards.map((card) => {
+    <div className="space-y-6">
+      {notice ? <p role="status" className="rounded-xl border border-border bg-surface px-4 py-3 text-sm text-text">{notice}</p> : null}
+      <section aria-labelledby="channels-active-title" className="space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h2 id="channels-active-title" className="text-base font-bold text-text">نشطة الآن</h2>
+            <p className="mt-1 text-xs text-text-muted">القنوات المربوطة بنشاطك التجاري</p>
+          </div>
+          <span className="rounded-full border border-success/30 bg-success/10 px-3 py-1 text-xs font-semibold text-success">
+            {cards.filter((card) => card.connected && card.verificationStatus === 'verified' && card.isActive).length} نشطة
+          </span>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+        {cards.filter((card) => card.connected).map((card) => {
           const state = stateOf(card)
           const status: ChannelStatus =
             state === 'verified' ? 'connected' : state === 'pending' || state === 'error' ? 'needsSetup' : 'disconnected'
@@ -81,8 +94,18 @@ export function ChannelsConsole({
 
           const iconBg = card.type === 'whatsapp' ? 'bg-[#25D366]' : 'bg-primary'
 
+          const toggleChannel = async () => {
+            if (!canManage || busyType) return
+            setBusyType(card.type)
+            const result = await setChannelActiveAction({ channelType: card.type, active: !card.isActive })
+            setNotice(result.ok ? (result.message ?? 'تم تحديث حالة القناة.') : (result.error ?? 'تعذّر تحديث القناة.'))
+            setBusyType(null)
+            if (result.ok) window.location.reload()
+          }
+
           return (
-            <UIChannelCard
+            <div key={card.type} className="space-y-2">
+              <UIChannelCard
               key={card.type}
               name={card.label}
               description={card.publicNumber ? `${card.publicNumber} · ${card.provider}` : card.connectionMode === 'coexistence' ? 'يعمل الرقم مع تطبيق WhatsApp Business وKayan AI معاً' : stateCopy[state].hint}
@@ -92,9 +115,50 @@ export function ChannelsConsole({
               actionLabel={state === 'verified' ? 'إدارة القناة' : state === 'pending' ? 'استكمال الربط' : 'ربط القناة'}
               onAction={() => setOpenType(card.type)}
             />
+              <div className="flex items-center justify-between rounded-xl border border-border bg-surface px-4 py-3">
+                <span className="text-xs text-text-muted">{state === 'verified' && card.isActive ? 'الرد والتوجيه مفعّلان' : state === 'disabled' ? 'القناة متوقفة' : 'تحتاج إلى إكمال الإعداد'}</span>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={card.isActive}
+                  aria-label={card.isActive ? 'إيقاف القناة' : 'تفعيل القناة'}
+                  disabled={!canManage || busyType === card.type || state === 'pending' || state === 'error' || state === 'not_connected'}
+                  onClick={toggleChannel}
+                  className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${card.isActive ? 'bg-success' : 'bg-border-strong'}`}
+                >
+                  <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${card.isActive ? 'translate-x-1' : 'translate-x-6'}`} />
+                </button>
+              </div>
+            </div>
           )
         })}
-      </div>
+        </div>
+      </section>
+
+      <section aria-labelledby="channels-available-title" className="space-y-3">
+        <div>
+          <h2 id="channels-available-title" className="text-base font-bold text-text">متاحة للربط</h2>
+          <p className="mt-1 text-xs text-text-muted">اختر قناة لإكمال إعدادها وربطها بحسابك</p>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          {cards.filter((card) => !card.connected).map((card) => {
+            const state = stateOf(card)
+            const getIcon = () => card.type === 'phone' ? <Phone className="h-6 w-6" aria-hidden="true" /> : <MessageSquare className="h-6 w-6" aria-hidden="true" />
+            return (
+              <UIChannelCard
+                key={card.type}
+                name={card.label}
+                description={stateCopy[state].hint}
+                status="disconnected"
+                icon={getIcon()}
+                iconBg="bg-primary"
+                actionLabel="إعداد القناة"
+                onAction={() => setOpenType(card.type)}
+              />
+            )
+          })}
+        </div>
+      </section>
 
       {openCard ? (
         <ChannelDialog card={openCard} canManage={canManage} onClose={() => setOpenType(null)} />
