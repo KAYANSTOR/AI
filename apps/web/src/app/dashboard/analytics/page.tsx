@@ -7,6 +7,7 @@ import {
 import { createClient } from '@/lib/db/server'
 import { getDashboardContext } from '@/lib/dashboard/context'
 import { formatNumber } from '@/lib/i18n/format'
+import { getHoursAgoIso, getDaysAgoIso } from '@/lib/i18n/current-date'
 
 export const dynamic = 'force-dynamic'
 
@@ -14,25 +15,23 @@ export default async function AnalyticsPage() {
   const context = await getDashboardContext()
   if (!context) redirect('/login')
   const db = await createClient()
-  const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
-  const since30d = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
+  const since24h = getHoursAgoIso(24)
+  const since30d = getDaysAgoIso(30)
 
   const [
     { count: totalConversations },
     { count: openConversations },
     { count: totalContacts },
-    { count: totalLeads },
     { data: completedOrders },
   ] = await Promise.all([
     db.from('conversations').select('id', { count: 'exact', head: true }).eq('organization_id', context.organizationId),
     db.from('conversations').select('id', { count: 'exact', head: true }).eq('organization_id', context.organizationId).in('status', ['open', 'needs_human', 'handoff', 'active']),
     db.from('contacts').select('id', { count: 'exact', head: true }).eq('organization_id', context.organizationId),
-    db.from('leads').select('id', { count: 'exact', head: true }).eq('organization_id', context.organizationId),
     db.from('orders').select('total, currency, created_at').eq('organization_id', context.organizationId).eq('status', 'completed').gte('created_at', since30d).limit(2000),
   ])
 
   const orders = completedOrders ?? []
-  const recentOrders = orders.filter((order) => new Date(order.created_at).getTime() >= new Date(since24h).getTime())
+  const recentOrders = orders.filter((order) => String(order.created_at) >= since24h)
   function moneyByCurrency(rows: typeof orders) {
     const totals = new Map<string, number>()
     for (const order of rows) {
@@ -53,8 +52,8 @@ export default async function AnalyticsPage() {
 
   const metricCards = [
     { label: 'إجمالي المحادثات', value: totalConversations ?? 0, icon: MessageSquareText },
+    { label: 'محادثات مفتوحة', value: openConversations ?? 0, icon: MessageSquareText },
     { label: 'جهات الاتصال', value: totalContacts ?? 0, icon: Users },
-    { label: 'العملاء المحتملون', value: totalLeads ?? 0, icon: UserRound },
   ]
   const groups = [
     {
