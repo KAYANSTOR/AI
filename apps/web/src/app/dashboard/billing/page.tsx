@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/db/server'
 import { getDashboardContext } from '@/lib/dashboard/context'
-import { CreditCard, Zap, Phone, Radio, Workflow, Megaphone } from 'lucide-react'
+import { CreditCard, Zap, Radio, Workflow, Megaphone } from 'lucide-react'
 import { formatNumber } from '@/lib/i18n/format'
 import { loadBillingSnapshot } from '@/lib/billing/entitlements'
 import { PLAN_CATALOG } from '@/lib/billing/plan-catalog'
@@ -39,15 +39,6 @@ export default async function BillingPage() {
       color: 'bg-accent',
       used: snapshot.usage.ai_messages ?? 0,
       limit: snapshot.limits.ai_messages ?? 100,
-    },
-    {
-      key: 'voice_minutes',
-      title: 'دقائق الصوت',
-      hint: 'استخدام الوكيل الصوتي',
-      icon: Phone,
-      color: 'bg-secondary',
-      used: snapshot.usage.voice_minutes ?? 0,
-      limit: snapshot.limits.voice_minutes ?? 30,
     },
     {
       key: 'channels',
