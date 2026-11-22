@@ -20,6 +20,7 @@ export function SignupForm({ authConfigured }: { authConfigured: boolean }) {
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
   const [password, setPassword] = useState('')
+  const [acceptedTerms, setAcceptedTerms] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
 
@@ -36,6 +37,7 @@ export function SignupForm({ authConfigured }: { authConfigured: boolean }) {
           email: identityMethod === 'email' ? email : undefined,
           phone: identityMethod === 'phone' ? phone : undefined,
           password,
+          acceptedTerms,
         })
         if (!result.ok) {
           setError(result.error)
@@ -139,7 +141,21 @@ export function SignupForm({ authConfigured }: { authConfigured: boolean }) {
         hint={`${MIN_PASSWORD_LENGTH} أحرف على الأقل.`}
       />
 
-      <button type="submit" disabled={pending} className={submitClass}>
+      <label className="flex items-start gap-3 text-sm leading-6 text-text-muted">
+        <input
+          type="checkbox"
+          checked={acceptedTerms}
+          onChange={(event) => setAcceptedTerms(event.target.checked)}
+          required
+          className="mt-1 size-4 shrink-0 rounded border-border accent-primary"
+        />
+        <span>
+          أوافق على <Link href="/terms" target="_blank" className="font-semibold text-secondary underline">شروط الاستخدام</Link>
+          {' '}و<Link href="/privacy" target="_blank" className="font-semibold text-secondary underline">سياسة الخصوصية</Link>.
+        </span>
+      </label>
+
+      <button type="submit" disabled={pending || !acceptedTerms} className={submitClass}>
         {pending ? <Loader2 size={17} className="animate-spin" aria-hidden="true" /> : null}
         {pending ? 'جارٍ إنشاء الحساب…' : 'إنشاء الحساب'}
       </button>
