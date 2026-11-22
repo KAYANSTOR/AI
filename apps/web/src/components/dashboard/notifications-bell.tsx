@@ -77,11 +77,12 @@ export function NotificationsBell() {
     setItems((current) => current.map((item) => ({ ...item, is_read: true })))
     setUnread(0)
     try {
-      await fetch('/api/notifications', {
+      const response = await fetch('/api/notifications', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ all: true }),
       })
+      if (!response.ok) throw new Error('notifications_update_failed')
     } catch {
       // Re-sync from the server if the optimistic update could not be persisted.
       void load()
@@ -98,7 +99,9 @@ export function NotificationsBell() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: notification.id }),
-      })
+      }).then((response) => {
+        if (!response.ok) void load()
+      }).catch(() => void load())
     }
     setOpen(false)
     const href = linkFor(notification)
