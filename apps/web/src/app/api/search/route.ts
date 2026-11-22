@@ -60,7 +60,7 @@ export async function GET(request: Request) {
       (row.email as string | null) ||
       'عميل غير مسجل',
     subtitle: (row.phone as string | null) || (row.email as string | null) || null,
-    href: '/dashboard/contacts',
+    href: `/dashboard/contacts/${row.id}`,
   }))
 
   if (contactRows.length > 0) {
