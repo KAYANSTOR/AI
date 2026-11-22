@@ -1,87 +1,108 @@
 'use client'
 
+import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Bot, LayoutDashboard, MessageSquare, Menu, TrendingUp } from 'lucide-react'
-import { cx } from '@/components/ui/cx'
+import {
+  Plus, X, Home, Contact, BarChart3, MessageSquareText,
+  CalendarPlus, FilePlus2, ClipboardList, Megaphone, Bot,
+} from 'lucide-react'
 
 const tabs = [
-  { href: '/dashboard', label: 'الرئيسية', icon: LayoutDashboard },
-  { href: '/dashboard/conversations', label: 'المحادثات', icon: MessageSquare },
-  { href: '/dashboard/agent', label: 'الوكيل', icon: Bot },
-  { href: '/dashboard/analytics', label: 'التحليلات', icon: TrendingUp },
-  { href: '/dashboard/settings', label: 'المزيد', icon: Menu },
+  { href: '/dashboard', label: 'الرئيسية', icon: Home },
+  { href: '/dashboard/contacts', label: 'العملاء', icon: Contact },
+  { href: '/dashboard/analytics', label: 'التقارير', icon: BarChart3 },
+  { href: '/dashboard/conversations', label: 'الوارد', icon: MessageSquareText },
 ] as const
 
-function isTabActive(pathname: string, href: string) {
-  if (href === '/dashboard') {
-    return pathname === '/dashboard'
-  }
-  if (href === '/dashboard/settings') {
-    const primary = ['/dashboard', '/dashboard/conversations', '/dashboard/agent', '/dashboard/analytics']
-    const isPrimary = primary.some(
-      (p) => pathname === p || (p !== '/dashboard' && pathname.startsWith(`${p}/`))
-    )
-    return pathname.startsWith('/dashboard/settings') || !isPrimary
-  }
-  return pathname === href || pathname.startsWith(`${href}/`)
-}
+const quickActions = [
+  { href: '/dashboard/contacts', label: 'إضافة عميل', description: 'سجّل بيانات عميل جديد', icon: Contact },
+  { href: '/dashboard/appointments', label: 'موعد جديد', description: 'أضف موعداً للنشاط', icon: CalendarPlus },
+  { href: '/dashboard/quotes/new', label: 'عرض سعر', description: 'أنشئ عرضاً للعميل', icon: FilePlus2 },
+  { href: '/dashboard/orders/new', label: 'طلب جديد', description: 'سجّل طلباً جديداً', icon: ClipboardList },
+  { href: '/dashboard/campaigns', label: 'حملة تواصل', description: 'جهّز حملة كمسودة', icon: Megaphone },
+  { href: '/dashboard/agent', label: 'إعداد المساعد', description: 'راجع الوكيل الذكي', icon: Bot },
+]
 
 export function MobileTabBar() {
   const pathname = usePathname()
+  const [open, setOpen] = useState(false)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const sheetRef = useRef<HTMLDivElement>(null)
+  const isActive = (href: string) => href === '/dashboard'
+    ? pathname === href
+    : pathname === href || pathname.startsWith(href + '/')
 
-  // Hide tab bar inside full-screen active chat on mobile so composer has full view
-  const isChatDetail = pathname.startsWith('/dashboard/conversations/') && pathname !== '/dashboard/conversations'
+  useEffect(() => {
+    if (!open) return
+    const sheet = sheetRef.current
+    const focusable = () => Array.from(sheet?.querySelectorAll<HTMLElement>('a[href],button:not([disabled])') ?? [])
+      .filter((item) => item.getClientRects().length > 0)
+    focusable()[0]?.focus()
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') { setOpen(false); return }
+      if (event.key !== 'Tab') return
+      const items = focusable()
+      const first = items[0]
+      const last = items[items.length - 1]
+      if (!first || !last) return
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus() }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus() }
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [open])
 
-  if (isChatDetail) {
-    return null
+  function close() {
+    setOpen(false)
+    requestAnimationFrame(() => triggerRef.current?.focus())
   }
 
   return (
-    <nav
-      aria-label="التنقل بين أقسام التطبيق"
-      className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-surface pb-[max(8px,env(safe-area-inset-bottom))] backdrop-blur-md shadow-[0_-4px_8px_rgba(31,42,31,0.07)] lg:hidden"
-    >
-      <div className="mx-auto flex h-[67px] max-w-[520px] items-center justify-around px-3 pt-2 pb-1">
-        {tabs.map(({ href, label, icon: Icon }) => {
-          const active = isTabActive(pathname, href)
-          return (
-            <Link
-              key={href}
-              href={href}
-              aria-current={active ? 'page' : undefined}
-              className="group flex min-h-11 flex-1 flex-col items-center justify-center gap-1 py-1"
-            >
-              <div
-                className={cx(
-                  'flex h-[30px] w-[58px] items-center justify-center rounded-full transition-all',
-                  active
-                    ? 'bg-primary-light text-primary font-bold'
-                    : 'text-text-muted group-hover:text-text'
-                )}
-              >
-                <Icon
-                  size={22}
-                  strokeWidth={active ? 2.4 : 1.8}
-                  aria-hidden="true"
-                />
-              </div>
-              <span
-                className={cx(
-                  'text-center leading-tight transition-colors',
-                  active
-                    ? 'text-[14px] font-semibold text-text'
-                    : 'text-[12px] font-medium text-text-muted group-hover:text-text'
-                )}
-              >
-                {label}
-              </span>
+    <>
+      <nav className="dashboard-bottom-nav" aria-label="التنقل الرئيسي">
+        <div className="dashboard-bottom-nav-inner">
+          {tabs.slice(0, 2).map(({ href, label, icon: Icon }) => (
+            <Link key={href} href={href} aria-current={isActive(href) ? 'page' : undefined} className={'dashboard-bottom-tab' + (isActive(href) ? ' is-active' : '')}>
+              <Icon size={20} strokeWidth={isActive(href) ? 2.5 : 1.8} aria-hidden="true" />
+              <span>{label}</span>
             </Link>
-          )
-        })}
-      </div>
-      {/* iOS style home indicator on mobile */}
-      <div className="mx-auto mt-2 h-[5px] w-[134px] rounded-full bg-text/15" />
-    </nav>
+          ))}
+          <button ref={triggerRef} type="button" onClick={() => setOpen(true)} aria-label="فتح الإجراءات السريعة" aria-expanded={open} className="dashboard-fab">
+            <Plus size={27} strokeWidth={2.4} aria-hidden="true" />
+          </button>
+          {tabs.slice(2).map(({ href, label, icon: Icon }) => (
+            <Link key={href} href={href} aria-current={isActive(href) ? 'page' : undefined} className={'dashboard-bottom-tab' + (isActive(href) ? ' is-active' : '')}>
+              <Icon size={20} strokeWidth={isActive(href) ? 2.5 : 1.8} aria-hidden="true" />
+              <span>{label}</span>
+            </Link>
+          ))}
+        </div>
+      </nav>
+      {open ? (
+        <div className="dashboard-sheet-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) close() }}>
+          <section ref={sheetRef} role="dialog" aria-modal="true" aria-labelledby="quick-actions-title" className="dashboard-quick-sheet">
+            <div className="dashboard-sheet-handle" aria-hidden="true" />
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <h2 id="quick-actions-title" className="text-lg font-extrabold text-text">إجراءات سريعة</h2>
+                <p className="mt-1 text-xs text-text-muted">اختر العملية التي تريد تنفيذها</p>
+              </div>
+              <button type="button" onClick={close} aria-label="إغلاق" className="dashboard-icon-button"><X size={18} aria-hidden="true" /></button>
+            </div>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              {quickActions.map(({ href, label, description, icon: Icon }) => (
+                <Link key={href} href={href} onClick={() => setOpen(false)} className="dashboard-quick-action">
+                  <span className="dashboard-quick-action-icon"><Icon size={21} aria-hidden="true" /></span>
+                  <span className="text-sm font-bold text-text">{label}</span>
+                  <span className="text-[11px] leading-5 text-text-muted">{description}</span>
+                </Link>
+              ))}
+            </div>
+            <p className="mt-4 text-center text-[11px] leading-5 text-text-muted">إنشاء حملة يحفظها كمسودة؛ لا يبدأ الإرسال قبل مراجعة الجمهور والموافقة.</p>
+          </section>
+        </div>
+      ) : null}
+    </>
   )
 }
