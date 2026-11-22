@@ -24,7 +24,7 @@ export type WhatsAppConnectionMode =
 export type ChannelConnectionMode = WhatsAppConnectionMode | 'native'
 
 export type ChannelCredentialContract = {
-  provider: 'meta' | 'telegram' | 'website' | 'twilio' | 'vapi'
+  provider: 'meta' | 'telegram' | 'website' | 'twilio' | 'vapi' | 'whatsapp_web'
   credentialTypes: readonly string[]
   secretsMustBeEncrypted: true
 }
@@ -57,6 +57,17 @@ export const CHANNEL_CREDENTIAL_CONTRACTS: Partial<
     credentialTypes: ['widget_signing_secret'],
     secretsMustBeEncrypted: true,
   },
+}
+
+/**
+ * WhatsApp QR is deliberately not stored under the Meta provider credentials.
+ * Its long-lived session material uses a separate provider namespace and must be
+ * encrypted independently from Cloud API / Coexistence access tokens.
+ */
+export const WHATSAPP_QR_SESSION_CREDENTIAL: ChannelCredentialContract = {
+  provider: 'whatsapp_web',
+  credentialTypes: ['session_data'],
+  secretsMustBeEncrypted: true,
 }
 
 export type WebsiteChatWidgetContract = {
