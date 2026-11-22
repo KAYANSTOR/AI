@@ -27,6 +27,32 @@ ALTER TABLE public.channels
   ADD CONSTRAINT channels_whatsapp_connection_mode_check
   CHECK (connection_mode IN ('cloud_api', 'coexistence', 'qr_unofficial'));
 
+-- The current channel management contract is one channel row per organization/type.
+-- Preflight first: never delete, merge, or silently choose between duplicate rows.
+DO $$
+DECLARE
+  duplicate_count BIGINT;
+BEGIN
+  SELECT count(*) INTO duplicate_count
+  FROM (
+    SELECT organization_id, channel_type
+    FROM public.channels
+    GROUP BY organization_id, channel_type
+    HAVING count(*) > 1
+  ) duplicates;
+
+  IF duplicate_count > 0 THEN
+    RAISE EXCEPTION
+      '0061 channel uniqueness preflight failed: % duplicate organization/channel-type group(s); reconcile them before retrying',
+      duplicate_count
+      USING ERRCODE = '23505';
+  END IF;
+END;
+$$;
+
+CREATE UNIQUE INDEX IF NOT EXISTS ux_channels_organization_channel_type
+  ON public.channels (organization_id, channel_type);
+
 -- Supports tenant-scoped channel inventory and health/status queries.
 CREATE INDEX IF NOT EXISTS idx_channels_org_type_active
   ON public.channels (organization_id, channel_type, is_active);
