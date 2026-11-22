@@ -119,6 +119,12 @@ export default async function OnboardingPage() {
           savedDescription: String(profile?.setup_description ?? ''),
           hasSavedAgentSetup: Boolean(profile?.setup_description && profile?.system_prompt_addition),
           canManage: context.role === 'owner' || context.role === 'admin',
+          completed: {
+            basics: Boolean(profile?.business_type_id),
+            connect: Boolean(channel?.is_active && channel.verification_status === 'verified'),
+            agent: Boolean(agentResult.data?.status === 'active' && profile?.setup_description && profile?.system_prompt_addition),
+            test: Boolean(initialOutcome?.passed && initialReply?.status === 'answered'),
+          },
         }}
       />
     </main>
