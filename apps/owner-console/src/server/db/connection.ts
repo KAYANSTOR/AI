@@ -45,8 +45,8 @@ export function getDatabaseMetadata(): {
   const externalPg = Boolean(process.env.DATABASE_URL?.trim());
   const dbPath = process.env.KAYAN_OWNER_DB_PATH ?? 'data/kayan_owner.db';
   return {
-    engine: 'SQLite (Node 22 Native WAL)',
-    mode: externalPg ? 'Hybrid (DATABASE_URL detected)' : 'Local Persistent Store',
+    engine: externalPg ? 'PostgreSQL + SQLite' : 'SQLite (Node 22 Native WAL)',
+    mode: externalPg ? 'PostgreSQL للبيانات التشغيلية + SQLite معزولة لأمن المالك وسجل التدقيق' : 'Local Persistent Store',
     externalPostgresConfigured: externalPg,
     pathLabel: dbPath === ':memory:' ? ':memory:' : path.basename(dbPath),
   };
