@@ -615,7 +615,7 @@ export function AiModelsPage({
                       <div className="text-[11px] font-mono text-[var(--k-ink-muted)]">{String(m.model_id)}</div>
                     </td>
                     <td className="px-4 py-3 font-mono tabular-nums">
-                      {String(m.pricing_source).startsWith('غير متاح') ? 'غير متاح' : '
+                      {String(m.pricing_source).startsWith('غير متاح') ? 'غير متاح' : '—'}
                     </td>
                     <td className="px-4 py-3">
                       <div>{String(m.pricing_source)}</div>
