@@ -73,41 +73,41 @@ export async function platformUsers(f:{search?:string;status?:string;paymentStat
 }
 
 export async function platformUserDetail(id:string) {
-  const [user]=await query(\`SELECT u.id::text id,\${fullName} full_name,u.email,u.phone,u.created_at::text created_at,u.last_sign_in_at::text last_active_at,
+  const [user]=await query(`SELECT u.id::text id,${fullName} full_name,u.email,u.phone,u.created_at::text created_at,u.last_sign_in_at::text last_active_at,
     CASE WHEN u.banned_until>NOW() THEN 'suspended' ELSE 'active' END account_status,u.raw_user_meta_data user_metadata,
-    COALESCE(u.raw_user_meta_data->>'admin_notes','') admin_notes FROM auth.users u WHERE u.id=$1::uuid AND u.deleted_at IS NULL\`,[id]);
+    COALESCE(u.raw_user_meta_data->>'admin_notes','') admin_notes FROM auth.users u WHERE u.id=$1::uuid AND u.deleted_at IS NULL`,[id]);
   if(!user)return null;
   const [workspaces,subscriptions,agents,channels,conversations,usage,payments,entitlements,recentEvents,auditActivity,knowledgeSources,errors]=await Promise.all([
-    query(\`SELECT o.id::text id,o.name,b.id::text business_id,b.name business_name,b.business_type_id business_type,COALESCE(b.status,'active') status,o.created_at::text created_at
-      FROM organization_members m JOIN organizations o ON o.id=m.organization_id LEFT JOIN businesses b ON b.organization_id=o.id WHERE m.user_id=$1::uuid AND m.role='owner' ORDER BY o.created_at DESC\`,[id]),
-    query(\`SELECT s.id::text id,s.organization_id::text organization_id,s.plan_tier plan_code,COALESCE(p.name,INITCAP(s.plan_tier)) plan_name,p.monthly_price::numeric price_monthly,p.currency,s.billing_cycle,s.status,s.period_start::text current_period_start,s.period_end::text current_period_end,s.minutes_used,s.sms_used,s.created_at::text created_at FROM subscriptions s LEFT JOIN plans p ON p.id=s.plan_id JOIN organization_members m ON m.organization_id=s.organization_id WHERE m.user_id=$1::uuid AND m.role='owner' ORDER BY s.created_at DESC\`,[id]),
-    query(\`SELECT a.id::text id,a.organization_id::text organization_id,a.business_id::text workspace_id,a.name,a.model_provider provider_code,a.status,a.temperature,a.locale,a.created_at::text created_at FROM ai_agents a JOIN organization_members m ON m.organization_id=a.organization_id WHERE m.user_id=$1::uuid AND m.role='owner' ORDER BY a.created_at DESC\`,[id]),
-    query(\`SELECT c.id::text id,c.organization_id::text organization_id,c.channel_type,c.is_active,c.verification_status,c.external_identifier,c.created_at::text created_at FROM channels c JOIN organization_members m ON m.organization_id=c.organization_id WHERE m.user_id=$1::uuid AND m.role='owner' ORDER BY c.created_at DESC\`,[id]),
-    query(\`SELECT c.id::text id,c.status,c.state,c.channel_id::text channel_id,c.last_message_at::text last_message_at,ch.channel_type,
+    query(`SELECT o.id::text id,o.name,b.id::text business_id,b.name business_name,b.business_type_id business_type,COALESCE(b.status,'active') status,o.created_at::text created_at
+      FROM organization_members m JOIN organizations o ON o.id=m.organization_id LEFT JOIN businesses b ON b.organization_id=o.id WHERE m.user_id=$1::uuid AND m.role='owner' ORDER BY o.created_at DESC`,[id]),
+    query(`SELECT s.id::text id,s.organization_id::text organization_id,s.plan_tier plan_code,COALESCE(p.name,INITCAP(s.plan_tier)) plan_name,p.monthly_price::numeric price_monthly,p.currency,s.billing_cycle,s.status,s.period_start::text current_period_start,s.period_end::text current_period_end,s.minutes_used,s.sms_used,s.created_at::text created_at FROM subscriptions s LEFT JOIN plans p ON p.id=s.plan_id JOIN organization_members m ON m.organization_id=s.organization_id WHERE m.user_id=$1::uuid AND m.role='owner' ORDER BY s.created_at DESC`,[id]),
+    query(`SELECT a.id::text id,a.organization_id::text organization_id,a.business_id::text workspace_id,a.name,a.model_provider provider_code,a.status,a.temperature,a.locale,a.created_at::text created_at FROM ai_agents a JOIN organization_members m ON m.organization_id=a.organization_id WHERE m.user_id=$1::uuid AND m.role='owner' ORDER BY a.created_at DESC`,[id]),
+    query(`SELECT c.id::text id,c.organization_id::text organization_id,c.channel_type,c.is_active,c.verification_status,c.external_identifier,c.created_at::text created_at FROM channels c JOIN organization_members m ON m.organization_id=c.organization_id WHERE m.user_id=$1::uuid AND m.role='owner' ORDER BY c.created_at DESC`,[id]),
+    query(`SELECT c.id::text id,c.status,c.state,c.channel_id::text channel_id,c.last_message_at::text last_message_at,ch.channel_type,
       COALESCE(NULLIF(ci.external_phone,''),NULLIF(ci.external_username,''),NULLIF(ci.external_user_id,''),ct.first_name) customer_name
       FROM conversations c JOIN organization_members m ON m.organization_id=c.organization_id LEFT JOIN channels ch ON ch.id=c.channel_id
       LEFT JOIN contacts ct ON ct.id=c.contact_id LEFT JOIN LATERAL(SELECT external_phone,external_username,external_user_id FROM contact_identities
         WHERE contact_id=c.contact_id AND channel=ch.channel_type ORDER BY created_at DESC LIMIT 1) ci ON TRUE
-      WHERE m.user_id=$1::uuid AND m.role='owner' ORDER BY c.last_message_at DESC LIMIT 50\`,[id]),
-    query(\`SELECT COUNT(*)::int requests,COALESCE(SUM(COALESCE(r.input_tokens,0)),0)::bigint input_tokens,
+      WHERE m.user_id=$1::uuid AND m.role='owner' ORDER BY c.last_message_at DESC LIMIT 50`,[id]),
+    query(`SELECT COUNT(*)::int requests,COALESCE(SUM(COALESCE(r.input_tokens,0)),0)::bigint input_tokens,
       COALESCE(SUM(COALESCE(r.output_tokens,0)),0)::bigint output_tokens,
       COALESCE(SUM(COALESCE(r.input_tokens,0)+COALESCE(r.output_tokens,0)),0)::bigint total_tokens
-      FROM agent_runs r JOIN organization_members m ON m.organization_id=r.organization_id WHERE m.user_id=$1::uuid AND m.role='owner'\`,[id]),
-    query(\`SELECT i.id::text id,i.external_order_id,i.plan_code,i.amount_usd::numeric amount_usd,i.amount_yer::bigint amount_yer,i.status,i.provider,i.payment_reference,i.created_at::text created_at
-      FROM billing_payment_intents i JOIN organization_members m ON m.organization_id=i.organization_id WHERE m.user_id=$1::uuid AND m.role='owner' ORDER BY i.created_at DESC LIMIT 100\`,[id]),
-    query(\`SELECT oc.organization_id::text organization_id,oc.capability_id feature_key,c.name feature_name,oc.is_enabled,
+      FROM agent_runs r JOIN organization_members m ON m.organization_id=r.organization_id WHERE m.user_id=$1::uuid AND m.role='owner'`,[id]),
+    query(`SELECT i.id::text id,i.external_order_id,i.plan_code,i.amount_usd::numeric amount_usd,i.amount_yer::bigint amount_yer,i.status,i.provider,i.payment_reference,i.created_at::text created_at
+      FROM billing_payment_intents i JOIN organization_members m ON m.organization_id=i.organization_id WHERE m.user_id=$1::uuid AND m.role='owner' ORDER BY i.created_at DESC LIMIT 100`,[id]),
+    query(`SELECT oc.organization_id::text organization_id,oc.capability_id feature_key,c.name feature_name,oc.is_enabled,
       be.limit_value,be.period,be.enabled quota_enabled FROM organization_capabilities oc JOIN capabilities c ON c.id=oc.capability_id
       JOIN organization_members m ON m.organization_id=oc.organization_id LEFT JOIN billing_entitlements be ON be.organization_id=oc.organization_id AND be.feature_key=oc.capability_id
-      WHERE m.user_id=$1::uuid AND m.role='owner' ORDER BY c.name\`,[id]),
-    query(\`SELECT r.id::text id,r.model_provider,r.model,r.status,r.input_tokens,r.output_tokens,r.latency_ms,r.error_code,r.created_at::text created_at
-      FROM agent_runs r JOIN organization_members m ON m.organization_id=r.organization_id WHERE m.user_id=$1::uuid AND m.role='owner' ORDER BY r.created_at DESC LIMIT 30\`,[id]),
-    query(\`SELECT e.id::text id,e.action,e.entity_type,e.entity_id::text entity_id,e.metadata,e.created_at::text created_at
-      FROM audit_events e JOIN organization_members m ON m.organization_id=e.organization_id WHERE m.user_id=$1::uuid AND m.role='owner' ORDER BY e.created_at DESC LIMIT 50\`,[id]),
-    query(\`SELECT d.id::text id,d.file_name title,d.mime_type file_type,d.status,d.created_at::text created_at,
+      WHERE m.user_id=$1::uuid AND m.role='owner' ORDER BY c.name`,[id]),
+    query(`SELECT r.id::text id,r.model_provider,r.model,r.status,r.input_tokens,r.output_tokens,r.latency_ms,r.error_code,r.created_at::text created_at
+      FROM agent_runs r JOIN organization_members m ON m.organization_id=r.organization_id WHERE m.user_id=$1::uuid AND m.role='owner' ORDER BY r.created_at DESC LIMIT 30`,[id]),
+    query(`SELECT e.id::text id,e.action,e.entity_type,e.entity_id::text entity_id,e.metadata,e.created_at::text created_at
+      FROM audit_events e JOIN organization_members m ON m.organization_id=e.organization_id WHERE m.user_id=$1::uuid AND m.role='owner' ORDER BY e.created_at DESC LIMIT 50`,[id]),
+    query(`SELECT d.id::text id,d.file_name title,d.mime_type file_type,d.status,d.created_at::text created_at,
       (SELECT COUNT(*) FROM knowledge_chunks k WHERE k.document_id=d.id)::int chunk_count
-      FROM knowledge_documents d JOIN organization_members m ON m.organization_id=d.organization_id WHERE m.user_id=$1::uuid AND m.role='owner' ORDER BY d.created_at DESC LIMIT 100\`,[id]),
-    query(\`SELECT r.id::text id,r.model_provider,r.model,r.error_code,r.created_at::text created_at
-      FROM agent_runs r JOIN organization_members m ON m.organization_id=r.organization_id WHERE m.user_id=$1::uuid AND m.role='owner' AND r.status='failed' ORDER BY r.created_at DESC LIMIT 50\`,[id])
+      FROM knowledge_documents d JOIN organization_members m ON m.organization_id=d.organization_id WHERE m.user_id=$1::uuid AND m.role='owner' ORDER BY d.created_at DESC LIMIT 100`,[id]),
+    query(`SELECT r.id::text id,r.model_provider,r.model,r.error_code,r.created_at::text created_at
+      FROM agent_runs r JOIN organization_members m ON m.organization_id=r.organization_id WHERE m.user_id=$1::uuid AND m.role='owner' AND r.status='failed' ORDER BY r.created_at DESC LIMIT 50`,[id])
   ]);
   return {user,workspaces,subscriptions,invoices:[],payments,agents,channels,knowledgeSources,conversations,
     aiUsage:{summary:usage[0]||{},recentEvents},auditActivity,sessions:[],errors,entitlements};
@@ -197,7 +197,7 @@ export async function platformAiUsage(f:{userId?:string;agentId?:string;modelId?
 }
 
 export async function platformChannels() {
-  return {items:await query(\`SELECT c.id::text id,c.organization_id::text organization_id,c.business_id::text business_id,c.channel_type,c.connection_mode,
+  return {items:await query(`SELECT c.id::text id,c.organization_id::text organization_id,c.business_id::text business_id,c.channel_type,c.connection_mode,
     c.is_active,c.verification_status,c.provider_account_id,c.external_identifier,c.created_at::text created_at,o.name organization_name,
     COALESCE(NULLIF(c.metadata->>'display_name',''),NULLIF(c.external_identifier,''),c.channel_type) display_name,o.name workspace_name,
     CASE WHEN c.channel_type='whatsapp' AND c.connection_mode='qr_unofficial' AND EXISTS(SELECT 1 FROM whatsapp_gateway_sessions q WHERE q.channel_id=c.id AND q.status='connected') THEN 'connected'
@@ -210,7 +210,7 @@ export async function platformChannels() {
     (SELECT COUNT(*) FROM messages m JOIN conversations v ON v.id=m.conversation_id WHERE v.channel_id=c.id AND m.direction='outbound')::int messages_sent,
     (SELECT COUNT(*) FROM webhook_events e WHERE e.channel_id=c.id AND e.processing_status='failed')::int error_count,
     (SELECT COUNT(*) FROM conversations v WHERE v.channel_id=c.id)::int conversations_count
-    FROM channels c JOIN organizations o ON o.id=c.organization_id ORDER BY c.created_at DESC LIMIT 1000\`)};
+    FROM channels c JOIN organizations o ON o.id=c.organization_id ORDER BY c.created_at DESC LIMIT 1000`)};
 }
 
 export async function platformConversations(f:{search?:string;status?:string;channelType?:string;agentId?:string;userId?:string}={}) {
@@ -347,14 +347,14 @@ export async function platformOverview(period:string,startDate?:string,endDate?:
 
 export async function updatePlatformUser(id:string,p:{fullName?:string;email?:string;phone?:string|null;adminNotes?:string}) {
   const set:string[]=[],args:unknown[]=[];
-  if(p.email!==undefined){args.push(p.email.trim().toLowerCase());set.push(\`email=$\${args.length}\`);}
-  if(p.phone!==undefined){args.push(p.phone||null);set.push(\`phone=$\${args.length}\`);}
+  if(p.email!==undefined){args.push(p.email.trim().toLowerCase());set.push(`email=$${args.length}`);}
+  if(p.phone!==undefined){args.push(p.phone||null);set.push(`phone=$${args.length}`);}
   const metadata:Record<string,string>={};
   if(p.fullName!==undefined)metadata.full_name=p.fullName.trim();
   if(p.adminNotes!==undefined)metadata.admin_notes=String(p.adminNotes||'').slice(0,4000);
-  if(Object.keys(metadata).length){args.push(JSON.stringify(metadata));set.push(\`raw_user_meta_data=COALESCE(raw_user_meta_data,'{}'::jsonb)||$\${args.length}::jsonb\`);}
+  if(Object.keys(metadata).length){args.push(JSON.stringify(metadata));set.push(`raw_user_meta_data=COALESCE(raw_user_meta_data,'{}'::jsonb)||$${args.length}::jsonb`);}
   if(!set.length)throw new Error('لا توجد تغييرات لحفظها.');args.push(id);
-  const [r]=await query(\`UPDATE auth.users SET \${set.join(',')},updated_at=NOW() WHERE id=$\${args.length}::uuid AND deleted_at IS NULL RETURNING id::text id,email,phone\`,args);
+  const [r]=await query(`UPDATE auth.users SET ${set.join(',')},updated_at=NOW() WHERE id=$${args.length}::uuid AND deleted_at IS NULL RETURNING id::text id,email,phone`,args);
   if(!r)throw new Error('المستخدم غير موجود.');return r;
 }
 
@@ -402,42 +402,42 @@ export async function platformEntitlementOverride(p:{userId:string;featureKey:st
 
 
 export async function platformConversationDetail(id:string) {
-  const [conversation]=await query(\`SELECT c.id::text id,c.organization_id::text organization_id,c.status,c.state,c.priority,c.handoff_reason,
+  const [conversation]=await query(`SELECT c.id::text id,c.organization_id::text organization_id,c.status,c.state,c.priority,c.handoff_reason,
     c.last_message_at::text last_message_at,ch.channel_type,o.name workspace_name,
     COALESCE(NULLIF(ci.external_phone,''),NULLIF(ci.external_username,''),NULLIF(ci.external_user_id,''),NULLIF(ct.first_name,''),'عميل') customer_handle
     FROM conversations c JOIN organizations o ON o.id=c.organization_id LEFT JOIN channels ch ON ch.id=c.channel_id
     LEFT JOIN contacts ct ON ct.id=c.contact_id LEFT JOIN LATERAL(SELECT external_phone,external_username,external_user_id FROM contact_identities
-      WHERE contact_id=c.contact_id AND channel=ch.channel_type ORDER BY created_at DESC LIMIT 1) ci ON TRUE WHERE c.id=$1::uuid\`,[id]);
+      WHERE contact_id=c.contact_id AND channel=ch.channel_type ORDER BY created_at DESC LIMIT 1) ci ON TRUE WHERE c.id=$1::uuid`,[id]);
   if(!conversation)return null;
-  const messages=await query(\`SELECT id::text id,CASE WHEN direction='outbound' THEN 'assistant' ELSE 'customer' END sender_type,
-    direction,message_type,content,created_at::text created_at FROM messages WHERE conversation_id=$1::uuid ORDER BY created_at ASC LIMIT 500\`,[id]);
+  const messages=await query(`SELECT id::text id,CASE WHEN direction='outbound' THEN 'assistant' ELSE 'customer' END sender_type,
+    direction,message_type,content,created_at::text created_at FROM messages WHERE conversation_id=$1::uuid ORDER BY created_at ASC LIMIT 500`,[id]);
   return {conversation,messages};
 }
 
 export async function platformQueueConversationIntervention(id:string,content:string,reason:string) {
   const body=content.trim(),why=reason.trim();
   if(!body||!why)throw new Error('نص التدخل وسببه الإداري مطلوبان.');
-  const [target]=await query(\`SELECT c.id::text id,c.organization_id::text organization_id,c.business_id::text business_id,
+  const [target]=await query(`SELECT c.id::text id,c.organization_id::text organization_id,c.business_id::text business_id,
     c.channel_id::text channel_id,ch.channel_type,ch.is_active,COALESCE(ci.external_phone,ci.external_user_id,ci.external_username) recipient
     FROM conversations c JOIN channels ch ON ch.id=c.channel_id
     LEFT JOIN LATERAL(SELECT external_phone,external_user_id,external_username FROM contact_identities
-      WHERE contact_id=c.contact_id AND channel=ch.channel_type ORDER BY created_at DESC LIMIT 1) ci ON TRUE WHERE c.id=$1::uuid\`,[id]);
+      WHERE contact_id=c.contact_id AND channel=ch.channel_type ORDER BY created_at DESC LIMIT 1) ci ON TRUE WHERE c.id=$1::uuid`,[id]);
   if(!target)throw new Error('المحادثة غير موجودة.');
   if(!target.is_active||!target.recipient)throw new Error('القناة متوقفة أو لا يوجد عنوان إرسال موثوق للعميل.');
   const idempotencyKey='owner-intervention:'+crypto.randomUUID();
-  await query(\`INSERT INTO outbox_events(organization_id,business_id,channel_id,event_type,idempotency_key,recipient,payload,status,scheduled_at)
-    VALUES($1::uuid,$2::uuid,$3::uuid,'message.send',$4,$5,$6::jsonb,'pending',NOW())\`,
+  await query(`INSERT INTO outbox_events(organization_id,business_id,channel_id,event_type,idempotency_key,recipient,payload,status,scheduled_at)
+    VALUES($1::uuid,$2::uuid,$3::uuid,'message.send',$4,$5,$6::jsonb,'pending',NOW())`,
     [target.organization_id,target.business_id,target.channel_id,idempotencyKey,target.recipient,JSON.stringify({body,conversation_id:id,source:'owner_console_intervention'})]);
-  await query(\`INSERT INTO audit_events(organization_id,business_id,actor_type,action,entity_type,entity_id,metadata)
-    VALUES($1::uuid,$2::uuid,'system','owner.conversation_intervention_queued','conversation',$3::uuid,$4::jsonb)\`,
+  await query(`INSERT INTO audit_events(organization_id,business_id,actor_type,action,entity_type,entity_id,metadata)
+    VALUES($1::uuid,$2::uuid,'system','owner.conversation_intervention_queued','conversation',$3::uuid,$4::jsonb)`,
     [target.organization_id,target.business_id,id,JSON.stringify({reason:why,idempotency_key:idempotencyKey,channel_type:target.channel_type})]);
   return await platformConversationDetail(id);
 }
 
 export async function updatePlatformWorkspaceStatus(organizationId:string,status:string) {
   if(!['active','suspended','archived'].includes(status))throw new Error('حالة مساحة العمل غير صالحة.');
-  const rows=await query(\`UPDATE businesses SET status=$2,updated_at=NOW() WHERE organization_id=$1::uuid
-    RETURNING id::text id,organization_id::text organization_id,name,status\`,[organizationId,status]);
+  const rows=await query(`UPDATE businesses SET status=$2,updated_at=NOW() WHERE organization_id=$1::uuid
+    RETURNING id::text id,organization_id::text organization_id,name,status`,[organizationId,status]);
   if(!rows.length)throw new Error('لم يتم العثور على نشاط مرتبط بمساحة العمل.');
   return {organizationId,status,businesses:rows};
 }
@@ -459,15 +459,15 @@ export async function savePlatformPlan(p:Record<string,unknown>,id?:string) {
   if(!['USD','YER','SAR'].includes(currency))throw new Error('عملة الباقة غير مدعومة.');
   const active=p.status!=='archived';
   if(id){
-    const [row]=await query(\`UPDATE plans SET code=$2,name=$3,description=$4,monthly_price=$5,currency=$6,
+    const [row]=await query(`UPDATE plans SET code=$2,name=$3,description=$4,monthly_price=$5,currency=$6,
       limits=COALESCE(limits,'{}'::jsonb)||$7::jsonb,is_active=$8,updated_at=NOW() WHERE id=$1::uuid
-      RETURNING id::text id,code,name,description,monthly_price::numeric price_monthly,currency,limits,is_active\`,
+      RETURNING id::text id,code,name,description,monthly_price::numeric price_monthly,currency,limits,is_active`,
       [id,code,name,description,monthly,currency,JSON.stringify(limits),active]);
     if(!row)throw new Error('الباقة غير موجودة.');
     return row;
   }
-  const [row]=await query(\`INSERT INTO plans(code,name,description,monthly_price,currency,limits,is_active)
-    VALUES($1,$2,$3,$4,$5,$6::jsonb,$7) RETURNING id::text id,code,name,description,monthly_price::numeric price_monthly,currency,limits,is_active\`,
+  const [row]=await query(`INSERT INTO plans(code,name,description,monthly_price,currency,limits,is_active)
+    VALUES($1,$2,$3,$4,$5,$6::jsonb,$7) RETURNING id::text id,code,name,description,monthly_price::numeric price_monthly,currency,limits,is_active`,
     [code,name,description,monthly,currency,JSON.stringify(limits),active]);
   return row;
 }
@@ -475,57 +475,57 @@ export async function savePlatformPlan(p:Record<string,unknown>,id?:string) {
 export async function platformCreateWorkspace(p:{ownerUserId:string;name:string;businessType?:string}) {
   const name=p.name.trim(),owner=p.ownerUserId.trim();
   if(!name||!owner)throw new Error('اسم مساحة العمل ومالكها مطلوبان.');
-  const [type]=await query(\`SELECT id FROM business_types WHERE id=$1\`,[p.businessType||'appointments']);
+  const [type]=await query(`SELECT id FROM business_types WHERE id=$1`,[p.businessType||'appointments']);
   const businessType=type?.id||'appointments';
   return await sql().begin(async tx=>{
-    const [org]=await tx.unsafe(\`INSERT INTO organizations(name) VALUES($1) RETURNING id::text id,name,created_at::text created_at\`,[name]);
-    await tx.unsafe(\`INSERT INTO organization_members(organization_id,user_id,role) VALUES($1::uuid,$2::uuid,'owner') ON CONFLICT(organization_id,user_id) DO NOTHING\`,[org.id,owner]);
+    const [org]=await tx.unsafe(`INSERT INTO organizations(name) VALUES($1) RETURNING id::text id,name,created_at::text created_at`,[name]);
+    await tx.unsafe(`INSERT INTO organization_members(organization_id,user_id,role) VALUES($1::uuid,$2::uuid,'owner') ON CONFLICT(organization_id,user_id) DO NOTHING`,[org.id,owner]);
     const slug=(name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,90)||'business')+'-'+crypto.randomUUID().slice(0,8);
-    const [business]=await tx.unsafe(\`INSERT INTO businesses(organization_id,name,slug,business_type_id,timezone,status)
-      VALUES($1::uuid,$2,$3,$4,'UTC','active') RETURNING id::text id,name,slug,business_type_id,status\`,[org.id,name,slug,businessType]);
-    await tx.unsafe(\`INSERT INTO business_profiles(organization_id,business_id,industry,timezone,business_type_id)
-      VALUES($1::uuid,$2::uuid,$3,'UTC',$3) ON CONFLICT(organization_id) DO UPDATE SET business_id=EXCLUDED.business_id,industry=EXCLUDED.industry,business_type_id=EXCLUDED.business_type_id\`,
+    const [business]=await tx.unsafe(`INSERT INTO businesses(organization_id,name,slug,business_type_id,timezone,status)
+      VALUES($1::uuid,$2,$3,$4,'UTC','active') RETURNING id::text id,name,slug,business_type_id,status`,[org.id,name,slug,businessType]);
+    await tx.unsafe(`INSERT INTO business_profiles(organization_id,business_id,industry,timezone,business_type_id)
+      VALUES($1::uuid,$2::uuid,$3,'UTC',$3) ON CONFLICT(organization_id) DO UPDATE SET business_id=EXCLUDED.business_id,industry=EXCLUDED.industry,business_type_id=EXCLUDED.business_type_id`,
       [org.id,business.id,businessType]);
-    const [agent]=await tx.unsafe(\`INSERT INTO ai_agents(organization_id,business_id,name,slug,model_provider,temperature,status,locale)
-      VALUES($1::uuid,$2::uuid,$3,'frontdesk','anthropic',0.2,'active','ar') RETURNING id::text id\`,[org.id,business.id,name+' AI']);
-    await tx.unsafe(\`INSERT INTO agent_tool_policies(agent_id,tool_name,is_allowed,requires_confirmation) VALUES
+    const [agent]=await tx.unsafe(`INSERT INTO ai_agents(organization_id,business_id,name,slug,model_provider,temperature,status,locale)
+      VALUES($1::uuid,$2::uuid,$3,'frontdesk','anthropic',0.2,'active','ar') RETURNING id::text id`,[org.id,business.id,name+' AI']);
+    await tx.unsafe(`INSERT INTO agent_tool_policies(agent_id,tool_name,is_allowed,requires_confirmation) VALUES
       ($1::uuid,'get_customer',TRUE,FALSE),($1::uuid,'find_available_slots',TRUE,FALSE),($1::uuid,'create_appointment',TRUE,TRUE),($1::uuid,'request_human_handoff',TRUE,FALSE)
-      ON CONFLICT(agent_id,tool_name) DO NOTHING\`,[agent.id]);
-    await tx.unsafe(\`INSERT INTO agent_prompt_versions(agent_id,version,system_prompt_addition,status,published_at)
-      VALUES($1::uuid,1,NULL,'published',NOW()) ON CONFLICT(agent_id,version) DO NOTHING\`,[agent.id]);
-    await tx.unsafe(\`INSERT INTO organization_capabilities(organization_id,capability_id,is_enabled)
+      ON CONFLICT(agent_id,tool_name) DO NOTHING`,[agent.id]);
+    await tx.unsafe(`INSERT INTO agent_prompt_versions(agent_id,version,system_prompt_addition,status,published_at)
+      VALUES($1::uuid,1,NULL,'published',NOW()) ON CONFLICT(agent_id,version) DO NOTHING`,[agent.id]);
+    await tx.unsafe(`INSERT INTO organization_capabilities(organization_id,capability_id,is_enabled)
       SELECT $1::uuid,capability_id,TRUE FROM business_type_capabilities WHERE business_type_id=$2 AND is_default=TRUE
-      ON CONFLICT(organization_id,capability_id) DO NOTHING\`,[org.id,businessType]);
-    await tx.unsafe(\`INSERT INTO billing_entitlements(organization_id,feature_key,limit_value,period,enabled)
+      ON CONFLICT(organization_id,capability_id) DO NOTHING`,[org.id,businessType]);
+    await tx.unsafe(`INSERT INTO billing_entitlements(organization_id,feature_key,limit_value,period,enabled)
       VALUES($1::uuid,'ai_messages_monthly',10000,'monthly',TRUE),($1::uuid,'phone_minutes_monthly',300,'monthly',TRUE),($1::uuid,'sms_monthly',500,'monthly',TRUE)
-      ON CONFLICT(organization_id,feature_key) DO NOTHING\`,[org.id]);
+      ON CONFLICT(organization_id,feature_key) DO NOTHING`,[org.id]);
     return {organization:org,business,agentId:agent.id};
   });
 }
 
 export async function platformAutomations() {
   const [workflows,campaigns,followups]=await Promise.all([
-    query(\`SELECT w.id::text id,'workflow' automation_type,w.name,w.description,w.status,w.trigger_type,w.created_at::text created_at,
+    query(`SELECT w.id::text id,'workflow' automation_type,w.name,w.description,w.status,w.trigger_type,w.created_at::text created_at,
       o.name workspace_name,COALESCE(u.email,'—') owner_name,(SELECT COUNT(*) FROM workflow_runs r WHERE r.workflow_id=w.id)::int total_runs,
       (SELECT COUNT(*) FROM workflow_runs r WHERE r.workflow_id=w.id AND r.status='completed')::int success_runs,
       (SELECT COUNT(*) FROM workflow_runs r WHERE r.workflow_id=w.id AND r.status='failed')::int failed_runs,
       COALESCE((SELECT AVG(EXTRACT(EPOCH FROM (r.completed_at-r.started_at))*1000) FROM workflow_runs r WHERE r.workflow_id=w.id AND r.completed_at IS NOT NULL),0)::int avg_duration_ms
       FROM workflows w JOIN organizations o ON o.id=w.organization_id
       LEFT JOIN LATERAL(SELECT user_id FROM organization_members WHERE organization_id=o.id AND role='owner' ORDER BY created_at LIMIT 1) own ON TRUE
-      LEFT JOIN auth.users u ON u.id=own.user_id ORDER BY w.created_at DESC LIMIT 500\`),
-    query(\`SELECT c.id::text id,'campaign' automation_type,c.name,c.channel,c.status,c.scheduled_at::text scheduled_at,c.created_at::text created_at,
+      LEFT JOIN auth.users u ON u.id=own.user_id ORDER BY w.created_at DESC LIMIT 500`),
+    query(`SELECT c.id::text id,'campaign' automation_type,c.name,c.channel,c.status,c.scheduled_at::text scheduled_at,c.created_at::text created_at,
       o.name workspace_name,COALESCE(u.email,'—') owner_name,(SELECT COUNT(*) FROM campaign_recipients r WHERE r.campaign_id=c.id)::int total_runs,
       (SELECT COUNT(*) FROM campaign_recipients r WHERE r.campaign_id=c.id AND r.status='sent')::int success_runs,
       (SELECT COUNT(*) FROM campaign_recipients r WHERE r.campaign_id=c.id AND r.status='failed')::int failed_runs,0::int avg_duration_ms
       FROM campaigns c JOIN organizations o ON o.id=c.organization_id
       LEFT JOIN LATERAL(SELECT user_id FROM organization_members WHERE organization_id=o.id AND role='owner' ORDER BY created_at LIMIT 1) own ON TRUE
-      LEFT JOIN auth.users u ON u.id=own.user_id ORDER BY c.created_at DESC LIMIT 500\`),
-    query(\`SELECT f.id::text id,'followup' automation_type,f.name,f.trigger_type,f.is_active,f.created_at::text created_at,
+      LEFT JOIN auth.users u ON u.id=own.user_id ORDER BY c.created_at DESC LIMIT 500`),
+    query(`SELECT f.id::text id,'followup' automation_type,f.name,f.trigger_type,f.is_active,f.created_at::text created_at,
       o.name workspace_name,COALESCE(u.email,'—') owner_name,(SELECT COUNT(*) FROM followup_enrollments e WHERE e.sequence_id=f.id)::int total_runs,
       (SELECT COUNT(*) FROM followup_enrollments e WHERE e.sequence_id=f.id AND e.status='sent')::int success_runs,0::int failed_runs,0::int avg_duration_ms
       FROM followup_sequences f JOIN organizations o ON o.id=f.organization_id
       LEFT JOIN LATERAL(SELECT user_id FROM organization_members WHERE organization_id=o.id AND role='owner' ORDER BY created_at LIMIT 1) own ON TRUE
-      LEFT JOIN auth.users u ON u.id=own.user_id ORDER BY f.created_at DESC LIMIT 500\`)
+      LEFT JOIN auth.users u ON u.id=own.user_id ORDER BY f.created_at DESC LIMIT 500`)
   ]);
   const items=[...workflows.map((r:any)=>({...r,id:'workflow:'+r.id,status:r.status==='published'?'active':r.status==='retired'?'disabled_by_owner':'paused'})),
     ...campaigns.map((r:any)=>({...r,id:'campaign:'+r.id})),
@@ -535,17 +535,17 @@ export async function platformAutomations() {
 
 export async function createPlatformAutomation(p:{workspaceId:string;name:string;automationType:string}) {
   const name=p.name.trim();if(!name||!p.workspaceId)throw new Error('اسم الأتمتة ومساحة العمل مطلوبان.');
-  const [business]=await query(\`SELECT id::text id FROM businesses WHERE organization_id=$1::uuid ORDER BY created_at LIMIT 1\`,[p.workspaceId]);
+  const [business]=await query(`SELECT id::text id FROM businesses WHERE organization_id=$1::uuid ORDER BY created_at LIMIT 1`,[p.workspaceId]);
   if(!business)throw new Error('لا يوجد نشاط مرتبط بمساحة العمل.');
   if(p.automationType==='workflow'){
-    const [row]=await query(\`INSERT INTO workflows(organization_id,business_id,name,status,trigger_type,definition)
+    const [row]=await query(`INSERT INTO workflows(organization_id,business_id,name,status,trigger_type,definition)
       VALUES($1::uuid,$2::uuid,$3,'draft','manual','{"nodes":[],"edges":[]}'::jsonb)
-      RETURNING id::text id,name,status,trigger_type,created_at::text created_at\`,[p.workspaceId,business.id,name]);
+      RETURNING id::text id,name,status,trigger_type,created_at::text created_at`,[p.workspaceId,business.id,name]);
     return {...row,id:'workflow:'+row.id,automation_type:'workflow'};
   }
   if(p.automationType==='followup'){
-    const [row]=await query(\`INSERT INTO followup_sequences(organization_id,name,trigger_type,is_active)
-      VALUES($1::uuid,$2,'new_lead',TRUE) RETURNING id::text id,name,trigger_type,is_active,created_at::text created_at\`,[p.workspaceId,name]);
+    const [row]=await query(`INSERT INTO followup_sequences(organization_id,name,trigger_type,is_active)
+      VALUES($1::uuid,$2,'new_lead',TRUE) RETURNING id::text id,name,trigger_type,is_active,created_at::text created_at`,[p.workspaceId,name]);
     return {...row,id:'followup:'+row.id,automation_type:'followup',status:'active'};
   }
   throw new Error('هذا النوع يحتاج إعدادات تشغيل ومحتوى غير متوفرة في نموذج الإدارة الحالي؛ لم يتم إنشاء سجل ناقص.');
@@ -555,16 +555,16 @@ export async function updatePlatformAutomation(id:string,status:string) {
   if(!['active','disabled_by_owner'].includes(status))throw new Error('حالة الأتمتة غير صالحة.');
   const [kind,rawId]=id.split(':');if(!rawId)throw new Error('معرّف الأتمتة غير صالح.');
   if(kind==='workflow'){
-    const [row]=await query(\`UPDATE workflows SET status=$2,published_at=CASE WHEN $2='published' THEN NOW() ELSE published_at END,updated_at=NOW()
-      WHERE id=$1::uuid RETURNING id::text id,name,status\`,[rawId,status==='active'?'published':'retired']);
+    const [row]=await query(`UPDATE workflows SET status=$2,published_at=CASE WHEN $2='published' THEN NOW() ELSE published_at END,updated_at=NOW()
+      WHERE id=$1::uuid RETURNING id::text id,name,status`,[rawId,status==='active'?'published':'retired']);
     if(!row)throw new Error('الأتمتة غير موجودة.');return {...row,id:'workflow:'+row.id};
   }
   if(kind==='followup'){
-    const [row]=await query(\`UPDATE followup_sequences SET is_active=$2,updated_at=NOW() WHERE id=$1::uuid RETURNING id::text id,name,is_active\`,[rawId,status==='active']);
+    const [row]=await query(`UPDATE followup_sequences SET is_active=$2,updated_at=NOW() WHERE id=$1::uuid RETURNING id::text id,name,is_active`,[rawId,status==='active']);
     if(!row)throw new Error('الأتمتة غير موجودة.');return {...row,id:'followup:'+row.id,status};
   }
   if(kind==='campaign'){
-    const [row]=await query(\`UPDATE campaigns SET status=$2,updated_at=NOW() WHERE id=$1::uuid RETURNING id::text id,name,status\`,[rawId,status==='active'?'running':'paused']);
+    const [row]=await query(`UPDATE campaigns SET status=$2,updated_at=NOW() WHERE id=$1::uuid RETURNING id::text id,name,status`,[rawId,status==='active'?'running':'paused']);
     if(!row)throw new Error('الحملة غير موجودة.');return {...row,id:'campaign:'+row.id};
   }
   throw new Error('نوع الأتمتة غير مدعوم.');
@@ -572,20 +572,20 @@ export async function updatePlatformAutomation(id:string,status:string) {
 
 export async function platformKnowledge() {
   const [documents,legacy]=await Promise.all([
-    query(\`SELECT d.id::text id,d.organization_id::text organization_id,d.file_name title,d.mime_type file_type,d.status,
+    query(`SELECT d.id::text id,d.organization_id::text organization_id,d.file_name title,d.mime_type file_type,d.status,
       CASE WHEN d.status='completed' THEN 'indexed' ELSE d.status END processing_status,
       CASE WHEN (SELECT COUNT(*) FROM knowledge_chunks k WHERE k.document_id=d.id)>0 THEN 'indexed' ELSE 'pending' END search_index_status,
       d.created_at::text created_at,d.updated_at::text updated_at,o.name workspace_name,COALESCE(u.email,'—') owner_name,
       octet_length(d.original_text)::bigint storage_bytes,(SELECT COUNT(*) FROM knowledge_chunks k WHERE k.document_id=d.id)::int chunk_count
       FROM knowledge_documents d JOIN organizations o ON o.id=d.organization_id
-      LEFT JOIN auth.users u ON u.id=d.created_by ORDER BY d.created_at DESC LIMIT 1000\`),
-    query(\`SELECT k.id::text id,k.organization_id::text organization_id,k.title,'text/plain' file_type,
+      LEFT JOIN auth.users u ON u.id=d.created_by ORDER BY d.created_at DESC LIMIT 1000`),
+    query(`SELECT k.id::text id,k.organization_id::text organization_id,k.title,'text/plain' file_type,
       CASE WHEN k.is_active THEN 'indexed' ELSE 'archived' END processing_status,
       CASE WHEN k.is_active THEN 'indexed' ELSE 'archived' END search_index_status,k.created_at::text created_at,k.updated_at::text updated_at,
       o.name workspace_name,COALESCE(u.email,'—') owner_name,octet_length(k.content)::bigint storage_bytes,1::int chunk_count
       FROM knowledge_base k JOIN organizations o ON o.id=k.organization_id
       LEFT JOIN LATERAL(SELECT user_id FROM organization_members WHERE organization_id=o.id AND role='owner' ORDER BY created_at LIMIT 1) own ON TRUE
-      LEFT JOIN auth.users u ON u.id=own.user_id ORDER BY k.created_at DESC LIMIT 1000\`)
+      LEFT JOIN auth.users u ON u.id=own.user_id ORDER BY k.created_at DESC LIMIT 1000`)
   ]);
   const items=[...documents,...legacy].sort((a:any,b:any)=>String(b.created_at).localeCompare(String(a.created_at)));
   const summary={total_sources:items.length,total_chunks:items.reduce((n:any,r:any)=>n+Number(r.chunk_count||0),0),
@@ -595,13 +595,13 @@ export async function platformKnowledge() {
 
 export async function platformApiIntegrations() {
   const [apiKeys,webhookEvents]=await Promise.all([
-    query(\`SELECT k.id::text id,k.organization_id::text organization_id,o.name workspace_name,k.name,k.key_prefix,k.scopes,
+    query(`SELECT k.id::text id,k.organization_id::text organization_id,o.name workspace_name,k.name,k.key_prefix,k.scopes,
       k.last_used_at::text last_used_at,k.revoked_at::text revoked_at,k.created_at::text created_at,
       CASE WHEN k.revoked_at IS NULL THEN 'active' ELSE 'revoked' END status,'غير محدد'::text rate_limit_per_min
-      FROM organization_api_keys k JOIN organizations o ON o.id=k.organization_id ORDER BY k.created_at DESC LIMIT 1000\`),
-    query(\`SELECT e.id::text id,e.organization_id::text organization_id,e.provider,e.event_type,e.processing_status status,
+      FROM organization_api_keys k JOIN organizations o ON o.id=k.organization_id ORDER BY k.created_at DESC LIMIT 1000`),
+    query(`SELECT e.id::text id,e.organization_id::text organization_id,e.provider,e.event_type,e.processing_status status,
       e.error_message,e.received_at::text created_at,e.processed_at::text processed_at,o.name workspace_name
-      FROM webhook_events e LEFT JOIN organizations o ON o.id=e.organization_id ORDER BY e.received_at DESC LIMIT 100\`)
+      FROM webhook_events e LEFT JOIN organizations o ON o.id=e.organization_id ORDER BY e.received_at DESC LIMIT 100`)
   ]);
   return {apiKeys,webhooks:[],webhookEvents,dataLimitations:{webhooks:'قاعدة المنصة تسجل أحداث Webhook الواردة، لكنها لا تحتوي حالياً على جدول تعريف Webhooks الصادرة.'}};
 }
@@ -609,25 +609,25 @@ export async function platformApiIntegrations() {
 export async function createPlatformApiKey(p:{organizationId:string;name:string}) {
   const name=p.name.trim();if(!name||!p.organizationId)throw new Error('اسم المفتاح ومساحة العمل مطلوبان.');
   const raw='fdk_'+crypto.randomBytes(24).toString('base64url'),prefix=raw.slice(0,12),hash=sha256Hex(raw);
-  const [row]=await query(\`INSERT INTO organization_api_keys(organization_id,name,key_prefix,key_hash,scopes)
-    VALUES($1::uuid,$2,$3,$4,ARRAY['read']::text[]) RETURNING id::text id,key_prefix\`,[p.organizationId,name,prefix,hash]);
+  const [row]=await query(`INSERT INTO organization_api_keys(organization_id,name,key_prefix,key_hash,scopes)
+    VALUES($1::uuid,$2,$3,$4,ARRAY['read']::text[]) RETURNING id::text id,key_prefix`,[p.organizationId,name,prefix,hash]);
   if(!row)throw new Error('تعذر إصدار مفتاح API.');
   return {id:row.id,oneTimeSecret:raw,prefix:row.key_prefix};
 }
 
 export async function revokePlatformApiKey(id:string) {
-  const [row]=await query(\`UPDATE organization_api_keys SET revoked_at=NOW() WHERE id=$1::uuid AND revoked_at IS NULL
-    RETURNING id::text id,revoked_at::text revoked_at\`,[id]);
+  const [row]=await query(`UPDATE organization_api_keys SET revoked_at=NOW() WHERE id=$1::uuid AND revoked_at IS NULL
+    RETURNING id::text id,revoked_at::text revoked_at`,[id]);
   if(!row)throw new Error('مفتاح API غير موجود أو مبطل مسبقاً.');
   return row;
 }
 
 export async function platformMonitoring() {
   const started=Date.now();await platformPing();const latencyMs=Date.now()-started;
-  const [counts]=await query(\`SELECT (SELECT COUNT(*) FROM agent_runs WHERE status='failed' AND created_at>NOW()-INTERVAL '24 hours')::int failed_runs,
+  const [counts]=await query(`SELECT (SELECT COUNT(*) FROM agent_runs WHERE status='failed' AND created_at>NOW()-INTERVAL '24 hours')::int failed_runs,
     (SELECT COUNT(*) FROM webhook_events WHERE processing_status='failed' AND received_at>NOW()-INTERVAL '24 hours')::int failed_webhooks,
-    (SELECT COUNT(*) FROM outbox_events WHERE status IN('failed','dead_letter') AND updated_at>NOW()-INTERVAL '24 hours')::int failed_outbound\`);
-  const migrations=await query(\`SELECT version::text version,name,applied_at::text applied_at FROM public.schema_migrations WHERE failed_at IS NULL ORDER BY version DESC LIMIT 30\`);
+    (SELECT COUNT(*) FROM outbox_events WHERE status IN('failed','dead_letter') AND updated_at>NOW()-INTERVAL '24 hours')::int failed_outbound`);
+  const migrations=await query(`SELECT version::text version,name,applied_at::text applied_at FROM public.schema_migrations WHERE failed_at IS NULL ORDER BY version DESC LIMIT 30`);
   const alerts=[];
   if(Number(counts?.failed_runs||0)>0)alerts.push({id:'failed-agent-runs',title:'إخفاقات تشغيل الوكلاء',description:String(counts.failed_runs)+' إخفاقاً خلال آخر 24 ساعة',acknowledged:0,severity:'warning'});
   if(Number(counts?.failed_webhooks||0)>0)alerts.push({id:'failed-webhooks',title:'أحداث Webhook فاشلة',description:String(counts.failed_webhooks)+' حدثاً فاشلاً خلال آخر 24 ساعة',acknowledged:0,severity:'warning'});
@@ -638,28 +638,28 @@ export async function platformMonitoring() {
 }
 
 export async function platformLogs(f:{category?:string;severity?:string;resolved?:string}) {
-  const rows=await query(\`SELECT id::text id,'ai' category,CASE WHEN status='failed' THEN 'error' ELSE 'warning' END severity,
+  const rows=await query(`SELECT id::text id,'ai' category,CASE WHEN status='failed' THEN 'error' ELSE 'warning' END severity,
     COALESCE(error_code,'agent_run_failed') message,COALESCE(error_code,'') details,status='completed' resolved,created_at::text created_at,
-    'agent_run' source FROM agent_runs WHERE status IN('failed','blocked') ORDER BY created_at DESC LIMIT 200\`);
-  const webhookRows=await query(\`SELECT id::text id,'webhook' category,'error' severity,COALESCE(error_message,'webhook_failed') message,
+    'agent_run' source FROM agent_runs WHERE status IN('failed','blocked') ORDER BY created_at DESC LIMIT 200`);
+  const webhookRows=await query(`SELECT id::text id,'webhook' category,'error' severity,COALESCE(error_message,'webhook_failed') message,
     provider||' · '||COALESCE(event_type,'') details,FALSE resolved,received_at::text created_at,'webhook_event' source
-    FROM webhook_events WHERE processing_status='failed' ORDER BY received_at DESC LIMIT 200\`);
+    FROM webhook_events WHERE processing_status='failed' ORDER BY received_at DESC LIMIT 200`);
   const items=[...rows,...webhookRows].filter((r:any)=>(!f.category||f.category==='all'||r.category===f.category)&&(!f.severity||f.severity==='all'||r.severity===f.severity)&&(!f.resolved||f.resolved==='all'||(f.resolved==='true'?r.resolved:!r.resolved)));
   return {items:items.sort((a:any,b:any)=>String(b.created_at).localeCompare(String(a.created_at)))};
 }
 
 export async function platformReport(type:string) {
   const reports:Record<string,{title:string;headers:{key:string;label:string}[];sql:string}> = {
-    users:{title:'تقرير المستخدمين',headers:[{key:'id',label:'المعرف'},{key:'full_name',label:'الاسم'},{key:'email',label:'البريد'},{key:'created_at',label:'تاريخ التسجيل'},{key:'account_status',label:'الحالة'}],sql:\`SELECT u.id::text id,\${fullName} full_name,u.email,u.created_at::text created_at,CASE WHEN u.banned_until>NOW() THEN 'suspended' ELSE 'active' END account_status FROM auth.users u WHERE u.deleted_at IS NULL ORDER BY u.created_at DESC LIMIT 2000\`},
-    subscriptions:{title:'تقرير الاشتراكات',headers:[{key:'workspace_name',label:'مساحة العمل'},{key:'user_email',label:'البريد'},{key:'plan_code',label:'الباقة'},{key:'status',label:'الحالة'},{key:'current_period_end',label:'نهاية الاشتراك'}],sql:\`SELECT o.name workspace_name,u.email user_email,s.plan_tier plan_code,s.status,s.period_end::text current_period_end FROM subscriptions s JOIN organizations o ON o.id=s.organization_id LEFT JOIN LATERAL(SELECT user_id FROM organization_members WHERE organization_id=o.id AND role='owner' ORDER BY created_at LIMIT 1) own ON TRUE LEFT JOIN auth.users u ON u.id=own.user_id ORDER BY s.created_at DESC LIMIT 2000\`},
-    revenue:{title:'تقرير الإيرادات الفعلية',headers:[{key:'payment_reference',label:'مرجع الدفع'},{key:'user_email',label:'البريد'},{key:'amount_usd',label:'المبلغ بالدولار'},{key:'amount_yer',label:'المبلغ بالريال'},{key:'status',label:'الحالة'},{key:'verified_at',label:'تاريخ التحقق'}],sql:\`SELECT i.payment_reference,u.email user_email,i.amount_usd::numeric amount_usd,i.amount_yer::bigint amount_yer,i.status,i.verified_at::text verified_at FROM billing_payment_intents i LEFT JOIN LATERAL(SELECT user_id FROM organization_members WHERE organization_id=i.organization_id AND role='owner' ORDER BY created_at LIMIT 1) own ON TRUE LEFT JOIN auth.users u ON u.id=own.user_id ORDER BY i.created_at DESC LIMIT 2000\`},
-    invoices:{title:'تقرير طلبات الدفع (لا يوجد دفتر فواتير منفصل)',headers:[{key:'external_order_id',label:'رقم الطلب'},{key:'user_email',label:'البريد'},{key:'plan_code',label:'الباقة'},{key:'amount_usd',label:'المبلغ'},{key:'status',label:'الحالة'}],sql:\`SELECT i.external_order_id,u.email user_email,i.plan_code,i.amount_usd::numeric amount_usd,i.status FROM billing_payment_intents i LEFT JOIN LATERAL(SELECT user_id FROM organization_members WHERE organization_id=i.organization_id AND role='owner' ORDER BY created_at LIMIT 1) own ON TRUE LEFT JOIN auth.users u ON u.id=own.user_id ORDER BY i.created_at DESC LIMIT 2000\`},
-    ai_usage:{title:'تقرير استهلاك الذكاء الاصطناعي',headers:[{key:'created_at',label:'التاريخ'},{key:'workspace_name',label:'مساحة العمل'},{key:'agent_name',label:'الوكيل'},{key:'model',label:'النموذج'},{key:'input_tokens',label:'رموز الإدخال'},{key:'output_tokens',label:'رموز الإخراج'},{key:'status',label:'الحالة'}],sql:\`SELECT r.created_at::text created_at,o.name workspace_name,a.name agent_name,r.model,r.input_tokens,r.output_tokens,r.status FROM agent_runs r LEFT JOIN organizations o ON o.id=r.organization_id LEFT JOIN ai_agents a ON a.id=r.agent_id ORDER BY r.created_at DESC LIMIT 2000\`},
-    model_costs:{title:'تقرير تكلفة النماذج',headers:[{key:'model',label:'النموذج'},{key:'requests',label:'الطلبات'},{key:'tokens',label:'الرموز'},{key:'recorded_cost_usd',label:'التكلفة المسجلة بالدولار'}],sql:\`SELECT COALESCE(r.model,'غير محدد') model,COUNT(*)::int requests,COALESCE(SUM(COALESCE(r.input_tokens,0)+COALESCE(r.output_tokens,0)),0)::bigint tokens,COALESCE(SUM(l.units*COALESCE(l.unit_cost,0)),0)::numeric recorded_cost_usd FROM agent_runs r LEFT JOIN usage_ledger l ON l.reference_id=r.id AND l.currency='USD' GROUP BY r.model ORDER BY requests DESC\`},
-    agents:{title:'تقرير أداء الوكلاء',headers:[{key:'agent_name',label:'الوكيل'},{key:'workspace_name',label:'مساحة العمل'},{key:'runs',label:'التشغيلات'},{key:'failed',label:'الفاشلة'},{key:'tokens',label:'الرموز'}],sql:\`SELECT a.name agent_name,o.name workspace_name,COUNT(r.id)::int runs,COUNT(r.id) FILTER(WHERE r.status='failed')::int failed,COALESCE(SUM(COALESCE(r.input_tokens,0)+COALESCE(r.output_tokens,0)),0)::bigint tokens FROM ai_agents a JOIN organizations o ON o.id=a.organization_id LEFT JOIN agent_runs r ON r.agent_id=a.id GROUP BY a.id,a.name,o.name ORDER BY runs DESC\`},
-    channels:{title:'تقرير استخدام القنوات',headers:[{key:'channel_type',label:'القناة'},{key:'channels',label:'عدد القنوات'},{key:'conversations',label:'المحادثات'},{key:'messages',label:'الرسائل'}],sql:\`SELECT ch.channel_type,COUNT(DISTINCT ch.id)::int channels,COUNT(DISTINCT c.id)::int conversations,COUNT(m.id)::int messages FROM channels ch LEFT JOIN conversations c ON c.channel_id=ch.id LEFT JOIN messages m ON m.conversation_id=c.id GROUP BY ch.channel_type ORDER BY channels DESC\`},
-    errors:{title:'تقرير الأخطاء',headers:[{key:'source',label:'المصدر'},{key:'message',label:'الخطأ'},{key:'created_at',label:'التاريخ'}],sql:\`SELECT 'agent_run' source,COALESCE(error_code,'failed') message,created_at::text created_at FROM agent_runs WHERE status IN('failed','blocked') UNION ALL SELECT 'webhook_event',COALESCE(error_message,'failed'),received_at::text FROM webhook_events WHERE processing_status='failed' ORDER BY created_at DESC LIMIT 2000\`},
-    activity:{title:'تقرير النشاط والتدقيق',headers:[{key:'organization_name',label:'مساحة العمل'},{key:'action',label:'الإجراء'},{key:'entity_type',label:'نوع السجل'},{key:'created_at',label:'التاريخ'}],sql:\`SELECT o.name organization_name,e.action,e.entity_type,e.created_at::text created_at FROM audit_events e LEFT JOIN organizations o ON o.id=e.organization_id ORDER BY e.created_at DESC LIMIT 2000\`}
+    users:{title:'تقرير المستخدمين',headers:[{key:'id',label:'المعرف'},{key:'full_name',label:'الاسم'},{key:'email',label:'البريد'},{key:'created_at',label:'تاريخ التسجيل'},{key:'account_status',label:'الحالة'}],sql:`SELECT u.id::text id,${fullName} full_name,u.email,u.created_at::text created_at,CASE WHEN u.banned_until>NOW() THEN 'suspended' ELSE 'active' END account_status FROM auth.users u WHERE u.deleted_at IS NULL ORDER BY u.created_at DESC LIMIT 2000`},
+    subscriptions:{title:'تقرير الاشتراكات',headers:[{key:'workspace_name',label:'مساحة العمل'},{key:'user_email',label:'البريد'},{key:'plan_code',label:'الباقة'},{key:'status',label:'الحالة'},{key:'current_period_end',label:'نهاية الاشتراك'}],sql:`SELECT o.name workspace_name,u.email user_email,s.plan_tier plan_code,s.status,s.period_end::text current_period_end FROM subscriptions s JOIN organizations o ON o.id=s.organization_id LEFT JOIN LATERAL(SELECT user_id FROM organization_members WHERE organization_id=o.id AND role='owner' ORDER BY created_at LIMIT 1) own ON TRUE LEFT JOIN auth.users u ON u.id=own.user_id ORDER BY s.created_at DESC LIMIT 2000`},
+    revenue:{title:'تقرير الإيرادات الفعلية',headers:[{key:'payment_reference',label:'مرجع الدفع'},{key:'user_email',label:'البريد'},{key:'amount_usd',label:'المبلغ بالدولار'},{key:'amount_yer',label:'المبلغ بالريال'},{key:'status',label:'الحالة'},{key:'verified_at',label:'تاريخ التحقق'}],sql:`SELECT i.payment_reference,u.email user_email,i.amount_usd::numeric amount_usd,i.amount_yer::bigint amount_yer,i.status,i.verified_at::text verified_at FROM billing_payment_intents i LEFT JOIN LATERAL(SELECT user_id FROM organization_members WHERE organization_id=i.organization_id AND role='owner' ORDER BY created_at LIMIT 1) own ON TRUE LEFT JOIN auth.users u ON u.id=own.user_id ORDER BY i.created_at DESC LIMIT 2000`},
+    invoices:{title:'تقرير طلبات الدفع (لا يوجد دفتر فواتير منفصل)',headers:[{key:'external_order_id',label:'رقم الطلب'},{key:'user_email',label:'البريد'},{key:'plan_code',label:'الباقة'},{key:'amount_usd',label:'المبلغ'},{key:'status',label:'الحالة'}],sql:`SELECT i.external_order_id,u.email user_email,i.plan_code,i.amount_usd::numeric amount_usd,i.status FROM billing_payment_intents i LEFT JOIN LATERAL(SELECT user_id FROM organization_members WHERE organization_id=i.organization_id AND role='owner' ORDER BY created_at LIMIT 1) own ON TRUE LEFT JOIN auth.users u ON u.id=own.user_id ORDER BY i.created_at DESC LIMIT 2000`},
+    ai_usage:{title:'تقرير استهلاك الذكاء الاصطناعي',headers:[{key:'created_at',label:'التاريخ'},{key:'workspace_name',label:'مساحة العمل'},{key:'agent_name',label:'الوكيل'},{key:'model',label:'النموذج'},{key:'input_tokens',label:'رموز الإدخال'},{key:'output_tokens',label:'رموز الإخراج'},{key:'status',label:'الحالة'}],sql:`SELECT r.created_at::text created_at,o.name workspace_name,a.name agent_name,r.model,r.input_tokens,r.output_tokens,r.status FROM agent_runs r LEFT JOIN organizations o ON o.id=r.organization_id LEFT JOIN ai_agents a ON a.id=r.agent_id ORDER BY r.created_at DESC LIMIT 2000`},
+    model_costs:{title:'تقرير تكلفة النماذج',headers:[{key:'model',label:'النموذج'},{key:'requests',label:'الطلبات'},{key:'tokens',label:'الرموز'},{key:'recorded_cost_usd',label:'التكلفة المسجلة بالدولار'}],sql:`SELECT COALESCE(r.model,'غير محدد') model,COUNT(*)::int requests,COALESCE(SUM(COALESCE(r.input_tokens,0)+COALESCE(r.output_tokens,0)),0)::bigint tokens,COALESCE(SUM(l.units*COALESCE(l.unit_cost,0)),0)::numeric recorded_cost_usd FROM agent_runs r LEFT JOIN usage_ledger l ON l.reference_id=r.id AND l.currency='USD' GROUP BY r.model ORDER BY requests DESC`},
+    agents:{title:'تقرير أداء الوكلاء',headers:[{key:'agent_name',label:'الوكيل'},{key:'workspace_name',label:'مساحة العمل'},{key:'runs',label:'التشغيلات'},{key:'failed',label:'الفاشلة'},{key:'tokens',label:'الرموز'}],sql:`SELECT a.name agent_name,o.name workspace_name,COUNT(r.id)::int runs,COUNT(r.id) FILTER(WHERE r.status='failed')::int failed,COALESCE(SUM(COALESCE(r.input_tokens,0)+COALESCE(r.output_tokens,0)),0)::bigint tokens FROM ai_agents a JOIN organizations o ON o.id=a.organization_id LEFT JOIN agent_runs r ON r.agent_id=a.id GROUP BY a.id,a.name,o.name ORDER BY runs DESC`},
+    channels:{title:'تقرير استخدام القنوات',headers:[{key:'channel_type',label:'القناة'},{key:'channels',label:'عدد القنوات'},{key:'conversations',label:'المحادثات'},{key:'messages',label:'الرسائل'}],sql:`SELECT ch.channel_type,COUNT(DISTINCT ch.id)::int channels,COUNT(DISTINCT c.id)::int conversations,COUNT(m.id)::int messages FROM channels ch LEFT JOIN conversations c ON c.channel_id=ch.id LEFT JOIN messages m ON m.conversation_id=c.id GROUP BY ch.channel_type ORDER BY channels DESC`},
+    errors:{title:'تقرير الأخطاء',headers:[{key:'source',label:'المصدر'},{key:'message',label:'الخطأ'},{key:'created_at',label:'التاريخ'}],sql:`SELECT 'agent_run' source,COALESCE(error_code,'failed') message,created_at::text created_at FROM agent_runs WHERE status IN('failed','blocked') UNION ALL SELECT 'webhook_event',COALESCE(error_message,'failed'),received_at::text FROM webhook_events WHERE processing_status='failed' ORDER BY created_at DESC LIMIT 2000`},
+    activity:{title:'تقرير النشاط والتدقيق',headers:[{key:'organization_name',label:'مساحة العمل'},{key:'action',label:'الإجراء'},{key:'entity_type',label:'نوع السجل'},{key:'created_at',label:'التاريخ'}],sql:`SELECT o.name organization_name,e.action,e.entity_type,e.created_at::text created_at FROM audit_events e LEFT JOIN organizations o ON o.id=e.organization_id ORDER BY e.created_at DESC LIMIT 2000`}
   };
   const report=reports[type];if(!report)throw new Error('نوع التقرير غير معروف.');
   return {title:report.title,headers:report.headers,rows:await query(report.sql)};
@@ -667,9 +667,9 @@ export async function platformReport(type:string) {
 
 
 export async function platformAiProviders() {
-  const usage=await query(\`SELECT model_provider,COUNT(*)::int total_requests,
+  const usage=await query(`SELECT model_provider,COUNT(*)::int total_requests,
     COUNT(*) FILTER(WHERE status='completed')::int success_requests,COUNT(*) FILTER(WHERE status='failed')::int failed_requests,
-    COALESCE(AVG(latency_ms),0)::int avg_latency_ms FROM agent_runs GROUP BY model_provider\`);
+    COALESCE(AVG(latency_ms),0)::int avg_latency_ms FROM agent_runs GROUP BY model_provider`);
   const byProvider=new Map(usage.map((r:any)=>[String(r.model_provider),r]));
   const definitions=[
     {id:'google',name:'Google Gemini',env_key_name:'GEMINI_API_KEY',env_configured:Boolean(process.env.GEMINI_API_KEY?.trim()),is_primary:1,keys:['google','gemini']},
@@ -680,24 +680,24 @@ export async function platformAiProviders() {
       stats:{total_requests:Number((stats as any).total_requests||0),success_requests:Number((stats as any).success_requests||0),
         failed_requests:Number((stats as any).failed_requests||0),avg_latency_ms:Number((stats as any).avg_latency_ms||0),total_cost_usd:0}};
   });
-  const models=await query(\`SELECT r.model model_id,COALESCE(r.model,'غير محدد') display_name,
+  const models=await query(`SELECT r.model model_id,COALESCE(r.model,'غير محدد') display_name,
     0::numeric input_price_per_1m,0::numeric output_price_per_1m,0::numeric cached_input_price_per_1m,
     'غير متاح في مخطط التسعير الحالي' pricing_source,'—' pricing_version,'—' pricing_effective_date,
     COUNT(DISTINCT r.agent_id)::int agents_using,COUNT(*)::int requests_count,1::int is_allowed,
-    MIN(r.model)::text id FROM agent_runs r WHERE r.model IS NOT NULL GROUP BY r.model ORDER BY requests_count DESC LIMIT 200\`);
+    MIN(r.model)::text id FROM agent_runs r WHERE r.model IS NOT NULL GROUP BY r.model ORDER BY requests_count DESC LIMIT 200`);
   return {providers,models};
 }
 
 export async function platformNotificationsSupport() {
   const [notifications,activityFeed]=await Promise.all([
-    query(\`SELECT n.id::text id,n.title,n.body,n.notification_type type,n.is_read,
+    query(`SELECT n.id::text id,n.title,n.body,n.notification_type type,n.is_read,
       CASE WHEN n.is_read THEN 'read' ELSE 'unread' END delivery_status,'مؤسسة: '||o.name target_type,1::int recipients_count,n.created_at::text created_at,
       o.name workspace_name FROM notifications n JOIN organizations o ON o.id=n.organization_id
-      ORDER BY n.created_at DESC LIMIT 300\`),
-    query(\`SELECT e.id::text id,e.action event_type,e.entity_type,e.entity_id::text entity_id,e.actor_type actor,
+      ORDER BY n.created_at DESC LIMIT 300`),
+    query(`SELECT e.id::text id,e.action event_type,e.entity_type,e.entity_id::text entity_id,e.actor_type actor,
       COALESCE(e.metadata->>'summary',e.action) summary,e.created_at::text created_at,'audit_events' source,
       o.name workspace_name,e.metadata FROM audit_events e LEFT JOIN organizations o ON o.id=e.organization_id
-      ORDER BY e.created_at DESC LIMIT 100\`)
+      ORDER BY e.created_at DESC LIMIT 100`)
   ]);
   return {notifications,tickets:[],activityFeed,dataLimitations:{tickets:'لا يوجد جدول تذاكر دعم فني في مخطط قاعدة المنصة الحالي؛ لم يتم عرض تذاكر محلية على أنها تذاكر إنتاجية.'}};
 }
@@ -706,7 +706,7 @@ export async function platformNotificationsSupport() {
 
 export async function rotatePlatformChannelSecret(channelId:string,newSecret:string) {
   const secret=newSecret.trim();if(secret.length<8)throw new Error('السر الجديد قصير أو غير صالح.');
-  const [channel]=await query(\`SELECT id::text id,organization_id::text organization_id,channel_type FROM channels WHERE id=$1::uuid\`,[channelId]);
+  const [channel]=await query(`SELECT id::text id,organization_id::text organization_id,channel_type FROM channels WHERE id=$1::uuid`,[channelId]);
   if(!channel)throw new Error('القناة غير موجودة.');
   const fields:Record<string,{provider:string;type:string}>={
     whatsapp:{provider:'meta',type:'access_token'},instagram:{provider:'meta',type:'access_token'},
@@ -716,26 +716,26 @@ export async function rotatePlatformChannelSecret(channelId:string,newSecret:str
   };
   const field=fields[String(channel.channel_type)];if(!field)throw new Error('نوع القناة لا يدعم تدوير السر من هذه الشاشة.');
   const encrypted=encryptSecret(secret);
-  await query(\`INSERT INTO provider_credentials(organization_id,channel_id,provider,credential_type,encrypted_value,status,key_version,last_verified_at,updated_at)
+  await query(`INSERT INTO provider_credentials(organization_id,channel_id,provider,credential_type,encrypted_value,status,key_version,last_verified_at,updated_at)
     VALUES($1::uuid,$2::uuid,$3,$4,$5,'active',1,NULL,NOW())
     ON CONFLICT(channel_id,provider,credential_type) WHERE channel_id IS NOT NULL
-    DO UPDATE SET encrypted_value=EXCLUDED.encrypted_value,status='active',key_version=1,last_verified_at=NULL,updated_at=NOW()\`,
+    DO UPDATE SET encrypted_value=EXCLUDED.encrypted_value,status='active',key_version=1,last_verified_at=NULL,updated_at=NOW()`,
     [channel.organization_id,channel.id,field.provider,field.type,encrypted]);
-  await query(\`UPDATE channels SET verification_status='pending',updated_at=NOW() WHERE id=$1::uuid\`,[channelId]);
+  await query(`UPDATE channels SET verification_status='pending',updated_at=NOW() WHERE id=$1::uuid`,[channelId]);
   return {id:channelId,credentialType:field.type,status:'updated_requires_test'};
 }
 
 export async function testPlatformChannel(channelId:string) {
-  const [channel]=await query(\`SELECT id::text id,organization_id::text organization_id,channel_type,connection_mode,is_active,provider_account_id,external_identifier
-    FROM channels WHERE id=$1::uuid\`,[channelId]);
+  const [channel]=await query(`SELECT id::text id,organization_id::text organization_id,channel_type,connection_mode,is_active,provider_account_id,external_identifier
+    FROM channels WHERE id=$1::uuid`,[channelId]);
   if(!channel)throw new Error('القناة غير موجودة.');
   if(!channel.is_active)throw new Error('القناة متوقفة؛ فعّلها قبل الاختبار.');
   try {
     if(channel.channel_type==='whatsapp'&&channel.connection_mode==='qr_unofficial'){
-      const [session]=await query(\`SELECT status,last_error FROM whatsapp_gateway_sessions WHERE channel_id=$1::uuid\`,[channelId]);
+      const [session]=await query(`SELECT status,last_error FROM whatsapp_gateway_sessions WHERE channel_id=$1::uuid`,[channelId]);
       if(session?.status!=='connected')throw new Error('جلسة واتساب QR غير متصلة حالياً.');
     } else {
-      const creds=await query(\`SELECT provider,credential_type,encrypted_value FROM provider_credentials WHERE channel_id=$1::uuid AND status='active'\`,[channelId]);
+      const creds=await query(`SELECT provider,credential_type,encrypted_value FROM provider_credentials WHERE channel_id=$1::uuid AND status='active'`,[channelId]);
       const values:Record<string,string>={};
       for(const row of creds as any[])values[String(row.credential_type)]=decryptSecret(String(row.encrypted_value));
       const timeout=AbortSignal.timeout(12000);
@@ -769,12 +769,12 @@ export async function testPlatformChannel(channelId:string) {
         throw new Error('نوع القناة لا يدعم اختباراً آلياً من لوحة المالك.');
       }
     }
-    await query(\`UPDATE channels SET verification_status='verified',updated_at=NOW() WHERE id=$1::uuid\`,[channelId]);
-    await query(\`UPDATE provider_credentials SET last_verified_at=NOW() WHERE channel_id=$1::uuid AND status='active'\`,[channelId]);
+    await query(`UPDATE channels SET verification_status='verified',updated_at=NOW() WHERE id=$1::uuid`,[channelId]);
+    await query(`UPDATE provider_credentials SET last_verified_at=NOW() WHERE channel_id=$1::uuid AND status='active'`,[channelId]);
     return {ok:true,diagnostic:'تم التحقق من بيانات القناة مع مزودها بنجاح.'};
   } catch(error) {
     const message=error instanceof Error?error.message:'فشل اختبار القناة.';
-    await query(\`UPDATE channels SET verification_status='failed',updated_at=NOW() WHERE id=$1::uuid\`,[channelId]);
+    await query(`UPDATE channels SET verification_status='failed',updated_at=NOW() WHERE id=$1::uuid`,[channelId]);
     return {ok:false,diagnostic:message};
   }
 }
