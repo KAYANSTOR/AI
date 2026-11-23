@@ -886,7 +886,10 @@ export function ApiIntegrationsPage({
   const [data, setData] = React.useState<{
     apiKeys: Array<Record<string, unknown>>;
     webhooks: Array<Record<string, unknown>>;
+    dataLimitations?: Record<string, string>;
   } | null>(null);
+  const [workspaces, setWorkspaces] = React.useState<Array<{ id: string; name: string }>>([]);
+  const [organizationId, setOrganizationId] = React.useState('');
   const [loading, setLoading] = React.useState(true);
   const [keyModal, setKeyModal] = React.useState(false);
   const [whModal, setWhModal] = React.useState(false);
@@ -897,11 +900,18 @@ export function ApiIntegrationsPage({
 
   const load = React.useCallback(() => {
     setLoading(true);
-    apiFetch<NonNullable<typeof data>>('/api/owner/integrations/api')
-      .then(setData)
+    Promise.all([
+      apiFetch<NonNullable<typeof data>>('/api/owner/integrations/api'),
+      apiFetch<{ items: Array<{ id: string; name: string }> }>('/api/owner/workspaces'),
+    ])
+      .then(([api, ws]) => {
+        setData(api);
+        setWorkspaces(ws.items);
+        if (!organizationId && ws.items[0]) setOrganizationId(ws.items[0].id);
+      })
       .catch((err) => onNotify('error', err instanceof Error ? err.message : 'تعذر تحميل API والتكاملات.'))
       .finally(() => setLoading(false));
-  }, [onNotify]);
+  }, [organizationId, onNotify]);
 
   React.useEffect(() => {
     load();
@@ -914,8 +924,8 @@ export function ApiIntegrationsPage({
         subtitle="إصدار وإبطال مفاتيح التكامل (تُخزن قيمها مجزأة SHA-256 فقط) وإدارة Webhooks مع حماية SSRF وتشفير الأسرار."
         action={
           <div className="flex gap-2">
-            <button type="button" onClick={() => setWhModal(true)} className={secondaryBtnClass}>
-              إضافة Webhook
+            <button type="button" disabled title="تعريف Webhooks الصادرة غير مدعوم في مخطط قاعدة المنصة الحالي" onClick={() => onNotify('info', 'تعريف Webhooks الصادرة غير متاح بعد في قاعدة المنصة.')} className={secondaryBtnClass}>
+              إضافة Webhook (غير متاح)
             </button>
             <button type="button" onClick={() => { setOneTimeKey(null); setKeyModal(true); }} className={primaryBtnClass}>
               <Key className="w-4 h-4" />
@@ -967,6 +977,7 @@ export function ApiIntegrationsPage({
 
           <section className="p-5 rounded-xl border border-[var(--k-line)] bg-[var(--k-surface)] space-y-3">
             <h2 className="text-sm font-bold">نقاط Webhooks الصادرة ({data.webhooks.length})</h2>
+            <p className="text-[11px] text-[var(--k-ink-muted)]">{String(data.dataLimitations?.webhooks || 'تعريف Webhooks الصادرة غير متاح في قاعدة المنصة الحالية.')}</p>
             {data.webhooks.length === 0 ? (
               <p className="text-xs text-[var(--k-ink-muted)]">لا توجد نقاط Webhook مسجلة.</p>
             ) : (
@@ -1011,7 +1022,7 @@ export function ApiIntegrationsPage({
               try {
                 const res = await apiFetch<{ oneTimeSecret: string }>('/api/owner/integrations/api-keys', {
                   method: 'POST',
-                  body: { name: keyName },
+                  body: { name: keyName, organizationId },
                 });
                 setOneTimeKey(res.oneTimeSecret);
                 setKeyName('');
@@ -1023,12 +1034,18 @@ export function ApiIntegrationsPage({
             className="space-y-4"
           >
             <div>
+              <label className="block text-xs font-medium mb-1">مساحة العمل التي سيُقيد بها المفتاح *</label>
+              <select required value={organizationId} onChange={(e) => setOrganizationId(e.target.value)} className={inputClass}>
+                {workspaces.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+              </select>
+            </div>
+            <div>
               <label className="block text-xs font-medium mb-1">اسم المفتاح *</label>
               <input required value={keyName} onChange={(e) => setKeyName(e.target.value)} placeholder="مثال: تكامل ERP الخارجي" className={inputClass} />
             </div>
             <div className="flex justify-end gap-2">
               <button type="button" onClick={() => setKeyModal(false)} className={secondaryBtnClass}>إلغاء</button>
-              <button type="submit" className={primaryBtnClass}>إصدار المفتاح</button>
+              <button type="submit" disabled={!organizationId || !keyName.trim()} className={primaryBtnClass}>إصدار المفتاح</button>
             </div>
           </form>
         )}
