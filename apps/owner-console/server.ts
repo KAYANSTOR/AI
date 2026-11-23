@@ -35,7 +35,9 @@ export async function createAppServer() {
     try {
       await platformPing();
       res.json({ status: 'ok', service: 'kayan-owner-console', platformDatabase: 'connected', timestamp: new Date().toISOString() });
-    } catch {
+    } catch (err) {
+      const failure = err as { code?: string; message?: string };
+      console.error('owner_console_platform_db_health_failed', { code: failure.code || 'unknown', message: failure.message || 'database connection failed' });
       res.status(503).json({ status: 'degraded', service: 'kayan-owner-console', platformDatabase: 'unavailable', timestamp: new Date().toISOString() });
     }
   });
@@ -70,15 +72,14 @@ export async function createAppServer() {
     app.use(vite.middlewares);
   } else {
     const distDir = path.resolve(process.cwd(), 'dist');
-    app.use('/admin', express.static(distDir, { index: false }));
-    app.get(['/admin', '/admin/', '/admin/*'], (_req: Request, res: Response) => {
+    const sendAdminApp = (_req: Request, res: Response) => {
       const indexFile = path.join(distDir, 'index.html');
-      if (fs.existsSync(indexFile)) {
-        res.sendFile(indexFile);
-      } else {
-        res.status(404).send('Build output not found.');
-      }
-    });
+      if (fs.existsSync(indexFile)) res.sendFile(indexFile);
+      else res.status(404).send('Build output not found.');
+    };
+    app.get(['/admin', '/admin/'], sendAdminApp);
+    app.use('/admin', express.static(distDir, { index: false }));
+    app.get('/admin/*', sendAdminApp);
   }
 
   return app;
