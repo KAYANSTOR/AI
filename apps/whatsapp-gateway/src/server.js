@@ -317,8 +317,15 @@ async function startSession(input) {
     sockets.delete(channelId)
     try { previous.sock.end(undefined) } catch {}
   }
-  const oldRows = await query("SELECT phone_number FROM public.whatsapp_gateway_sessions WHERE channel_id=$1 LIMIT 1", [channelId])
-  if (oldRows[0] && oldRows[0].phone_number !== phoneNumber) {
+  const oldRows = await query("SELECT phone_number,status,auth_creds_ciphertext FROM public.whatsapp_gateway_sessions WHERE channel_id=$1 LIMIT 1", [channelId])
+  const storedCreds = oldRows[0]?.auth_creds_ciphertext
+    ? decryptJson(oldRows[0].auth_creds_ciphertext)
+    : null
+  const phoneChanged = Boolean(oldRows[0] && oldRows[0].phone_number !== phoneNumber)
+  // A failed phone-code attempt can persist creds.me before WhatsApp accepts the
+  // companion registration. Never reuse that half-registered identity on retry.
+  const incompleteAuth = Boolean(oldRows[0] && storedCreds && storedCreds.registered !== true)
+  if (phoneChanged || incompleteAuth) {
     await query("DELETE FROM public.whatsapp_gateway_auth_keys WHERE channel_id=$1", [channelId])
     await query("UPDATE public.whatsapp_gateway_sessions SET auth_creds_ciphertext=NULL WHERE channel_id=$1", [channelId])
   }
