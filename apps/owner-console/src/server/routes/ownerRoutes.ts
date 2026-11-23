@@ -88,7 +88,7 @@ import {
 import type { PeriodGranularity } from '../domain/analytics';
 import {
   platformStatus, platformUsers, platformUserDetail, platformWorkspaces, platformSubscriptions,
-  platformAgents, platformAiUsage, platformChannels, platformConversations, platformEntitlements,
+  platformAgents, platformAgentDetail, platformAiUsage, platformChannels, platformConversations, platformEntitlements,
   platformOverview, updatePlatformUser, platformUserAction, subscriptionAction, updatePlatformAgent,
   platformEntitlementOverride,
 } from '../services/platformDataService';
@@ -182,6 +182,10 @@ platformDataRouter.post('/subscriptions/:id/actions', requirePermission('billing
 platformDataRouter.get('/agents', async (req, res) => {
   try { res.json({items:await platformAgents({search:req.query.search?String(req.query.search):undefined,status:req.query.status?String(req.query.status):undefined,provider:req.query.provider?String(req.query.provider):undefined})}); } catch (err) { handleError(res, err, 503); }
 });
+platformDataRouter.get('/agents/:id', async (req, res) => {
+  try { const data=await platformAgentDetail(String(req.params.id)); if(!data){res.status(404).json({error:'not_found',message:'الوكيل غير موجود.'});return;} res.json(data); }
+  catch (err) { handleError(res, err, 503); }
+});
 platformDataRouter.patch('/agents/:id/control', requirePermission('ai:write'), async (req, res) => {
   try { const result=await updatePlatformAgent(String(req.params.id),req.body||{}); writeAuditLog({actor:req.ownerAdmin!,action:'agent.control_updated',entityType:'agent',entityId:String(req.params.id),summary:'تحديث تحكم الوكيل في PostgreSQL.',after:result,ipAddress:getClientIp(req)}); res.json(result); }
   catch (err) { handleError(res, err); }
@@ -206,6 +210,17 @@ platformDataRouter.post('/entitlements/overrides', requirePermission('users:writ
 // These areas have no canonical PostgreSQL source yet. Block the former local/demo store rather than displaying misleading data.
 const unavailablePlatformData = (_req: Request, res: Response) => res.status(501).json({error:'not_integrated',message:'هذا القسم لم يُربط بعد بمصدر بيانات المنصة الحقيقي؛ لم نعد نعرض بيانات المخزن المحلي على أنها بيانات إنتاجية.'});
 platformDataRouter.get('/plans', unavailablePlatformData);
+platformDataRouter.post('/users', requirePermission('users:write'), unavailablePlatformData);
+platformDataRouter.post('/workspaces', requirePermission('users:write'), unavailablePlatformData);
+platformDataRouter.patch('/workspaces/:id/status', requirePermission('users:write'), unavailablePlatformData);
+platformDataRouter.post('/agents', requirePermission('ai:write'), unavailablePlatformData);
+platformDataRouter.get('/ai/providers', unavailablePlatformData);
+platformDataRouter.patch('/ai/models/:modelId', requirePermission('ai:write'), unavailablePlatformData);
+platformDataRouter.post('/ai/usage', requirePermission('ai:write'), unavailablePlatformData);
+platformDataRouter.patch('/entitlements/flags/:key', requirePermission('users:write'), unavailablePlatformData);
+platformDataRouter.post('/conversations', requirePermission('ops:write'), unavailablePlatformData);
+platformDataRouter.post('/channels', requirePermission('ops:write'), unavailablePlatformData);
+
 platformDataRouter.post('/plans', unavailablePlatformData);
 platformDataRouter.put('/plans/:id', unavailablePlatformData);
 platformDataRouter.get('/billing', unavailablePlatformData);
