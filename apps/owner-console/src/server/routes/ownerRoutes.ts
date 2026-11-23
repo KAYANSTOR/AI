@@ -90,7 +90,11 @@ import {
   platformStatus, platformUsers, platformUserDetail, platformWorkspaces, platformPlans, platformSubscriptions,
   platformAgents, platformAgentDetail, platformAiUsage, platformChannels, platformConversations, platformEntitlements, platformBillingLedger,
   platformOverview, updatePlatformUser, platformUserAction, subscriptionAction, updatePlatformAgent,
-  platformEntitlementOverride,
+  platformEntitlementOverride, platformConversationDetail, platformQueueConversationIntervention,
+  updatePlatformWorkspaceStatus, platformCreateWorkspace, savePlatformPlan, platformAutomations,
+  createPlatformAutomation, updatePlatformAutomation, platformKnowledge, platformApiIntegrations,
+  createPlatformApiKey, revokePlatformApiKey, platformMonitoring, platformLogs, platformReport,
+  platformAiProviders, platformNotificationsSupport,
 } from '../services/platformDataService';
 
 export const ownerRouter = Router();
@@ -199,6 +203,59 @@ platformDataRouter.get('/channels', async (_req, res) => {
 platformDataRouter.get('/conversations', async (req, res) => {
   try { res.json(await platformConversations({search:req.query.search?String(req.query.search):undefined,status:req.query.status?String(req.query.status):undefined,channelType:req.query.channelType?String(req.query.channelType):undefined,agentId:req.query.agentId?String(req.query.agentId):undefined,userId:req.query.userId?String(req.query.userId):undefined})); } catch (err) { handleError(res, err, 503); }
 });
+
+platformDataRouter.get('/conversations/:id', async (req, res) => {
+  try { const data=await platformConversationDetail(String(req.params.id)); if(!data){res.status(404).json({error:'not_found',message:'المحادثة غير موجودة.'});return;} res.json(data); }
+  catch (err) { handleError(res, err, 503); }
+});
+platformDataRouter.post('/conversations/:id/intervene', requirePermission('ops:write'), async (req, res) => {
+  try {
+    const data=await platformQueueConversationIntervention(String(req.params.id),String(req.body?.content||''),String(req.body?.reason||''));
+    writeAuditLog({actor:req.ownerAdmin!,action:'conversation.intervention_queued',entityType:'conversation',entityId:String(req.params.id),summary:String(req.body?.reason||'تدخل إداري مسجل في قائمة الإرسال.'),ipAddress:getClientIp(req)});
+    res.json(data);
+  } catch (err) { handleError(res, err); }
+});
+platformDataRouter.get('/automations', async (_req,res)=>{try{res.json(await platformAutomations());}catch(err){handleError(res,err,503);}});
+platformDataRouter.post('/automations', requirePermission('ops:write'), async (req,res)=>{
+  try { const result=await createPlatformAutomation({workspaceId:String(req.body?.workspaceId||''),name:String(req.body?.name||''),automationType:String(req.body?.automationType||'')});
+    writeAuditLog({actor:req.ownerAdmin!,action:'automation.created',entityType:'automation',entityId:String(result.id),summary:'إنشاء سجل أتمتة في قاعدة المنصة.',after:result,ipAddress:getClientIp(req)});res.status(201).json(result);
+  } catch(err){handleError(res,err);}
+});
+platformDataRouter.patch('/automations/:id/status', requirePermission('ops:write'), async (req,res)=>{
+  try { const result=await updatePlatformAutomation(String(req.params.id),String(req.body?.status||''));writeAuditLog({actor:req.ownerAdmin!,action:'automation.status_updated',entityType:'automation',entityId:String(req.params.id),summary:String(req.body?.reason||'تحديث حالة الأتمتة.'),after:result,ipAddress:getClientIp(req)});res.json(result);}
+  catch(err){handleError(res,err);}
+});
+platformDataRouter.get('/knowledge', async (_req,res)=>{try{res.json(await platformKnowledge());}catch(err){handleError(res,err,503);}});
+platformDataRouter.get('/integrations/api', async (_req,res)=>{try{res.json(await platformApiIntegrations());}catch(err){handleError(res,err,503);}});
+platformDataRouter.post('/integrations/api-keys', requirePermission('ops:write'), async (req,res)=>{
+  try {const result=await createPlatformApiKey({organizationId:String(req.body?.organizationId||''),name:String(req.body?.name||'')});writeAuditLog({actor:req.ownerAdmin!,action:'api_key.created',entityType:'api_key',entityId:String(result.id),summary:'إصدار مفتاح API لمؤسسة محددة؛ السر يعرض مرة واحدة.',ipAddress:getClientIp(req)});res.status(201).json(result);}
+  catch(err){handleError(res,err);}
+});
+platformDataRouter.post('/integrations/api-keys/:id/revoke', requirePermission('ops:write'), async (req,res)=>{
+  try {const result=await revokePlatformApiKey(String(req.params.id));writeAuditLog({actor:req.ownerAdmin!,action:'api_key.revoked',entityType:'api_key',entityId:String(req.params.id),summary:'إبطال مفتاح API.',ipAddress:getClientIp(req)});res.json(result);}
+  catch(err){handleError(res,err);}
+});
+platformDataRouter.get('/monitoring', async (_req,res)=>{try{res.json(await platformMonitoring());}catch(err){handleError(res,err,503);}});
+platformDataRouter.get('/logs', async (req,res)=>{
+  try {res.json(await platformLogs({category:req.query.category?String(req.query.category):undefined,severity:req.query.severity?String(req.query.severity):undefined,resolved:req.query.resolved?String(req.query.resolved):undefined}));}
+  catch(err){handleError(res,err,503);}
+});
+platformDataRouter.get('/notifications-support', async (_req,res)=>{try{res.json(await platformNotificationsSupport());}catch(err){handleError(res,err,503);}});
+platformDataRouter.get('/reports/:type', async (req,res)=>{
+  try {
+    const report=await platformReport(String(req.params.type));
+    if(String(req.query.format||'')==='csv'){
+      const cell=(v:unknown)=>'"'+String(v??'').replace(/"/g,'""')+'"';
+      const header=report.headers.map(h=>cell(h.label)).join(',');
+      const rows=report.rows.map((row:Record<string,unknown>)=>report.headers.map(h=>cell(row[h.key])).join(','));
+      res.setHeader('Content-Type','text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition','attachment; filename="kayan-'+String(req.params.type)+'-report.csv"');
+      res.send('\\uFEFF'+[header,...rows].join('\\r\\n'));
+      return;
+    }
+    res.json(report);
+  } catch(err){handleError(res,err,503);}
+});
 platformDataRouter.get('/entitlements', async (_req, res) => {
   try { res.json(await platformEntitlements()); } catch (err) { handleError(res, err, 503); }
 });
@@ -211,18 +268,40 @@ platformDataRouter.post('/entitlements/overrides', requirePermission('users:writ
 const unavailablePlatformData = (_req: Request, res: Response) => res.status(501).json({error:'not_integrated',message:'هذا القسم لم يُربط بعد بمصدر بيانات المنصة الحقيقي؛ لم نعد نعرض بيانات المخزن المحلي على أنها بيانات إنتاجية.'});
 platformDataRouter.get('/plans', async (_req, res) => { try { res.json(await platformPlans()); } catch (err) { handleError(res, err, 503); } });
 platformDataRouter.post('/users', requirePermission('users:write'), unavailablePlatformData);
-platformDataRouter.post('/workspaces', requirePermission('users:write'), unavailablePlatformData);
-platformDataRouter.patch('/workspaces/:id/status', requirePermission('users:write'), unavailablePlatformData);
+platformDataRouter.post('/knowledge', requirePermission('ops:write'), unavailablePlatformData);
+platformDataRouter.post('/integrations/webhooks', requirePermission('ops:write'), unavailablePlatformData);
+platformDataRouter.post('/notifications', requirePermission('ops:write'), unavailablePlatformData);
+platformDataRouter.post('/tickets', requirePermission('ops:write'), unavailablePlatformData);
+platformDataRouter.patch('/tickets/:id/status', requirePermission('ops:write'), unavailablePlatformData);
+platformDataRouter.post('/alerts/:id/ack', requirePermission('ops:write'), unavailablePlatformData);
+platformDataRouter.post('/logs/:id/resolve', requirePermission('ops:write'), unavailablePlatformData);
+platformDataRouter.post('/channels/:id/test', requirePermission('ops:write'), unavailablePlatformData);
+platformDataRouter.post('/channels/:id/rotate-secret', requirePermission('ops:write'), unavailablePlatformData);
+platformDataRouter.post('/workspaces', requirePermission('users:write'), async (req,res)=>{
+  try {const result=await platformCreateWorkspace({ownerUserId:String(req.body?.ownerUserId||''),name:String(req.body?.name||''),businessType:req.body?.businessType?String(req.body.businessType):undefined});
+    writeAuditLog({actor:req.ownerAdmin!,action:'workspace.created',entityType:'workspace',entityId:String(result.organization.id),summary:'إنشاء مؤسسة ونشاط ووكيل افتراضي في PostgreSQL.',after:result,ipAddress:getClientIp(req)});res.status(201).json(result);}
+  catch(err){handleError(res,err);}
+});
+platformDataRouter.patch('/workspaces/:id/status', requirePermission('users:write'), async (req,res)=>{
+  try {const result=await updatePlatformWorkspaceStatus(String(req.params.id),String(req.body?.status||''));writeAuditLog({actor:req.ownerAdmin!,action:'workspace.status_updated',entityType:'workspace',entityId:String(req.params.id),summary:'تحديث حالة نشاط مساحة العمل.',after:result,ipAddress:getClientIp(req)});res.json(result);}
+  catch(err){handleError(res,err);}
+});
 platformDataRouter.post('/agents', requirePermission('ai:write'), unavailablePlatformData);
-platformDataRouter.get('/ai/providers', unavailablePlatformData);
+platformDataRouter.get('/ai/providers', async (_req,res)=>{try{res.json(await platformAiProviders());}catch(err){handleError(res,err,503);}});
 platformDataRouter.patch('/ai/models/:modelId', requirePermission('ai:write'), unavailablePlatformData);
 platformDataRouter.post('/ai/usage', requirePermission('ai:write'), unavailablePlatformData);
 platformDataRouter.patch('/entitlements/flags/:key', requirePermission('users:write'), unavailablePlatformData);
 platformDataRouter.post('/conversations', requirePermission('ops:write'), unavailablePlatformData);
 platformDataRouter.post('/channels', requirePermission('ops:write'), unavailablePlatformData);
 
-platformDataRouter.post('/plans', unavailablePlatformData);
-platformDataRouter.put('/plans/:id', unavailablePlatformData);
+platformDataRouter.post('/plans', requirePermission('billing:write'), async (req,res)=>{
+  try {const result=await savePlatformPlan(req.body||{});writeAuditLog({actor:req.ownerAdmin!,action:'plan.created',entityType:'plan',entityId:String(result.id),summary:'إنشاء باقة في كتالوج PostgreSQL.',after:result,ipAddress:getClientIp(req)});res.status(201).json(result);}
+  catch(err){handleError(res,err);}
+});
+platformDataRouter.put('/plans/:id', requirePermission('billing:write'), async (req,res)=>{
+  try {const result=await savePlatformPlan(req.body||{},String(req.params.id));writeAuditLog({actor:req.ownerAdmin!,action:'plan.updated',entityType:'plan',entityId:String(req.params.id),summary:'تحديث باقة في كتالوج PostgreSQL.',after:result,ipAddress:getClientIp(req)});res.json(result);}
+  catch(err){handleError(res,err);}
+});
 platformDataRouter.get('/billing', async (_req, res) => { try { res.json(await platformBillingLedger()); } catch (err) { handleError(res, err, 503); } });
 platformDataRouter.post('/invoices', unavailablePlatformData);
 platformDataRouter.post('/invoices/:id/refund', unavailablePlatformData);
