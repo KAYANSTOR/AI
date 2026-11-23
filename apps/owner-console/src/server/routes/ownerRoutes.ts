@@ -86,6 +86,12 @@ import {
   updateTicketStatus,
 } from '../services/monitoringService';
 import type { PeriodGranularity } from '../domain/analytics';
+import {
+  platformStatus, platformUsers, platformUserDetail, platformWorkspaces, platformSubscriptions,
+  platformAgents, platformAiUsage, platformChannels, platformConversations, platformEntitlements,
+  platformOverview, updatePlatformUser, platformUserAction, subscriptionAction, updatePlatformAgent,
+  platformEntitlementOverride,
+} from '../services/platformDataService';
 
 export const ownerRouter = Router();
 
@@ -134,7 +140,81 @@ ownerRouter.post('/auth/login', (req: Request, res: Response) => {
 // ============================================================
 // 2. PROTECTED OWNER ROUTES — SERVER-ENFORCED RBAC BARRIER
 // ============================================================
+const platformDataRouter = Router();
+
+platformDataRouter.get('/platform-data/status', async (_req, res) => {
+  try { res.json(await platformStatus()); } catch (err) { handleError(res, err, 503); }
+});
+platformDataRouter.get('/overview', async (req, res) => {
+  try { res.json(await platformOverview(String(req.query.period || 'month'), req.query.startDate ? String(req.query.startDate) : undefined, req.query.endDate ? String(req.query.endDate) : undefined)); }
+  catch (err) { handleError(res, err, 503); }
+});
+platformDataRouter.get('/users', async (req, res) => {
+  try { res.json(await platformUsers({search:req.query.search?String(req.query.search):undefined,status:req.query.status?String(req.query.status):undefined,paymentStatus:req.query.paymentStatus?String(req.query.paymentStatus):undefined,sortBy:req.query.sortBy?String(req.query.sortBy):undefined,sortDir:req.query.sortDir==='asc'?'asc':'desc',page:req.query.page?Number(req.query.page):1,pageSize:req.query.pageSize?Number(req.query.pageSize):20})); }
+  catch (err) { handleError(res, err, 503); }
+});
+platformDataRouter.get('/users/:id', async (req, res) => {
+  try { const data=await platformUserDetail(String(req.params.id)); if(!data){res.status(404).json({error:'not_found',message:'المستخدم غير موجود.'});return;} res.json(data); }
+  catch (err) { handleError(res, err, 503); }
+});
+platformDataRouter.get('/users/:id/export', async (req, res) => {
+  try { const data=await platformUserDetail(String(req.params.id)); if(!data){res.status(404).json({error:'not_found',message:'المستخدم غير موجود.'});return;} writeAuditLog({actor:req.ownerAdmin!,action:'user.data_exported',entityType:'user',entityId:String(req.params.id),summary:'تصدير بيانات المستخدم من PostgreSQL.',ipAddress:getClientIp(req)}); res.json({exportedAt:new Date().toISOString(),data}); }
+  catch (err) { handleError(res, err, 503); }
+});
+platformDataRouter.patch('/users/:id', requirePermission('users:write'), async (req, res) => {
+  try { const result=await updatePlatformUser(String(req.params.id),req.body||{}); writeAuditLog({actor:req.ownerAdmin!,action:'user.updated',entityType:'user',entityId:String(req.params.id),summary:'تحديث بيانات المستخدم في PostgreSQL.',after:result,ipAddress:getClientIp(req)}); res.json(await platformUserDetail(String(req.params.id))); }
+  catch (err) { handleError(res, err); }
+});
+platformDataRouter.post('/users/:id/actions', requirePermission('users:write'), async (req, res) => {
+  try { const action=String(req.body?.action||''); const result=await platformUserAction(String(req.params.id),action); writeAuditLog({actor:req.ownerAdmin!,action:action==='suspend'?'user.suspended':'user.reactivated',entityType:'user',entityId:String(req.params.id),summary:String(req.body?.reason||'تغيير حالة الحساب من لوحة المالك.'),after:result,ipAddress:getClientIp(req)}); res.json(result); }
+  catch (err) { handleError(res, err); }
+});
+platformDataRouter.get('/workspaces', async (req, res) => {
+  try { res.json(await platformWorkspaces(req.query.search?String(req.query.search):undefined)); } catch (err) { handleError(res, err, 503); }
+});
+platformDataRouter.get('/subscriptions', async (req, res) => {
+  try { res.json(await platformSubscriptions(req.query.status?String(req.query.status):undefined)); } catch (err) { handleError(res, err, 503); }
+});
+platformDataRouter.post('/subscriptions/:id/actions', requirePermission('billing:write'), async (req, res) => {
+  try { const result=await subscriptionAction(String(req.params.id),String(req.body?.action||''),req.body||{}); writeAuditLog({actor:req.ownerAdmin!,action:'subscription.updated',entityType:'subscription',entityId:String(req.params.id),summary:'تعديل الاشتراك في قاعدة PostgreSQL.',after:result,ipAddress:getClientIp(req)}); res.json(result); }
+  catch (err) { handleError(res, err); }
+});
+platformDataRouter.get('/agents', async (req, res) => {
+  try { res.json({items:await platformAgents({search:req.query.search?String(req.query.search):undefined,status:req.query.status?String(req.query.status):undefined,provider:req.query.provider?String(req.query.provider):undefined})}); } catch (err) { handleError(res, err, 503); }
+});
+platformDataRouter.patch('/agents/:id/control', requirePermission('ai:write'), async (req, res) => {
+  try { const result=await updatePlatformAgent(String(req.params.id),req.body||{}); writeAuditLog({actor:req.ownerAdmin!,action:'agent.control_updated',entityType:'agent',entityId:String(req.params.id),summary:'تحديث تحكم الوكيل في PostgreSQL.',after:result,ipAddress:getClientIp(req)}); res.json(result); }
+  catch (err) { handleError(res, err); }
+});
+platformDataRouter.get('/ai/usage', async (req, res) => {
+  try { res.json(await platformAiUsage({userId:req.query.userId?String(req.query.userId):undefined,agentId:req.query.agentId?String(req.query.agentId):undefined,modelId:req.query.modelId?String(req.query.modelId):undefined,providerCode:req.query.providerCode?String(req.query.providerCode):undefined,status:req.query.status?String(req.query.status):undefined,page:req.query.page?Number(req.query.page):1,pageSize:req.query.pageSize?Number(req.query.pageSize):25})); } catch (err) { handleError(res, err, 503); }
+});
+platformDataRouter.get('/channels', async (_req, res) => {
+  try { res.json(await platformChannels()); } catch (err) { handleError(res, err, 503); }
+});
+platformDataRouter.get('/conversations', async (req, res) => {
+  try { res.json(await platformConversations({search:req.query.search?String(req.query.search):undefined,status:req.query.status?String(req.query.status):undefined,channelType:req.query.channelType?String(req.query.channelType):undefined,agentId:req.query.agentId?String(req.query.agentId):undefined,userId:req.query.userId?String(req.query.userId):undefined})); } catch (err) { handleError(res, err, 503); }
+});
+platformDataRouter.get('/entitlements', async (_req, res) => {
+  try { res.json(await platformEntitlements()); } catch (err) { handleError(res, err, 503); }
+});
+platformDataRouter.post('/entitlements/overrides', requirePermission('users:write'), async (req, res) => {
+  try { const result=await platformEntitlementOverride(req.body||{}); writeAuditLog({actor:req.ownerAdmin!,action:'entitlement.overridden',entityType:'entitlement',entityId:String(result.id),summary:'تعديل استحقاق المؤسسة في PostgreSQL.',after:result,ipAddress:getClientIp(req)}); res.json(result); }
+  catch (err) { handleError(res, err); }
+});
+
+// These areas have no canonical PostgreSQL source yet. Block the former local/demo store rather than displaying misleading data.
+const unavailablePlatformData = (_req: Request, res: Response) => res.status(501).json({error:'not_integrated',message:'هذا القسم لم يُربط بعد بمصدر بيانات المنصة الحقيقي؛ لم نعد نعرض بيانات المخزن المحلي على أنها بيانات إنتاجية.'});
+platformDataRouter.get('/plans', unavailablePlatformData);
+platformDataRouter.post('/plans', unavailablePlatformData);
+platformDataRouter.put('/plans/:id', unavailablePlatformData);
+platformDataRouter.get('/billing', unavailablePlatformData);
+platformDataRouter.post('/invoices', unavailablePlatformData);
+platformDataRouter.post('/invoices/:id/refund', unavailablePlatformData);
+platformDataRouter.post('/expenses', unavailablePlatformData);
+
 ownerRouter.use(requireOwnerAuth);
+ownerRouter.use(platformDataRouter);
 
 ownerRouter.get('/auth/me', (req: Request, res: Response) => {
   res.json({ admin: req.ownerAdmin });
