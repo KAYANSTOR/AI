@@ -54,7 +54,7 @@ export async function platformUserDetail(id:string) {
   const [workspaces,subscriptions,agents,channels,conversations,usage]=await Promise.all([
     query(`SELECT o.id::text id,o.name,b.id::text business_id,b.name business_name,b.business_type_id business_type,COALESCE(b.status,'active') status,o.created_at::text created_at
       FROM organization_members m JOIN organizations o ON o.id=m.organization_id LEFT JOIN businesses b ON b.organization_id=o.id WHERE m.user_id=$1::uuid AND m.role='owner' ORDER BY o.created_at DESC`,[id]),
-    query(`SELECT s.id::text id,s.organization_id::text organization_id,s.plan_tier plan_code,s.plan_tier plan_name,s.status,s.period_start::text current_period_start,s.period_end::text current_period_end,s.minutes_used,s.sms_used,s.created_at::text created_at FROM subscriptions s JOIN organization_members m ON m.organization_id=s.organization_id WHERE m.user_id=$1::uuid AND m.role='owner' ORDER BY s.created_at DESC`,[id]),
+    query(`SELECT s.id::text id,s.organization_id::text organization_id,s.plan_tier plan_code,COALESCE(p.name,INITCAP(s.plan_tier)) plan_name,p.monthly_price::numeric price_monthly,p.currency,s.billing_cycle,s.status,s.period_start::text current_period_start,s.period_end::text current_period_end,s.minutes_used,s.sms_used,s.created_at::text created_at FROM subscriptions s LEFT JOIN plans p ON p.id=s.plan_id JOIN organization_members m ON m.organization_id=s.organization_id WHERE m.user_id=$1::uuid AND m.role='owner' ORDER BY s.created_at DESC`,[id]),
     query(`SELECT a.id::text id,a.organization_id::text organization_id,a.business_id::text workspace_id,a.name,a.model_provider provider_code,a.status,a.temperature,a.locale,a.created_at::text created_at FROM ai_agents a JOIN organization_members m ON m.organization_id=a.organization_id WHERE m.user_id=$1::uuid AND m.role='owner' ORDER BY a.created_at DESC`,[id]),
     query(`SELECT c.id::text id,c.organization_id::text organization_id,c.channel_type,c.is_active,c.verification_status,c.external_identifier,c.created_at::text created_at FROM channels c JOIN organization_members m ON m.organization_id=c.organization_id WHERE m.user_id=$1::uuid AND m.role='owner' ORDER BY c.created_at DESC`,[id]),
     query(`SELECT c.id::text id,c.status,c.state,c.channel_id::text channel_id,c.last_message_at::text last_message_at,ch.channel_type,COALESCE(ct.first_name,'')||CASE WHEN ct.last_name IS NULL THEN '' ELSE ' '||ct.last_name END customer_name FROM conversations c JOIN organization_members m ON m.organization_id=c.organization_id LEFT JOIN channels ch ON ch.id=c.channel_id LEFT JOIN contacts ct ON ct.id=c.contact_id WHERE m.user_id=$1::uuid AND m.role='owner' ORDER BY c.last_message_at DESC LIMIT 50`,[id]),
@@ -73,11 +73,26 @@ export async function platformWorkspaces(search?:string) {
     LEFT JOIN auth.users u ON u.id=own.user_id ${where} ORDER BY o.created_at DESC LIMIT 500`,args)};
 }
 
+export async function platformPlans() {
+  const rows=await query<{id:string;code:string;name:string;description:string|null;monthly_price:string|number;currency:string;limits:Record<string,unknown>|null;is_active:boolean;active_subscribers:string}>(`SELECT p.id::text id,p.code,p.name,p.description,p.monthly_price::text monthly_price,p.currency,p.limits,p.is_active,
+    (SELECT COUNT(*) FROM subscriptions s WHERE s.plan_id=p.id AND s.status IN ('active','trial'))::text active_subscribers
+    FROM plans p ORDER BY p.monthly_price ASC,p.code ASC`);
+  return {items:rows.map(p=>{
+    const limits=p.limits||{};
+    const value=(key:string)=>limits[key]===undefined||limits[key]===null?null:Number(limits[key]);
+    return {id:p.id,code:p.code,name:p.name,name_en:p.name,description:p.description||'',price_monthly:Number(p.monthly_price),price_yearly:null,currency:p.currency,
+      billing_cycle:'monthly',trial_days:null,max_users:null,max_agents:null,max_messages:value('ai_messages'),token_quota:null,max_channels:value('channels'),
+      voice_minutes:value('voice_minutes'),automation_runs:value('automation_runs'),campaign_sends:value('campaign_sends'),storage_mb:null,
+      allowed_models:[],allowed_channels:[],allowed_tools:[],enabled_features:[],blocked_features:[],status:p.is_active?'active':'archived',
+      active_subscribers:Number(p.active_subscribers),editable:false};
+  })};
+}
+
 export async function platformSubscriptions(status?:string) {
   const args:unknown[]=[];const where=status&&status!=='all'?(args.push(status),'WHERE s.status=$1'):'';
   const items=await query(`SELECT s.id::text id,s.organization_id::text organization_id,s.plan_tier plan_code,s.plan_tier plan_name,s.status,s.period_start::text current_period_start,
     s.period_end::text current_period_end,s.minutes_used,s.sms_used,s.created_at::text created_at,o.name workspace_name,u.id::text user_id,${fullName} user_name,u.email user_email
-    FROM subscriptions s JOIN organizations o ON o.id=s.organization_id LEFT JOIN LATERAL(SELECT user_id FROM organization_members WHERE organization_id=o.id AND role='owner' ORDER BY created_at LIMIT 1) own ON TRUE
+    FROM subscriptions s JOIN organizations o ON o.id=s.organization_id LEFT JOIN plans p ON p.id=s.plan_id LEFT JOIN LATERAL(SELECT user_id FROM organization_members WHERE organization_id=o.id AND role='owner' ORDER BY created_at LIMIT 1) own ON TRUE
     LEFT JOIN auth.users u ON u.id=own.user_id ${where} ORDER BY s.created_at DESC LIMIT 1000`,args);
   const [summary]=await query(`SELECT COUNT(*)::int total,COUNT(*) FILTER(WHERE status='active')::int active,COUNT(*) FILTER(WHERE status='trial')::int trial,
     COUNT(*) FILTER(WHERE status='past_due')::int past_due,COUNT(*) FILTER(WHERE status='expired')::int expired,COUNT(*) FILTER(WHERE status='cancelled')::int cancelled FROM subscriptions`);
