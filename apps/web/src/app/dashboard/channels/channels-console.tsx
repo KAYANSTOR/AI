@@ -4,7 +4,6 @@ import { useMemo, useState, useTransition } from 'react'
 import { CheckCircle2, CircleAlert, Link2, Loader2, MessageSquare, Phone, Power, RefreshCw, ArrowRight, Bot, MessageCircle } from 'lucide-react'
 import {
   saveChannelAction,
-  deleteChannelAction,
   setChannelActiveAction,
   testChannelAction,
   connectWhatsAppChannelAction,
@@ -259,16 +258,6 @@ function ChannelDialog({
         text: result.ok ? result.message ?? 'تم حذف إعدادات القناة.' : result.error ?? 'تعذّر حذف إعدادات القناة.',
       })
       if (result.ok) window.location.reload()
-    })
-  }
-
-  function removeChannel() {
-    if (!canManage || !window.confirm('سيتم حذف إعدادات هذه القناة وفصل اتصالها. هل تريد المتابعة؟')) return
-    startTransition(async () => {
-      setNotice(null)
-      const result = await deleteChannelAction({ channelType: card.type, connectionMode: card.connectionMode })
-      setNotice({ ok: result.ok, text: result.ok ? result.message ?? 'تم حذف القناة.' : result.error ?? 'تعذّر حذف القناة.' })
-      if (result.ok) window.location.href = '/dashboard/channels'
     })
   }
 
@@ -621,7 +610,7 @@ function ChannelDialog({
               <button
                 type="button"
                 onClick={submit}
-                disabled={busy || (card.type === 'telegram' ? !telegramBotToken.trim() : !identifier.trim())}
+                disabled={busy || (card.type === 'telegram' ? !telegramBotToken.trim() : !identifier.trim() || Boolean(spec.publicNumberLabel && !publicNumber.trim()))}
                 className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl border border-border bg-background px-4 text-sm font-semibold text-text hover:bg-surface disabled:opacity-50"
               >
                 {busy ? <Loader2 size={18} className="animate-spin" /> : <Link2 size={17} />}
