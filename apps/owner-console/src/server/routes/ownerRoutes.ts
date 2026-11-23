@@ -209,7 +209,7 @@ platformDataRouter.post('/entitlements/overrides', requirePermission('users:writ
 
 // These areas have no canonical PostgreSQL source yet. Block the former local/demo store rather than displaying misleading data.
 const unavailablePlatformData = (_req: Request, res: Response) => res.status(501).json({error:'not_integrated',message:'هذا القسم لم يُربط بعد بمصدر بيانات المنصة الحقيقي؛ لم نعد نعرض بيانات المخزن المحلي على أنها بيانات إنتاجية.'});
-platformDataRouter.get('/plans', unavailablePlatformData);
+platformDataRouter.get('/plans', (_req, res) => res.json({items:[],catalogStatus:'not_configured',message:'مخطط المنصة الحالي لا يحتوي كتالوج أسعار مركزي.'}));
 platformDataRouter.post('/users', requirePermission('users:write'), unavailablePlatformData);
 platformDataRouter.post('/workspaces', requirePermission('users:write'), unavailablePlatformData);
 platformDataRouter.patch('/workspaces/:id/status', requirePermission('users:write'), unavailablePlatformData);

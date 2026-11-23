@@ -46,7 +46,7 @@ export function PlansSubscriptionsPage({
 }: {
   onNotify: (type: 'success' | 'error' | 'info', text: string) => void;
 }) {
-  const [tab, setTab] = React.useState<'plans' | 'subscriptions'>('plans');
+  const [tab, setTab] = React.useState<'plans' | 'subscriptions'>('subscriptions');
   const [plans, setPlans] = React.useState<PlanRow[]>([]);
   const [subs, setSubs] = React.useState<Array<Record<string, unknown>>>([]);
   const [subSummary, setSubSummary] = React.useState<Record<string, number>>({});
@@ -188,12 +188,6 @@ export function PlansSubscriptionsPage({
       <PageHeader
         title="إدارة الاشتراكات والباقات"
         subtitle="التحكم الكامل بباقات Kayan AI (الأسعار، الحصص، القنوات، النماذج، والمزايا) ومتابعة دورة حياة جميع الاشتراكات."
-        action={
-          <button type="button" onClick={openNewPlan} className={primaryBtnClass}>
-            <Plus className="w-4 h-4" />
-            <span>إنشاء باقة جديدة</span>
-          </button>
-        }
       />
 
       <div className="flex items-center gap-1 p-1 rounded-lg bg-[var(--k-surface-subtle)] border border-[var(--k-line)] w-fit">
@@ -221,6 +215,11 @@ export function PlansSubscriptionsPage({
         <TableSkeleton rows={5} />
       ) : tab === 'plans' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {plans.length === 0 && (
+            <div className="md:col-span-2 rounded-xl border border-[var(--k-line)] bg-[var(--k-surface)] p-5 text-sm text-[var(--k-ink-secondary)]">
+              لا يوجد كتالوج أسعار مركزي في قاعدة PostgreSQL الحالية. تعرض صفحة الاشتراكات المستويات المسجلة فعلياً، ولن يتم إنشاء أسعار أو حدود افتراضية.
+            </div>
+          )}
           {plans.map((p) => (
             <div
               key={p.id}
