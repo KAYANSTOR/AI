@@ -27,6 +27,7 @@ type ChannelCard = {
   description: string
   publicNumberLabel: string | null
   publicNumber: string | null
+  identifier?: string | null
   connected: boolean
   verificationStatus: string | null
   isActive: boolean
@@ -211,7 +212,8 @@ function ChannelDialog({
   onClose: () => void
 }) {
   const spec = getChannelSpec(card.type)
-  const [identifier, setIdentifier] = useState(card.publicNumber ?? '')
+  const [identifier, setIdentifier] = useState(card.identifier ?? card.publicNumber ?? '')
+  const [publicNumber, setPublicNumber] = useState(card.publicNumber ?? '')
   const [busy, startTransition] = useTransition()
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null)
   const [testResult, setTestResult] = useState<BindingTestResult | null>(null)
@@ -233,7 +235,7 @@ function ChannelDialog({
           ? await connectWhatsAppChannelAction({ number: identifier })
           : card.type === 'telegram'
             ? await connectTelegramChannelAction({ botToken: telegramBotToken })
-            : await saveChannelAction({ channelType: card.type, identifier })
+            : await saveChannelAction({ channelType: card.type, identifier, publicNumber })
       setNotice({
         ok: result.ok,
         text: result.ok ? result.message ?? 'تم حفظ الربط.' : result.error ?? 'تعذّر إكمال الربط.',
@@ -514,6 +516,22 @@ function ChannelDialog({
               </label>
             </section>
           ) : card.type !== 'whatsapp' ? (
+            <>
+            {spec.publicNumberLabel ? (
+              <label className="block">
+                <span className="text-sm font-semibold text-text">{spec.publicNumberLabel}</span>
+                <input
+                  value={publicNumber}
+                  onChange={(event) => setPublicNumber(event.target.value)}
+                  dir="ltr"
+                  autoComplete="tel"
+                  inputMode="tel"
+                  placeholder="+967777123456"
+                  className="mt-2 min-h-12 w-full rounded-xl border border-border bg-background px-3 text-base text-text outline-none focus:border-secondary focus:ring-2 focus:ring-accent/40"
+                  disabled={busy || !canManage}
+                />
+              </label>
+            ) : null}
             <label className="block">
               <span className="text-sm font-semibold text-text">
                 {card.type === 'instagram'
@@ -536,6 +554,7 @@ function ChannelDialog({
                 disabled={busy || !canManage}
               />
             </label>
+            </>
           ) : null}
 
           <div className="rounded-2xl border border-border bg-background p-4">
