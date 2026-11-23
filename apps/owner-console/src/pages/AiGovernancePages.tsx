@@ -193,7 +193,7 @@ export function AgentsPage({
                     <td className="px-4 py-3 font-mono tabular-nums">
                       <div>{formatNumber(Number(a.total_tokens))} tok</div>
                       <div className="text-[11px] text-[var(--k-ink-muted)]">
-                        {formatCurrency(Number(a.total_cost_usd))}
+                        {a.total_cost_usd == null ? 'غير متاح' : formatCurrency(Number(a.total_cost_usd))}
                       </div>
                     </td>
                     <td className="px-4 py-3 text-end">
@@ -416,7 +416,7 @@ function AgentDetailView({
         <MetricTile label="مرات التنفيذ" value={formatNumber(detail.stats?.total_runs)} />
         <MetricTile label="النجاح / الفشل" value={`${detail.stats?.success_runs || 0} / ${detail.stats?.failed_runs || 0}`} />
         <MetricTile label="استهلاك Tokens" value={formatNumber(detail.stats?.total_tokens)} />
-        <MetricTile label="التكلفة المسجلة" value={formatCurrency(detail.stats?.total_cost_usd)} />
+        <MetricTile label="التكلفة المسجلة" value={detail.stats?.total_cost_usd == null ? 'غير متاح' : formatCurrency(Number(detail.stats.total_cost_usd))} />
         <MetricTile label="متوسط الاستجابة" value={`${Math.round(detail.stats?.avg_latency_ms || 0)} ms`} />
       </div>
 
@@ -491,7 +491,7 @@ function AgentDetailView({
                     </div>
                     <div className="text-end font-mono tabular-nums">
                       <div>{formatNumber(Number(ex.total_tokens))} tok</div>
-                      <div className="text-[11px] text-[var(--k-ink-muted)]">{formatCurrency(Number(ex.cost_usd))}</div>
+                      <div className="text-[11px] text-[var(--k-ink-muted)]">{ex.cost_usd == null ? 'غير متاح' : formatCurrency(Number(ex.cost_usd))}</div>
                     </div>
                   </div>
                 ))}
@@ -587,7 +587,7 @@ export function AiModelsPage({
                     </div>
                     <div>
                       <dt className="font-sans text-[var(--k-ink-muted)]">التكلفة المسجلة</dt>
-                      <dd className="font-semibold mt-0.5">{formatCurrency(stats.total_cost_usd)}</dd>
+                      <dd className="font-semibold mt-0.5">{stats.total_cost_usd == null ? 'غير متاح' : formatCurrency(Number(stats.total_cost_usd))}</dd>
                     </div>
                   </dl>
                 </div>
@@ -741,9 +741,9 @@ export function AiUsagePage({
         <>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             <MetricTile label="إجمالي الطلبات" value={formatNumber(data.summary?.requests)} />
-            <MetricTile label="إجمالي Tokens" value={formatNumber(data.summary?.total_tokens)} subtext={`مخزنة: ${formatNumber(data.summary?.cached_tokens)}`} />
-            <MetricTile label="التكلفة الفعلية (Actual)" value={formatCurrency(data.summary?.actual_cost_usd)} tone="sage" />
-            <MetricTile label="التكلفة التقديرية (Estimated)" value={formatCurrency(data.summary?.estimated_cost_usd)} subtext={`الإجمالي: ${formatCurrency(data.summary?.total_cost_usd)}`} />
+            <MetricTile label="إجمالي Tokens" value={formatNumber(data.summary?.total_tokens)} subtext={`مخزنة: ${data.summary?.cached_tokens == null ? 'غير متاح' : formatNumber(Number(data.summary.cached_tokens))}`} />
+            <MetricTile label="التكلفة الفعلية المسجلة" value={data.summary?.actual_cost_usd == null ? 'غير متاح' : formatCurrency(Number(data.summary.actual_cost_usd))} tone="sage" />
+            <MetricTile label="التكلفة التقديرية" value={data.summary?.estimated_cost_usd == null ? 'غير متاح' : formatCurrency(Number(data.summary.estimated_cost_usd))} subtext={`الإجمالي المسجل: ${data.summary?.total_cost_usd == null ? 'غير متاح' : formatCurrency(Number(data.summary.total_cost_usd))}`} />
           </div>
 
           <div className="flex flex-wrap gap-3">
@@ -807,7 +807,7 @@ export function AiUsagePage({
                       </td>
                       <td className="px-4 py-3">
                         <div className="font-mono tabular-nums font-semibold">
-                          {formatCurrency(Number(ev.cost_usd))} ({ev.cost_type === 'actual' ? 'فعلي' : 'تقديري'})
+                          {ev.cost_usd == null ? 'غير متاح' : formatCurrency(Number(ev.cost_usd))} ({ev.cost_type === 'actual' ? 'فعلي' : 'غير مسجل'})
                         </div>
                         <div className="text-[11px] text-[var(--k-ink-muted)]">
                           {String(ev.pricing_source)} v{String(ev.pricing_version)}
