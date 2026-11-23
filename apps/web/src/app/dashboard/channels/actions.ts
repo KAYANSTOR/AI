@@ -824,3 +824,58 @@ export async function resetWhatsAppQrChannelAction(): Promise<ChannelActionResul
     return { ok: false, error: actionErrorMessage(error, 'تعذّر مسح إعدادات واتساب. حاول مرة أخرى.') }
   }
 }
+
+
+export async function deleteChannelAction(input: {
+  channelType: string
+  connectionMode?: string | null
+}): Promise<ChannelActionResult> {
+  try {
+    const org = await requireChannelAdmin()
+    const spec = getChannelSpec(input.channelType)
+    if (!spec) return { ok: false, error: 'نوع قناة غير معروف.' }
+
+    const db = await createClient()
+    const { data: rows, error: readError } = await db.from('channels')
+      .select('id, business_id, connection_mode')
+      .eq('organization_id', org.organizationId)
+      .eq('channel_type', spec.type)
+    if (readError) throw new Error('تعذّرت قراءة إعدادات القناة.')
+    const channel = spec.type === 'whatsapp'
+      ? rows?.find((row) => row.connection_mode === input.connectionMode) ??
+        (input.connectionMode === 'cloud_api' ? rows?.find((row) => !row.connection_mode) : undefined)
+      : rows?.[0]
+    if (!channel?.id) return { ok: false, error: 'إعدادات هذه القناة غير موجودة.' }
+
+    // Close a QR session before removing its local channel record. A stale gateway
+    // session must not prevent the owner from removing an incorrect phone number.
+    if (spec.type === 'whatsapp' && channel.connection_mode === 'qr_unofficial') {
+      try {
+        await callWhatsAppGateway('POST', '/sessions/' + channel.id + '/logout', {})
+      } catch (error) {
+        console.warn('WhatsApp QR logout during channel deletion failed', error)
+      }
+    }
+
+    await audit(org.organizationId, channel.business_id, 'channel.deleted', 'channel', channel.id, {
+      channel_type: spec.type,
+      connection_mode: channel.connection_mode ?? null,
+    })
+
+    const { error: deleteError } = await db.from('channels')
+      .delete()
+      .eq('id', channel.id)
+      .eq('organization_id', org.organizationId)
+    if (deleteError) {
+      console.error('Unable to delete channel settings', deleteError)
+      return { ok: false, error: describeWriteError(deleteError.code, deleteError.message) }
+    }
+
+    revalidatePath('/dashboard/channels')
+    revalidatePath('/dashboard/integrations')
+    revalidatePath('/dashboard/conversations')
+    return { ok: true, message: 'تم حذف إعدادات القناة. يمكنك إدخال الرقم أو بيانات الربط الصحيحة من جديد.' }
+  } catch (error) {
+    return { ok: false, error: actionErrorMessage(error, 'تعذّر حذف إعدادات القناة.') }
+  }
+}
