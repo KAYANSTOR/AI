@@ -192,14 +192,26 @@ export async function platformAiUsage(f:{userId?:string;agentId?:string;modelId?
   const where=clauses.length?'WHERE '+clauses.join(' AND '):'';
   const [totalRow]=await query<{total:string}>(`SELECT COUNT(*)::text total FROM agent_runs r LEFT JOIN LATERAL(SELECT user_id FROM organization_members WHERE organization_id=r.organization_id AND role='owner' ORDER BY created_at LIMIT 1) own ON TRUE ${where}`,args);
   const items=await query(`SELECT r.id::text id,r.organization_id::text organization_id,r.agent_id::text agent_id,r.model_provider provider_code,r.model model_id,r.status,r.input_tokens,r.output_tokens,
-    (COALESCE(r.input_tokens,0)+COALESCE(r.output_tokens,0)) total_tokens,r.latency_ms,r.error_code,r.created_at::text created_at,o.name workspace_name,a.name agent_name,u.id::text user_id,u.email user_email,${fullName} user_name
+    (COALESCE(r.input_tokens,0)+COALESCE(r.output_tokens,0)) total_tokens,
+    (SELECT CASE WHEN COUNT(*) FILTER(WHERE l.unit_cost IS NOT NULL)>0 THEN SUM(l.units*COALESCE(l.unit_cost,0))::numeric ELSE NULL END
+      FROM usage_ledger l WHERE l.reference_id=r.id AND l.event_type='ai_tokens' AND l.currency='USD') cost_usd,
+    CASE WHEN EXISTS(SELECT 1 FROM usage_ledger l WHERE l.reference_id=r.id AND l.event_type='ai_tokens' AND l.currency='USD' AND l.unit_cost IS NOT NULL) THEN 'actual' ELSE 'unavailable' END cost_type,
+    CASE WHEN EXISTS(SELECT 1 FROM usage_ledger l WHERE l.reference_id=r.id AND l.event_type='ai_tokens' AND l.currency='USD' AND l.unit_cost IS NOT NULL) THEN 'usage_ledger' ELSE 'غير مسجل' END pricing_source,
+    '—'::text pricing_version,r.latency_ms,r.error_code,r.created_at::text created_at,o.name workspace_name,a.name agent_name,u.id::text user_id,u.email user_email,${fullName} user_name
     FROM agent_runs r LEFT JOIN organizations o ON o.id=r.organization_id LEFT JOIN ai_agents a ON a.id=r.agent_id
-    LEFT JOIN LATERAL(SELECT user_id FROM organization_members WHERE organization_id=r.organization_id AND role='owner' ORDER BY created_at LIMIT 1) own ON TRUE LEFT JOIN auth.users u ON u.id=own.user_id
-    ${where} ORDER BY r.created_at DESC LIMIT $${args.length+1} OFFSET $${args.length+2}`,[...args,size,(page-1)*size]);
-  const [summary]=await query(`SELECT COUNT(*)::int requests,COALESCE(SUM(COALESCE(r.input_tokens,0)),0)::bigint input_tokens,COALESCE(SUM(COALESCE(r.output_tokens,0)),0)::bigint output_tokens,
-    COALESCE(SUM(COALESCE(r.input_tokens,0)+COALESCE(r.output_tokens,0)),0)::bigint total_tokens FROM agent_runs r
-    LEFT JOIN LATERAL(SELECT user_id FROM organization_members WHERE organization_id=r.organization_id AND role='owner' ORDER BY created_at LIMIT 1) own ON TRUE ${where}`,args);
-  const total=count(totalRow?.total);return {items,summary,pagination:{page,pageSize:size,total,totalPages:Math.max(1,Math.ceil(total/size))}};
+    LEFT JOIN LATERAL(SELECT user_id FROM organization_members WHERE organization_id=r.organization_id AND role='owner' ORDER BY created_at LIMIT 1) own ON TRUE
+    LEFT JOIN auth.users u ON u.id=own.user_id ${where} ORDER BY r.created_at DESC LIMIT $${args.length+1} OFFSET $${args.length+2}`,[...args,size,(page-1)*size]);
+  const [summary]=await query(`SELECT COUNT(*)::int requests,COALESCE(SUM(COALESCE(r.input_tokens,0)),0)::bigint input_tokens,
+    COALESCE(SUM(COALESCE(r.output_tokens,0)),0)::bigint output_tokens,
+    COALESCE(SUM(COALESCE(r.input_tokens,0)+COALESCE(r.output_tokens,0)),0)::bigint total_tokens
+    FROM agent_runs r LEFT JOIN LATERAL(SELECT user_id FROM organization_members WHERE organization_id=r.organization_id AND role='owner' ORDER BY created_at LIMIT 1) own ON TRUE ${where}`,args);
+  const costWhere=clauses.length?where+` AND l.event_type='ai_tokens' AND l.currency='USD'`:`WHERE l.event_type='ai_tokens' AND l.currency='USD'`;
+  const [costSummary]=await query(`SELECT CASE WHEN COUNT(*) FILTER(WHERE l.unit_cost IS NOT NULL)>0 THEN SUM(l.units*COALESCE(l.unit_cost,0))::numeric ELSE NULL END actual_cost_usd
+    FROM usage_ledger l JOIN agent_runs r ON r.id=l.reference_id
+    LEFT JOIN LATERAL(SELECT user_id FROM organization_members WHERE organization_id=r.organization_id AND role='owner' ORDER BY created_at LIMIT 1) own ON TRUE ${costWhere}`,args);
+  const total=count(totalRow?.total),actualCost=costSummary?.actual_cost_usd??null;
+  return {items,summary:{...summary,actual_cost_usd:actualCost,estimated_cost_usd:null,total_cost_usd:actualCost,cached_tokens:null},
+    pagination:{page,pageSize:size,total,totalPages:Math.max(1,Math.ceil(total/size))}};
 }
 
 export async function platformChannels() {
