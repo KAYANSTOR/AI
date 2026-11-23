@@ -780,3 +780,47 @@ export async function disconnectWhatsAppQrSessionAction(): Promise<ChannelAction
     return { ok: false, error: actionErrorMessage(error, 'تعذّر فصل جلسة واتساب.') }
   }
 }
+
+/**
+ * Clears only the QR channel's connection settings. Conversation and contact history
+ * remain untouched; the channel row is retained so its WhatsApp connection mode stays
+ * unambiguous and can be configured again.
+ */
+export async function resetWhatsAppQrChannelAction(): Promise<ChannelActionResult> {
+  try {
+    const org = await requireChannelAdmin()
+    const admin = createAdminClient()
+    const { data: channel, error: readError } = await admin.from('channels')
+      .select('id, business_id, connection_mode')
+      .eq('organization_id', org.organizationId)
+      .eq('channel_type', 'whatsapp')
+      .eq('connection_mode', 'qr_unofficial')
+      .maybeSingle()
+    if (readError) throw new Error('تعذّرت قراءة إعدادات قناة واتساب.')
+    if (!channel?.id) return { ok: false, error: 'لا توجد إعدادات QR محفوظة لهذه القناة.' }
+
+    // Do not clear the stored number if the gateway could not safely log out.
+    await callWhatsAppGateway('POST', '/sessions/' + channel.id + '/logout', {})
+    const { error: updateError } = await admin.from('channels')
+      .update({
+        provider_account_id: null,
+        external_identifier: null,
+        is_active: false,
+        verification_status: 'pending',
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', channel.id)
+      .eq('organization_id', org.organizationId)
+    if (updateError) throw updateError
+
+    await audit(org.organizationId, channel.business_id, 'channel.whatsapp_qr_settings_reset', 'channel', channel.id, {
+      channel_type: 'whatsapp',
+      connection_mode: 'qr_unofficial',
+    })
+    revalidatePath('/dashboard/channels')
+    revalidatePath('/dashboard/conversations')
+    return { ok: true, message: 'تم مسح رقم واتساب وإعدادات الاتصال. سجل المحادثات والعملاء محفوظ.' }
+  } catch (error) {
+    return { ok: false, error: actionErrorMessage(error, 'تعذّر مسح إعدادات واتساب. حاول مرة أخرى.') }
+  }
+}
