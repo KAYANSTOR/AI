@@ -6,6 +6,7 @@
   "workspaces": [
     "apps/web",
     "apps/owner-console",
+    "apps/whatsapp-gateway",
     "packages/db"
   ],
   "engines": {
