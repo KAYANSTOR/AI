@@ -81,7 +81,7 @@ interface OverviewResponse {
     }>;
     channelUsage: Array<{ channel: string; total: number; connected: number; messages: number }>;
     planDistribution: Array<{ code: string; name: string; subscribers: number }>;
-    modelUsage: Array<{ modelId: string; displayName: string; requests: number; tokens: number; costUsd: number }>;
+    modelUsage: Array<{ modelId: string; displayName: string; requests: number; tokens: number; costUsd: number | null }>;
   };
   dataLimitations?: { revenue?: string; expenses?: string; aiCost?: string; systemErrors?: string };
   attentionItems: {
