@@ -33,7 +33,7 @@ async function handle(req: NextRequest) {
   const channelIds = [...new Set((events ?? []).map((event) => event.channel_id as string | null).filter((id): id is string => Boolean(id)))]
   const channelsResult = channelIds.length
     ? await db.from('channels')
-        .select('id, organization_id, business_id, channel_type, provider_account_id, external_identifier')
+        .select('id, organization_id, business_id, channel_type, provider_account_id, external_identifier, connection_mode')
         .in('id', channelIds)
     : { data: [] as Array<Record<string, unknown>>, error: null }
   const channelsById = new Map<string, Record<string, unknown>>()
@@ -42,6 +42,7 @@ async function handle(req: NextRequest) {
   let sent = 0
   for (const event of events ?? []) {
     let providerAccepted = false
+    let selectedChannel: { channel_type?: string | null; connection_mode?: string | null } | undefined
     const claim = await db.from('outbox_events')
       .update({ status: 'processing', attempts: Number(event.attempts ?? 0) + 1, locked_at: new Date().toISOString() })
       .eq('id', event.id)
@@ -61,9 +62,11 @@ async function handle(req: NextRequest) {
             channel_type: string
             provider_account_id: string | null
             external_identifier: string | null
+            connection_mode: string | null
           }
         | undefined
       if (!channel) throw new Error('channel_not_found')
+      selectedChannel = channel
 
       const payload = event.payload as Record<string, unknown>
       const body = String(payload.body ?? '')
@@ -76,7 +79,8 @@ async function handle(req: NextRequest) {
           businessId: channel.business_id,
           channelType: channel.channel_type,
           providerAccountId: channel.provider_account_id,
-          externalIdentifier: channel.external_identifier,
+            externalIdentifier: channel.external_identifier,
+            connectionMode: channel.connection_mode as string | null,
         },
         recipient: event.recipient,
         body,
@@ -111,6 +115,8 @@ async function handle(req: NextRequest) {
       if (providerAccepted) {
         console.error('Outbound provider accepted message but inbox projection failed', {
           outboxEventId: event.id,
+          provider: selectedChannel?.channel_type === 'whatsapp' && selectedChannel?.connection_mode === 'qr_unofficial' ? 'baileys' : 'meta',
+          connection_mode: selectedChannel?.connection_mode ?? null,
           reason: message.slice(0, 240),
         })
         continue

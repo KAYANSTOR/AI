@@ -72,6 +72,41 @@ export type OutboundClaimResult =
   | { status: 'queued' }
   | { status: 'blocked' }
 
+async function reserveOutboundEventAtomically(
+  db: DbClient,
+  args: {
+    organizationId: string
+    businessId: string | null
+    channelId: string
+    eventType: string
+    idempotencyKey: string
+    recipient: string
+    payload: Record<string, unknown>
+  }
+): Promise<OutboundClaimResult | null> {
+  const { data, error } = await db.rpc('reserve_outbound_event', {
+    p_organization_id: args.organizationId,
+    p_business_id: args.businessId,
+    p_channel_id: args.channelId,
+    p_event_type: args.eventType,
+    p_idempotency_key: args.idempotencyKey,
+    p_recipient: args.recipient,
+    p_payload: args.payload,
+  })
+  if (error) {
+    // The in-memory test double intentionally has no default RPC handlers.
+    if (error.message.startsWith('rpc reserve_outbound_event is not registered')) return null
+    throw new Error(error.message)
+  }
+  const row = (Array.isArray(data) ? data[0] : data) as Record<string, unknown> | null
+  if (!row?.event_id) throw new Error('outbound_reservation_invalid')
+  const status = String(row.status ?? '')
+  if (status === 'sent') return { status: 'sent' }
+  if (status === 'dead_letter' || status === 'cancelled') return { status: 'blocked' }
+  if (status === 'processing') return { status: 'queued' }
+  return { status: 'claimed', eventId: String(row.event_id), attempts: Number(row.attempts ?? 1) }
+}
+
 /**
  * Creates a durable outbound intent before the network call, then atomically claims
  * it for the inline sender. The unique organization/idempotency key prevents a
@@ -88,9 +123,13 @@ export async function claimOutboundEvent(
     recipient: string
     payload: Record<string, unknown>
   },
-  now: Date = new Date()
+  now?: Date
 ): Promise<OutboundClaimResult> {
+  const atomicResult = await reserveOutboundEventAtomically(db, args)
+  if (atomicResult) return atomicResult
+
   await enqueueOutbound({ db, ...args })
+  const claimNow = now ?? new Date()
 
   const { data: event, error } = await db
     .from('outbox_events')
@@ -111,14 +150,14 @@ export async function claimOutboundEvent(
   if (attempts >= OUTBOX_MAX_ATTEMPTS) {
     await db
       .from('outbox_events')
-      .update({ status: 'dead_letter', last_error: 'max_attempts_reached', locked_at: null, updated_at: now.toISOString() })
+      .update({ status: 'dead_letter', last_error: 'max_attempts_reached', locked_at: null, updated_at: claimNow.toISOString() })
       .eq('id', event.id)
       .eq('status', status)
     return { status: 'blocked' }
   }
 
   const scheduledAt = event.scheduled_at ? new Date(String(event.scheduled_at)).getTime() : 0
-  if (Number.isFinite(scheduledAt) && scheduledAt > now.getTime()) {
+  if (Number.isFinite(scheduledAt) && scheduledAt > claimNow.getTime()) {
     return { status: 'queued' }
   }
 
@@ -128,8 +167,8 @@ export async function claimOutboundEvent(
     .update({
       status: 'processing',
       attempts: nextAttempts,
-      locked_at: now.toISOString(),
-      updated_at: now.toISOString(),
+      locked_at: claimNow.toISOString(),
+      updated_at: claimNow.toISOString(),
     })
     .eq('id', event.id)
     .eq('status', status)

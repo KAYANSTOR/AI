@@ -3,12 +3,12 @@ import { createAdminClient } from '@/lib/db/admin'
 import { claimOutboundEvent, nextOutboxFailureState } from '@/lib/channels/outbox'
 import { CredentialConfigError, CredentialMissingError, requireCredential } from '@/lib/credentials/service'
 import { resolveChannelProviderCredentials } from '@/lib/credentials/resolve'
-import { MetaApiError, sendInstagramText, sendWhatsAppTemplate, sendWhatsAppText, type WhatsAppTemplateInput } from '@/lib/providers/meta'
+import { MetaApiError, sendInstagramText, sendWhatsAppTemplate, type WhatsAppTemplateInput } from '@/lib/providers/meta'
 import { sendTwilioSms } from '@/lib/providers/twilio'
 import { sendTelegramText } from '@/lib/providers/telegram'
 import { sendMessengerText } from '@/lib/providers/messenger'
 import { markFirstResponse } from '@/lib/sla'
-import { callWhatsAppGateway } from '@/lib/providers/whatsapp-gateway'
+import { adapterForWhatsAppMode, type WhatsAppConnectionMode } from '@/lib/channels/whatsapp-provider-adapter'
 
 /**
  * Provider credentials are intentionally inaccessible through the tenant-scoped
@@ -33,7 +33,7 @@ async function resolveOwnedChannelCredentials(channel: OutboundChannel): Promise
     throw new Error('قناة واتساب متوقفة حالياً.')
   }
   if (data.connection_mode === 'qr_unofficial') {
-    return { __connection_mode: 'qr_unofficial' }
+    return { __connection_mode: 'qr_unofficial', __channel_id: String(data.id) }
   }
   const credentials = await resolveChannelProviderCredentials(admin, {
     channelId: data.id,
@@ -49,6 +49,7 @@ export type OutboundChannel = {
   channelType: string
   providerAccountId: string | null
   externalIdentifier: string | null
+  connectionMode?: WhatsAppConnectionMode | string | null
 }
 
 /**
@@ -118,6 +119,9 @@ export async function deliverOutbound(
   if (claim?.status === 'sent') return 'sent'
   if (claim?.status === 'blocked') return 'blocked'
   if (claim?.status === 'queued') return 'queued'
+  // HTTP/webhook paths only create the durable intent. The outbox worker is the
+  // only path allowed to call an external WhatsApp provider.
+  if (queueOnFailure) return 'queued'
 
   let credentials: Record<string, string>
   try {
@@ -153,6 +157,8 @@ export async function deliverOutbound(
         entity_id: input.conversationId ?? null,
         metadata: {
           channel_type: input.channel.channelType,
+          provider: input.channel.channelType === 'whatsapp' && input.channel.connectionMode === 'qr_unofficial' ? 'baileys' : 'meta',
+          connection_mode: input.channel.connectionMode ?? null,
           idempotency_key: input.idempotencyKey,
           reason: (error instanceof Error ? error.message : String(error)).slice(0, 300),
         },
@@ -180,16 +186,6 @@ export async function deliverOutbound(
       throw new Error('outbound_sent_state_update_failed: ' + (sentError?.message ?? 'claim_lost'))
     }
   }
-
-  await db.from('usage_ledger').insert({
-    organization_id: input.channel.organizationId,
-    business_id: input.channel.businessId,
-    event_type: 'message_outbound',
-    units: 1,
-    reference_type: 'channel',
-    reference_id: input.channel.id,
-    metadata: { channel_type: input.channel.channelType },
-  })
 
   return 'sent'
 }
@@ -328,19 +324,21 @@ async function sendViaProvider(
   }
 
   if (channel.channelType === 'whatsapp') {
-    if (credentials.__connection_mode === 'qr_unofficial') {
-      await callWhatsAppGateway('POST', '/sessions/' + channel.id + '/send', { recipient, text: body })
-      return
-    }
-    await sendWhatsAppText(
-      {
-        access_token: requireCredential(credentials, 'meta', 'access_token'),
-        // The binding on the channel row is authoritative for which number sends.
-        phone_number_id: channel.providerAccountId ?? credentials.phone_number_id,
-      },
-      recipient,
-      body
-    )
+    const connectionMode = credentials.__connection_mode ?? channel.connectionMode ?? 'cloud_api'
+    const adapter = adapterForWhatsAppMode(connectionMode)
+    console.info('WhatsApp outbound provider selected', {
+      provider: adapter.provider,
+      connection_mode: connectionMode,
+      channel_id: channel.id,
+    })
+    if (adapter.provider === 'meta') requireCredential(credentials, 'meta', 'access_token')
+    await adapter.sendText({
+      credentials,
+      from: channel.providerAccountId ?? credentials.phone_number_id ?? channel.externalIdentifier ?? '',
+      to: recipient,
+      body,
+      channelId: channel.id,
+    })
     return
   }
 

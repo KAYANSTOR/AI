@@ -5,7 +5,7 @@ export async function resolveChannelExact(db:DbClient,input:{channelType:string;
   const externalIdentifier=input.externalIdentifier?.trim() || null
   if(!providerAccountId && !externalIdentifier) return null
   let query=db.from('channels')
-    .select('id,organization_id,business_id,channel_type,provider_account_id,external_identifier')
+    .select('id,organization_id,business_id,channel_type,provider_account_id,external_identifier,connection_mode')
     .eq('channel_type',input.channelType).eq('is_active',true).eq('verification_status','verified')
   query=providerAccountId ? query.eq('provider_account_id',providerAccountId) : query.eq('external_identifier',externalIdentifier)
   const {data,error}=await query.maybeSingle()
@@ -14,6 +14,7 @@ export async function resolveChannelExact(db:DbClient,input:{channelType:string;
   return {
     id:data.id,organizationId:data.organization_id,businessId:data.business_id,
     channelType:data.channel_type,providerAccountId:data.provider_account_id,externalIdentifier:data.external_identifier,
+    connectionMode:data.connection_mode,
   }
 }
 

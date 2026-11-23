@@ -14,6 +14,7 @@ import {
   verifyMetaSignature,
 } from '@/lib/runtime/security'
 import { deliverOutbound, recordDeliveredOutboundMessage } from '@/lib/runtime/outbound'
+import { normalizeWhatsAppInbound } from '@/lib/channels/whatsapp-provider-adapter'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -291,6 +292,15 @@ export async function POST(req: NextRequest) {
           continue
         }
 
+        const normalized = normalizeWhatsAppInbound(msg, {
+          provider: 'meta',
+          connectionMode: channel.connectionMode === 'qr_unofficial'
+            ? 'qr_unofficial'
+            : channel.connectionMode === 'coexistence' ? 'coexistence' : 'cloud_api',
+          from: remotePhone,
+          to: to || null,
+        })
+
         await db
           .from('webhook_events')
           .update({
@@ -353,7 +363,7 @@ export async function POST(req: NextRequest) {
           continue
         }
 
-        const result = await processInboundMessage(db, { ...identity, text: inbound.text })
+        const result = await processInboundMessage(db, { ...identity, text: normalized.text ?? inbound.text })
 
         if (result.reply) {
           const delivery = await deliverOutbound(db, {

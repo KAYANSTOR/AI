@@ -1,4 +1,4 @@
-export type WhatsAppConnectionMode = 'cloud_api' | 'coexistence'
+export type WhatsAppConnectionMode = 'cloud_api' | 'coexistence' | 'qr_unofficial'
 
 /** Resolve the final mode from Meta's phone resource, not only a browser callback. */
 export function resolveWhatsAppConnectionMode(input: { isOnBizApp: boolean; platformType: string | null | undefined; sessionMarkedCoexistence: boolean }): WhatsAppConnectionMode {
