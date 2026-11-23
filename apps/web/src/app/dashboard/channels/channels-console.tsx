@@ -100,7 +100,7 @@ export function ChannelsConsole({
             <p className="mt-1 text-xs text-text-muted">القنوات المربوطة بنشاطك التجاري</p>
           </div>
           <span className="rounded-full border border-success/30 bg-success/10 px-3 py-1 text-xs font-semibold text-success">
-            {cards.filter((card) => card.connected && card.verificationStatus === 'verified' && card.isActive).length} نشطة
+            {cards.filter((card) => card.type !== 'whatsapp' && card.connected && card.verificationStatus === 'verified' && card.isActive).length} نشطة
           </span>
         </div>
         <div className="grid gap-3 sm:grid-cols-2">

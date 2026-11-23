@@ -126,28 +126,35 @@ export async function POST(req: NextRequest) {
         if (acquired.status === 'error') throw new Error(acquired.message)
         eventRowId = acquired.eventRowId
         const { data: channels, error: channelError } = await db.from('channels')
-          .select('id, organization_id').eq('waba_id', wabaId).eq('channel_type', 'whatsapp').limit(2)
+          .select('id, organization_id').eq('waba_id', wabaId).eq('channel_type', 'whatsapp')
         if (channelError) throw new Error(channelError.message)
-        if (!channels || channels.length !== 1) {
-          await markWebhookProcessed(db, eventRowId, 'failed', channels?.length ? 'ambiguous_whatsapp_waba_mapping' : 'unmapped_whatsapp_waba')
+        if (!channels?.length) {
+          await markWebhookProcessed(db, eventRowId, 'failed', 'unmapped_whatsapp_waba')
           eventRowId = null
           continue
         }
-        const channel = channels[0]
+        const organizationIds = Array.from(new Set(channels.map((channel) => channel.organization_id)))
+        if (organizationIds.length !== 1) {
+          await markWebhookProcessed(db, eventRowId, 'failed', 'ambiguous_whatsapp_waba_mapping')
+          eventRowId = null
+          continue
+        }
+        const organizationId = organizationIds[0]
+        const channelIds = channels.map((channel) => channel.id)
         if (event === 'ACCOUNT_OFFBOARDED' || event === 'PARTNER_REMOVED') {
           const { error } = await db.from('channels').update({
             verification_status: 'disabled', is_active: false, updated_at: new Date().toISOString(),
-          }).eq('id', channel.id).eq('organization_id', channel.organization_id)
+          }).eq('organization_id', organizationId).in('id', channelIds)
           if (error) throw new Error(error.message)
         } else if (event === 'ACCOUNT_RECONNECTED') {
           const { error } = await db.from('channels').update({
             verification_status: 'pending', is_active: false, updated_at: new Date().toISOString(),
-          }).eq('id', channel.id).eq('organization_id', channel.organization_id)
+          }).eq('organization_id', organizationId).in('id', channelIds)
           if (error) throw new Error(error.message)
         }
         await db.from('webhook_events').update({
-          organization_id: channel.organization_id, channel_id: channel.id,
-          event_type: 'channel.coexistence_account_update', signature_verified: true,
+          organization_id: organizationId, channel_id: channelIds[0],
+          event_type: 'channel.meta_account_update', signature_verified: true,
         }).eq('id', eventRowId)
         await markWebhookProcessed(db, eventRowId, 'processed')
         eventRowId = null
