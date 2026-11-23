@@ -175,11 +175,12 @@ export async function platformAgentDetail(id:string) {
   if(!agent)return null;
   const [channels,executions,conversations,stats]=await Promise.all([
     query(`SELECT id::text id,channel_type,is_active,verification_status,external_identifier FROM channels WHERE organization_id=$1::uuid ORDER BY created_at DESC`,[agent.organization_id]),
-    query(`SELECT id::text id,model_provider,model,status,input_tokens,output_tokens,latency_ms,error_code,created_at::text created_at FROM agent_runs WHERE agent_id=$1::uuid ORDER BY created_at DESC LIMIT 40`,[id]),
+    query(`SELECT r.id::text id,r.model_provider,r.model,r.status,r.input_tokens,r.output_tokens,(SELECT CASE WHEN COUNT(*) FILTER(WHERE l.unit_cost IS NOT NULL)>0 THEN SUM(l.units*COALESCE(l.unit_cost,0))::numeric ELSE NULL END FROM usage_ledger l WHERE l.reference_id=r.id AND l.event_type='ai_tokens' AND l.currency='USD') cost_usd,r.latency_ms,r.error_code,r.created_at::text created_at FROM agent_runs r WHERE r.agent_id=$1::uuid ORDER BY r.created_at DESC LIMIT 40`,[id]),
     query(`SELECT id::text id,status,state,channel_id::text channel_id,last_message_at::text last_message_at FROM conversations c WHERE EXISTS(SELECT 1 FROM agent_runs r WHERE r.conversation_id=c.id AND r.agent_id=$1::uuid) ORDER BY c.last_message_at DESC LIMIT 30`,[id]),
     query(`SELECT COUNT(*)::int total_runs,COUNT(*) FILTER(WHERE status='completed')::int success_runs,COUNT(*) FILTER(WHERE status='failed')::int failed_runs,
-      COALESCE(SUM(COALESCE(input_tokens,0)+COALESCE(output_tokens,0)),0)::bigint total_tokens,COALESCE(AVG(latency_ms),0)::int avg_latency_ms
-      FROM agent_runs WHERE agent_id=$1::uuid`,[id])
+      COALESCE(SUM(COALESCE(r.input_tokens,0)+COALESCE(r.output_tokens,0)),0)::bigint total_tokens,COALESCE(AVG(r.latency_ms),0)::int avg_latency_ms,
+      (SELECT CASE WHEN COUNT(*) FILTER(WHERE l.unit_cost IS NOT NULL)>0 THEN SUM(l.units*COALESCE(l.unit_cost,0))::numeric ELSE NULL END FROM usage_ledger l JOIN agent_runs r2 ON r2.id=l.reference_id WHERE r2.agent_id=$1::uuid AND l.event_type='ai_tokens' AND l.currency='USD') total_cost_usd
+      FROM agent_runs r WHERE r.agent_id=$1::uuid`,[id])
   ]);
   return {agent,channels,knowledgeSources:[],executions,conversations,errors:executions.filter((r:any)=>r.status==='failed'),configHistory:[],stats:stats[0]||{}};
 }
