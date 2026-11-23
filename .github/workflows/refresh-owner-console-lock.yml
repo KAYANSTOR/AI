@@ -25,6 +25,26 @@ jobs:
           node-version: 22
       - name: Regenerate workspace lockfile
         run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+      - name: Keep public GitHub dependencies on HTTPS
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFileSync, writeFileSync } from 'node:fs'
+          const path = 'package-lock.json'
+          const lock = JSON.parse(readFileSync(path, 'utf8'))
+          let changed = false
+          for (const entry of Object.values(lock.packages || {})) {
+            if (typeof entry.resolved !== 'string') continue
+            const normalized = entry.resolved.replace(
+              /^git\\+ssh:\\/\\/git@github\\.com\\//,
+              'git+https://github.com/'
+            )
+            if (normalized !== entry.resolved) {
+              entry.resolved = normalized
+              changed = true
+            }
+          }
+          if (changed) writeFileSync(path, JSON.stringify(lock, null, 2) + '\\n')
+          NODE
       - name: Commit updated lockfile when needed
         run: |
           if git diff --quiet -- package-lock.json; then
