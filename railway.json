@@ -2,10 +2,10 @@
   "$schema": "https://railway.com/railway.schema.json",
   "build": {
     "builder": "RAILPACK",
-    "buildCommand": "npm run build"
+    "buildCommand": "npm install --no-save --package-lock=false @whiskeysockets/baileys@7.0.0-rc14 qrcode@1.5.4 && npm run build"
   },
   "deploy": {
-    "startCommand": "npm run start",
+    "startCommand": "node start-with-gateway.mjs",
     "preDeployCommand": ["npm run db:migrate"],
     "healthcheckPath": "/",
     "healthcheckTimeout": 120,
