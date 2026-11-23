@@ -20,7 +20,7 @@ import { createAdminClient } from '@/lib/db/admin'
 import { saveChannelCredential, loadChannelCredentials, deleteChannelCredential } from '@/lib/credentials/service'
 import { configureTelegramWebhook, verifyTelegramBot, verifyTelegramWebhook } from '@/lib/providers/telegram'
 import { createEmbeddedSignupOAuthState, verifyEmbeddedSignupOAuthState } from '@/lib/channels/embedded-signup'
-import { ensureMessengerAppWebhook, exchangeMessengerCode, getMessengerPage, listMessengerPages, subscribeMessengerPage, verifyMessengerPage, verifyMessengerPermissions } from '@/lib/providers/messenger'
+import { ensureMessengerAppWebhook, getMessengerPage, listMessengerPages, subscribeMessengerPage, verifyMessengerPage, verifyMessengerPermissions } from '@/lib/providers/messenger'
 
 export type ChannelActionResult = {
   ok: boolean
@@ -548,14 +548,14 @@ export async function createMessengerOAuthStateAction(): Promise<{ok:true;state:
   }
 }
 
-export async function beginMessengerConnectionAction(input:{code:string;state:string}):Promise<{ok:boolean;error?:string;pages:MessengerPageOption[]}> {
+export async function beginMessengerConnectionAction(input:{accessToken:string;state:string}):Promise<{ok:boolean;error?:string;pages:MessengerPageOption[]}> {
   try {
     const org=await requireChannelAdmin()
     const oauth=await verifyEmbeddedSignupOAuthState(input.state,org.organizationId)
     if(!oauth)return{ok:false,error:'انتهت جلسة Facebook أو لم تتطابق مع حسابك. أعد بدء الربط.',pages:[]}
-    if(!input.code?.trim()||input.code.length>4096)return{ok:false,error:'لم يصل رمز تفويض صالح من Facebook.',pages:[]}
+    const userToken=input.accessToken?.trim()
+    if(!userToken||userToken.length>4096)return{ok:false,error:'لم يصل رمز وصول صالح من Facebook.',pages:[]}
     await ensureMessengerAppWebhook()
-    const userToken=await exchangeMessengerCode(input.code.trim(),oauth.redirectUri)
     await verifyMessengerPermissions(userToken)
     const pages=await listMessengerPages(userToken)
     if(!pages.length)return{ok:false,error:'لم يعثر Facebook على صفحة تملك صلاحية الرسائل وإدارة الاشتراكات عليها.',pages:[]}

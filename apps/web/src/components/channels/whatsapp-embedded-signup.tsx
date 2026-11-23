@@ -12,7 +12,7 @@ import {
 const META_GRAPH_VERSION = 'v26.0'
 
 export type FacebookLoginResponse = {
-  authResponse?: { code?: string } | null
+  authResponse?: { code?: string; accessToken?: string } | null
   status?: string
   error?: { message?: string }
 }

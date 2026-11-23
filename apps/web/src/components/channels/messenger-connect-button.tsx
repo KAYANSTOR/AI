@@ -37,15 +37,15 @@ export function MessengerConnectButton({disabled,onPages,onError}:{disabled?:boo
    const state=await createMessengerOAuthStateAction()
    if(!state.ok){setBusy(false);onError(state.error);return}
    fb.login(async(response:FacebookLoginResponse)=>{
-    const code=response.authResponse?.code?.trim()
-    if(!code){setBusy(false);onError(response.error?.message?'رفضت Meta التفويض: '+response.error.message:'لم تُرجع Meta رمز التفويض. وافق على صلاحيات الصفحات والرسائل.');return}
+    const accessToken=response.authResponse?.accessToken?.trim()
+    if(!accessToken){setBusy(false);onError(response.error?.message?'رفضت Meta التفويض: '+response.error.message:'لم يمنح Facebook رمز وصول. وافق على صلاحيات الصفحات والرسائل ثم أعد المحاولة.');return}
     try{
-     const result=await beginMessengerConnectionAction({code,state:state.state});setBusy(false)
+     const result=await beginMessengerConnectionAction({accessToken,state:state.state});setBusy(false)
      if(!result.ok){onError(result.error??'تعذّر تفويض صفحات Facebook.');return}
      if(!result.pages.length){onError('لم نجد صفحة تملك صلاحية إدارة الرسائل عليها.');return}
      onPages(result.pages)
     }catch(e){setBusy(false);console.error('Messenger OAuth failed',e);onError('تعذّر إكمال تفويض Facebook.')}
-   },{scope:'pages_show_list,pages_messaging,pages_manage_metadata',auth_type:'rerequest',response_type:'code',override_default_response_type:true})
+   },{scope:'pages_show_list,pages_messaging,pages_manage_metadata',auth_type:'rerequest'})
   }catch(e){setBusy(false);console.error('Messenger login launch failed',e);onError('تعذّر بدء تسجيل الدخول إلى Facebook.')}
  }
  return <div className="space-y-2">
