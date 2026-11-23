@@ -248,8 +248,8 @@ export async function platformUserAction(id:string,action:string) {
 }
 export async function subscriptionAction(id:string,action:string,p:Record<string,unknown>) {
   let result:Record<string,unknown>[]=[];
-  if(action==='extend'){const days=Math.max(1,Math.min(730,Math.floor(Number(p.days)||30)));result=await query(`UPDATE subscriptions SET period_end=GREATEST(COALESCE(period_end,NOW()),NOW())+($2::int*INTERVAL '1 day'),status='active',updated_at=NOW() WHERE id=$1::uuid RETURNING id::text id,status,period_end::text period_end`,[id,days]);}
-  else if(action==='change_plan'){const tier=String(p.planCode||'');if(!['starter','growth','pro'].includes(tier))throw new Error('الباقة يجب أن تكون starter أو growth أو pro.');result=await query(`UPDATE subscriptions SET plan_tier=$2,updated_at=NOW() WHERE id=$1::uuid RETURNING id::text id,status,plan_tier`,[id,tier]);}
+  if(action==='extend'){const days=Math.max(1,Math.min(730,Math.floor(Number(p.days)||30)));result=await query(`UPDATE subscriptions SET period_end=GREATEST(COALESCE(period_end,current_period_end,NOW()),NOW())+($2::int*INTERVAL '1 day'),current_period_end=GREATEST(COALESCE(current_period_end,period_end,NOW()),NOW())+($2::int*INTERVAL '1 day'),status='active',updated_at=NOW() WHERE id=$1::uuid RETURNING id::text id,status,period_end::text period_end,current_period_end::text current_period_end`,[id,days]);}
+  else if(action==='change_plan'){const tier=String(p.planCode||'');if(!['trial','starter','growth','pro'].includes(tier))throw new Error('رمز الباقة غير صالح.');result=await query(`UPDATE subscriptions s SET plan_id=p.id,plan_tier=p.code,status=CASE WHEN s.status='expired' THEN 'active' ELSE s.status END,updated_at=NOW() FROM plans p WHERE s.id=$1::uuid AND p.code=$2 AND p.is_active=TRUE RETURNING s.id::text id,s.status,s.plan_tier,s.plan_id::text plan_id`,[id,tier]);}
   else if(action==='cancel'||action==='reactivate')result=await query(`UPDATE subscriptions SET status=$2,updated_at=NOW() WHERE id=$1::uuid RETURNING id::text id,status`,[id,action==='cancel'?'cancelled':'active']);
   else throw new Error('الإجراء غير مدعوم في نموذج الاشتراك الفعلي.');
   if(!result[0])throw new Error('الاشتراك غير موجود.');return result[0];
@@ -279,5 +279,5 @@ export async function platformEntitlementOverride(p:{userId:string;featureKey:st
       RETURNING id::text id,limit_value,period,enabled,source`,[org.organization_id,p.featureKey,limit,period,enabled]);
     quota=qrow||null;
   }
-  return {...result,feature_name:p.featureKey,override_state:enabled?'granted':'revoked',quota};
+  return {...result,id:`${org.organization_id}:${p.featureKey}`,feature_name:p.featureKey,override_state:enabled?'granted':'revoked',quota};
 }
