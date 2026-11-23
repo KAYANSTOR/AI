@@ -559,6 +559,8 @@ export function InvoicesPaymentsPage({
   const [data, setData] = React.useState<{
     invoices: Array<Record<string, unknown>>;
     expenses: Array<Record<string, unknown>>;
+    paymentIntents?: Array<Record<string, unknown>>;
+    dataLimitations?: { invoices?: string; expenses?: string; refunds?: string };
     gateways: Array<{ code: string; name: string; configured: boolean; webhookConfigured: boolean; supportsRefund: boolean }>;
     summary: {
       collectedRevenueUsd: number;
@@ -648,18 +650,7 @@ export function InvoicesPaymentsPage({
     <div className="space-y-6">
       <PageHeader
         title="الفواتير والمدفوعات والمصروفات التشغيلية"
-        subtitle="فصل دقيق بين الإيرادات المحصلة فعلياً، الفواتير غير المدفوعة، الإيراد المتكرر التقديري (MRR)، والمصروفات التشغيلية المسجلة."
-        action={
-          <div className="flex items-center gap-2">
-            <button type="button" onClick={() => setExpenseModal(true)} className={secondaryBtnClass}>
-              تسجيل مصروف تشغيلي
-            </button>
-            <button type="button" onClick={() => setInvoiceModal(true)} className={primaryBtnClass}>
-              <Receipt className="w-4 h-4" />
-              <span>إصدار / تسجيل فاتورة</span>
-            </button>
-          </div>
-        }
+        subtitle="متابعة طلبات الدفع المؤكدة والمعلقة من قاعدة المنصة. الفواتير والمصروفات المنفصلة غير متاحة في مخطط البيانات الحالي."
       />
 
       {loading || !data ? (
@@ -668,29 +659,31 @@ export function InvoicesPaymentsPage({
         <>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
             <MetricTile
-              label="الإيرادات المحصلة فعلياً"
+              label="المبالغ المؤكدة"
               value={formatCurrency(data.summary.collectedRevenueUsd)}
-              subtext="فواتير مدفوعة ومحصّلة"
+              subtext={`طلبات دفع مؤكدة: ${data.summary.verifiedPayments ?? 0}`}
               tone="sage"
             />
             <MetricTile
-              label="الفواتير غير المدفوعة"
+              label="طلبات الدفع المعلقة"
               value={formatCurrency(data.summary.unpaidInvoicesUsd)}
-              subtext="بانتظار السداد أو فاشلة"
+              subtext={`معلقة: ${data.summary.pendingPayments ?? 0} · مبلغ غير مطابق: ${data.summary.wrongAmountPayments ?? 0}`}
               tone={data.summary.unpaidInvoicesUsd > 0 ? 'warning' : 'default'}
             />
             <MetricTile
-              label="MRR التقديري (تقدير فقط)"
+              label="MRR للاشتراكات الشهرية"
               value={formatCurrency(data.summary.estimatedMrrUsd)}
-              subtext="من الاشتراكات النشطة"
+              subtext="الاشتراكات الشهرية النشطة فقط"
             />
             <MetricTile
-              label="الاستردادات المسجلة"
-              value={formatCurrency(data.summary.refundedUsd)}
+              label="الاستردادات"
+              value="غير متاح"
+              subtext="لا يوجد تدفق استرداد مسجل في قاعدة المنصة"
             />
             <MetricTile
               label="المصروفات التشغيلية"
-              value={formatCurrency(data.summary.recordedExpensesUsd)}
+              value="غير متاح"
+              subtext="لا يوجد دفتر مصروفات في قاعدة المنصة"
             />
           </div>
 
@@ -716,18 +709,50 @@ export function InvoicesPaymentsPage({
             ))}
           </div>
 
+          {data.dataLimitations && (
+            <div role="note" className="rounded-xl border border-[var(--k-line)] bg-[var(--k-surface-subtle)] px-4 py-3 text-xs leading-6 text-[var(--k-ink-secondary)]">
+              <strong className="text-[var(--k-ink)]">حدود السجل المالي:</strong>
+              {' '}{data.dataLimitations.invoices} {' '}{data.dataLimitations.expenses} {' '}{data.dataLimitations.refunds}
+            </div>
+          )}
+
+          <div className="space-y-3">
+            <h2 className="text-sm font-bold text-[var(--k-ink)]">طلبات الدفع الفعلية ({data.paymentIntents?.length ?? 0})</h2>
+            {!data.paymentIntents?.length ? (
+              <EmptyState title="لا توجد طلبات دفع مسجلة" description="ستظهر هنا طلبات المحافظ اليمنية المسجلة والتحقق منها في قاعدة المنصة." />
+            ) : (
+              <div className="rounded-xl border border-[var(--k-line)] bg-[var(--k-surface)] overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead><tr className="border-b border-[var(--k-line)] bg-[var(--k-surface-subtle)] text-[var(--k-ink-muted)]">
+                    <th className="px-4 py-3 text-start">رقم الطلب</th><th className="px-4 py-3 text-start">المالك / المؤسسة</th>
+                    <th className="px-4 py-3 text-start">الباقة</th><th className="px-4 py-3 text-start">المبلغ</th>
+                    <th className="px-4 py-3 text-start">مرجع الدفع</th><th className="px-4 py-3 text-start">الحالة</th><th className="px-4 py-3 text-start">التاريخ</th>
+                  </tr></thead>
+                  <tbody className="divide-y divide-[var(--k-line)]">
+                    {data.paymentIntents.map((p) => (
+                      <tr key={String(p.id)} className="hover:bg-[var(--k-surface-subtle)]/60">
+                        <td className="px-4 py-3 font-mono">{String(p.external_order_id || p.id)}</td>
+                        <td className="px-4 py-3"><div>{String(p.user_name || '—')}</div><div className="text-[10px] text-[var(--k-ink-muted)]">{String(p.workspace_name || '')}</div></td>
+                        <td className="px-4 py-3">{String(p.plan_name || p.plan_code || '—')}</td>
+                        <td className="px-4 py-3 font-mono"><div>{formatCurrency(Number(p.amount_usd), 'USD')}</div><div className="text-[10px] text-[var(--k-ink-muted)]">{formatNumber(Number(p.amount_yer))} ر.ي</div></td>
+                        <td className="px-4 py-3 font-mono">{String(p.payment_reference || p.provider_payment_id || '—')}</td>
+                        <td className="px-4 py-3"><StatusText status={p.status === 'verified' ? 'ok' : p.status === 'failed' || p.status === 'expired' || p.status === 'cancelled' ? 'error' : 'warn'} label={String(p.status)} /></td>
+                        <td className="px-4 py-3 text-[var(--k-ink-muted)]">{formatDateTime(String(p.created_at))}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
           {/* Invoices Table */}
           <div className="space-y-3">
             <h2 className="text-sm font-bold text-[var(--k-ink)]">سجل الفواتير ({data.invoices.length})</h2>
             {data.invoices.length === 0 ? (
               <EmptyState
-                title="لا توجد فواتير مسجلة حتى الآن"
-                description="عند إتمام عمليات دفع عبر Stripe أو إيصالات أو تسجيل فاتورة يدوياً ستظهر جميع تفاصيلها هنا."
-                action={
-                  <button type="button" onClick={() => setInvoiceModal(true)} className={primaryBtnClass}>
-                    تسجيل فاتورة
-                  </button>
-                }
+                title="لا يوجد دفتر فواتير منفصل"
+                description="طلبات الدفع الفعلية معروضة أعلاه؛ لا ننشئ فواتير محلية غير مرتبطة بقاعدة المنصة."
               />
             ) : (
               <div className="rounded-xl border border-[var(--k-line)] bg-[var(--k-surface)] overflow-x-auto">
