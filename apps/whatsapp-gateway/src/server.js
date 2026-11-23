@@ -184,6 +184,34 @@ async function startSocket(channelId, options = {}) {
       console.error('whatsapp_qr_credentials_persist_failed', { channelId, reason: error instanceof Error ? error.message : 'storage_error' })
     }
   })
+  // WhatsApp now rotates the companion ADV secret after a QR scan.
+  // Baileys rc14 acknowledges this notification but does not update the secret,
+  // which makes the phone reject the link and eventually exhaust QR refs.
+  const refreshPairingSecret = async node => {
+    if (session.stopping || session.creds.me || session.creds.registered) return
+    const children = Array.isArray(node?.content) ? node.content : []
+    if (!children.some(child => ['companion_reg_refresh', 'pair-device-rotate-qr'].includes(child?.tag))) return
+    try {
+      session.creds.advSecretKey = randomBytes(32).toString('base64')
+      await saveCreds(session)
+      if (typeof session.qrRaw === 'string') {
+        const parts = session.qrRaw.split(',')
+        if (parts.length === 5) {
+          parts[3] = session.creds.advSecretKey
+          session.qrRaw = parts.join(',')
+          session.qrDataUrl = await QRCode.toDataURL(session.qrRaw, { width: 320, margin: 1 })
+          await persistSocketState(session)
+        }
+      }
+      console.info('whatsapp_qr_pairing_secret_refreshed', { channelId })
+    } catch (error) {
+      console.error('whatsapp_qr_pairing_secret_refresh_failed', {
+        channelId,
+        reason: error instanceof Error ? error.message : 'secret_refresh_failed',
+      })
+    }
+  }
+  sock.ws?.on?.('CB:notification,type:companion_reg_refresh', refreshPairingSecret)
   sock.ev.on('connection.update', async update => {
     try {
       if (session.mode === 'pairing_code' && !session.creds.registered &&
@@ -209,7 +237,12 @@ async function startSocket(channelId, options = {}) {
 
       if (update.qr && session.mode !== 'pairing_code') {
         session.status = 'qr_required'
-        session.qrDataUrl = await QRCode.toDataURL(update.qr, { width: 320, margin: 1 })
+        const parts = update.qr.split(',')
+        if (parts.length === 5 && typeof session.creds.advSecretKey === 'string' && !session.creds.me) {
+          parts[3] = session.creds.advSecretKey
+        }
+        session.qrRaw = parts.join(',')
+        session.qrDataUrl = await QRCode.toDataURL(session.qrRaw, { width: 320, margin: 1 })
         session.pairingCode = null
         session.lastError = null
         await persistSocketState(session)
