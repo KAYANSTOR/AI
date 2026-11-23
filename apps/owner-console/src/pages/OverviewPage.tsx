@@ -229,9 +229,9 @@ export function OverviewPage({ onNavigate }: { onNavigate: (route: OwnerRouteId)
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               <MetricTile
                 label="الإيرادات المحصلة فعلياً"
-                value={data.dataLimitations?.revenue ? 'غير متاح' : formatCurrency(data.metrics.collectedRevenueUsd)}
+                value={formatCurrency(data.metrics.collectedRevenueUsd)}
                 deltaPct={data.comparisons.revenueDeltaPct}
-                subtext={data.dataLimitations?.revenue || `غير مدفوعة: ${formatCurrency(data.metrics.unpaidInvoicesUsd)}`}
+                subtext={data.dataLimitations?.revenue || 'بانتظار التحقق أو تصحيح مبلغ الدفع'}
                 tone="sage"
                 onClick={() => onNavigate('invoices_payments')}
               />
