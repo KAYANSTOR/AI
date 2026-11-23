@@ -568,6 +568,9 @@ export function InvoicesPaymentsPage({
       refundedUsd: number;
       estimatedMrrUsd: number;
       recordedExpensesUsd: number;
+      verifiedPayments?: number;
+      pendingPayments?: number;
+      wrongAmountPayments?: number;
     };
   } | null>(null);
   const [users, setUsers] = React.useState<Array<{ id: string; full_name: string }>>([]);
