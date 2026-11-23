@@ -463,19 +463,26 @@ export async function platformCreateWorkspace(p:{ownerUserId:string;name:string;
 export async function platformAutomations() {
   const [workflows,campaigns,followups]=await Promise.all([
     query(\`SELECT w.id::text id,'workflow' automation_type,w.name,w.description,w.status,w.trigger_type,w.created_at::text created_at,
-      o.name workspace_name,(SELECT COUNT(*) FROM workflow_runs r WHERE r.workflow_id=w.id)::int executions_count,
-      (SELECT COUNT(*) FROM workflow_runs r WHERE r.workflow_id=w.id AND r.status='completed')::int success_count,
-      (SELECT COUNT(*) FROM workflow_runs r WHERE r.workflow_id=w.id AND r.status='failed')::int error_count
-      FROM workflows w JOIN organizations o ON o.id=w.organization_id ORDER BY w.created_at DESC LIMIT 500\`),
+      o.name workspace_name,COALESCE(u.email,'—') owner_name,(SELECT COUNT(*) FROM workflow_runs r WHERE r.workflow_id=w.id)::int total_runs,
+      (SELECT COUNT(*) FROM workflow_runs r WHERE r.workflow_id=w.id AND r.status='completed')::int success_runs,
+      (SELECT COUNT(*) FROM workflow_runs r WHERE r.workflow_id=w.id AND r.status='failed')::int failed_runs,
+      COALESCE((SELECT AVG(EXTRACT(EPOCH FROM (r.completed_at-r.started_at))*1000) FROM workflow_runs r WHERE r.workflow_id=w.id AND r.completed_at IS NOT NULL),0)::int avg_duration_ms
+      FROM workflows w JOIN organizations o ON o.id=w.organization_id
+      LEFT JOIN LATERAL(SELECT user_id FROM organization_members WHERE organization_id=o.id AND role='owner' ORDER BY created_at LIMIT 1) own ON TRUE
+      LEFT JOIN auth.users u ON u.id=own.user_id ORDER BY w.created_at DESC LIMIT 500\`),
     query(\`SELECT c.id::text id,'campaign' automation_type,c.name,c.channel,c.status,c.scheduled_at::text scheduled_at,c.created_at::text created_at,
-      o.name workspace_name,(SELECT COUNT(*) FROM campaign_recipients r WHERE r.campaign_id=c.id)::int executions_count,
-      (SELECT COUNT(*) FROM campaign_recipients r WHERE r.campaign_id=c.id AND r.status='sent')::int success_count,
-      (SELECT COUNT(*) FROM campaign_recipients r WHERE r.campaign_id=c.id AND r.status='failed')::int error_count
-      FROM campaigns c JOIN organizations o ON o.id=c.organization_id ORDER BY c.created_at DESC LIMIT 500\`),
+      o.name workspace_name,COALESCE(u.email,'—') owner_name,(SELECT COUNT(*) FROM campaign_recipients r WHERE r.campaign_id=c.id)::int total_runs,
+      (SELECT COUNT(*) FROM campaign_recipients r WHERE r.campaign_id=c.id AND r.status='sent')::int success_runs,
+      (SELECT COUNT(*) FROM campaign_recipients r WHERE r.campaign_id=c.id AND r.status='failed')::int failed_runs,0::int avg_duration_ms
+      FROM campaigns c JOIN organizations o ON o.id=c.organization_id
+      LEFT JOIN LATERAL(SELECT user_id FROM organization_members WHERE organization_id=o.id AND role='owner' ORDER BY created_at LIMIT 1) own ON TRUE
+      LEFT JOIN auth.users u ON u.id=own.user_id ORDER BY c.created_at DESC LIMIT 500\`),
     query(\`SELECT f.id::text id,'followup' automation_type,f.name,f.trigger_type,f.is_active,f.created_at::text created_at,
-      o.name workspace_name,(SELECT COUNT(*) FROM followup_enrollments e WHERE e.sequence_id=f.id)::int executions_count,
-      (SELECT COUNT(*) FROM followup_enrollments e WHERE e.sequence_id=f.id AND e.status='sent')::int success_count,0::int error_count
-      FROM followup_sequences f JOIN organizations o ON o.id=f.organization_id ORDER BY f.created_at DESC LIMIT 500\`)
+      o.name workspace_name,COALESCE(u.email,'—') owner_name,(SELECT COUNT(*) FROM followup_enrollments e WHERE e.sequence_id=f.id)::int total_runs,
+      (SELECT COUNT(*) FROM followup_enrollments e WHERE e.sequence_id=f.id AND e.status='sent')::int success_runs,0::int failed_runs,0::int avg_duration_ms
+      FROM followup_sequences f JOIN organizations o ON o.id=f.organization_id
+      LEFT JOIN LATERAL(SELECT user_id FROM organization_members WHERE organization_id=o.id AND role='owner' ORDER BY created_at LIMIT 1) own ON TRUE
+      LEFT JOIN auth.users u ON u.id=own.user_id ORDER BY f.created_at DESC LIMIT 500\`)
   ]);
   const items=[...workflows.map((r:any)=>({...r,id:'workflow:'+r.id,status:r.status==='published'?'active':r.status==='retired'?'disabled_by_owner':'paused'})),
     ...campaigns.map((r:any)=>({...r,id:'campaign:'+r.id})),
@@ -522,25 +529,32 @@ export async function updatePlatformAutomation(id:string,status:string) {
 
 export async function platformKnowledge() {
   const [documents,legacy]=await Promise.all([
-    query(\`SELECT d.id::text id,d.organization_id::text organization_id,d.file_name title,d.mime_type file_type,d.status,d.created_at::text created_at,
-      o.name workspace_name,octet_length(d.original_text)::bigint storage_bytes,
-      (SELECT COUNT(*) FROM knowledge_chunks k WHERE k.document_id=d.id)::int chunks_count,'document' source_type
-      FROM knowledge_documents d JOIN organizations o ON o.id=d.organization_id ORDER BY d.created_at DESC LIMIT 1000\`),
+    query(\`SELECT d.id::text id,d.organization_id::text organization_id,d.file_name title,d.mime_type file_type,d.status,
+      CASE WHEN d.status='completed' THEN 'indexed' ELSE d.status END processing_status,
+      CASE WHEN (SELECT COUNT(*) FROM knowledge_chunks k WHERE k.document_id=d.id)>0 THEN 'indexed' ELSE 'pending' END search_index_status,
+      d.created_at::text created_at,d.updated_at::text updated_at,o.name workspace_name,COALESCE(u.email,'—') owner_name,
+      octet_length(d.original_text)::bigint storage_bytes,(SELECT COUNT(*) FROM knowledge_chunks k WHERE k.document_id=d.id)::int chunk_count
+      FROM knowledge_documents d JOIN organizations o ON o.id=d.organization_id
+      LEFT JOIN auth.users u ON u.id=d.created_by ORDER BY d.created_at DESC LIMIT 1000\`),
     query(\`SELECT k.id::text id,k.organization_id::text organization_id,k.title,'text/plain' file_type,
-      CASE WHEN k.is_active THEN 'completed' ELSE 'archived' END status,k.created_at::text created_at,o.name workspace_name,
-      octet_length(k.content)::bigint storage_bytes,1::int chunks_count,'legacy' source_type
-      FROM knowledge_base k JOIN organizations o ON o.id=k.organization_id ORDER BY k.created_at DESC LIMIT 1000\`)
+      CASE WHEN k.is_active THEN 'indexed' ELSE 'archived' END processing_status,
+      CASE WHEN k.is_active THEN 'indexed' ELSE 'archived' END search_index_status,k.created_at::text created_at,k.updated_at::text updated_at,
+      o.name workspace_name,COALESCE(u.email,'—') owner_name,octet_length(k.content)::bigint storage_bytes,1::int chunk_count
+      FROM knowledge_base k JOIN organizations o ON o.id=k.organization_id
+      LEFT JOIN LATERAL(SELECT user_id FROM organization_members WHERE organization_id=o.id AND role='owner' ORDER BY created_at LIMIT 1) own ON TRUE
+      LEFT JOIN auth.users u ON u.id=own.user_id ORDER BY k.created_at DESC LIMIT 1000\`)
   ]);
   const items=[...documents,...legacy].sort((a:any,b:any)=>String(b.created_at).localeCompare(String(a.created_at)));
-  const summary={total_documents:items.length,total_chunks:items.reduce((n:any,r:any)=>n+Number(r.chunks_count||0),0),
-    storage_bytes:items.reduce((n:any,r:any)=>n+Number(r.storage_bytes||0),0),failed_documents:items.filter((r:any)=>r.status==='failed').length};
+  const summary={total_sources:items.length,total_chunks:items.reduce((n:any,r:any)=>n+Number(r.chunk_count||0),0),
+    total_bytes:items.reduce((n:any,r:any)=>n+Number(r.storage_bytes||0),0),failed_count:items.filter((r:any)=>r.processing_status==='failed').length};
   return {items,summary};
 }
 
 export async function platformApiIntegrations() {
   const [apiKeys,webhookEvents]=await Promise.all([
     query(\`SELECT k.id::text id,k.organization_id::text organization_id,o.name workspace_name,k.name,k.key_prefix,k.scopes,
-      k.last_used_at::text last_used_at,k.revoked_at::text revoked_at,k.created_at::text created_at
+      k.last_used_at::text last_used_at,k.revoked_at::text revoked_at,k.created_at::text created_at,
+      CASE WHEN k.revoked_at IS NULL THEN 'active' ELSE 'revoked' END status,'غير محدد'::text rate_limit_per_min
       FROM organization_api_keys k JOIN organizations o ON o.id=k.organization_id ORDER BY k.created_at DESC LIMIT 1000\`),
     query(\`SELECT e.id::text id,e.organization_id::text organization_id,e.provider,e.event_type,e.processing_status status,
       e.error_message,e.received_at::text created_at,e.processed_at::text processed_at,o.name workspace_name
@@ -610,24 +624,38 @@ export async function platformReport(type:string) {
 
 
 export async function platformAiProviders() {
-  const [models]=await query(\`SELECT model_provider provider_code,model model_id,COUNT(*)::int request_count,
-    MAX(created_at)::text last_used_at FROM agent_runs WHERE model IS NOT NULL GROUP BY model_provider,model ORDER BY request_count DESC\`);
-  const providers=[
-    {code:'google',name:'Google Gemini',configured:Boolean(process.env.GEMINI_API_KEY?.trim()),defaultModel:process.env.GEMINI_MODEL||null},
-    {code:'groq',name:'Groq',configured:Boolean(process.env.GROQ_API_KEY?.trim()),defaultModel:process.env.GROQ_MODEL||null},
-    {code:'anthropic',name:'Anthropic',configured:Boolean(process.env.ANTHROPIC_API_KEY?.trim()),defaultModel:process.env.ANTHROPIC_MODEL||null}
+  const usage=await query(\`SELECT model_provider,COUNT(*)::int total_requests,
+    COUNT(*) FILTER(WHERE status='completed')::int success_requests,COUNT(*) FILTER(WHERE status='failed')::int failed_requests,
+    COALESCE(AVG(latency_ms),0)::int avg_latency_ms FROM agent_runs GROUP BY model_provider\`);
+  const byProvider=new Map(usage.map((r:any)=>[String(r.model_provider),r]));
+  const definitions=[
+    {id:'google',name:'Google Gemini',env_key_name:'GEMINI_API_KEY',env_configured:Boolean(process.env.GEMINI_API_KEY?.trim()),is_primary:1,keys:['google','gemini']},
+    {id:'groq',name:'Groq',env_key_name:'GROQ_API_KEY',env_configured:Boolean(process.env.GROQ_API_KEY?.trim()),is_primary:0,keys:['groq']}
   ];
+  const providers=definitions.map(p=>{const stats=byProvider.get(p.id)||p.keys.map(k=>byProvider.get(k)).find(Boolean)||{};
+    return {id:p.id,name:p.name,env_key_name:p.env_key_name,env_configured:p.env_configured,is_primary:p.is_primary,
+      stats:{total_requests:Number((stats as any).total_requests||0),success_requests:Number((stats as any).success_requests||0),
+        failed_requests:Number((stats as any).failed_requests||0),avg_latency_ms:Number((stats as any).avg_latency_ms||0),total_cost_usd:0}};
+  });
+  const models=await query(\`SELECT r.model model_id,COALESCE(r.model,'غير محدد') display_name,
+    0::numeric input_price_per_1m,0::numeric output_price_per_1m,0::numeric cached_input_price_per_1m,
+    'غير متاح في مخطط التسعير الحالي' pricing_source,'—' pricing_version,'—' pricing_effective_date,
+    COUNT(DISTINCT r.agent_id)::int agents_using,COUNT(*)::int requests_count,1::int is_allowed,
+    MIN(r.model)::text id FROM agent_runs r WHERE r.model IS NOT NULL GROUP BY r.model ORDER BY requests_count DESC LIMIT 200\`);
   return {providers,models};
 }
 
 export async function platformNotificationsSupport() {
   const [notifications,activityFeed]=await Promise.all([
-    query(\`SELECT n.id::text id,n.title,n.body,n.notification_type type,n.is_read, n.created_at::text created_at,
+    query(\`SELECT n.id::text id,n.title,n.body,n.notification_type type,n.is_read,
+      CASE WHEN n.is_read THEN 'read' ELSE 'unread' END delivery_status,'مؤسسة: '||o.name target_type,1::int recipients_count,n.created_at::text created_at,
       o.name workspace_name FROM notifications n JOIN organizations o ON o.id=n.organization_id
       ORDER BY n.created_at DESC LIMIT 300\`),
-    query(\`SELECT e.id::text id,e.action,e.entity_type,e.entity_id::text entity_id,e.actor_type,e.created_at::text created_at,
+    query(\`SELECT e.id::text id,e.action event_type,e.entity_type,e.entity_id::text entity_id,e.actor_type actor,
+      COALESCE(e.metadata->>'summary',e.action) summary,e.created_at::text created_at,'audit_events' source,
       o.name workspace_name,e.metadata FROM audit_events e LEFT JOIN organizations o ON o.id=e.organization_id
       ORDER BY e.created_at DESC LIMIT 100\`)
   ]);
   return {notifications,tickets:[],activityFeed,dataLimitations:{tickets:'لا يوجد جدول تذاكر دعم فني في مخطط قاعدة المنصة الحالي؛ لم يتم عرض تذاكر محلية على أنها تذاكر إنتاجية.'}};
 }
+
