@@ -30,8 +30,8 @@ type WhatsAppFacebookLoginOptions = {
 type MessengerFacebookLoginOptions = {
   scope: string
   auth_type: 'rerequest'
-  response_type: 'code'
-  override_default_response_type: true
+  response_type?: 'code'
+  override_default_response_type?: true
 }
 export type FacebookSdk = {
   init(options: { appId: string; cookie: boolean; xfbml: boolean; version: string }): void
