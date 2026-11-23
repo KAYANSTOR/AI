@@ -4,6 +4,7 @@ import { useMemo, useState, useTransition } from 'react'
 import { CheckCircle2, CircleAlert, Link2, Loader2, MessageSquare, Phone, Power, RefreshCw, ArrowRight, Bot, MessageCircle } from 'lucide-react'
 import {
   saveChannelAction,
+  deleteChannelAction,
   setChannelActiveAction,
   testChannelAction,
   connectWhatsAppChannelAction,
@@ -209,7 +210,7 @@ function ChannelDialog({
   onClose: () => void
 }) {
   const spec = getChannelSpec(card.type)
-  const [identifier, setIdentifier] = useState(card.type === 'whatsapp' ? card.publicNumber ?? '' : '')
+  const [identifier, setIdentifier] = useState(card.publicNumber ?? '')
   const [busy, startTransition] = useTransition()
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null)
   const [testResult, setTestResult] = useState<BindingTestResult | null>(null)
@@ -235,6 +236,24 @@ function ChannelDialog({
       setNotice({
         ok: result.ok,
         text: result.ok ? result.message ?? 'تم حفظ الربط.' : result.error ?? 'تعذّر إكمال الربط.',
+      })
+      if (result.ok) window.location.reload()
+    })
+  }
+
+  function removeChannel() {
+    if (!canManage || !card.connected) return
+    const confirmed = window.confirm('هل تريد حذف إعدادات هذه القناة؟ سيتم فصل اتصال QR إن وجد، ويمكنك ربط الرقم أو الحساب الصحيح من جديد.')
+    if (!confirmed) return
+    startTransition(async () => {
+      setNotice(null)
+      const result = await deleteChannelAction({
+        channelType: card.type,
+        connectionMode: card.connectionMode,
+      })
+      setNotice({
+        ok: result.ok,
+        text: result.ok ? result.message ?? 'تم حذف إعدادات القناة.' : result.error ?? 'تعذّر حذف إعدادات القناة.',
       })
       if (result.ok) window.location.reload()
     })
@@ -557,6 +576,17 @@ function ChannelDialog({
           ) : null}
 
           <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+            {canManage && card.connected ? (
+              <button
+                type="button"
+                onClick={removeChannel}
+                disabled={busy}
+                className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-error/40 px-4 text-sm font-semibold text-error hover:bg-error/5 disabled:opacity-50"
+              >
+                {busy ? <Loader2 size={17} className="animate-spin" /> : <CircleAlert size={17} />}
+                حذف إعدادات القناة
+              </button>
+            ) : null}
             {canManage && card.type !== 'messenger' && card.type !== 'whatsapp' ? (
               <button
                 type="button"
