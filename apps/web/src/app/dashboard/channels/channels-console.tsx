@@ -12,6 +12,7 @@ import {
 } from './actions'
 import { getChannelSpec, type ChannelType, type BindingTestResult } from '@/lib/channels/management'
 import { WhatsAppEmbeddedSignupButton } from '@/components/channels/whatsapp-embedded-signup'
+import { WhatsAppQrConnector } from './whatsapp-qr-connector'
 import { MessengerConnectButton } from '@/components/channels/messenger-connect-button'
 import { registerWhatsAppCloudApiNumberAction } from '@/app/onboarding/embedded-signup-actions'
 import { ChannelCard as UIChannelCard, type ChannelStatus } from '@/components/ui/channel-card'
@@ -290,7 +291,7 @@ function ChannelDialog({
         </header>
 
         <div className="space-y-6 px-5 py-6 sm:px-7">
-          {card.type === 'whatsapp' && state !== 'verified' ? (
+          {card.type === 'whatsapp' && (state !== 'verified' || card.connectionMode === 'qr_unofficial') ? (
             <div className="space-y-2">
               <WhatsAppEmbeddedSignupButton
                 disabled={!canManage}
@@ -306,6 +307,8 @@ function ChannelDialog({
             </div>
           ) : null}
 
+          {card.type === 'whatsapp' ? <WhatsAppQrConnector disabled={!canManage} connectionMode={card.connectionMode} publicNumber={card.publicNumber} /> : null}
+
           {card.type === 'whatsapp' && card.connected && card.connectionMode === 'coexistence' ? (
             <section className="space-y-2 rounded-2xl border border-success/30 bg-success/5 p-4">
               <h3 className="text-sm font-bold text-text">الاستمرار باستخدام تطبيق WhatsApp Business</h3>
@@ -316,7 +319,7 @@ function ChannelDialog({
             </section>
           ) : null}
 
-          {card.type === 'whatsapp' && card.connected && card.connectionMode !== 'coexistence' && state !== 'verified' ? (
+          {card.type === 'whatsapp' && card.connected && card.connectionMode !== 'coexistence' && card.connectionMode !== 'qr_unofficial' && state !== 'verified' ? (
             <section className="space-y-3 rounded-2xl border border-warning/40 bg-warning/5 p-4">
               <div>
                 <h3 className="text-sm font-bold text-text">تسجيل رقم الإرسال على WhatsApp</h3>
@@ -505,7 +508,7 @@ function ChannelDialog({
           ) : null}
 
           <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-            {canManage && card.type !== 'messenger' ? (
+            {canManage && card.type !== 'messenger' && !(card.type === 'whatsapp' && card.connectionMode === 'qr_unofficial') ? (
               <button
                 type="button"
                 onClick={submit}

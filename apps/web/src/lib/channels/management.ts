@@ -20,19 +20,19 @@ export const CHANNEL_SPECS: readonly ChannelSpec[] = [
   {
     type: 'whatsapp',
     label: 'واتساب للأعمال',
-    provider: 'Meta',
+    provider: 'Meta / WhatsApp Web QR',
     bindingColumn: 'provider_account_id',
     bindingLabel: 'رقم واتساب',
     bindingPlaceholder: 'مثال +967777123456',
-    bindingHint: 'الربط الفعلي عبر زر Meta فقط. حفظ الرقم وحده لا يستقبل رسائل.',
+    bindingHint: 'اختر الربط الرسمي من Meta أو ربط WhatsApp Web عبر QR/رمز الهاتف. الربط عبر QR غير رسمي.',
     publicNumberLabel: 'رقم واتساب المحفوظ',
     setup: [
-      'اضغط «ربط واتساب عبر Meta» وأكمل التحقق من ملكية الرقم.',
-      'اختر رقم واتساب للأعمال المرتبط بنشاطك.',
-      'افتح بطاقة القناة وأكمل تسجيل رقم الإرسال برمز PIN من 6 أرقام للتحقق بخطوتين.',
-      'بعد قبول Meta لطلب التسجيل، تصبح القناة جاهزة للإرسال والاستقبال.',
+      'للربط الرسمي: استخدم زر Meta ثم أكمل إعداد Cloud API.',
+      'للربط عبر الهاتف: اختر رمز QR أو رمز الربط برقم الهاتف من إعدادات القناة.',
+      'امسح QR من الأجهزة المرتبطة في واتساب أو أدخل رمز الربط الذي يظهر في الصفحة.',
+      'تتحول القناة إلى متصلة فقط بعد تأكيد WhatsApp نجاح ربط الجهاز.',
     ],
-    testScope: 'أن الرقم مفوّض من Meta ومسجل في WhatsApp Cloud API وأن النظام يوجّه رسائله لشركتك.',
+    testScope: 'التحقق من جلسة Meta الرسمية أو جلسة WhatsApp Web QR بحسب وضع الاتصال المختار.',
   },
   {
     type: 'instagram',
@@ -145,6 +145,7 @@ export type ChannelRow = {
   external_identifier: string | null
   verification_status: string | null
   is_active: boolean | null
+  connection_mode?: string | null
 }
 
 export type BindingCheck = { label: string; ok: boolean; detail?: string }
@@ -191,14 +192,15 @@ export async function verifyChannelBinding(
     })
   }
 
-  // Real WhatsApp routing requires phone_number_id (provider_account_id).
-  if (spec.type === 'whatsapp') {
-    const live = Boolean(channel.provider_account_id) && channel.verification_status === 'verified'
+  if (spec.type === 'whatsapp' && channel.connection_mode === 'qr_unofficial') {
     checks.push({
-      label: 'ربط Meta فعلي',
-      ok: live,
-      detail: live ? 'مربوط' : 'غير مكتمل — استخدم زر Meta',
+      label: 'وضع WhatsApp Web QR',
+      ok: channel.verification_status === 'verified' && channel.is_active === true,
+      detail: channel.verification_status === 'verified' ? 'تم تأكيد جلسة الجهاز' : 'الجلسة غير متصلة',
     })
+  } else if (spec.type === 'whatsapp') {
+    const live = Boolean(channel.provider_account_id) && channel.verification_status === 'verified'
+    checks.push({ label: 'ربط Meta فعلي', ok: live, detail: live ? 'مربوط' : 'غير مكتمل — استخدم زر Meta' })
   }
 
   const resolved = await resolveChannelExact(db, {

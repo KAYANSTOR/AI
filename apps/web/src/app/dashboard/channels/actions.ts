@@ -21,6 +21,7 @@ import { saveChannelCredential, loadChannelCredentials, deleteChannelCredential 
 import { configureTelegramWebhook, verifyTelegramBot, verifyTelegramWebhook } from '@/lib/providers/telegram'
 import { createEmbeddedSignupOAuthState, verifyEmbeddedSignupOAuthState } from '@/lib/channels/embedded-signup'
 import { ensureMessengerAppWebhook, getMessengerPage, listMessengerPages, subscribeMessengerPage, verifyMessengerPage, verifyMessengerPermissions } from '@/lib/providers/messenger'
+import { callWhatsAppGateway, type WhatsAppGatewaySession } from '@/lib/providers/whatsapp-gateway'
 
 export type ChannelActionResult = {
   ok: boolean
@@ -298,18 +299,20 @@ export async function setChannelActiveAction(input: {
 
     const { data, error } = await db
       .from('channels')
-      .select('id, is_active, verification_status')
+      .select('id, is_active, verification_status, connection_mode')
       .eq('organization_id', org.organizationId)
       .eq('channel_type', spec.type)
       .maybeSingle()
     if (error) throw new Error(error.message)
     if (!data) return { ok: false, error: 'القناة غير مربوطة بعد.' }
 
-    if (input.active && (spec.type === 'whatsapp' || spec.type === 'messenger') && data.verification_status !== 'verified') {
-      return {
-        ok: false,
-        error: 'لا يمكن تفعيل واتساب قبل تسجيل رقم الإرسال لدى Meta باستخدام PIN.',
+    if (input.active && spec.type === 'whatsapp' && data.connection_mode === 'qr_unofficial') {
+      const status = await callWhatsAppGateway<{ session: WhatsAppGatewaySession }>('GET', '/sessions/' + data.id + '/status')
+      if (status.session.status !== 'connected' || data.verification_status !== 'verified') {
+        return { ok: false, error: 'أكمل ربط واتساب عبر QR أو رمز الهاتف أولاً.' }
       }
+    } else if (input.active && (spec.type === 'whatsapp' || spec.type === 'messenger') && data.verification_status !== 'verified') {
+      return { ok: false, error: 'لا يمكن تفعيل واتساب قبل إكمال التحقق لدى Meta باستخدام PIN.' }
     }
 
     if (input.active && !data.is_active) {
@@ -375,7 +378,7 @@ export async function testChannelAction(input: {
     const { data, error } = await db
       .from('channels')
       .select(
-        'id, channel_type, provider_account_id, external_identifier, verification_status, is_active, business_id, updated_at'
+        'id, channel_type, provider_account_id, external_identifier, verification_status, is_active, business_id, updated_at, connection_mode'
       )
       .eq('organization_id', org.organizationId)
       .eq('channel_type', spec.type)
@@ -384,7 +387,12 @@ export async function testChannelAction(input: {
     if (!data) return { ok: false, error: 'القناة غير مربوطة بعد.' }
 
     const result = await verifyChannelBinding(db, data as unknown as ChannelRow)
-    if (spec.type === 'whatsapp') {
+    if (spec.type === 'whatsapp' && data.connection_mode === 'qr_unofficial') {
+      const status = await callWhatsAppGateway<{ session: WhatsAppGatewaySession }>('GET', '/sessions/' + data.id + '/status')
+      const connected = status.session.status === 'connected'
+      result.checks.push({ label: 'جلسة WhatsApp Web', ok: connected, detail: connected ? 'الجلسة محفوظة ومتصلة' : 'الجلسة غير متصلة؛ أعد ربط الهاتف' })
+      result.ok = result.checks.every((check) => check.ok)
+    } else if (spec.type === 'whatsapp') {
       const liveChecks = await verifyMetaChannelConnection({
         organizationId: org.organizationId,
         channelId: data.id,
@@ -631,5 +639,133 @@ export async function completeMessengerConnectionAction(input:{pageId:string}):P
     if(message==='messenger_webhook_callback_conflict')return{ok:false,error:'عنوان Webhook لصفحات Facebook مستخدم من تكامل آخر؛ لم نغيّر إعداداته.'}
     if(message==='messenger_verify_token_missing')return{ok:false,error:'أضف META_MESSENGER_VERIFY_TOKEN أو استخدم WHATSAPP_VERIFY_TOKEN في Railway.'}
     return{ok:false,error:actionErrorMessage(error,'تعذّر ربط صفحة Facebook. لم نفعّل القناة قبل اكتمال التحقق.')}
+  }
+}
+
+
+export type WhatsAppQrConnectionMethod = 'qr' | 'pairing_code'
+
+export async function startWhatsAppQrSessionAction(input: {
+  number: string
+  method: WhatsAppQrConnectionMethod
+}): Promise<{ ok: boolean; error?: string; session?: WhatsAppGatewaySession }> {
+  try {
+    const org = await requireChannelAdmin()
+    const number = normalizeChannelNumber(input.number)
+    if (!/^\+[1-9]\d{7,14}$/.test(number)) {
+      return { ok: false, error: 'أدخل رقم واتساب بصيغة دولية صحيحة، مثل +967777123456.' }
+    }
+    if (!['qr', 'pairing_code'].includes(input.method)) {
+      return { ok: false, error: 'طريقة الربط غير معروفة.' }
+    }
+
+    const admin = createAdminClient()
+    const businessId = await ensurePrimaryBusinessId(org.organizationId, org.organizationName)
+    if (!businessId) return { ok: false, error: 'أكمل إعداد النشاط التجاري قبل ربط واتساب.' }
+
+    const { data: existing, error: readError } = await admin.from('channels')
+      .select('id, connection_mode, is_active')
+      .eq('organization_id', org.organizationId)
+      .eq('channel_type', 'whatsapp')
+      .maybeSingle()
+    if (readError) throw new Error('تعذّرت قراءة قناة واتساب الحالية.')
+
+    if (!existing) {
+      const tenantDb = await createClient()
+      await assertWithinLimit(tenantDb, org.organizationId, 'channels', 1)
+    }
+
+    const patch = {
+      business_id: businessId,
+      provider_account_id: number,
+      external_identifier: number,
+      connection_mode: 'qr_unofficial',
+      is_active: false,
+      verification_status: 'pending',
+      updated_at: new Date().toISOString(),
+    }
+    const written = existing
+      ? await admin.from('channels').update(patch).eq('id', existing.id).select('id').single()
+      : await admin.from('channels').insert({
+          organization_id: org.organizationId,
+          channel_type: 'whatsapp',
+          ...patch,
+        }).select('id').single()
+    if (written.error || !written.data?.id) {
+      throw new Error('تعذّر تجهيز قناة واتساب لربط QR.')
+    }
+
+    const channelId = String(written.data.id)
+    const gateway = await callWhatsAppGateway<{ session: WhatsAppGatewaySession }>('POST', '/sessions/start', {
+      channelId,
+      organizationId: org.organizationId,
+      phoneNumber: number,
+      method: input.method,
+    })
+
+    await audit(org.organizationId, businessId, 'channel.whatsapp_qr_started', 'channel', channelId, {
+      channel_type: 'whatsapp',
+      connection_mode: 'qr_unofficial',
+      method: input.method,
+    })
+    revalidatePath('/dashboard/channels')
+    revalidatePath('/dashboard/conversations')
+    return { ok: true, session: gateway.session }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : ''
+    if (message === 'pairing_code_request_failed') {
+      return { ok: false, error: 'تعذّر توليد رمز الربط حالياً. تحقق من الرقم ثم أعد المحاولة.' }
+    }
+    return { ok: false, error: actionErrorMessage(error, 'تعذّر بدء ربط واتساب عبر QR.') }
+  }
+}
+
+export async function getWhatsAppQrSessionStatusAction(): Promise<{
+  ok: boolean
+  error?: string
+  session?: WhatsAppGatewaySession
+}> {
+  try {
+    const org = await requireChannelAdmin()
+    const admin = createAdminClient()
+    const { data: channel, error } = await admin.from('channels')
+      .select('id, connection_mode')
+      .eq('organization_id', org.organizationId)
+      .eq('channel_type', 'whatsapp')
+      .maybeSingle()
+    if (error) throw new Error('تعذّرت قراءة حالة قناة واتساب.')
+    if (!channel || channel.connection_mode !== 'qr_unofficial') {
+      return { ok: true, session: { status: 'not_configured' } }
+    }
+    const result = await callWhatsAppGateway<{ session: WhatsAppGatewaySession }>('GET',
+      '/sessions/' + channel.id + '/status')
+    return { ok: true, session: result.session }
+  } catch (error) {
+    return { ok: false, error: actionErrorMessage(error, 'تعذّر قراءة حالة ربط واتساب.') }
+  }
+}
+
+export async function disconnectWhatsAppQrSessionAction(): Promise<ChannelActionResult> {
+  try {
+    const org = await requireChannelAdmin()
+    const admin = createAdminClient()
+    const { data: channel, error } = await admin.from('channels')
+      .select('id, business_id, connection_mode')
+      .eq('organization_id', org.organizationId)
+      .eq('channel_type', 'whatsapp')
+      .maybeSingle()
+    if (error || !channel?.id || channel.connection_mode !== 'qr_unofficial') {
+      return { ok: false, error: 'لا توجد جلسة QR مربوطة بهذا النشاط.' }
+    }
+    await callWhatsAppGateway('POST', '/sessions/' + channel.id + '/logout', {})
+    await audit(org.organizationId, channel.business_id, 'channel.whatsapp_qr_disconnected', 'channel', channel.id, {
+      channel_type: 'whatsapp',
+      connection_mode: 'qr_unofficial',
+    })
+    revalidatePath('/dashboard/channels')
+    revalidatePath('/dashboard/conversations')
+    return { ok: true, message: 'تم فصل جلسة واتساب.' }
+  } catch (error) {
+    return { ok: false, error: actionErrorMessage(error, 'تعذّر فصل جلسة واتساب.') }
   }
 }

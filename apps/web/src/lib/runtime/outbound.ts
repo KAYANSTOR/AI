@@ -8,6 +8,7 @@ import { sendTwilioSms } from '@/lib/providers/twilio'
 import { sendTelegramText } from '@/lib/providers/telegram'
 import { sendMessengerText } from '@/lib/providers/messenger'
 import { markFirstResponse } from '@/lib/sla'
+import { callWhatsAppGateway } from '@/lib/providers/whatsapp-gateway'
 
 /**
  * Provider credentials are intentionally inaccessible through the tenant-scoped
@@ -19,7 +20,7 @@ async function resolveOwnedChannelCredentials(channel: OutboundChannel): Promise
   const admin = createAdminClient()
   const { data, error } = await admin
     .from('channels')
-    .select('id')
+    .select('id, connection_mode, is_active')
     .eq('id', channel.id)
     .eq('organization_id', channel.organizationId)
     .eq('channel_type', channel.channelType)
@@ -28,10 +29,14 @@ async function resolveOwnedChannelCredentials(channel: OutboundChannel): Promise
   if (error) throw new Error('تعذّر التحقق من قناة الإرسال.')
   if (!data) throw new Error('قناة الإرسال لا تتبع النشاط الحالي.')
 
-  return resolveChannelProviderCredentials(admin, {
+  if (data.connection_mode === 'qr_unofficial' && data.is_active !== true) {
+    throw new Error('قناة واتساب متوقفة حالياً.')
+  }
+  const credentials = await resolveChannelProviderCredentials(admin, {
     channelId: data.id,
     channelType: channel.channelType,
   })
+  return { ...credentials, __connection_mode: data.connection_mode ?? '' }
 }
 
 export type OutboundChannel = {
@@ -208,6 +213,9 @@ export async function deliverWhatsAppTemplate(
   }
 
   const credentials = await resolveOwnedChannelCredentials(input.channel)
+  if (credentials.__connection_mode === 'qr_unofficial') {
+    throw new Error('قوالب WhatsApp المعتمدة متاحة فقط عبر ربط Meta Cloud API.')
+  }
 
   const result = await sendWhatsAppTemplate(
     {
@@ -317,6 +325,10 @@ async function sendViaProvider(
   }
 
   if (channel.channelType === 'whatsapp') {
+    if (credentials.__connection_mode === 'qr_unofficial') {
+      await callWhatsAppGateway('POST', '/sessions/' + channel.id + '/send', { recipient, text: body })
+      return
+    }
     await sendWhatsAppText(
       {
         access_token: requireCredential(credentials, 'meta', 'access_token'),
