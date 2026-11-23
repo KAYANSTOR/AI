@@ -11,6 +11,6 @@
   "dependencies": {
     "postgres": "^3.4.9",
     "qrcode": "^1.5.4",
-    "baileys": "git+https://github.com/Abdullah9213/Baileys.git#9bc4edcf85578ce2e1cc8f151d2d69064d08c94e"
+    "baileys": "git+https://github.com/doryani-ai/Baileys.git#042fe1f3ddacf63ac2288837fbc8a395556bbb6e"
   }
 }
