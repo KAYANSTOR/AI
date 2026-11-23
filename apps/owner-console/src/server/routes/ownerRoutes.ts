@@ -94,7 +94,7 @@ import {
   updatePlatformWorkspaceStatus, platformCreateWorkspace, savePlatformPlan, platformAutomations,
   createPlatformAutomation, updatePlatformAutomation, platformKnowledge, platformApiIntegrations,
   createPlatformApiKey, revokePlatformApiKey, platformMonitoring, platformLogs, platformReport,
-  platformAiProviders, platformNotificationsSupport,
+  platformAiProviders, platformNotificationsSupport, rotatePlatformChannelSecret, testPlatformChannel,
 } from '../services/platformDataService';
 
 export const ownerRouter = Router();
@@ -250,7 +250,7 @@ platformDataRouter.get('/reports/:type', async (req,res)=>{
       const rows=report.rows.map((row:Record<string,unknown>)=>report.headers.map(h=>cell(row[h.key])).join(','));
       res.setHeader('Content-Type','text/csv; charset=utf-8');
       res.setHeader('Content-Disposition','attachment; filename="kayan-'+String(req.params.type)+'-report.csv"');
-      res.send('\\uFEFF'+[header,...rows].join('\\r\\n'));
+      res.send('\uFEFF'+[header,...rows].join('\r\n'));
       return;
     }
     res.json(report);
@@ -275,8 +275,14 @@ platformDataRouter.post('/tickets', requirePermission('ops:write'), unavailableP
 platformDataRouter.patch('/tickets/:id/status', requirePermission('ops:write'), unavailablePlatformData);
 platformDataRouter.post('/alerts/:id/ack', requirePermission('ops:write'), unavailablePlatformData);
 platformDataRouter.post('/logs/:id/resolve', requirePermission('ops:write'), unavailablePlatformData);
-platformDataRouter.post('/channels/:id/test', requirePermission('ops:write'), unavailablePlatformData);
-platformDataRouter.post('/channels/:id/rotate-secret', requirePermission('ops:write'), unavailablePlatformData);
+platformDataRouter.post('/channels/:id/test', requirePermission('ops:write'), async (req,res)=>{
+  try {const result=await testPlatformChannel(String(req.params.id));writeAuditLog({actor:req.ownerAdmin!,action:'channel.connection_tested',entityType:'channel',entityId:String(req.params.id),summary:result.diagnostic,after:result,ipAddress:getClientIp(req)});res.json(result);}
+  catch(err){handleError(res,err);}
+});
+platformDataRouter.post('/channels/:id/rotate-secret', requirePermission('ops:write'), async (req,res)=>{
+  try {const result=await rotatePlatformChannelSecret(String(req.params.id),String(req.body?.newSecret||''));writeAuditLog({actor:req.ownerAdmin!,action:'channel.credential_rotated',entityType:'channel',entityId:String(req.params.id),summary:'تدوير بيانات اعتماد القناة وتطلب اختبار اتصال جديد.',after:result,ipAddress:getClientIp(req)});res.json(result);}
+  catch(err){handleError(res,err);}
+});
 platformDataRouter.post('/workspaces', requirePermission('users:write'), async (req,res)=>{
   try {const result=await platformCreateWorkspace({ownerUserId:String(req.body?.ownerUserId||''),name:String(req.body?.name||''),businessType:req.body?.businessType?String(req.body.businessType):undefined});
     writeAuditLog({actor:req.ownerAdmin!,action:'workspace.created',entityType:'workspace',entityId:String(result.organization.id),summary:'إنشاء مؤسسة ونشاط ووكيل افتراضي في PostgreSQL.',after:result,ipAddress:getClientIp(req)});res.status(201).json(result);}
