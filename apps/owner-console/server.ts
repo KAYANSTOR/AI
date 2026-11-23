@@ -65,7 +65,7 @@ export async function createAppServer() {
   } else {
     const distDir = path.resolve(process.cwd(), 'dist');
     app.use('/admin', express.static(distDir, { index: false }));
-    app.get(['/admin', '/admin/*'], (_req: Request, res: Response) => {
+    app.get(['/admin', '/admin/', '/admin/*'], (_req: Request, res: Response) => {
       const indexFile = path.join(distDir, 'index.html');
       if (fs.existsSync(indexFile)) {
         res.sendFile(indexFile);
