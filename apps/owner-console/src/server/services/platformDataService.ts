@@ -623,18 +623,30 @@ export async function revokePlatformApiKey(id:string) {
 }
 
 export async function platformMonitoring() {
-  const started=Date.now();await platformPing();const latencyMs=Date.now()-started;
+  const started=Date.now();
+  await platformPing();
+  const latencyMs=Date.now()-started;
+  const mem=process.memoryUsage();
+  const uptimeSec=Math.floor(process.uptime());
   const [counts]=await query(`SELECT (SELECT COUNT(*) FROM agent_runs WHERE status='failed' AND created_at>NOW()-INTERVAL '24 hours')::int failed_runs,
     (SELECT COUNT(*) FROM webhook_events WHERE processing_status='failed' AND received_at>NOW()-INTERVAL '24 hours')::int failed_webhooks,
     (SELECT COUNT(*) FROM outbox_events WHERE status IN('failed','dead_letter') AND updated_at>NOW()-INTERVAL '24 hours')::int failed_outbound`);
   const migrations=await query(`SELECT version::text version,name,applied_at::text applied_at FROM public.schema_migrations WHERE failed_at IS NULL ORDER BY version DESC LIMIT 30`);
+  const failedRuns=count(counts?.failed_runs),failedWebhooks=count(counts?.failed_webhooks),failedOutbound=count(counts?.failed_outbound);
   const alerts=[];
-  if(Number(counts?.failed_runs||0)>0)alerts.push({id:'failed-agent-runs',title:'إخفاقات تشغيل الوكلاء',description:String(counts.failed_runs)+' إخفاقاً خلال آخر 24 ساعة',acknowledged:0,severity:'warning'});
-  if(Number(counts?.failed_webhooks||0)>0)alerts.push({id:'failed-webhooks',title:'أحداث Webhook فاشلة',description:String(counts.failed_webhooks)+' حدثاً فاشلاً خلال آخر 24 ساعة',acknowledged:0,severity:'warning'});
-  if(Number(counts?.failed_outbound||0)>0)alerts.push({id:'failed-outbound',title:'رسائل لم تُرسل',description:String(counts.failed_outbound)+' محاولة إرسال فاشلة أو في قائمة العزل',acknowledged:0,severity:'warning'});
-  return {services:[{id:'postgres',name:'PostgreSQL — Railway',status:'healthy',latencyMs,detail:'اتصال مباشر بقاعدة بيانات المنصة وفحص الجداول الأساسية ناجح.'},
-    {id:'owner-console',name:'خدمة لوحة المالك',status:'healthy',latencyMs:null,detail:'خادم لوحة المالك يعمل داخل خدمة KAYAN AI.'}],
-    alerts,migrations};
+  if(failedRuns>0)alerts.push({id:'failed-agent-runs',title:'إخفاقات تشغيل الوكلاء',description:String(failedRuns)+' إخفاقاً خلال آخر 24 ساعة',acknowledged:'system',severity:'warning'});
+  if(failedWebhooks>0)alerts.push({id:'failed-webhooks',title:'أحداث Webhook فاشلة',description:String(failedWebhooks)+' حدثاً فاشلاً خلال آخر 24 ساعة',acknowledged:'system',severity:'warning'});
+  if(failedOutbound>0)alerts.push({id:'failed-outbound',title:'رسائل لم تُرسل',description:String(failedOutbound)+' محاولة إرسال فاشلة أو في قائمة العزل',acknowledged:'system',severity:'warning'});
+  return {
+    runtime:{nodeVersion:process.version,platform:process.platform+' '+process.arch,uptimeSec,
+      memoryMb:Number((mem.rss/1024/1024).toFixed(1)),unresolvedErrors:failedRuns+failedWebhooks+failedOutbound,
+      unauthorizedAttempts24h:'غير متاح من مصدر بيانات المنصة الحالي'},
+    services:[
+      {id:'backend_api',name:'خادم KAYAN AI',status:'operational',latencyMs:null,detail:'خدمة التطبيق ولوحة المالك تعملان ضمن خدمة Railway نفسها.'},
+      {id:'postgres',name:'قاعدة بيانات PostgreSQL',status:'operational',latencyMs,detail:'تم تنفيذ فحص اتصال فعلي للجداول الأساسية في قاعدة بيانات المنصة.'}
+    ],
+    alerts,migrations
+  };
 }
 
 export async function platformLogs(f:{category?:string;severity?:string;resolved?:string}) {
