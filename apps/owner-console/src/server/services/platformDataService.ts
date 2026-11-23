@@ -25,7 +25,7 @@ export async function platformPing() {
     'SELECT id,organization_id,business_id,name,model_provider,status,temperature,locale,slug,created_at,updated_at FROM ai_agents LIMIT 0',
     'SELECT id,organization_id,agent_id,model_provider,model,status,input_tokens,output_tokens,latency_ms,error_code,created_at FROM agent_runs LIMIT 0',
     'SELECT id,organization_id,business_id,channel_type,is_active,verification_status,provider_account_id,external_identifier,created_at FROM channels LIMIT 0',
-    'SELECT id,organization_id,contact_id,channel_id,agent_id,status,state,priority,ai_paused_at,handoff_reason,last_message_at,created_at FROM conversations LIMIT 0',
+    'SELECT id,organization_id,contact_id,channel_id,status,state,priority,ai_paused_at,handoff_reason,last_message_at,created_at FROM conversations LIMIT 0',
     'SELECT id,first_name,last_name FROM contacts LIMIT 0',
     'SELECT id,conversation_id,created_at FROM messages LIMIT 0',
     'SELECT id,organization_id,feature_key,limit_value,period,enabled,source,updated_at FROM billing_entitlements LIMIT 0',
@@ -127,7 +127,7 @@ export async function platformAgents(f:{search?:string;status?:string;provider?:
   if(f.status&&f.status!=='all')add('a.status=?',f.status);if(f.provider&&f.provider!=='all')add('a.model_provider=?',f.provider);
   if(f.search?.trim()){args.push(`%${f.search.trim()}%`);const p=args.length;clauses.push(`(a.name ILIKE $${p} OR o.name ILIKE $${p} OR u.email ILIKE $${p})`);}
   return query(`SELECT a.id::text id,a.organization_id::text organization_id,a.business_id::text workspace_id,a.name,a.model_provider provider_code,a.model_provider provider_name,a.status,a.temperature,a.locale,a.slug,a.created_at::text created_at,o.name workspace_name,u.email owner_email,${fullName} owner_name,
-    (SELECT COUNT(*) FROM conversations c WHERE c.organization_id=a.organization_id)::int conversations_count,(SELECT COUNT(*) FROM agent_runs r WHERE r.agent_id=a.id)::int executions_count,
+    (SELECT COUNT(DISTINCT r.conversation_id) FROM agent_runs r WHERE r.agent_id=a.id)::int conversations_count,(SELECT COUNT(*) FROM agent_runs r WHERE r.agent_id=a.id)::int executions_count,
     (SELECT COUNT(*) FROM agent_runs r WHERE r.agent_id=a.id AND r.status='completed')::int success_count,(SELECT COUNT(*) FROM agent_runs r WHERE r.agent_id=a.id AND r.status='failed')::int error_count,
     (SELECT COALESCE(SUM(COALESCE(r.input_tokens,0)+COALESCE(r.output_tokens,0)),0)::bigint FROM agent_runs r WHERE r.agent_id=a.id) total_tokens
     FROM ai_agents a JOIN organizations o ON o.id=a.organization_id LEFT JOIN LATERAL(SELECT user_id FROM organization_members WHERE organization_id=o.id AND role='owner' ORDER BY created_at LIMIT 1) own ON TRUE
@@ -176,12 +176,14 @@ export async function platformChannels() {
 export async function platformConversations(f:{search?:string;status?:string;channelType?:string;agentId?:string;userId?:string}={}) {
   const clauses:string[]=[],args:unknown[]=[];const add=(s:string,v:unknown)=>{args.push(v);clauses.push(s.replace('?',`$${args.length}`));};
   if(f.status&&f.status!=='all')add('c.status=?',f.status);if(f.channelType&&f.channelType!=='all')add('ch.channel_type=?',f.channelType);
-  if(f.agentId)add('c.agent_id=?::uuid',f.agentId);if(f.userId)add('own.user_id=?::uuid',f.userId);
+  if(f.agentId)add('ar_agent.agent_id=?::uuid',f.agentId);if(f.userId)add('own.user_id=?::uuid',f.userId);
   if(f.search?.trim()){args.push(`%${f.search.trim()}%`);const p=args.length;clauses.push(`(COALESCE(ct.first_name,'')||' '||COALESCE(ct.last_name,'') ILIKE $${p} OR o.name ILIKE $${p})`);}
-  return query(`SELECT c.id::text id,c.organization_id::text organization_id,c.contact_id::text contact_id,c.channel_id::text channel_id,c.agent_id::text agent_id,c.status,c.state,c.priority,c.ai_paused_at::text ai_paused_at,c.handoff_reason,
+  return query(`SELECT c.id::text id,c.organization_id::text organization_id,c.contact_id::text contact_id,c.channel_id::text channel_id,c.agent_id::text agent_id,c.status,c.state,c.priority,c.ai_paused_at::text ai_paused_at,c.handoff_reason,ar_agent.agent_id::text agent_id,
     c.last_message_at::text last_message_at,c.created_at::text created_at,ch.channel_type,COALESCE(ct.first_name,'')||CASE WHEN ct.last_name IS NULL THEN '' ELSE ' '||ct.last_name END customer_name,a.name agent_name,o.name workspace_name,
     (SELECT COUNT(*) FROM messages m WHERE m.conversation_id=c.id)::int message_count FROM conversations c JOIN organizations o ON o.id=c.organization_id
-    LEFT JOIN channels ch ON ch.id=c.channel_id LEFT JOIN contacts ct ON ct.id=c.contact_id LEFT JOIN ai_agents a ON a.id=c.agent_id
+    LEFT JOIN channels ch ON ch.id=c.channel_id LEFT JOIN contacts ct ON ct.id=c.contact_id
+    LEFT JOIN LATERAL(SELECT r.agent_id FROM agent_runs r WHERE r.conversation_id=c.id AND r.agent_id IS NOT NULL ORDER BY r.created_at DESC LIMIT 1) ar_agent ON TRUE
+    LEFT JOIN ai_agents a ON a.id=ar_agent.agent_id
     LEFT JOIN LATERAL(SELECT user_id FROM organization_members WHERE organization_id=c.organization_id AND role='owner' ORDER BY created_at LIMIT 1) own ON TRUE
     ${clauses.length?'WHERE '+clauses.join(' AND '):''} ORDER BY c.last_message_at DESC LIMIT 1000`,args);
 }
