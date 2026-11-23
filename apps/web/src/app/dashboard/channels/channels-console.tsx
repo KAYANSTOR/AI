@@ -9,7 +9,6 @@ import {
   connectWhatsAppChannelAction,
   connectTelegramChannelAction,
   completeMessengerConnectionAction,
-  deleteChannelAction,
 } from './actions'
 import { getChannelSpec, type ChannelType, type BindingTestResult } from '@/lib/channels/management'
 import { WhatsAppEmbeddedSignupButton } from '@/components/channels/whatsapp-embedded-signup'
@@ -26,7 +25,6 @@ type ChannelCard = {
   description: string
   publicNumberLabel: string | null
   publicNumber: string | null
-  identifier?: string | null
   connected: boolean
   verificationStatus: string | null
   isActive: boolean
@@ -211,8 +209,7 @@ function ChannelDialog({
   onClose: () => void
 }) {
   const spec = getChannelSpec(card.type)
-  const [identifier, setIdentifier] = useState(card.identifier ?? card.publicNumber ?? '')
-  const [publicNumber, setPublicNumber] = useState(card.publicNumber ?? '')
+  const [identifier, setIdentifier] = useState(card.type === 'whatsapp' ? card.publicNumber ?? '' : '')
   const [busy, startTransition] = useTransition()
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null)
   const [testResult, setTestResult] = useState<BindingTestResult | null>(null)
@@ -234,28 +231,10 @@ function ChannelDialog({
           ? await connectWhatsAppChannelAction({ number: identifier })
           : card.type === 'telegram'
             ? await connectTelegramChannelAction({ botToken: telegramBotToken })
-            : await saveChannelAction({ channelType: card.type, identifier, publicNumber })
+            : await saveChannelAction({ channelType: card.type, identifier })
       setNotice({
         ok: result.ok,
         text: result.ok ? result.message ?? 'تم حفظ الربط.' : result.error ?? 'تعذّر إكمال الربط.',
-      })
-      if (result.ok) window.location.reload()
-    })
-  }
-
-  function removeChannel() {
-    if (!canManage || !card.connected) return
-    const confirmed = window.confirm('هل تريد حذف إعدادات هذه القناة؟ سيتم فصل اتصال QR إن وجد، ويمكنك ربط الرقم أو الحساب الصحيح من جديد.')
-    if (!confirmed) return
-    startTransition(async () => {
-      setNotice(null)
-      const result = await deleteChannelAction({
-        channelType: card.type,
-        connectionMode: card.connectionMode,
-      })
-      setNotice({
-        ok: result.ok,
-        text: result.ok ? result.message ?? 'تم حذف إعدادات القناة.' : result.error ?? 'تعذّر حذف إعدادات القناة.',
       })
       if (result.ok) window.location.reload()
     })
@@ -505,22 +484,6 @@ function ChannelDialog({
               </label>
             </section>
           ) : card.type !== 'whatsapp' ? (
-            <>
-            {spec.publicNumberLabel ? (
-              <label className="block">
-                <span className="text-sm font-semibold text-text">{spec.publicNumberLabel}</span>
-                <input
-                  value={publicNumber}
-                  onChange={(event) => setPublicNumber(event.target.value)}
-                  dir="ltr"
-                  autoComplete="tel"
-                  inputMode="tel"
-                  placeholder="+967777123456"
-                  className="mt-2 min-h-12 w-full rounded-xl border border-border bg-background px-3 text-base text-text outline-none focus:border-secondary focus:ring-2 focus:ring-accent/40"
-                  disabled={busy || !canManage}
-                />
-              </label>
-            ) : null}
             <label className="block">
               <span className="text-sm font-semibold text-text">
                 {card.type === 'instagram'
@@ -543,7 +506,6 @@ function ChannelDialog({
                 disabled={busy || !canManage}
               />
             </label>
-            </>
           ) : null}
 
           <div className="rounded-2xl border border-border bg-background p-4">
@@ -595,32 +557,15 @@ function ChannelDialog({
           ) : null}
 
           <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-            {canManage && card.connected ? (
-              <button
-                type="button"
-                onClick={removeChannel}
-                disabled={busy}
-                className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-error/40 px-4 text-sm font-semibold text-error hover:bg-error/5 disabled:opacity-50"
-              >
-                {busy ? <Loader2 size={17} className="animate-spin" /> : <CircleAlert size={17} />}
-                حذف إعدادات القناة
-              </button>
-            ) : null}
             {canManage && card.type !== 'messenger' && card.type !== 'whatsapp' ? (
               <button
                 type="button"
                 onClick={submit}
-                disabled={busy || (card.type === 'telegram' ? !telegramBotToken.trim() : !identifier.trim() || Boolean(spec.publicNumberLabel && !publicNumber.trim()))}
+                disabled={busy || (card.type === 'telegram' ? !telegramBotToken.trim() : !identifier.trim())}
                 className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl border border-border bg-background px-4 text-sm font-semibold text-text hover:bg-surface disabled:opacity-50"
               >
                 {busy ? <Loader2 size={18} className="animate-spin" /> : <Link2 size={17} />}
                 {state === 'verified' ? 'إعادة التحقق' : 'حفظ والربط'}
-              </button>
-            ) : null}
-            {canManage && card.connected ? (
-              <button type="button" onClick={removeChannel} disabled={busy}
-                className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-error/30 px-4 text-sm font-semibold text-error hover:bg-error/5 disabled:opacity-50">
-                حذف إعدادات القناة
               </button>
             ) : null}
             {state !== 'not_connected' ? (

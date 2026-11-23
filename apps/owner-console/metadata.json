@@ -1,6 +1,0 @@
-{
-  "name": "Kayan AI Owner Console",
-  "description": "مركز التحكم الرئيسي والخاص بمالك منصة Kayan AI لإدارة المستخدمين ومساحات العمل والباقات والوكلاء الذكيين ومراقبة الذكاء الاصطناعي والعمليات.",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}

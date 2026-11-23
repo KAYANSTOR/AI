@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState, useTransition } from 'react'
-import { AlertTriangle, CheckCircle2, Link2, Loader2, QrCode, Smartphone, XCircle, Trash2, Pencil } from 'lucide-react'
-import { startWhatsAppQrSessionAction, getWhatsAppQrSessionStatusAction, disconnectWhatsAppQrSessionAction, resetWhatsAppQrChannelAction } from './actions'
+import { AlertTriangle, CheckCircle2, Link2, Loader2, QrCode, Smartphone, XCircle } from 'lucide-react'
+import { startWhatsAppQrSessionAction, getWhatsAppQrSessionStatusAction, disconnectWhatsAppQrSessionAction } from './actions'
 
 type SessionStatus = {
   status: string
@@ -19,7 +19,6 @@ export function WhatsAppQrConnector({ disabled, connectionMode, publicNumber }: 
   const [busy, startTransition] = useTransition()
   const waiting = Boolean(session && ['starting', 'qr_required', 'pairing_code', 'reconnecting'].includes(session.status))
   const linked = session?.status === 'connected'
-  const hasSavedSettings = Boolean(publicNumber || (session && session.status !== 'not_configured'))
 
   async function refreshStatus() {
     const result = await getWhatsAppQrSessionStatusAction()
@@ -48,11 +47,9 @@ export function WhatsAppQrConnector({ disabled, connectionMode, publicNumber }: 
 
   function start() {
     if (disabled) return
+    if (connectionMode && connectionMode !== 'qr_unofficial' &&
+        !window.confirm('سيؤدي تفعيل ربط QR إلى استبدال اتصال WhatsApp الحالي عبر Meta. هل تريد المتابعة؟')) return
     const digits = phoneNumber.replace(/\D/g, '')
-    if (!/^\+?[1-9]\d{7,14}$/.test(phoneNumber.replace(/[\s()-]/g, ''))) {
-      setNotice('أدخل رقم الهاتف بصيغة دولية صحيحة، مثل +967777123456.')
-      return
-    }
     if (method === 'pairing_code' && (digits.length < 8 || digits.length > 15)) {
       setNotice('أدخل رقم الهاتف كاملاً مع مفتاح الدولة، مثل +967777123456.')
       return
@@ -75,23 +72,10 @@ export function WhatsAppQrConnector({ disabled, connectionMode, publicNumber }: 
       const result = await disconnectWhatsAppQrSessionAction()
       if (!result.ok) { setNotice(result.error ?? 'تعذّر فصل الجلسة.'); return }
       setSession({ status: 'disconnected' })
-      setNotice('تم فصل الجلسة. يمكنك الآن تعديل الرقم ثم إعادة الربط.')
+      setNotice('تم فصل جلسة WhatsApp Web.')
       window.location.reload()
     })
   }
-  function resetSettings() {
-    if (disabled || !window.confirm('سيتم فصل واتساب ومسح الرقم وإعدادات الاتصال فقط. ستبقى المحادثات والعملاء محفوظين. هل تريد المتابعة؟')) return
-    startTransition(async () => {
-      setNotice(null)
-      const result = await resetWhatsAppQrChannelAction()
-      if (!result.ok) { setNotice(result.error ?? 'تعذّر مسح الإعدادات.'); return }
-      setPhoneNumber('')
-      setSession({ status: 'not_configured' })
-      setNotice(result.message ?? 'تم مسح إعدادات القناة.')
-      window.location.reload()
-    })
-  }
-
   return (
     <section className="space-y-4 rounded-2xl border border-border bg-background p-4 sm:p-5">
       <div className="flex items-start gap-3">
@@ -115,8 +99,8 @@ export function WhatsAppQrConnector({ disabled, connectionMode, publicNumber }: 
           <p className="text-sm font-semibold text-text">تم ربط الرقم بنجاح وأصبحت الجلسة متصلة.</p>
           <p className="text-xs text-text-muted" dir="ltr">{session?.phoneNumber || phoneNumber}</p>
           <button type="button" onClick={disconnect} disabled={busy || disabled}
-            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-border px-4 text-sm font-semibold text-text disabled:opacity-50">
-            {busy ? <Loader2 size={16} className="animate-spin" /> : <Pencil size={16} />} فصل الاتصال لتعديل الرقم
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-error/30 px-4 text-sm font-semibold text-error disabled:opacity-50">
+            {busy ? <Loader2 size={16} className="animate-spin" /> : <XCircle size={16} />} فصل الجلسة
           </button>
         </div>
       ) : (
@@ -143,7 +127,7 @@ export function WhatsAppQrConnector({ disabled, connectionMode, publicNumber }: 
                 : 'أدخل الرقم المرتبط بحساب واتساب الذي ستقوم بمسح رمز QR منه.'}
             </span>
           </label>
-          <button type="button" onClick={start} disabled={busy || disabled || !phoneNumber.trim()}
+          <button type="button" onClick={start} disabled={busy || disabled || (method === 'pairing_code' && !phoneNumber.trim())}
             className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#25D366] px-4 text-sm font-bold text-white hover:opacity-90 disabled:opacity-50">
             {busy ? <Loader2 size={18} className="animate-spin" /> : <Link2 size={17} />}
             {method === 'qr' ? 'إنشاء رمز QR للربط' : 'توليد رمز الربط بالهاتف'}
@@ -173,15 +157,6 @@ export function WhatsAppQrConnector({ disabled, connectionMode, publicNumber }: 
         </>
       )}
       {notice ? <p role="status" className="rounded-xl border border-border px-3 py-3 text-xs text-text">{notice}</p> : null}
-      {hasSavedSettings ? (
-        <div className="border-t border-border pt-3">
-          <button type="button" onClick={resetSettings} disabled={busy || disabled}
-            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-error/30 px-4 text-sm font-semibold text-error disabled:opacity-50">
-            {busy ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />} مسح إعدادات القناة
-          </button>
-          <p className="mt-1 text-[11px] leading-5 text-text-muted">يمسح رقم الاتصال وإعداداته فقط، ولا يحذف المحادثات أو بيانات العملاء.</p>
-        </div>
-      ) : null}
     </section>
   )
 }
