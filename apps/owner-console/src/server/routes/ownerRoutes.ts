@@ -88,7 +88,7 @@ import {
 import type { PeriodGranularity } from '../domain/analytics';
 import {
   platformStatus, platformUsers, platformUserDetail, platformWorkspaces, platformPlans, platformSubscriptions,
-  platformAgents, platformAgentDetail, platformAiUsage, platformChannels, platformConversations, platformEntitlements,
+  platformAgents, platformAgentDetail, platformAiUsage, platformChannels, platformConversations, platformEntitlements, platformBillingLedger,
   platformOverview, updatePlatformUser, platformUserAction, subscriptionAction, updatePlatformAgent,
   platformEntitlementOverride,
 } from '../services/platformDataService';
@@ -223,7 +223,7 @@ platformDataRouter.post('/channels', requirePermission('ops:write'), unavailable
 
 platformDataRouter.post('/plans', unavailablePlatformData);
 platformDataRouter.put('/plans/:id', unavailablePlatformData);
-platformDataRouter.get('/billing', unavailablePlatformData);
+platformDataRouter.get('/billing', async (_req, res) => { try { res.json(await platformBillingLedger()); } catch (err) { handleError(res, err, 503); } });
 platformDataRouter.post('/invoices', unavailablePlatformData);
 platformDataRouter.post('/invoices/:id/refund', unavailablePlatformData);
 platformDataRouter.post('/expenses', unavailablePlatformData);
