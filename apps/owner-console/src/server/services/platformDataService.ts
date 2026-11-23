@@ -204,7 +204,7 @@ export async function platformBillingLedger() {
   const [mrr]=await query(`SELECT COALESCE(SUM(p.monthly_price),0)::numeric amount FROM subscriptions s JOIN plans p ON p.id=s.plan_id
     WHERE s.status='active' AND COALESCE(s.billing_cycle,'monthly')='monthly'`);
   const gateways=[
-    {code:'esaalat',name:'إيصالات / المحافظ اليمنية',configured:Boolean(process.env.ESAALAT_API_KEY?.trim()),webhookConfigured:Boolean(process.env.ESAALAT_WEBHOOK_SECRET?.trim()),supportsRefund:false},
+    {code:'esaalat',name:'إيصالات / المحافظ اليمنية',configured:Boolean(process.env.ESAALAT_CLIENT_ID?.trim()&&process.env.ESAALAT_CLIENT_SECRET?.trim()&&Number(process.env.YER_PER_USD)>0),webhookConfigured:Boolean(process.env.ESAALAT_WEBHOOK_SECRET?.trim()),supportsRefund:false},
     {code:'stripe',name:'Stripe',configured:Boolean(process.env.STRIPE_SECRET_KEY?.trim()),webhookConfigured:Boolean(process.env.STRIPE_WEBHOOK_SECRET?.trim()),supportsRefund:false}
   ];
   return {invoices:[],expenses:[],paymentIntents,gateways,summary:{
