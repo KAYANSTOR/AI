@@ -7,6 +7,7 @@ import { getDb } from './src/server/db/connection';
 import { ownerRouter } from './src/server/routes/ownerRoutes';
 import { logSystemError } from './src/server/services/monitoringService';
 import { isEncryptionKeyConfigured } from './src/server/security/crypto';
+import { platformPing } from './src/server/services/platformDataService';
 
 export async function createAppServer() {
   // Production must never encrypt credentials with an ephemeral key.
@@ -30,8 +31,13 @@ export async function createAppServer() {
   });
 
   // Health probe (non-sensitive)
-  app.get('/api/health', (_req: Request, res: Response) => {
-    res.json({ status: 'ok', service: 'kayan-owner-console', timestamp: new Date().toISOString() });
+  app.get('/api/health', async (_req: Request, res: Response) => {
+    try {
+      await platformPing();
+      res.json({ status: 'ok', service: 'kayan-owner-console', platformDatabase: 'connected', timestamp: new Date().toISOString() });
+    } catch {
+      res.status(503).json({ status: 'degraded', service: 'kayan-owner-console', platformDatabase: 'unavailable', timestamp: new Date().toISOString() });
+    }
   });
 
   // Owner Console API

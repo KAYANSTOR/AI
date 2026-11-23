@@ -14,6 +14,8 @@ function query<T extends Record<string, unknown> = Record<string, unknown>>(text
 const count = (v: unknown) => Number(v ?? 0);
 const fullName = "COALESCE(NULLIF(u.raw_user_meta_data->>'full_name',''),NULLIF(u.raw_user_meta_data->>'name',''),NULLIF(split_part(COALESCE(u.email,''),'@',1),''),'مستخدم')";
 
+export async function platformPing() { await query('SELECT 1 AS ok'); return true; }
+
 export async function platformStatus() {
   const [r] = await query<{db:string;users:string;orgs:string;subs:string}>(`SELECT current_database() db,(SELECT COUNT(*) FROM auth.users WHERE deleted_at IS NULL)::text users,(SELECT COUNT(*) FROM organizations)::text orgs,(SELECT COUNT(*) FROM subscriptions)::text subs`);
   return { connected:true, engine:'PostgreSQL', database:r.db, counts:{users:count(r.users),organizations:count(r.orgs),subscriptions:count(r.subs)}, ownerSecurityStore:'SQLite منفصلة للجلسات وسجل تدقيق المالك' };
