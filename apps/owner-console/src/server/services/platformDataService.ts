@@ -129,8 +129,15 @@ export async function platformConversations(f:{search?:string;status?:string;cha
     ${clauses.length?'WHERE '+clauses.join(' AND '):''} ORDER BY c.last_message_at DESC LIMIT 1000`,args);
 }
 export async function platformEntitlements() {
-  return {items:await query(`SELECT e.id::text id,e.organization_id::text organization_id,o.name organization_name,e.feature_key,e.limit_value,e.period,e.enabled,e.source,e.updated_at::text updated_at
-    FROM billing_entitlements e JOIN organizations o ON o.id=e.organization_id ORDER BY o.name,e.feature_key LIMIT 2000`)};
+  const flags=await query(`SELECT feature_key id,feature_key key,feature_key name,'مزايا المؤسسة' description,'platform' category,'paid' tier_type,
+    CASE WHEN BOOL_OR(enabled) THEN 1 ELSE 0 END::int platform_enabled,ARRAY[]::text[] allowed_plan_codes,NULL::int default_quota,
+    COUNT(*) FILTER(WHERE enabled)::int active_users_estimate,COUNT(*) FILTER(WHERE source='owner_override' AND enabled)::int granted_overrides,
+    COUNT(*) FILTER(WHERE source='owner_override' AND NOT enabled)::int revoked_overrides
+    FROM billing_entitlements GROUP BY feature_key ORDER BY feature_key`);
+  const userOverrides=await query(`SELECT e.id::text id,e.organization_id::text organization_id,o.name organization_name,e.feature_key,e.limit_value custom_limit,
+    e.period,e.enabled override_enabled,e.source,e.updated_at::text updated_at FROM billing_entitlements e
+    JOIN organizations o ON o.id=e.organization_id WHERE e.source='owner_override' ORDER BY e.updated_at DESC LIMIT 2000`);
+  return {flags,userOverrides,activations:[],history:[]};
 }
 
 export async function platformOverview(period:string,startDate?:string,endDate?:string) {
@@ -154,8 +161,9 @@ export async function platformOverview(period:string,startDate?:string,endDate?:
       (SELECT COUNT(*) FROM conversations v WHERE v.created_at::date=d.day)::int conversations,(SELECT COUNT(*) FROM messages m WHERE m.created_at::date=d.day)::int messages,
       (SELECT COUNT(*) FROM agent_runs r WHERE r.created_at::date=d.day AND r.status='completed')::int success_runs,(SELECT COUNT(*) FROM agent_runs r WHERE r.created_at::date=d.day AND r.status='failed')::int failed_runs
       FROM generate_series($1::date,$2::date,interval '1 day') d(day) ORDER BY d.day`,[from,to]),
-    query(`SELECT channel_type channel,COUNT(*)::int total,COUNT(*) FILTER(WHERE is_active AND verification_status='verified')::int connected,
-      (SELECT COUNT(*) FROM messages m JOIN conversations v ON v.id=m.conversation_id WHERE v.channel_id=channels.id)::int messages FROM channels GROUP BY channel_type ORDER BY total DESC`),
+    query(`SELECT ch.channel_type channel,COUNT(*)::int total,COUNT(*) FILTER(WHERE ch.is_active AND ch.verification_status='verified')::int connected,COALESCE(SUM(mc.messages),0)::int messages
+      FROM channels ch LEFT JOIN (SELECT v.channel_id,COUNT(m.id)::int messages FROM conversations v JOIN messages m ON m.conversation_id=v.id GROUP BY v.channel_id) mc ON mc.channel_id=ch.id
+      GROUP BY ch.channel_type ORDER BY total DESC`),
     query(`SELECT plan_tier code,INITCAP(plan_tier) name,COUNT(*)::int subscribers FROM subscriptions GROUP BY plan_tier ORDER BY subscribers DESC`),
     query(`SELECT COALESCE(model,'غير محدد') model_id,COALESCE(model,'غير محدد') display_name,COUNT(*)::int requests,COALESCE(SUM(COALESCE(input_tokens,0)+COALESCE(output_tokens,0)),0)::bigint tokens
       FROM agent_runs WHERE created_at BETWEEN $1 AND $2 GROUP BY model ORDER BY requests DESC LIMIT 10`,[from,to])
@@ -165,15 +173,15 @@ export async function platformOverview(period:string,startDate?:string,endDate?:
     activeSubscriptions:v('active_subscriptions'),expiredSubscriptions:v('expired_subscriptions'),cancelledSubscriptions:v('cancelled_subscriptions'),pastDueSubscriptions:v('past_due_subscriptions'),trialSubscriptions:v('trial_subscriptions'),
     totalWorkspaces:v('total_workspaces'),totalAgents:v('total_agents'),activeAgents:v('active_agents'),failingAgents:v('failing_agents'),totalConversations:v('total_conversations'),totalMessages:v('total_messages'),
     totalAiRequests:v('ai_requests'),successfulAgentRuns:v('success_runs'),failedAgentRuns:v('failed_runs'),totalTokens:v('total_tokens'),aiProviderCostsUsd:0,collectedRevenueUsd:0,unpaidInvoicesUsd:0,recordedExpensesUsd:0,totalOperatingCostsUsd:0,netMarginUsd:0,netMarginPercent:null,
-    connectedChannels:v('connected_channels'),disconnectedChannels:v('disconnected_channels'),currentSystemErrors:v('failed_runs')};
+    connectedChannels:v('connected_channels'),disconnectedChannels:v('disconnected_channels'),currentSystemErrors:0};
   return {window:{startIso:from,endIso:to,days:Math.max(1,Math.ceil((end.getTime()-start.getTime())/86400000))},
     database:{engine:'PostgreSQL',mode:'بيانات المنصة الحقيقية؛ جلسات المالك وسجل تدقيقه منفصلان',externalPostgresConfigured:true,pathLabel:'Railway Postgres'},integrations:[],metrics,
     comparisons:{newUsersDeltaPct:null,subscriptionsDeltaPct:null,revenueDeltaPct:null,aiRequestsDeltaPct:null,aiCostDeltaPct:null},
     charts:{timeSeries:series.map((r:any)=>({date:r.date,users:count(r.users),subscriptions:count(r.subscriptions),revenueUsd:0,tokens:count(r.tokens),aiCostUsd:0,conversations:count(r.conversations),messages:count(r.messages),successRuns:count(r.success_runs),failedRuns:count(r.failed_runs)})),
       channelUsage:channels.map((r:any)=>({channel:r.channel,total:count(r.total),connected:count(r.connected),messages:count(r.messages)})),
       planDistribution:plans.map((r:any)=>({code:r.code,name:r.name,subscribers:count(r.subscribers)})),modelUsage:models.map((r:any)=>({modelId:r.model_id,displayName:r.display_name,requests:count(r.requests),tokens:count(r.tokens),costUsd:0}))},
-    attentionItems:{pastDueSubscriptions:v('past_due_subscriptions'),failingAgents:v('failing_agents'),disconnectedChannels:v('disconnected_channels'),unresolvedErrors:v('failed_runs'),unacknowledgedAlerts:0,openTickets:0},
-    dataLimitations:{revenue:'مخطط PostgreSQL الحالي لا يحتوي جداول فواتير ومدفوعات.',expenses:'لا يوجد دفتر مصروفات تشغيلي في المخطط الحالي.',aiCost:'المتاح سجل الرموز؛ لا توجد تكلفة فعلية مؤكدة لكل تشغيل.'}};
+    attentionItems:{pastDueSubscriptions:v('past_due_subscriptions'),failingAgents:v('failing_agents'),disconnectedChannels:v('disconnected_channels'),unresolvedErrors:0,unacknowledgedAlerts:0,openTickets:0},
+    dataLimitations:{revenue:'مخطط PostgreSQL الحالي لا يحتوي جداول فواتير ومدفوعات.',expenses:'لا يوجد دفتر مصروفات تشغيلي في المخطط الحالي.',aiCost:'المتاح سجل الرموز؛ لا توجد تكلفة فعلية مؤكدة لكل تشغيل.',systemErrors:'لا يوجد سجل أخطاء تشغيلي موحد في مخطط PostgreSQL الحالي.'}};
 }
 
 export async function updatePlatformUser(id:string,p:{fullName?:string;email?:string;phone?:string|null}) {
@@ -203,7 +211,7 @@ export async function updatePlatformAgent(id:string,p:{status?:string}) {
   const [r]=await query(`UPDATE ai_agents SET status=COALESCE($2,status),updated_at=NOW() WHERE id=$1::uuid RETURNING id::text id,name,status,model_provider,temperature`,[id,p.status||null]);
   if(!r)throw new Error('الوكيل غير موجود.');return r;
 }
-export async function platformEntitlementOverride(p:{userId:string;featureKey:string;enabled:boolean;limit?:number|null;period?:string}) {
+export async function platformEntitlementOverride(p:{userId:string;featureKey:string;overrideState?:'granted'|'revoked';enabled?:boolean;customLimit?:number|null;limit?:number|null;period?:string}) {
   const [org]=await query<{organization_id:string}>(`SELECT organization_id::text organization_id FROM organization_members WHERE user_id=$1::uuid AND role='owner' ORDER BY created_at LIMIT 1`,[p.userId]);
   if(!org)throw new Error('لا توجد مؤسسة مملوكة لهذا المستخدم.');
   const period=['daily','monthly','unlimited'].includes(p.period||'')?p.period:'monthly';
@@ -211,6 +219,6 @@ export async function platformEntitlementOverride(p:{userId:string;featureKey:st
     VALUES($1::uuid,$2,$3,$4,$5,'owner_override',NOW()) ON CONFLICT(organization_id,feature_key)
     DO UPDATE SET limit_value=EXCLUDED.limit_value,period=EXCLUDED.period,enabled=EXCLUDED.enabled,source='owner_override',updated_at=NOW()
     RETURNING id::text id,organization_id::text organization_id,feature_key,limit_value,period,enabled,source`,
-    [org.organization_id,p.featureKey,p.limit??null,period,p.enabled]);
+    [org.organization_id,p.featureKey,p.customLimit??p.limit??null,period,p.enabled??(p.overrideState!=='revoked')]);
   return r;
 }
