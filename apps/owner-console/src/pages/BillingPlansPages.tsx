@@ -366,8 +366,7 @@ export function PlansSubscriptionsPage({
                           label={String(s.status)}
                         />
                       </td>
-                      <td className="px-4 py-3">{Number(s.auto_renew) === 1 ? 'تلقائي' : 'متوقف'}</td>
-                      <td className="px-4 py-3 font-mono tabular-nums">{String(s.current_period_end).slice(0, 10)}</td>
+                                            <td className="px-4 py-3 font-mono tabular-nums">{String(s.current_period_end).slice(0, 10)}</td>
                       <td className="px-4 py-3 text-end">
                         <div className="inline-flex items-center gap-1.5">
                           <button
@@ -376,13 +375,6 @@ export function PlansSubscriptionsPage({
                             className={secondaryBtnClass}
                           >
                             +30 يوم
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => runSubAction(String(s.id), 'toggle_renew')}
-                            className={secondaryBtnClass}
-                          >
-                            {Number(s.auto_renew) === 1 ? 'إيقاف التجديد' : 'تفعيل التجديد'}
                           </button>
                           {s.status === 'cancelled' ? (
                             <button
