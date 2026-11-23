@@ -143,7 +143,7 @@ export async function platformAgentDetail(id:string) {
   const [channels,executions,conversations,stats]=await Promise.all([
     query(`SELECT id::text id,channel_type,is_active,verification_status,external_identifier FROM channels WHERE organization_id=$1::uuid ORDER BY created_at DESC`,[agent.organization_id]),
     query(`SELECT id::text id,model_provider,model,status,input_tokens,output_tokens,latency_ms,error_code,created_at::text created_at FROM agent_runs WHERE agent_id=$1::uuid ORDER BY created_at DESC LIMIT 40`,[id]),
-    query(`SELECT id::text id,status,state,channel_id::text channel_id,last_message_at::text last_message_at FROM conversations WHERE agent_id=$1::uuid ORDER BY last_message_at DESC LIMIT 30`,[id]),
+    query(`SELECT id::text id,status,state,channel_id::text channel_id,last_message_at::text last_message_at FROM conversations c WHERE EXISTS(SELECT 1 FROM agent_runs r WHERE r.conversation_id=c.id AND r.agent_id=$1::uuid) ORDER BY c.last_message_at DESC LIMIT 30`,[id]),
     query(`SELECT COUNT(*)::int total_runs,COUNT(*) FILTER(WHERE status='completed')::int success_runs,COUNT(*) FILTER(WHERE status='failed')::int failed_runs,
       COALESCE(SUM(COALESCE(input_tokens,0)+COALESCE(output_tokens,0)),0)::bigint total_tokens,COALESCE(AVG(latency_ms),0)::int avg_latency_ms
       FROM agent_runs WHERE agent_id=$1::uuid`,[id])
@@ -178,7 +178,7 @@ export async function platformConversations(f:{search?:string;status?:string;cha
   if(f.status&&f.status!=='all')add('c.status=?',f.status);if(f.channelType&&f.channelType!=='all')add('ch.channel_type=?',f.channelType);
   if(f.agentId)add('ar_agent.agent_id=?::uuid',f.agentId);if(f.userId)add('own.user_id=?::uuid',f.userId);
   if(f.search?.trim()){args.push(`%${f.search.trim()}%`);const p=args.length;clauses.push(`(COALESCE(ct.first_name,'')||' '||COALESCE(ct.last_name,'') ILIKE $${p} OR o.name ILIKE $${p})`);}
-  return query(`SELECT c.id::text id,c.organization_id::text organization_id,c.contact_id::text contact_id,c.channel_id::text channel_id,c.agent_id::text agent_id,c.status,c.state,c.priority,c.ai_paused_at::text ai_paused_at,c.handoff_reason,ar_agent.agent_id::text agent_id,
+  return query(`SELECT c.id::text id,c.organization_id::text organization_id,c.contact_id::text contact_id,c.channel_id::text channel_id,c.status,c.state,c.priority,c.ai_paused_at::text ai_paused_at,c.handoff_reason,ar_agent.agent_id::text agent_id,
     c.last_message_at::text last_message_at,c.created_at::text created_at,ch.channel_type,COALESCE(ct.first_name,'')||CASE WHEN ct.last_name IS NULL THEN '' ELSE ' '||ct.last_name END customer_name,a.name agent_name,o.name workspace_name,
     (SELECT COUNT(*) FROM messages m WHERE m.conversation_id=c.id)::int message_count FROM conversations c JOIN organizations o ON o.id=c.organization_id
     LEFT JOIN channels ch ON ch.id=c.channel_id LEFT JOIN contacts ct ON ct.id=c.contact_id
