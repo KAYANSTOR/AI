@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
-import { Bell, Bot, BookOpen, Building2, CalendarDays, ChevronLeft, CircleDollarSign, Clock3, Contact, FileText, Globe, KeyRound, ListTodo, LogOut, MapPin, Megaphone, Moon, RadioTower, Shield, SlidersHorizontal, Users, Workflow, Zap, MessageSquareText, Sparkles, Settings2 } from 'lucide-react'
+import { Bell, Bot, BookOpen, Brain, Building2, CalendarDays, ChevronLeft, CircleDollarSign, Clock3, Contact, FileText, Globe, KeyRound, ListTodo, LogOut, MapPin, Megaphone, Moon, RadioTower, Shield, SlidersHorizontal, Users, Workflow, Zap, MessageSquareText, Sparkles, Settings2 } from 'lucide-react'
 import { signOutAction } from '@/lib/auth/actions'
 import { ThemeToggle } from '@/components/theme/theme-toggle'
 import { PasswordForm } from './password-form'
@@ -22,6 +22,7 @@ const groups = [
   ]},
   { title: 'المساعد والقنوات', items: [
     { href:'/dashboard/agent',title:'المساعد الذكي',description:'إعداد الوكيل واختباره',icon:Bot },
+    { href:'/dashboard/assistant/memories',title:'الذاكرة الشخصية',description:'إدارة معلوماتك المحفوظة الخاصة بك',icon:Brain },
     { href:'/dashboard/knowledge',title:'قاعدة المعرفة',description:'معلومات النشاط ومصادر الإجابة',icon:BookOpen,capability:'knowledge_base' },
     { href:'/dashboard/channels',title:'القنوات والربط',description:'واتساب والقنوات المتصلة',icon:RadioTower },
     { href:'/dashboard/integrations',title:'التكاملات',description:'الخدمات والاتصالات الخارجية',icon:Zap },

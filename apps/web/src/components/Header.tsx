@@ -4,7 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import {
-  Activity, BarChart3, BookOpen, Bot, CalendarDays, Contact, CreditCard,
+  Activity, BarChart3, BookOpen, Bot, Brain, CalendarDays, Contact, CreditCard,
   FileText, LifeBuoy, Megaphone, MessageSquareText, RadioTower, RefreshCw,
   Search, Settings, Users, Workflow,
 } from 'lucide-react'
@@ -25,6 +25,7 @@ const PAGE_META = [
   { prefix: '/dashboard/quotes', title: 'عروض الأسعار', subtitle: 'إعداد عروض الأسعار ومتابعتها', icon: CreditCard },
   { prefix: '/dashboard/orders', title: 'الطلبات', subtitle: 'متابعة طلبات العملاء', icon: Contact },
   { prefix: '/dashboard/agent', title: 'المساعد الذكي', subtitle: 'إعداد الوكيل واختباره وتدريبه', icon: Bot },
+  { prefix: '/dashboard/assistant/memories', title: 'الذاكرة الشخصية', subtitle: 'إدارة معلوماتك الخاصة بالمساعد', icon: Brain },
   { prefix: '/dashboard/channels', title: 'القنوات', subtitle: 'إدارة قنوات التواصل والربط', icon: RadioTower },
   { prefix: '/dashboard/knowledge', title: 'قاعدة المعرفة', subtitle: 'المعلومات التي يعتمد عليها المساعد', icon: BookOpen },
   { prefix: '/dashboard/campaigns', title: 'الحملات', subtitle: 'إعداد حملات التواصل ومراجعتها', icon: Megaphone },
