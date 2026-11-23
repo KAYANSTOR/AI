@@ -199,7 +199,16 @@ export async function platformAiUsage(f:{userId?:string;agentId?:string;modelId?
 export async function platformChannels() {
   return {items:await query(\`SELECT c.id::text id,c.organization_id::text organization_id,c.business_id::text business_id,c.channel_type,c.connection_mode,
     c.is_active,c.verification_status,c.provider_account_id,c.external_identifier,c.created_at::text created_at,o.name organization_name,
-    COALESCE((SELECT array_agg(pc.credential_type ORDER BY pc.credential_type) FROM provider_credentials pc WHERE pc.channel_id=c.id AND pc.status='active'),ARRAY[]::varchar[]) credential_types,
+    COALESCE(NULLIF(c.metadata->>'display_name',''),NULLIF(c.external_identifier,''),c.channel_type) display_name,o.name workspace_name,
+    CASE WHEN c.channel_type='whatsapp' AND c.connection_mode='qr_unofficial' AND EXISTS(SELECT 1 FROM whatsapp_gateway_sessions q WHERE q.channel_id=c.id AND q.status='connected') THEN 'connected'
+      WHEN c.is_active AND c.verification_status='verified' THEN 'connected' WHEN c.verification_status='failed' THEN 'error' ELSE 'pending' END connection_status,
+    CASE WHEN EXISTS(SELECT 1 FROM webhook_events e WHERE e.channel_id=c.id AND e.processing_status='failed') THEN 'يوجد إخفاق'
+      WHEN c.verification_status='verified' THEN 'متحقق' ELSE 'غير متحقق' END webhook_status,
+    CASE WHEN EXISTS(SELECT 1 FROM provider_credentials pc WHERE pc.channel_id=c.id AND pc.status='active') THEN 'بيانات اعتماد مهيأة' ELSE 'بيانات اعتماد ناقصة' END provider_status,
+    COALESCE((SELECT 'مشفّر: '||string_agg(pc.credential_type,', ' ORDER BY pc.credential_type) FROM provider_credentials pc WHERE pc.channel_id=c.id AND pc.status='active'),'لا توجد أسرار') secret_masked,
+    (SELECT COUNT(*) FROM messages m JOIN conversations v ON v.id=m.conversation_id WHERE v.channel_id=c.id AND m.direction='inbound')::int messages_received,
+    (SELECT COUNT(*) FROM messages m JOIN conversations v ON v.id=m.conversation_id WHERE v.channel_id=c.id AND m.direction='outbound')::int messages_sent,
+    (SELECT COUNT(*) FROM webhook_events e WHERE e.channel_id=c.id AND e.processing_status='failed')::int error_count,
     (SELECT COUNT(*) FROM conversations v WHERE v.channel_id=c.id)::int conversations_count
     FROM channels c JOIN organizations o ON o.id=c.organization_id ORDER BY c.created_at DESC LIMIT 1000\`)};
 }
