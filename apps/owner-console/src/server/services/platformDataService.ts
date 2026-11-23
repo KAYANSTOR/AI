@@ -94,6 +94,23 @@ export async function platformAgents(f:{search?:string;status?:string;provider?:
     LEFT JOIN auth.users u ON u.id=own.user_id ${clauses.length?'WHERE '+clauses.join(' AND '):''} ORDER BY a.created_at DESC LIMIT 500`,args);
 }
 
+export async function platformAgentDetail(id:string) {
+  const [agent]=await query(`SELECT a.id::text id,a.organization_id::text organization_id,a.business_id::text workspace_id,a.name,a.model_provider provider_code,a.status,a.temperature,a.locale,a.slug,a.created_at::text created_at,
+    o.name workspace_name,u.email owner_email,${fullName} owner_name FROM ai_agents a JOIN organizations o ON o.id=a.organization_id
+    LEFT JOIN LATERAL(SELECT user_id FROM organization_members WHERE organization_id=o.id AND role='owner' ORDER BY created_at LIMIT 1) own ON TRUE
+    LEFT JOIN auth.users u ON u.id=own.user_id WHERE a.id=$1::uuid`,[id]);
+  if(!agent)return null;
+  const [channels,executions,conversations,stats]=await Promise.all([
+    query(`SELECT id::text id,channel_type,is_active,verification_status,external_identifier FROM channels WHERE organization_id=$1::uuid ORDER BY created_at DESC`,[agent.organization_id]),
+    query(`SELECT id::text id,model_provider,model,status,input_tokens,output_tokens,latency_ms,error_code,created_at::text created_at FROM agent_runs WHERE agent_id=$1::uuid ORDER BY created_at DESC LIMIT 40`,[id]),
+    query(`SELECT id::text id,status,state,channel_id::text channel_id,last_message_at::text last_message_at FROM conversations WHERE agent_id=$1::uuid ORDER BY last_message_at DESC LIMIT 30`,[id]),
+    query(`SELECT COUNT(*)::int total_runs,COUNT(*) FILTER(WHERE status='completed')::int success_runs,COUNT(*) FILTER(WHERE status='failed')::int failed_runs,
+      COALESCE(SUM(COALESCE(input_tokens,0)+COALESCE(output_tokens,0)),0)::bigint total_tokens,COALESCE(AVG(latency_ms),0)::int avg_latency_ms
+      FROM agent_runs WHERE agent_id=$1::uuid`,[id])
+  ]);
+  return {agent,channels,knowledgeSources:[],executions,conversations,errors:executions.filter((r:any)=>r.status==='failed'),configHistory:[],stats:stats[0]||{}};
+}
+
 export async function platformAiUsage(f:{userId?:string;agentId?:string;modelId?:string;providerCode?:string;status?:string;page?:number;pageSize?:number}) {
   const page=Math.max(1,Number(f.page)||1),size=Math.min(100,Math.max(10,Number(f.pageSize)||25)),clauses:string[]=[],args:unknown[]=[];
   const add=(s:string,v:unknown)=>{args.push(v);clauses.push(s.replace('?',`$${args.length}`));};
