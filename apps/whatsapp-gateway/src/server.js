@@ -41,6 +41,19 @@ function normalizePhoneNumber(value) {
   }
   return phoneNumber.slice(1)
 }
+async function withTimeout(promise, timeoutMs, errorCode) {
+  let timer
+  try {
+    return await Promise.race([
+      promise,
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error(errorCode)), timeoutMs)
+      }),
+    ])
+  } finally {
+    clearTimeout(timer)
+  }
+}
 function encryptText(value) {
   const iv = randomBytes(12)
   const cipher = createCipheriv('aes-256-gcm', SESSION_KEY, iv)
@@ -200,6 +213,7 @@ async function startSocket(channelId, options = {}) {
     throw error
   }
   sock.ev.on('creds.update', async update => {
+    if (session.stopping) return
     Object.assign(session.creds, update)
     try { await saveCreds(session) } catch (error) {
       console.error('whatsapp_qr_credentials_persist_failed', { channelId, reason: error instanceof Error ? error.message : 'storage_error' })
@@ -213,17 +227,30 @@ async function startSocket(channelId, options = {}) {
         session.pairingRequested = true
         console.log('whatsapp_qr_pairing_code_requesting', { channelId, connection: update.connection || null, hasQr: Boolean(update.qr) })
         try {
-          const code = await sock.requestPairingCode(normalizePhoneNumber(session.phoneNumber))
+          const code = await withTimeout(
+            sock.requestPairingCode(normalizePhoneNumber(session.phoneNumber)),
+            20_000,
+            'pairing_code_request_timeout',
+          )
           session.status = 'pairing_code'
           session.pairingCode = code
           session.qrDataUrl = null
           session.lastError = null
+          if (session.stopping) return
           await persistSocketState(session)
+          console.log('whatsapp_qr_pairing_code_ready', { channelId })
         } catch (error) {
           session.pairingRequested = false
           session.status = 'failed'
-          session.lastError = 'pairing_code_request_failed'
+          session.lastError = error instanceof Error && error.message === 'pairing_code_request_timeout'
+            ? 'pairing_code_request_timeout'
+            : 'pairing_code_request_failed'
           await persistSocketState(session)
+          session.stopping = true
+          if (sockets.get(channelId)?.sock === sock) sockets.delete(channelId)
+          try { sock.end(undefined) } catch {}
+          await query("UPDATE public.whatsapp_gateway_sessions SET auth_creds_ciphertext=NULL WHERE channel_id=$1", [channelId])
+          await query("DELETE FROM public.whatsapp_gateway_auth_keys WHERE channel_id=$1", [channelId])
           await query("UPDATE public.channels SET is_active=false,verification_status='failed',updated_at=now() WHERE id=$1 AND connection_mode='qr_unofficial'", [channelId])
           console.error('whatsapp_qr_pairing_code_request_failed', { channelId, reason: error instanceof Error ? error.message : 'pairing_error' })
         }
