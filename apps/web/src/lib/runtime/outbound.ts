@@ -9,6 +9,7 @@ import { sendTelegramText } from '@/lib/providers/telegram'
 import { sendMessengerText } from '@/lib/providers/messenger'
 import { markFirstResponse } from '@/lib/sla'
 import { adapterForWhatsAppMode, type WhatsAppConnectionMode } from '@/lib/channels/whatsapp-provider-adapter'
+import { formatForWhatsApp } from '@/lib/channels/whatsapp-format'
 
 /**
  * Provider credentials are intentionally inaccessible through the tenant-scoped
@@ -336,7 +337,7 @@ async function sendViaProvider(
       credentials,
       from: channel.providerAccountId ?? credentials.phone_number_id ?? channel.externalIdentifier ?? '',
       to: recipient,
-      body,
+      body: formatForWhatsApp(body),
       channelId: channel.id,
     })
     return

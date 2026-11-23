@@ -131,7 +131,7 @@ export const geminiProvider: AIProvider = {
               systemInstruction,
               contents,
               tools,
-              generationConfig: { maxOutputTokens: 1024 },
+              generationConfig: { maxOutputTokens: input.isWhatsApp ? 400 : 1024 },
             }),
             signal: AbortSignal.timeout(15_000),
           }

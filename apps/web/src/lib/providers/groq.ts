@@ -114,7 +114,7 @@ export const groqProvider: AIProvider = {
     const requestBody: Record<string, unknown> = {
       model,
       messages: toGroqMessages(input.system, input.messages),
-      max_completion_tokens: 1024,
+      max_completion_tokens: input.isWhatsApp ? 400 : 1024,
       parallel_tool_calls: false,
     }
 

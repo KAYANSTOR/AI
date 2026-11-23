@@ -55,6 +55,23 @@ describe('Gemini 3.8 provider contract', () => {
     expect(body.generationConfig.temperature).toBeUndefined()
   })
 
+  test('uses the shorter generation budget for WhatsApp', async () => {
+    let body: Record<string, unknown> | undefined
+    globalThis.fetch = (async (_input, init) => {
+      body = JSON.parse(String(init?.body)) as Record<string, unknown>
+      return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: 'تم' }] } }] }), { status: 200 })
+    }) as typeof fetch
+
+    await geminiProvider.call({
+      system: 'system',
+      messages: [{ role: 'user', content: 'مرحبا' }],
+      tools: [],
+      isWhatsApp: true,
+    })
+
+    expect(body?.generationConfig).toEqual({ maxOutputTokens: 400 })
+  })
+
   test('preserves function-call id when sending a tool result back to Gemini', async () => {
     let body: Record<string, unknown> | undefined
 

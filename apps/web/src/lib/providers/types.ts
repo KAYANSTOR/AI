@@ -55,5 +55,7 @@ export interface AIProvider {
     system: string
     messages: ModelMessage[]
     tools: ModelToolDefinition[]
+    /** Enables the shorter generation budget for WhatsApp replies. */
+    isWhatsApp?: boolean
   }): Promise<ModelResult>
 }

@@ -141,6 +141,7 @@ async function runAgentLoop(args: AgentLoopArgs): Promise<AgentLoopResult> {
       system: args.systemPrompt,
       messages,
       tools: args.toolSet,
+      isWhatsApp: args.channel === 'whatsapp',
     }, activeProvider)
     activeProvider = generated.provider
     const result = generated.result

@@ -21,7 +21,7 @@ export function getProvider(): AIProvider {
  * The caller keeps the selected provider for the rest of the agent turn.
  */
 export async function callProvider(
-  input: { system: string; messages: ModelMessage[]; tools: ModelToolDefinition[] },
+  input: { system: string; messages: ModelMessage[]; tools: ModelToolDefinition[]; isWhatsApp?: boolean },
   preferredProvider: AIProviderName = 'gemini'
 ): Promise<ProviderCallResult> {
   if (preferredProvider === 'groq') {
