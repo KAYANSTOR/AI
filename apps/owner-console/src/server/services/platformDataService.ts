@@ -169,12 +169,12 @@ export async function platformEntitlements() {
       WHERE oc.capability_id=c.id AND oc.is_enabled)::int active_users_estimate,0::int granted_overrides,0::int revoked_overrides
     FROM capabilities c ORDER BY c.name`);
   const userOverrides=await query(`SELECT (oc.organization_id::text||':'||oc.capability_id) id,oc.organization_id::text organization_id,o.name organization_name,
-    oc.capability_id feature_key,c.name feature_name,
+    oc.capability_id feature_key,c.name feature_name,be.limit_value custom_limit,be.period,
     COALESCE(NULLIF(u.raw_user_meta_data->>'full_name',''),NULLIF(u.raw_user_meta_data->>'name',''),u.email) user_name,u.email user_email,
     CASE WHEN oc.is_enabled THEN 'granted' ELSE 'revoked' END override_state,NULL::numeric custom_limit,oc.created_at::text updated_at
     FROM organization_capabilities oc JOIN organizations o ON o.id=oc.organization_id JOIN capabilities c ON c.id=oc.capability_id
     LEFT JOIN LATERAL(SELECT user_id FROM organization_members WHERE organization_id=oc.organization_id AND role='owner' ORDER BY created_at LIMIT 1) own ON TRUE
-    LEFT JOIN auth.users u ON u.id=own.user_id ORDER BY oc.created_at DESC LIMIT 2000`);
+    LEFT JOIN auth.users u ON u.id=own.user_id LEFT JOIN billing_entitlements be ON be.organization_id=oc.organization_id AND be.feature_key=oc.capability_id ORDER BY oc.created_at DESC LIMIT 2000`);
   const activations=await query(`SELECT u.id::text id,COALESCE(NULLIF(u.raw_user_meta_data->>'full_name',''),NULLIF(u.raw_user_meta_data->>'name',''),u.email) full_name,u.email,
     CASE WHEN u.banned_until>NOW() THEN 'suspended' ELSE 'active' END account_status,s.status activation_status,
     s.period_start::text activation_start_at,s.period_end::text activation_end_at,p.name plan_name,NULL::text activation_source,NULL::text deactivation_reason
