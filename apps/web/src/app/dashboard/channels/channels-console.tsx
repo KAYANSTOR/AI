@@ -565,11 +565,7 @@ function ChannelDialog({
                 className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl border border-border bg-background px-4 text-sm font-semibold text-text hover:bg-surface disabled:opacity-50"
               >
                 {busy ? <Loader2 size={18} className="animate-spin" /> : <Link2 size={17} />}
-                {state === 'verified'
-                  ? 'إعادة التحقق'
-                  : card.type === 'whatsapp'
-                    ? 'حفظ الرقم فقط'
-                    : 'حفظ والربط'}
+                {state === 'verified' ? 'إعادة التحقق' : 'حفظ والربط'}
               </button>
             ) : null}
             {state !== 'not_connected' ? (
