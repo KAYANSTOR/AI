@@ -1,6 +1,6 @@
 import postgres from 'postgres';
 import crypto from 'node:crypto';
-import { sha256Hex } from '../security/crypto';
+import { sha256Hex, encryptSecret, decryptSecret } from '../security/crypto';
 
 type Pool = ReturnType<typeof postgres>;
 let pool: Pool | undefined;
@@ -197,9 +197,13 @@ export async function platformAiUsage(f:{userId?:string;agentId?:string;modelId?
 }
 
 export async function platformChannels() {
-  return {items:await query(`SELECT c.id::text id,c.organization_id::text organization_id,c.business_id::text business_id,c.channel_type,c.is_active,c.verification_status,c.provider_account_id,c.external_identifier,c.created_at::text created_at,o.name organization_name,
-    (SELECT COUNT(*) FROM conversations v WHERE v.channel_id=c.id)::int conversations_count FROM channels c JOIN organizations o ON o.id=c.organization_id ORDER BY c.created_at DESC LIMIT 1000`)};
+  return {items:await query(\`SELECT c.id::text id,c.organization_id::text organization_id,c.business_id::text business_id,c.channel_type,c.connection_mode,
+    c.is_active,c.verification_status,c.provider_account_id,c.external_identifier,c.created_at::text created_at,o.name organization_name,
+    COALESCE((SELECT array_agg(pc.credential_type ORDER BY pc.credential_type) FROM provider_credentials pc WHERE pc.channel_id=c.id AND pc.status='active'),ARRAY[]::varchar[]) credential_types,
+    (SELECT COUNT(*) FROM conversations v WHERE v.channel_id=c.id)::int conversations_count
+    FROM channels c JOIN organizations o ON o.id=c.organization_id ORDER BY c.created_at DESC LIMIT 1000\`)};
 }
+
 export async function platformConversations(f:{search?:string;status?:string;channelType?:string;agentId?:string;userId?:string}={}) {
   const clauses:string[]=[],args:unknown[]=[];const add=(s:string,v:unknown)=>{args.push(v);clauses.push(s.replace('?',`$${args.length}`));};
   if(f.status&&f.status!=='all')add('c.status=?',f.status);if(f.channelType&&f.channelType!=='all')add('ch.channel_type=?',f.channelType);
@@ -689,3 +693,79 @@ export async function platformNotificationsSupport() {
   return {notifications,tickets:[],activityFeed,dataLimitations:{tickets:'لا يوجد جدول تذاكر دعم فني في مخطط قاعدة المنصة الحالي؛ لم يتم عرض تذاكر محلية على أنها تذاكر إنتاجية.'}};
 }
 
+
+
+export async function rotatePlatformChannelSecret(channelId:string,newSecret:string) {
+  const secret=newSecret.trim();if(secret.length<8)throw new Error('السر الجديد قصير أو غير صالح.');
+  const [channel]=await query(\`SELECT id::text id,organization_id::text organization_id,channel_type FROM channels WHERE id=$1::uuid\`,[channelId]);
+  if(!channel)throw new Error('القناة غير موجودة.');
+  const fields:Record<string,{provider:string;type:string}>={
+    whatsapp:{provider:'meta',type:'access_token'},instagram:{provider:'meta',type:'access_token'},
+    telegram:{provider:'telegram',type:'bot_token'},sms:{provider:'twilio',type:'auth_token'},
+    phone:{provider:'vapi',type:'api_key'},messenger:{provider:'meta',type:'page_access_token'},
+    website:{provider:'website',type:'widget_signing_secret'}
+  };
+  const field=fields[String(channel.channel_type)];if(!field)throw new Error('نوع القناة لا يدعم تدوير السر من هذه الشاشة.');
+  const encrypted=encryptSecret(secret);
+  await query(\`INSERT INTO provider_credentials(organization_id,channel_id,provider,credential_type,encrypted_value,status,key_version,last_verified_at,updated_at)
+    VALUES($1::uuid,$2::uuid,$3,$4,$5,'active',1,NULL,NOW())
+    ON CONFLICT(channel_id,provider,credential_type) WHERE channel_id IS NOT NULL
+    DO UPDATE SET encrypted_value=EXCLUDED.encrypted_value,status='active',key_version=1,last_verified_at=NULL,updated_at=NOW()\`,
+    [channel.organization_id,channel.id,field.provider,field.type,encrypted]);
+  await query(\`UPDATE channels SET verification_status='pending',updated_at=NOW() WHERE id=$1::uuid\`,[channelId]);
+  return {id:channelId,credentialType:field.type,status:'updated_requires_test'};
+}
+
+export async function testPlatformChannel(channelId:string) {
+  const [channel]=await query(\`SELECT id::text id,organization_id::text organization_id,channel_type,connection_mode,is_active,provider_account_id,external_identifier
+    FROM channels WHERE id=$1::uuid\`,[channelId]);
+  if(!channel)throw new Error('القناة غير موجودة.');
+  if(!channel.is_active)throw new Error('القناة متوقفة؛ فعّلها قبل الاختبار.');
+  try {
+    if(channel.channel_type==='whatsapp'&&channel.connection_mode==='qr_unofficial'){
+      const [session]=await query(\`SELECT status,last_error FROM whatsapp_gateway_sessions WHERE channel_id=$1::uuid\`,[channelId]);
+      if(session?.status!=='connected')throw new Error('جلسة واتساب QR غير متصلة حالياً.');
+    } else {
+      const creds=await query(\`SELECT provider,credential_type,encrypted_value FROM provider_credentials WHERE channel_id=$1::uuid AND status='active'\`,[channelId]);
+      const values:Record<string,string>={};
+      for(const row of creds as any[])values[String(row.credential_type)]=decryptSecret(String(row.encrypted_value));
+      const timeout=AbortSignal.timeout(12000);
+      if(channel.channel_type==='whatsapp'||channel.channel_type==='instagram'||channel.channel_type==='messenger'){
+        const token=values.access_token||values.page_access_token;
+        if(!token||!channel.provider_account_id)throw new Error('بيانات القناة الأساسية غير مكتملة (المعرّف أو رمز الوصول).');
+        const base=(process.env.META_GRAPH_BASE_URL||'https://graph.facebook.com/v23.0').replace(/\\/+$/,'');
+        const response=await fetch(base+'/'+encodeURIComponent(String(channel.provider_account_id))+'?fields=id',{
+          headers:{Authorization:'Bearer '+token},signal:timeout
+        });
+        if(!response.ok)throw new Error('رفض مزود Meta التحقق من القناة (HTTP '+response.status+').');
+      } else if(channel.channel_type==='telegram'){
+        if(!values.bot_token)throw new Error('رمز بوت Telegram غير موجود.');
+        const response=await fetch('https://api.telegram.org/bot'+values.bot_token+'/getMe',{signal:timeout});
+        const payload=await response.json().catch(()=>null) as {ok?:boolean;description?:string}|null;
+        if(!response.ok||payload?.ok!==true)throw new Error('فشل تحقق Telegram من البوت.');
+      } else if(channel.channel_type==='sms'){
+        if(!values.account_sid||!values.auth_token)throw new Error('بيانات Twilio الأساسية غير مكتملة.');
+        const auth=Buffer.from(values.account_sid+':'+values.auth_token).toString('base64');
+        const response=await fetch('https://api.twilio.com/2010-04-01/Accounts/'+encodeURIComponent(values.account_sid)+'.json',{
+          headers:{Authorization:'Basic '+auth},signal:timeout
+        });
+        if(!response.ok)throw new Error('رفض Twilio بيانات الحساب (HTTP '+response.status+').');
+      } else if(channel.channel_type==='phone'){
+        if(!values.api_key)throw new Error('مفتاح Vapi غير موجود.');
+        const response=await fetch('https://api.vapi.ai/assistant',{headers:{Authorization:'Bearer '+values.api_key},signal:timeout});
+        if(!response.ok)throw new Error('رفض Vapi مفتاح القناة (HTTP '+response.status+').');
+      } else if(channel.channel_type==='website'){
+        if(!values.widget_signing_secret)throw new Error('سر توقيع أداة الموقع غير موجود.');
+      } else {
+        throw new Error('نوع القناة لا يدعم اختباراً آلياً من لوحة المالك.');
+      }
+    }
+    await query(\`UPDATE channels SET verification_status='verified',updated_at=NOW() WHERE id=$1::uuid\`,[channelId]);
+    await query(\`UPDATE provider_credentials SET last_verified_at=NOW() WHERE channel_id=$1::uuid AND status='active'\`,[channelId]);
+    return {ok:true,diagnostic:'تم التحقق من بيانات القناة مع مزودها بنجاح.'};
+  } catch(error) {
+    const message=error instanceof Error?error.message:'فشل اختبار القناة.';
+    await query(\`UPDATE channels SET verification_status='failed',updated_at=NOW() WHERE id=$1::uuid\`,[channelId]);
+    return {ok:false,diagnostic:message};
+  }
+}
