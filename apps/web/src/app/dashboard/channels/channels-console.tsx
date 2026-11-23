@@ -10,6 +10,7 @@ import {
   connectWhatsAppChannelAction,
   connectTelegramChannelAction,
   completeMessengerConnectionAction,
+  deleteChannelAction,
 } from './actions'
 import { getChannelSpec, type ChannelType, type BindingTestResult } from '@/lib/channels/management'
 import { WhatsAppEmbeddedSignupButton } from '@/components/channels/whatsapp-embedded-signup'
@@ -256,6 +257,16 @@ function ChannelDialog({
         text: result.ok ? result.message ?? 'تم حذف إعدادات القناة.' : result.error ?? 'تعذّر حذف إعدادات القناة.',
       })
       if (result.ok) window.location.reload()
+    })
+  }
+
+  function removeChannel() {
+    if (!canManage || !window.confirm('سيتم حذف إعدادات هذه القناة وفصل اتصالها. هل تريد المتابعة؟')) return
+    startTransition(async () => {
+      setNotice(null)
+      const result = await deleteChannelAction({ channelType: card.type, connectionMode: card.connectionMode })
+      setNotice({ ok: result.ok, text: result.ok ? result.message ?? 'تم حذف القناة.' : result.error ?? 'تعذّر حذف القناة.' })
+      if (result.ok) window.location.href = '/dashboard/channels'
     })
   }
 
@@ -596,6 +607,12 @@ function ChannelDialog({
               >
                 {busy ? <Loader2 size={18} className="animate-spin" /> : <Link2 size={17} />}
                 {state === 'verified' ? 'إعادة التحقق' : 'حفظ والربط'}
+              </button>
+            ) : null}
+            {canManage && card.connected ? (
+              <button type="button" onClick={removeChannel} disabled={busy}
+                className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-error/30 px-4 text-sm font-semibold text-error hover:bg-error/5 disabled:opacity-50">
+                حذف إعدادات القناة
               </button>
             ) : null}
             {state !== 'not_connected' ? (
