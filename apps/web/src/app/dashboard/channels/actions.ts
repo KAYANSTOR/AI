@@ -676,7 +676,6 @@ export async function startWhatsAppQrSessionAction(input: {
       .select('id, connection_mode, is_active')
       .eq('organization_id', org.organizationId)
       .eq('channel_type', 'whatsapp')
-      .eq('connection_mode', 'qr_unofficial')
       .maybeSingle()
     if (readError) throw new Error('تعذّرت قراءة قناة واتساب الحالية.')
 
