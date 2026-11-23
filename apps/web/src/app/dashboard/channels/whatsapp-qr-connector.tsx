@@ -19,6 +19,8 @@ export function WhatsAppQrConnector({ disabled, connectionMode, publicNumber }: 
   const [busy, startTransition] = useTransition()
   const waiting = Boolean(session && ['starting', 'qr_required', 'pairing_code', 'reconnecting'].includes(session.status))
   const linked = session?.status === 'connected'
+  const pairingExpired = session?.status === 'failed' &&
+    (session.lastError === 'pairing_code_expired' || session.lastError === 'pairing_session_closed')
   const hasSavedSettings = Boolean(publicNumber || (session && session.status !== 'not_configured'))
 
   async function refreshStatus() {
@@ -48,7 +50,6 @@ export function WhatsAppQrConnector({ disabled, connectionMode, publicNumber }: 
 
   function start() {
     if (disabled) return
-    const digits = phoneNumber.replace(/\D/g, '')
     if (!/^\+?[1-9]\d{7,14}$/.test(phoneNumber.replace(/[\s()-]/g, ''))) {
       setNotice('أدخل رقم الهاتف بصيغة دولية صحيحة، مثل +967777123456.')
       return
@@ -63,7 +64,6 @@ export function WhatsAppQrConnector({ disabled, connectionMode, publicNumber }: 
         return
       }
       if (result.session) setSession(result.session)
-      window.setTimeout(() => window.location.reload(), 450)
     })
   }
   function disconnect() {
@@ -158,9 +158,20 @@ export function WhatsAppQrConnector({ disabled, connectionMode, publicNumber }: 
           ) : null}
           {session?.status === 'pairing_code' && session.pairingCode ? (
             <div className="rounded-xl border border-success/30 bg-success/5 p-4 text-center">
-              <p className="text-xs font-semibold text-text-muted">رمز ربط واتساب — أدخله في الهاتف نفسه</p>
+              <p className="text-sm font-bold text-text">تم إنشاء جلسة جديدة ورمز الربط جاهز الآن</p>
               <p className="mt-3 font-mono text-3xl font-bold tracking-[0.28em] text-text" dir="ltr">{session.pairingCode}</p>
-              <p className="mt-3 text-xs leading-6 text-text-muted">في واتساب: الأجهزة المرتبطة ← ربط جهاز ← الربط برقم الهاتف، ثم أدخل الرمز الظاهر هنا.</p>
+              <p className="mt-3 text-xs leading-6 text-text-muted">أدخل الرمز فوراً في الهاتف نفسه: واتساب ← الأجهزة المرتبطة ← ربط جهاز ← الربط برقم الهاتف. لا تغلق هذه الصفحة حتى يكتمل الربط.</p>
+            </div>
+          ) : null}
+
+          {pairingExpired ? (
+            <div className="space-y-3 rounded-xl border border-warning/40 bg-warning/5 p-4">
+              <p className="text-sm font-semibold text-text">انتهت صلاحية رمز الربط قبل إكماله</p>
+              <p className="text-xs leading-6 text-text-muted">الخادم أنشأ الجلسة، لكن الهاتف لم يقبل الرمز في الوقت المطلوب. اضغط لإصدار رمز جديد ثم أدخله مباشرة في الهاتف.</p>
+              <button type="button" onClick={start} disabled={busy || disabled || !phoneNumber.trim()}
+                className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#25D366] px-4 text-sm font-bold text-white hover:opacity-90 disabled:opacity-50">
+                {busy ? <Loader2 size={17} className="animate-spin" /> : <Link2 size={16} />} إصدار رمز ربط جديد
+              </button>
             </div>
           ) : null}
 
@@ -170,7 +181,7 @@ export function WhatsAppQrConnector({ disabled, connectionMode, publicNumber }: 
           {session?.status === 'reconnecting' ? (
             <p role="status" className="rounded-xl border border-warning/40 bg-warning/5 px-3 py-3 text-xs text-text">انقطع الاتصال مؤقتاً. يحاول النظام استعادة الجلسة تلقائياً.</p>
           ) : null}
-          {session?.status === 'failed' || session?.status === 'disconnected' ? (
+          {(session?.status === 'failed' && !pairingExpired) || session?.status === 'disconnected' ? (
             <p role="status" className="rounded-xl border border-error/30 bg-error/5 px-3 py-3 text-xs text-text">لم يكتمل الربط أو تم فصل الجهاز. أعد المحاولة برمز جديد.</p>
           ) : null}
         </>

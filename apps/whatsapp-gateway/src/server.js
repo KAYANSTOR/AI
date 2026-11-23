@@ -198,7 +198,10 @@ async function startSocket(channelId, options = {}) {
   })
   const sock = makeWASocket({
     auth: { creds, keys: createKeyStore(channelId) },
-    browser: Browsers.ubuntu('Kayan AI'),
+    // WhatsApp validates the companion platform display strictly during
+    // phone-number pairing. A custom browser label can yield a code that is
+    // displayed successfully but rejected when entered on the phone.
+    browser: Browsers.ubuntu('Chrome'),
     printQRInTerminal: false, syncFullHistory: false, markOnlineOnConnect: false,
   })
   session.sock = sock
@@ -283,6 +286,25 @@ async function startSocket(channelId, options = {}) {
         }
         const code = update.lastDisconnect?.error?.output?.statusCode || 0
         const loggedOut = code === DisconnectReason.loggedOut
+        // A phone-number pairing session is not a resumable WhatsApp Web
+        // session until the code has been entered on the phone. Retrying it
+        // with the half-registered auth state creates a new server session
+        // while the user is still looking at the old code, which is exactly
+        // the misleading "session not connected" state shown in the UI.
+        if (session.mode === 'pairing_code' && !session.creds.registered) {
+          session.status = 'failed'
+          session.qrDataUrl = null
+          session.lastError = session.pairingCode
+            ? 'pairing_code_expired'
+            : 'pairing_session_closed'
+          await persistSocketState(session)
+          if (sockets.get(channelId)?.sock === sock) sockets.delete(channelId)
+          await query("UPDATE public.whatsapp_gateway_sessions SET auth_creds_ciphertext=NULL WHERE channel_id=$1", [channelId])
+          await query("DELETE FROM public.whatsapp_gateway_auth_keys WHERE channel_id=$1", [channelId])
+          await query("UPDATE public.channels SET is_active=false,verification_status='failed',updated_at=now() WHERE id=$1 AND connection_mode='qr_unofficial'", [channelId])
+          console.warn('whatsapp_qr_pairing_code_expired', { channelId, code, hadPairingCode: Boolean(session.pairingCode) })
+          return
+        }
         console.warn('whatsapp_qr_socket_closed', { channelId, code, loggedOut, retry: session.retries })
         session.status = loggedOut ? 'disconnected' : 'reconnecting'
         session.qrDataUrl = null

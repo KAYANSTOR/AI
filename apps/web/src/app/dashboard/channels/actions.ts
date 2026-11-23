@@ -399,7 +399,17 @@ export async function testChannelAction(input: {
     if (spec.type === 'whatsapp' && data.connection_mode === 'qr_unofficial') {
       const status = await callWhatsAppGateway<{ session: WhatsAppGatewaySession }>('GET', '/sessions/' + data.id + '/status')
       const connected = status.session.status === 'connected'
-      result.checks.push({ label: 'جلسة WhatsApp Web', ok: connected, detail: connected ? 'الجلسة محفوظة ومتصلة' : 'الجلسة غير متصلة؛ أعد ربط الهاتف' })
+      const pairingReady = status.session.status === 'pairing_code' && Boolean(status.session.pairingCode)
+      const pairingExpired = status.session.status === 'failed' &&
+        (status.session.lastError === 'pairing_code_expired' || status.session.lastError === 'pairing_session_closed')
+      const detail = connected
+        ? 'الجلسة محفوظة ومتصلة'
+        : pairingReady
+          ? 'رمز الربط جاهز؛ أدخله الآن في الهاتف من الأجهزة المرتبطة ثم أعد الفحص'
+          : pairingExpired
+            ? 'انتهت صلاحية رمز الربط؛ أصدر رمزاً جديداً وأدخله مباشرة في الهاتف'
+            : 'الجلسة غير متصلة؛ ابدأ جلسة ربط جديدة من بطاقة واتساب'
+      result.checks.push({ label: 'جلسة WhatsApp Web', ok: connected, detail })
       result.ok = result.checks.every((check) => check.ok)
     } else if (spec.type === 'whatsapp') {
       const liveChecks = await verifyMetaChannelConnection({
