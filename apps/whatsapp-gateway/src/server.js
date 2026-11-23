@@ -2,7 +2,7 @@ import http from 'node:http'
 import { createCipheriv, createDecipheriv, randomBytes, timingSafeEqual } from 'node:crypto'
 import postgres from 'postgres'
 import QRCode from 'qrcode'
-import makeWASocket, { Browsers, BufferJSON, DisconnectReason, initAuthCreds } from '@whiskeysockets/baileys'
+import makeWASocket, { Browsers, BufferJSON, DisconnectReason, initAuthCreds } from 'baileys'
 
 const PORT = Number(process.env.WHATSAPP_GATEWAY_PORT || 3001)
 const DATABASE_URL = requiredEnv('DATABASE_URL')
@@ -324,7 +324,7 @@ async function startSession(input) {
   const phoneChanged = Boolean(oldRows[0] && oldRows[0].phone_number !== phoneNumber)
   // A failed phone-code attempt can persist creds.me before WhatsApp accepts the
   // companion registration. Never reuse that half-registered identity on retry.
-  const incompleteAuth = Boolean(oldRows[0] && storedCreds?.registered !== true)
+  const incompleteAuth = Boolean(oldRows[0] && storedCreds?.pairingCode && storedCreds.registered !== true)
   if (phoneChanged || incompleteAuth) {
     await query("DELETE FROM public.whatsapp_gateway_auth_keys WHERE channel_id=$1", [channelId])
     await query("UPDATE public.whatsapp_gateway_sessions SET auth_creds_ciphertext=NULL WHERE channel_id=$1", [channelId])
