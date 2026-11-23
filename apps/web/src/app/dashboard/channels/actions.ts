@@ -780,3 +780,102 @@ export async function disconnectWhatsAppQrSessionAction(): Promise<ChannelAction
     return { ok: false, error: actionErrorMessage(error, 'تعذّر فصل جلسة واتساب.') }
   }
 }
+
+/**
+ * Clears only the QR channel's connection settings. Conversation and contact history
+ * remain untouched; the channel row is retained so its WhatsApp connection mode stays
+ * unambiguous and can be configured again.
+ */
+export async function resetWhatsAppQrChannelAction(): Promise<ChannelActionResult> {
+  try {
+    const org = await requireChannelAdmin()
+    const admin = createAdminClient()
+    const { data: channel, error: readError } = await admin.from('channels')
+      .select('id, business_id, connection_mode')
+      .eq('organization_id', org.organizationId)
+      .eq('channel_type', 'whatsapp')
+      .eq('connection_mode', 'qr_unofficial')
+      .maybeSingle()
+    if (readError) throw new Error('تعذّرت قراءة إعدادات قناة واتساب.')
+    if (!channel?.id) return { ok: false, error: 'لا توجد إعدادات QR محفوظة لهذه القناة.' }
+
+    // Do not clear the stored number if the gateway could not safely log out.
+    await callWhatsAppGateway('POST', '/sessions/' + channel.id + '/logout', {})
+    const { error: updateError } = await admin.from('channels')
+      .update({
+        provider_account_id: null,
+        external_identifier: null,
+        is_active: false,
+        verification_status: 'pending',
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', channel.id)
+      .eq('organization_id', org.organizationId)
+    if (updateError) throw updateError
+
+    await audit(org.organizationId, channel.business_id, 'channel.whatsapp_qr_settings_reset', 'channel', channel.id, {
+      channel_type: 'whatsapp',
+      connection_mode: 'qr_unofficial',
+    })
+    revalidatePath('/dashboard/channels')
+    revalidatePath('/dashboard/conversations')
+    return { ok: true, message: 'تم مسح رقم واتساب وإعدادات الاتصال. سجل المحادثات والعملاء محفوظ.' }
+  } catch (error) {
+    return { ok: false, error: actionErrorMessage(error, 'تعذّر مسح إعدادات واتساب. حاول مرة أخرى.') }
+  }
+}
+
+
+export async function deleteChannelAction(input: {
+  channelType: string
+  connectionMode?: string | null
+}): Promise<ChannelActionResult> {
+  try {
+    const org = await requireChannelAdmin()
+    const spec = getChannelSpec(input.channelType)
+    if (!spec) return { ok: false, error: 'نوع قناة غير معروف.' }
+
+    const db = await createClient()
+    const { data: rows, error: readError } = await db.from('channels')
+      .select('id, business_id, connection_mode')
+      .eq('organization_id', org.organizationId)
+      .eq('channel_type', spec.type)
+    if (readError) throw new Error('تعذّرت قراءة إعدادات القناة.')
+    const channel = spec.type === 'whatsapp'
+      ? rows?.find((row) => row.connection_mode === input.connectionMode) ??
+        (input.connectionMode === 'cloud_api' ? rows?.find((row) => !row.connection_mode) : undefined)
+      : rows?.[0]
+    if (!channel?.id) return { ok: false, error: 'إعدادات هذه القناة غير موجودة.' }
+
+    // Close a QR session before removing its local channel record. A stale gateway
+    // session must not prevent the owner from removing an incorrect phone number.
+    if (spec.type === 'whatsapp' && channel.connection_mode === 'qr_unofficial') {
+      try {
+        await callWhatsAppGateway('POST', '/sessions/' + channel.id + '/logout', {})
+      } catch (error) {
+        console.warn('WhatsApp QR logout during channel deletion failed', error)
+      }
+    }
+
+    await audit(org.organizationId, channel.business_id, 'channel.deleted', 'channel', channel.id, {
+      channel_type: spec.type,
+      connection_mode: channel.connection_mode ?? null,
+    })
+
+    const { error: deleteError } = await db.from('channels')
+      .delete()
+      .eq('id', channel.id)
+      .eq('organization_id', org.organizationId)
+    if (deleteError) {
+      console.error('Unable to delete channel settings', deleteError)
+      return { ok: false, error: describeWriteError(deleteError.code, deleteError.message) }
+    }
+
+    revalidatePath('/dashboard/channels')
+    revalidatePath('/dashboard/integrations')
+    revalidatePath('/dashboard/conversations')
+    return { ok: true, message: 'تم حذف إعدادات القناة. يمكنك إدخال الرقم أو بيانات الربط الصحيحة من جديد.' }
+  } catch (error) {
+    return { ok: false, error: actionErrorMessage(error, 'تعذّر حذف إعدادات القناة.') }
+  }
+}
