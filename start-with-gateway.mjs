@@ -5,10 +5,10 @@ const port = String(process.env.PORT || '8080')
 const children = new Map()
 let stopping = false
 
-function launch(name, args, cwd = root) {
+function launch(name, args, cwd = root, env = process.env) {
   const child = spawn(process.execPath, args, {
     cwd,
-    env: process.env,
+    env,
     stdio: 'inherit',
   })
   children.set(name, child)
@@ -45,4 +45,18 @@ process.on('SIGTERM', () => stop(0))
 process.on('SIGINT', () => stop(0))
 
 launch('whatsapp_gateway', ['apps/whatsapp-gateway/src/server.js'])
+
+const ownerConsoleEnv = {
+  ...process.env,
+  PORT: String(process.env.OWNER_CONSOLE_PORT || '8090'),
+  KAYAN_OWNER_DB_PATH: process.env.OWNER_CONSOLE_DB_PATH || '/data/kayan_owner.db',
+  CREDENTIAL_ENCRYPTION_KEY: process.env.OWNER_CONSOLE_CREDENTIAL_ENCRYPTION_KEY || '',
+  OWNER_EMAIL: process.env.OWNER_CONSOLE_OWNER_EMAIL || 'jarallhalkboudi@gmail.com',
+  OWNER_PASSCODE: process.env.OWNER_CONSOLE_OWNER_PASSCODE || '',
+}
+// The owner console has its own persistent SQLite store; never let the main
+// platform DATABASE_URL imply that its SQLite adapter is connected to Postgres.
+delete ownerConsoleEnv.DATABASE_URL
+launch('owner_console', ['--import', 'tsx', 'server.ts'], `${root}/apps/owner-console`, ownerConsoleEnv)
+
 launch('kayan_web', [`${root}/node_modules/next/dist/bin/next`, 'start', '-H', '0.0.0.0', '-p', port], `${root}/apps/web`)

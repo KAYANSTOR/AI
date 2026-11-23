@@ -1,0 +1,182 @@
+@import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+ * Kayan AI Owner Console — Unified Brand & Semantic Design Tokens
+ * Grounded in Kayan AI brand identity:
+ * - Pastel Sage: #D8E2D0 (balanced brand motif, never overwhelming)
+ * - Deep Forest Olive: #1F3B22 (executive anchor & primary brand ink)
+ * - Signal Gold: #F2D600 (restrained high-intent highlight)
+ */
+
+@theme inline {
+  --color-brand-sage: var(--k-brand-sage);
+  --color-brand-forest: var(--k-brand-forest);
+  --color-brand-gold: var(--k-brand-gold);
+  --color-canvas: var(--k-canvas);
+  --color-surface: var(--k-surface);
+  --color-surface-subtle: var(--k-surface-subtle);
+  --color-surface-elevated: var(--k-surface-elevated);
+  --color-ink: var(--k-ink);
+  --color-ink-secondary: var(--k-ink-secondary);
+  --color-ink-muted: var(--k-ink-muted);
+  --color-line: var(--k-line);
+  --color-line-strong: var(--k-line-strong);
+  --color-accent: var(--k-accent);
+  --color-accent-ink: var(--k-accent-ink);
+  --color-success: var(--k-success);
+  --color-warning: var(--k-warning);
+  --color-danger: var(--k-danger);
+  --color-info: var(--k-info);
+
+  --font-sans: "IBM Plex Sans Arabic", "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "IBM Plex Sans Arabic", "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+:root {
+  color-scheme: light;
+  --k-brand-sage: #D8E2D0;
+  --k-brand-forest: #1F3B22;
+  --k-brand-gold: #F2D600;
+
+  /* 60% Dominant Neutral Canvas (soft cool-neutral with <5% sage whisper) */
+  --k-canvas: #F6F8F5;
+  /* 30% Structural Surfaces */
+  --k-surface: #FFFFFF;
+  --k-surface-subtle: #EFF3EC;
+  --k-surface-elevated: #FFFFFF;
+  --k-sidebar-bg: #F1F5EE;
+  --k-sidebar-active-bg: #D8E2D0;
+  --k-sidebar-active-ink: #1F3B22;
+
+  /* High-contrast Typography */
+  --k-ink: #132215;
+  --k-ink-secondary: #354737;
+  --k-ink-muted: #5C6E5E;
+
+  /* Hairline Borders */
+  --k-line: #DFE6DA;
+  --k-line-strong: #C5D1BE;
+
+  /* 10% Accent Budget */
+  --k-accent: #1F3B22;
+  --k-accent-hover: #172E1A;
+  --k-accent-ink: #FFFFFF;
+  --k-sage-tint: rgba(216, 226, 208, 0.55);
+
+  /* Semantic Status (always paired with explicit text labels) */
+  --k-success: #15803D;
+  --k-success-bg: #ECFDF3;
+  --k-warning: #B45309;
+  --k-warning-bg: #FFFBEB;
+  --k-danger: #B91C1C;
+  --k-danger-bg: #FEF2F2;
+  --k-info: #1D4ED8;
+  --k-info-bg: #EFF6FF;
+}
+
+.dark {
+  color-scheme: dark;
+  --k-brand-sage: #D8E2D0;
+  --k-brand-forest: #D8E2D0;
+  --k-brand-gold: #F2D600;
+
+  /* Deep Neutral Charcoal-Olive Canvas */
+  --k-canvas: #0D120E;
+  --k-surface: #141B15;
+  --k-surface-subtle: #1B241D;
+  --k-surface-elevated: #1F2A21;
+  --k-sidebar-bg: #111712;
+  --k-sidebar-active-bg: rgba(216, 226, 208, 0.16);
+  --k-sidebar-active-ink: #E5EFE0;
+
+  /* Optical-compensated light inks */
+  --k-ink: #EFF4ED;
+  --k-ink-secondary: #C5D2C6;
+  --k-ink-muted: #8B9B8D;
+
+  /* Hairline Borders */
+  --k-line: #232F25;
+  --k-line-strong: #324335;
+
+  /* 10% Accent Budget */
+  --k-accent: #D8E2D0;
+  --k-accent-hover: #E6EFE0;
+  --k-accent-ink: #111F13;
+  --k-sage-tint: rgba(216, 226, 208, 0.12);
+
+  /* Semantic Status */
+  --k-success: #4ADE80;
+  --k-success-bg: rgba(22, 163, 74, 0.14);
+  --k-warning: #FBBF24;
+  --k-warning-bg: rgba(217, 119, 6, 0.16);
+  --k-danger: #F87171;
+  --k-danger-bg: rgba(220, 38, 38, 0.16);
+  --k-info: #60A5FA;
+  --k-info-bg: rgba(37, 99, 235, 0.16);
+}
+
+@layer base {
+  html {
+    font-family: var(--font-sans);
+    background-color: var(--k-canvas);
+    color: var(--k-ink);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    background-color: var(--k-canvas);
+    color: var(--k-ink);
+    min-height: 100vh;
+    margin: 0;
+  }
+
+  h1, h2, h3, h4 {
+    text-wrap: balance;
+  }
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+.dark body {
+  letter-spacing: 0.005em;
+}
+
+/* Custom thin scrollbars matching Kayan tokens */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--k-line-strong);
+  border-radius: 3px;
+}
+
+.pb-safe {
+  padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  .animate-pulse,
+  .animate-spin,
+  .animate-bounce {
+    animation: none !important;
+  }
+
+  *, *::before, *::after {
+    transition-duration: 75ms !important;
+  }
+}
