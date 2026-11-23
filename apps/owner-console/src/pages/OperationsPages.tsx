@@ -411,11 +411,11 @@ export function ChannelsPage({
     <div className="space-y-6">
       <PageHeader
         title="قنوات الاتصال والتكاملات"
-        subtitle="إدارة قنوات WhatsApp وInstagram وTelegram وSMS وVapi Voice مع عرض حالة السر مشفرة فقط وإمكانية التدوير الآمن واختبار الاتصال."
+        subtitle="عرض قنوات المنصة الحقيقية، حالة بيانات اعتمادها، اختبار الاتصال بمزود الخدمة، وتدوير السر بتشفير متوافق مع خادم KAYAN AI. إنشاء القناة يتم من إعدادات مساحة العمل حتى لا تُنشأ قناة ناقصة."
         action={
-          <button type="button" onClick={() => setAddOpen(true)} className={primaryBtnClass}>
+          <button type="button" disabled title="إنشاء القنوات يتطلب معرّفات المزود وحقول اعتماد كاملة؛ استخدم إعدادات القنوات داخل مساحة العمل" onClick={() => onNotify('info', 'أضف القناة من إعدادات مساحة العمل حتى تُحفظ كل معرّفات المزود والاعتمادات المطلوبة.')} className={primaryBtnClass}>
             <Plus className="w-4 h-4" />
-            <span>إضافة قناة</span>
+            <span>إضافة قناة من مساحة العمل</span>
           </button>
         }
       />
@@ -427,8 +427,8 @@ export function ChannelsPage({
           title="لا توجد قنوات اتصال مرتبطة بعد"
           description="أضف قناة WhatsApp أو Telegram أو Instagram لمساحة عمل واختبر حالة الربط والـ Webhook."
           action={
-            <button type="button" onClick={() => setAddOpen(true)} className={primaryBtnClass}>
-              إضافة أول قناة
+            <button type="button" disabled className={primaryBtnClass}>
+              أضف القناة من مساحة العمل
             </button>
           }
         />
