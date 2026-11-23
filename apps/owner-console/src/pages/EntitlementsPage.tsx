@@ -66,39 +66,6 @@ export function EntitlementsPage({
     load();
   }, [load]);
 
-  async function togglePlatformFlag(flag: FeatureFlagRow) {
-    try {
-      await apiFetch(`/api/owner/entitlements/flags/${encodeURIComponent(flag.key)}`, {
-        method: 'PATCH',
-        body: {
-          platformEnabled: flag.platform_enabled !== 1,
-          reason: flag.platform_enabled === 1 ? 'تعطيل على مستوى المنصة' : 'تفعيل على مستوى المنصة',
-        },
-      });
-      onNotify('success', `تم ${flag.platform_enabled === 1 ? 'تعطيل' : 'تفعيل'} ميزة "${flag.name}" على الخادم.`);
-      load();
-    } catch (err) {
-      onNotify('error', err instanceof Error ? err.message : 'تعذر تحديث الميزة.');
-    }
-  }
-
-  async function togglePlanForFlag(flag: FeatureFlagRow, planCode: string) {
-    const exists = flag.allowed_plan_codes.includes(planCode);
-    const nextPlans = exists
-      ? flag.allowed_plan_codes.filter((c) => c !== planCode)
-      : [...flag.allowed_plan_codes, planCode];
-    try {
-      await apiFetch(`/api/owner/entitlements/flags/${encodeURIComponent(flag.key)}`, {
-        method: 'PATCH',
-        body: { allowedPlanCodes: nextPlans, reason: `تحديث الباقات المتاحة للميزة ${flag.key}` },
-      });
-      onNotify('success', `تم تحديث باقات ميزة "${flag.name}".`);
-      load();
-    } catch (err) {
-      onNotify('error', err instanceof Error ? err.message : 'تعذر تحديث باقات الميزة.');
-    }
-  }
-
   async function submitOverride(e: React.FormEvent) {
     e.preventDefault();
     try {
