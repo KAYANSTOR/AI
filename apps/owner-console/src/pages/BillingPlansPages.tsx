@@ -21,24 +21,25 @@ interface PlanRow {
   name_en: string;
   description: string;
   price_monthly: number;
-  price_yearly: number;
+  price_yearly: number | null;
   currency: string;
   billing_cycle: string;
-  trial_days: number;
-  max_users: number;
-  max_agents: number;
-  max_messages: number;
-  token_quota: number;
-  max_channels: number;
-  voice_minutes: number;
-  automation_runs: number;
-  campaign_sends: number;
-  storage_mb: number;
+  trial_days: number | null;
+  max_users: number | null;
+  max_agents: number | null;
+  max_messages: number | null;
+  token_quota: number | null;
+  max_channels: number | null;
+  voice_minutes: number | null;
+  automation_runs: number | null;
+  campaign_sends: number | null;
+  storage_mb: number | null;
   allowed_models: string[];
   allowed_channels: string[];
   enabled_features: string[];
   status: string;
   active_subscribers: number;
+  editable?: boolean;
 }
 
 export function PlansSubscriptionsPage({
@@ -187,7 +188,7 @@ export function PlansSubscriptionsPage({
     <div className="space-y-6">
       <PageHeader
         title="إدارة الاشتراكات والباقات"
-        subtitle="التحكم الكامل بباقات Kayan AI (الأسعار، الحصص، القنوات، النماذج، والمزايا) ومتابعة دورة حياة جميع الاشتراكات."
+        subtitle="عرض كتالوج الباقات المسجل فعلياً في PostgreSQL ومتابعة الاشتراكات وحالاتها."
       />
 
       <div className="flex items-center gap-1 p-1 rounded-lg bg-[var(--k-surface-subtle)] border border-[var(--k-line)] w-fit">
@@ -217,7 +218,7 @@ export function PlansSubscriptionsPage({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {plans.length === 0 && (
             <div className="md:col-span-2 rounded-xl border border-[var(--k-line)] bg-[var(--k-surface)] p-5 text-sm text-[var(--k-ink-secondary)]">
-              لا يوجد كتالوج أسعار مركزي في قاعدة PostgreSQL الحالية. تعرض صفحة الاشتراكات المستويات المسجلة فعلياً، ولن يتم إنشاء أسعار أو حدود افتراضية.
+              لا توجد باقات مسجلة في جدول plans بقاعدة المنصة.
             </div>
           )}
           {plans.map((p) => (
@@ -248,34 +249,34 @@ export function PlansSubscriptionsPage({
                     <span className="text-xs text-[var(--k-ink-muted)]"> / شهرياً</span>
                   </div>
                   <span className="text-xs font-mono text-[var(--k-ink-muted)]">
-                    السنوي: {formatCurrency(p.price_yearly, p.currency)} · التجربة: {p.trial_days} يوم
+                    السنوي: {p.price_yearly === null ? 'غير محدد' : formatCurrency(p.price_yearly, p.currency)} · التجربة: {p.trial_days === null ? 'غير محددة' : `${p.trial_days} يوم`}
                   </span>
                 </div>
 
                 <dl className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 text-xs">
                   <div>
                     <dt className="text-[var(--k-ink-muted)]">المستخدمون</dt>
-                    <dd className="font-mono tabular-nums font-semibold">{formatNumber(p.max_users)}</dd>
+                    <dd className="font-mono tabular-nums font-semibold">{p.max_users === null ? 'غير محدد' : formatNumber(p.max_users)}</dd>
                   </div>
                   <div>
                     <dt className="text-[var(--k-ink-muted)]">الوكلاء</dt>
-                    <dd className="font-mono tabular-nums font-semibold">{formatNumber(p.max_agents)}</dd>
+                    <dd className="font-mono tabular-nums font-semibold">{p.max_agents === null ? 'غير محدد' : formatNumber(p.max_agents)}</dd>
                   </div>
                   <div>
                     <dt className="text-[var(--k-ink-muted)]">القنوات</dt>
-                    <dd className="font-mono tabular-nums font-semibold">{formatNumber(p.max_channels)}</dd>
+                    <dd className="font-mono tabular-nums font-semibold">{p.max_channels === null ? 'غير محدد' : formatNumber(p.max_channels)}</dd>
                   </div>
                   <div>
                     <dt className="text-[var(--k-ink-muted)]">الرسائل</dt>
-                    <dd className="font-mono tabular-nums font-semibold">{formatNumber(p.max_messages)}</dd>
+                    <dd className="font-mono tabular-nums font-semibold">{p.max_messages === null ? 'غير محدد' : formatNumber(p.max_messages)}</dd>
                   </div>
                   <div>
                     <dt className="text-[var(--k-ink-muted)]">حصة Tokens</dt>
-                    <dd className="font-mono tabular-nums font-semibold">{formatNumber(p.token_quota)}</dd>
+                    <dd className="font-mono tabular-nums font-semibold">{p.token_quota === null ? 'غير محدد' : formatNumber(p.token_quota)}</dd>
                   </div>
                   <div>
                     <dt className="text-[var(--k-ink-muted)]">التخزين</dt>
-                    <dd className="font-mono tabular-nums font-semibold">{formatNumber(p.storage_mb)} MB</dd>
+                    <dd className="font-mono tabular-nums font-semibold">{p.storage_mb === null ? 'غير محدد' : `${formatNumber(p.storage_mb)} MB`}</dd>
                   </div>
                 </dl>
 
@@ -293,36 +294,7 @@ export function PlansSubscriptionsPage({
                 </div>
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-[var(--k-line)]">
-                <button type="button" onClick={() => openEditPlan(p)} className={secondaryBtnClass}>
-                  <Edit3 className="w-3.5 h-3.5" />
-                  <span>تعديل الباقة والحدود</span>
-                </button>
-                {p.status === 'active' && (
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      await apiFetch(`/api/owner/plans/${encodeURIComponent(p.id)}`, {
-                        method: 'PUT',
-                        body: {
-                          code: p.code,
-                          name: p.name,
-                          priceMonthly: p.price_monthly,
-                          priceYearly: p.price_yearly,
-                          status: 'archived',
-                        },
-                      });
-                      onNotify('info', `تمت أرشفة باقة "${p.name}".`);
-                      loadAll();
-                    }}
-                    className={secondaryBtnClass}
-                  >
-                    <Archive className="w-3.5 h-3.5" />
-                    <span>أرشفة</span>
-                  </button>
-                )}
-              </div>
-            </div>
+           </div>
           ))}
         </div>
       ) : (
