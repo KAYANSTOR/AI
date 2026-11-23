@@ -344,8 +344,10 @@ export async function platformOverview(period:string,startDate?:string,endDate?:
       FROM channels ch LEFT JOIN (SELECT v.channel_id,COUNT(m.id)::int messages FROM conversations v JOIN messages m ON m.conversation_id=v.id GROUP BY v.channel_id) mc ON mc.channel_id=ch.id
       GROUP BY ch.channel_type ORDER BY total DESC`),
     query(`SELECT plan_tier code,INITCAP(plan_tier) name,COUNT(*)::int subscribers FROM subscriptions GROUP BY plan_tier ORDER BY subscribers DESC`),
-    query(`SELECT COALESCE(model,'غير محدد') model_id,COALESCE(model,'غير محدد') display_name,COUNT(*)::int requests,COALESCE(SUM(COALESCE(input_tokens,0)+COALESCE(output_tokens,0)),0)::bigint tokens
-      FROM agent_runs WHERE created_at BETWEEN $1 AND $2 GROUP BY model ORDER BY requests DESC LIMIT 10`,[from,to])
+    query(`SELECT COALESCE(r.model,'غير محدد') model_id,COALESCE(r.model,'غير محدد') display_name,COUNT(*)::int requests,COALESCE(SUM(COALESCE(r.input_tokens,0)+COALESCE(r.output_tokens,0)),0)::bigint tokens,
+      (SELECT CASE WHEN COUNT(*) FILTER(WHERE l.unit_cost IS NOT NULL)>0 THEN SUM(l.units*COALESCE(l.unit_cost,0))::numeric ELSE NULL END
+        FROM usage_ledger l JOIN agent_runs r2 ON r2.id=l.reference_id WHERE r2.model=r.model AND r2.created_at BETWEEN $1 AND $2 AND l.event_type='ai_tokens' AND l.currency='USD') cost_usd
+      FROM agent_runs r WHERE r.created_at BETWEEN $1 AND $2 GROUP BY r.model ORDER BY requests DESC LIMIT 10`,[from,to])
   ]);
   const x=c[0]||{},v=(k:string)=>count(x[k]);
   const aiCostAvailable=v('ai_cost_records')>0;
@@ -359,7 +361,7 @@ export async function platformOverview(period:string,startDate?:string,endDate?:
     comparisons:{newUsersDeltaPct:null,subscriptionsDeltaPct:null,revenueDeltaPct:null,aiRequestsDeltaPct:null,aiCostDeltaPct:null},
     charts:{timeSeries:series.map((r:any)=>({date:r.date,users:count(r.users),subscriptions:count(r.subscriptions),revenueUsd:count(r.revenue_usd),tokens:count(r.tokens),aiCostUsd:count(r.ai_cost_usd),conversations:count(r.conversations),messages:count(r.messages),successRuns:count(r.success_runs),failedRuns:count(r.failed_runs)})),
       channelUsage:channels.map((r:any)=>({channel:r.channel,total:count(r.total),connected:count(r.connected),messages:count(r.messages)})),
-      planDistribution:plans.map((r:any)=>({code:r.code,name:r.name,subscribers:count(r.subscribers)})),modelUsage:models.map((r:any)=>({modelId:r.model_id,displayName:r.display_name,requests:count(r.requests),tokens:count(r.tokens),costUsd:0}))},
+      planDistribution:plans.map((r:any)=>({code:r.code,name:r.name,subscribers:count(r.subscribers)})),modelUsage:models.map((r:any)=>({modelId:r.model_id,displayName:r.display_name,requests:count(r.requests),tokens:count(r.tokens),costUsd:r.cost_usd==null?null:count(r.cost_usd)}))},
     attentionItems:{pastDueSubscriptions:v('past_due_subscriptions'),failingAgents:v('failing_agents'),disconnectedChannels:v('disconnected_channels'),unresolvedErrors:0,unacknowledgedAlerts:0,openTickets:0},
     dataLimitations:{revenue:'الإيراد المحصل محسوب من طلبات الدفع المؤكدة؛ لا يوجد دفتر فواتير منفصل.',expenses:'لا يوجد دفتر مصروفات تشغيلي في المخطط الحالي.',aiCost:aiCostAvailable?undefined:'سجل الرموز لا يحتوي تكلفة موثقة حتى الآن.',systemErrors:'لا يوجد سجل أخطاء تشغيلي موحد في مخطط PostgreSQL الحالي.'}};
 }
