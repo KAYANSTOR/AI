@@ -65,7 +65,10 @@ export async function platformUsers(f:{search?:string;status?:string;paymentStat
     (SELECT COUNT(*) FROM organization_members m WHERE m.user_id=u.id AND m.role='owner')::int workspaces_count,
     (SELECT COUNT(*) FROM ai_agents a JOIN organization_members m ON m.organization_id=a.organization_id WHERE m.user_id=u.id AND m.role='owner')::int agents_count,
     (SELECT COALESCE(SUM(COALESCE(r.input_tokens,0)+COALESCE(r.output_tokens,0)),0)::bigint FROM agent_runs r JOIN organization_members m ON m.organization_id=r.organization_id WHERE m.user_id=u.id AND m.role='owner') total_tokens,
-    (SELECT COUNT(*) FROM conversations c JOIN organization_members m ON m.organization_id=c.organization_id WHERE m.user_id=u.id AND m.role='owner')::int conversations_count
+    (SELECT COUNT(*) FROM conversations c JOIN organization_members m ON m.organization_id=c.organization_id WHERE m.user_id=u.id AND m.role='owner')::int conversations_count,
+    (SELECT CASE WHEN COUNT(*) FILTER(WHERE l.unit_cost IS NOT NULL)>0 THEN COALESCE(SUM(l.units*COALESCE(l.unit_cost,0)),0)::numeric ELSE NULL END
+      FROM usage_ledger l JOIN organization_members m ON m.organization_id=l.organization_id
+      WHERE m.user_id=u.id AND m.role='owner' AND l.event_type='ai_tokens' AND l.currency='USD') total_ai_cost_usd
     FROM auth.users u LEFT JOIN LATERAL(SELECT s.status,s.plan_tier,s.period_end FROM subscriptions s JOIN organization_members m ON m.organization_id=s.organization_id AND m.user_id=u.id AND m.role='owner' ORDER BY s.created_at DESC LIMIT 1) s ON TRUE
     WHERE ${w} ORDER BY ${sort} ${dir} NULLS LAST LIMIT $${args.length+1} OFFSET $${args.length+2}`,[...args,size,(page-1)*size]);
   const total=count(totalRow?.total);
@@ -156,7 +159,10 @@ export async function platformAgents(f:{search?:string;status?:string;provider?:
   return query(`SELECT a.id::text id,a.organization_id::text organization_id,a.business_id::text workspace_id,a.name,a.model_provider provider_code,a.model_provider provider_name,a.status,a.temperature,a.locale,a.slug,a.created_at::text created_at,o.name workspace_name,u.email owner_email,${fullName} owner_name,
     (SELECT COUNT(DISTINCT r.conversation_id) FROM agent_runs r WHERE r.agent_id=a.id)::int conversations_count,(SELECT COUNT(*) FROM agent_runs r WHERE r.agent_id=a.id)::int executions_count,
     (SELECT COUNT(*) FROM agent_runs r WHERE r.agent_id=a.id AND r.status='completed')::int success_count,(SELECT COUNT(*) FROM agent_runs r WHERE r.agent_id=a.id AND r.status='failed')::int error_count,
-    (SELECT COALESCE(SUM(COALESCE(r.input_tokens,0)+COALESCE(r.output_tokens,0)),0)::bigint FROM agent_runs r WHERE r.agent_id=a.id) total_tokens
+    (SELECT COALESCE(SUM(COALESCE(r.input_tokens,0)+COALESCE(r.output_tokens,0)),0)::bigint FROM agent_runs r WHERE r.agent_id=a.id) total_tokens,
+    (SELECT CASE WHEN COUNT(*) FILTER(WHERE l.unit_cost IS NOT NULL)>0 THEN COALESCE(SUM(l.units*COALESCE(l.unit_cost,0)),0)::numeric ELSE NULL END
+      FROM usage_ledger l JOIN agent_runs r ON r.id=l.reference_id
+      WHERE r.agent_id=a.id AND l.event_type='ai_tokens' AND l.currency='USD') total_cost_usd
     FROM ai_agents a JOIN organizations o ON o.id=a.organization_id LEFT JOIN LATERAL(SELECT user_id FROM organization_members WHERE organization_id=o.id AND role='owner' ORDER BY created_at LIMIT 1) own ON TRUE
     LEFT JOIN auth.users u ON u.id=own.user_id ${clauses.length?'WHERE '+clauses.join(' AND '):''} ORDER BY a.created_at DESC LIMIT 500`,args);
 }
