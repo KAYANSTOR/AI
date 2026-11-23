@@ -146,7 +146,7 @@ export function EntitlementsPage({
                 <tr className="border-b border-[var(--k-line)] bg-[var(--k-surface-subtle)] text-[var(--k-ink-muted)]">
                   <th className="px-4 py-3 text-start font-semibold">الميزة</th>
                   <th className="px-4 py-3 text-start font-semibold">التصنيف / النوع</th>
-                  <th className="px-4 py-3 text-start font-semibold">الباقات المتاحة لها</th>
+                  <th className="px-4 py-3 text-start font-semibold">المرجع</th>
                   <th className="px-4 py-3 text-start font-semibold">المستخدمون المستفيدون</th>
                   <th className="px-4 py-3 text-start font-semibold">الحالة على المنصة</th>
                   <th className="px-4 py-3 text-end font-semibold">التحكم الفوري</th>
@@ -170,25 +170,7 @@ export function EntitlementsPage({
                           : 'مدفوعة'}
                     </td>
                     <td className="px-4 py-3">
-                      <div className="flex flex-wrap gap-1">
-                        {(['trial', 'starter', 'growth', 'pro'] as const).map((code) => {
-                          const on = f.allowed_plan_codes.includes(code);
-                          return (
-                            <button
-                              key={code}
-                              type="button"
-                              onClick={() => togglePlanForFlag(f, code)}
-                              className={`px-2 py-0.5 text-[11px] font-mono rounded border transition-colors ${
-                                on
-                                  ? 'border-[var(--k-brand-forest)] bg-[var(--k-sage-tint)] text-[var(--k-ink)] font-semibold'
-                                  : 'border-[var(--k-line)] text-[var(--k-ink-muted)]'
-                              }`}
-                            >
-                              {code}
-                            </button>
-                          );
-                        })}
-                      </div>
+                      <span className="text-[11px] text-[var(--k-ink-muted)]">حسب صلاحيات المؤسسة ونوع النشاط</span>
                     </td>
                     <td className="px-4 py-3 font-mono tabular-nums">
                       {formatNumber(f.active_users_estimate)}
@@ -202,17 +184,11 @@ export function EntitlementsPage({
                     <td className="px-4 py-3">
                       <StatusText
                         status={f.platform_enabled === 1 ? 'ok' : 'error'}
-                        label={f.platform_enabled === 1 ? 'مفعلة' : 'معطلة عالمياً'}
+                        label={f.platform_enabled === 1 ? 'ضمن كتالوج المنصة' : 'غير متاحة'}
                       />
                     </td>
                     <td className="px-4 py-3 text-end">
-                      <button
-                        type="button"
-                        onClick={() => togglePlatformFlag(f)}
-                        className={secondaryBtnClass}
-                      >
-                        {f.platform_enabled === 1 ? 'تعطيل الميزة' : 'تفعيل الميزة'}
-                      </button>
+                      <span className="text-[11px] text-[var(--k-ink-muted)]">تُدار لكل مؤسسة</span>
                     </td>
                   </tr>
                 ))}
