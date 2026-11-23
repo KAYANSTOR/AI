@@ -31,19 +31,15 @@ jobs:
           import { readFileSync, writeFileSync } from 'node:fs'
           const path = 'package-lock.json'
           const lock = JSON.parse(readFileSync(path, 'utf8'))
+          const prefix = 'git+ssh://git@github.com/'
+          const replacement = 'git+https://github.com/'
           let changed = false
           for (const entry of Object.values(lock.packages || {})) {
-            if (typeof entry.resolved !== 'string') continue
-            const normalized = entry.resolved.replace(
-              /^git\\+ssh:\\/\\/git@github\\.com\\//,
-              'git+https://github.com/'
-            )
-            if (normalized !== entry.resolved) {
-              entry.resolved = normalized
-              changed = true
-            }
+            if (typeof entry.resolved !== 'string' || !entry.resolved.startsWith(prefix)) continue
+            entry.resolved = replacement + entry.resolved.slice(prefix.length)
+            changed = true
           }
-          if (changed) writeFileSync(path, JSON.stringify(lock, null, 2) + '\\n')
+          if (changed) writeFileSync(path, JSON.stringify(lock, null, 2) + String.fromCharCode(10))
           NODE
       - name: Commit updated lockfile when needed
         run: |
