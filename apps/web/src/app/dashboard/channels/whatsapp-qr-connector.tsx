@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useState, useTransition } from 'react'
-import { AlertTriangle, CheckCircle2, Link2, Loader2, QrCode, Trash2, Pencil } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, Link2, Loader2, QrCode, Trash2, Pencil, Smartphone } from 'lucide-react'
 import { startWhatsAppQrSessionAction, getWhatsAppQrSessionStatusAction, disconnectWhatsAppQrSessionAction, resetWhatsAppQrChannelAction } from './actions'
 
 type SessionStatus = {
@@ -13,6 +13,7 @@ type SessionStatus = {
 }
 export function WhatsAppQrConnector({ disabled, connectionMode, publicNumber }: { disabled: boolean; connectionMode: string | null; publicNumber: string | null }) {
   const [phoneNumber, setPhoneNumber] = useState(publicNumber ?? '')
+  const [method, setMethod] = useState<'qr' | 'pairing_code'>('pairing_code')
   const [session, setSession] = useState<SessionStatus | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [busy, startTransition] = useTransition()
@@ -55,7 +56,7 @@ export function WhatsAppQrConnector({ disabled, connectionMode, publicNumber }: 
     startTransition(async () => {
       setNotice(null)
       setSession({ status: 'starting' })
-      const result = await startWhatsAppQrSessionAction({ number: phoneNumber, method: 'qr' })
+      const result = await startWhatsAppQrSessionAction({ number: phoneNumber, method })
       if (!result.ok) {
         setNotice(result.error ?? 'تعذّر بدء ربط واتساب.')
         setSession({ status: 'failed', lastError: result.error })
@@ -116,9 +117,23 @@ export function WhatsAppQrConnector({ disabled, connectionMode, publicNumber }: 
         </div>
       ) : (
         <>
+          <div className="grid grid-cols-2 gap-2 rounded-xl border border-border p-1">
+            <button type="button" onClick={() => setMethod('pairing_code')} disabled={busy}
+              className={'inline-flex min-h-11 items-center justify-center gap-2 rounded-lg px-2 text-sm font-semibold ' + (method === 'pairing_code' ? 'bg-primary text-primary-foreground' : 'text-text-muted')}>
+              <Smartphone size={16} /> برقم الهاتف
+            </button>
+            <button type="button" onClick={() => setMethod('qr')} disabled={busy}
+              className={'inline-flex min-h-11 items-center justify-center gap-2 rounded-lg px-2 text-sm font-semibold ' + (method === 'qr' ? 'bg-primary text-primary-foreground' : 'text-text-muted')}>
+              <QrCode size={16} /> رمز QR
+            </button>
+          </div>
           <div className="rounded-xl border border-border bg-surface px-3 py-3">
-            <p className="flex items-center gap-2 text-sm font-semibold text-text"><QrCode size={17} /> الربط الآمن برمز QR</p>
-            <p className="mt-1 text-xs leading-5 text-text-muted">افتح واتساب على هاتفك، ثم الأجهزة المرتبطة، واختر ربط جهاز لمسح الرمز.</p>
+            <p className="text-sm font-semibold text-text">{method === 'pairing_code' ? 'الربط برقم الهاتف (مناسب لهاتف واحد)' : 'الربط عبر رمز QR'}</p>
+            <p className="mt-1 text-xs leading-5 text-text-muted">
+              {method === 'pairing_code'
+                ? 'سيظهر رمز من 8 خانات. افتح واتساب ← الأجهزة المرتبطة ← ربط جهاز ← الربط برقم الهاتف، ثم أدخل الرمز.'
+                : 'افتح واتساب على هاتف آخر أو اعرض الرمز على شاشة ثانية، ثم امسحه من الأجهزة المرتبطة.'}
+            </p>
           </div>
           <label className="block">
             <span className="text-sm font-semibold text-text">رقم واتساب مع مفتاح الدولة</span>
@@ -127,13 +142,13 @@ export function WhatsAppQrConnector({ disabled, connectionMode, publicNumber }: 
               className="mt-2 min-h-12 w-full rounded-xl border border-border bg-surface px-3 text-left text-base text-text outline-none focus:border-secondary"
               disabled={busy || disabled} />
             <span className="mt-1 block text-[11px] leading-5 text-text-muted">
-              أدخل رقم حساب واتساب نفسه الموجود على الهاتف الذي سيمسح رمز QR.
+              أدخل رقم حساب واتساب نفسه مع مفتاح الدولة، ويجب أن يكون الهاتف متصلاً بالإنترنت.
             </span>
           </label>
           <button type="button" onClick={start} disabled={busy || disabled || !phoneNumber.trim()}
             className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#25D366] px-4 text-sm font-bold text-white hover:opacity-90 disabled:opacity-50">
             {busy ? <Loader2 size={18} className="animate-spin" /> : <Link2 size={17} />}
-            إنشاء رمز QR للربط
+            {method === 'pairing_code' ? 'إصدار رمز الربط للهاتف' : 'إنشاء رمز QR للربط'}
           </button>
           {session?.status === 'qr_required' && session.qrDataUrl ? (
             <div className="mx-auto flex max-w-sm flex-col items-center gap-3 rounded-xl border border-border bg-white p-4">
@@ -141,6 +156,14 @@ export function WhatsAppQrConnector({ disabled, connectionMode, publicNumber }: 
               <p className="text-center text-xs font-semibold text-gray-800">امسح الرمز من خيار الأجهزة المرتبطة في تطبيق واتساب.</p>
             </div>
           ) : null}
+          {session?.status === 'pairing_code' && session.pairingCode ? (
+            <div className="rounded-xl border border-success/30 bg-success/5 p-4 text-center">
+              <p className="text-xs font-semibold text-text-muted">رمز ربط واتساب — أدخله في الهاتف نفسه</p>
+              <p className="mt-3 font-mono text-3xl font-bold tracking-[0.28em] text-text" dir="ltr">{session.pairingCode}</p>
+              <p className="mt-3 text-xs leading-6 text-text-muted">في واتساب: الأجهزة المرتبطة ← ربط جهاز ← الربط برقم الهاتف، ثم أدخل الرمز الظاهر هنا.</p>
+            </div>
+          ) : null}
+
           {waiting && !session?.qrDataUrl && !session?.pairingCode ? (
             <p role="status" className="rounded-xl border border-border bg-surface px-3 py-3 text-xs text-text-muted">جارٍ تجهيز جلسة واتساب والاتصال بالخدمة...</p>
           ) : null}
