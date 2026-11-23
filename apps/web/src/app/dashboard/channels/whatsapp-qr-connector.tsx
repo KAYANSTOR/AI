@@ -47,6 +47,8 @@ export function WhatsAppQrConnector({ disabled, connectionMode, publicNumber }: 
 
   function start() {
     if (disabled) return
+    if (connectionMode && connectionMode !== 'qr_unofficial' &&
+        !window.confirm('سيؤدي تفعيل ربط QR إلى استبدال اتصال WhatsApp الحالي عبر Meta. هل تريد المتابعة؟')) return
     const digits = phoneNumber.replace(/\D/g, '')
     if (method === 'pairing_code' && (digits.length < 8 || digits.length > 15)) {
       setNotice('أدخل رقم الهاتف كاملاً مع مفتاح الدولة، مثل +967777123456.')

@@ -251,6 +251,7 @@ async function startSocket(channelId, options = {}) {
       session.status = 'failed'
       session.lastError = 'pairing_code_request_failed'
       await persistSocketState(session)
+      await query("UPDATE public.channels SET is_active=false,verification_status='failed',updated_at=now() WHERE id=$1 AND connection_mode='qr_unofficial'", [channelId])
       console.error('whatsapp_qr_pairing_code_request_failed', { channelId })
       throw Object.assign(new Error('pairing_code_request_failed'), { status: 502 })
     }
@@ -270,7 +271,8 @@ async function startSession(input) {
     throw Object.assign(new Error('qr_channel_not_owned_or_not_configured'), { status: 403 })
   }
   const previous = sockets.get(channelId)
-  if (previous && previous.phoneNumber === phoneNumber) return previous
+  if (previous && previous.phoneNumber === phoneNumber &&
+      ['starting', 'qr_required', 'pairing_code', 'connected', 'reconnecting'].includes(previous.status)) return previous
   if (previous) {
     previous.stopping = true
     sockets.delete(channelId)
@@ -305,6 +307,7 @@ async function logoutSession(channelId) {
   const session = sockets.get(channelId)
   if (session) {
     sockets.delete(channelId)
+    session.stopping = true
     try { await session.sock.logout() } catch {}
   }
   await query("DELETE FROM public.whatsapp_gateway_sessions WHERE channel_id=$1", [channelId])

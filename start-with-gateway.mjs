@@ -5,9 +5,9 @@ const port = String(process.env.PORT || '8080')
 const children = new Map()
 let stopping = false
 
-function launch(name, args) {
+function launch(name, args, cwd = root) {
   const child = spawn(process.execPath, args, {
-    cwd: root,
+    cwd,
     env: process.env,
     stdio: 'inherit',
   })
@@ -45,4 +45,4 @@ process.on('SIGTERM', () => stop(0))
 process.on('SIGINT', () => stop(0))
 
 launch('whatsapp_gateway', ['apps/whatsapp-gateway/src/server.js'])
-launch('kayan_web', ['node_modules/next/dist/bin/next', 'start', '-H', '0.0.0.0', '-p', port])
+launch('kayan_web', [`${root}/node_modules/next/dist/bin/next`, 'start', '-H', '0.0.0.0', '-p', port], `${root}/apps/web`)
