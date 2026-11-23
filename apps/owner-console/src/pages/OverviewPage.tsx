@@ -83,6 +83,7 @@ interface OverviewResponse {
     planDistribution: Array<{ code: string; name: string; subscribers: number }>;
     modelUsage: Array<{ modelId: string; displayName: string; requests: number; tokens: number; costUsd: number }>;
   };
+  dataLimitations?: { revenue?: string; expenses?: string; aiCost?: string; systemErrors?: string };
   attentionItems: {
     pastDueSubscriptions: number;
     failingAgents: number;
@@ -214,6 +215,13 @@ export function OverviewPage({ onNavigate }: { onNavigate: (route: OwnerRouteId)
               فحص حالة الربط والخدمات
             </button>
           </div>
+          {data.dataLimitations && (
+            <div role="note" className="rounded-xl border border-[var(--k-line)] bg-[var(--k-surface-subtle)] px-4 py-3 text-xs leading-6 text-[var(--k-ink-secondary)]">
+              <strong className="text-[var(--k-ink)]">شفافية مصدر البيانات:</strong>
+              {' '}{data.dataLimitations.revenue} {' '}{data.dataLimitations.expenses} {' '}{data.dataLimitations.aiCost} {' '}{data.dataLimitations.systemErrors}
+              <div className="mt-1">لن تُعرض القيم غير المتوفرة على أنها أصفار أو إيرادات محصلة.</div>
+            </div>
+          )}
 
           {/* Primary Financial & Executive KPI Strip */}
           <section aria-label="المؤشرات المالية والتشغيلية الرئيسية" className="space-y-3">
@@ -221,30 +229,30 @@ export function OverviewPage({ onNavigate }: { onNavigate: (route: OwnerRouteId)
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               <MetricTile
                 label="الإيرادات المحصلة فعلياً"
-                value={formatCurrency(data.metrics.collectedRevenueUsd)}
+                value={data.dataLimitations?.revenue ? 'غير متاح' : formatCurrency(data.metrics.collectedRevenueUsd)}
                 deltaPct={data.comparisons.revenueDeltaPct}
-                subtext={`غير مدفوعة: ${formatCurrency(data.metrics.unpaidInvoicesUsd)}`}
+                subtext={data.dataLimitations?.revenue || `غير مدفوعة: ${formatCurrency(data.metrics.unpaidInvoicesUsd)}`}
                 tone="sage"
                 onClick={() => onNavigate('invoices_payments')}
               />
               <MetricTile
                 label="تكاليف مزودي الذكاء الاصطناعي"
-                value={formatCurrency(data.metrics.aiProviderCostsUsd)}
+                value={data.dataLimitations?.aiCost ? 'غير متاح' : formatCurrency(data.metrics.aiProviderCostsUsd)}
                 deltaPct={data.comparisons.aiCostDeltaPct}
-                subtext={`${formatNumber(data.metrics.totalTokens)} Token`}
+                subtext={data.dataLimitations?.aiCost || `${formatNumber(data.metrics.totalTokens)} Token`}
                 onClick={() => onNavigate('ai_usage')}
               />
               <MetricTile
                 label="المصروفات التشغيلية المسجلة"
-                value={formatCurrency(data.metrics.recordedExpensesUsd)}
-                subtext={`الإجمالي التشغيلي: ${formatCurrency(data.metrics.totalOperatingCostsUsd)}`}
+                value={data.dataLimitations?.expenses ? 'غير متاح' : formatCurrency(data.metrics.recordedExpensesUsd)}
+                subtext={data.dataLimitations?.expenses || `الإجمالي التشغيلي: ${formatCurrency(data.metrics.totalOperatingCostsUsd)}`}
                 onClick={() => onNavigate('invoices_payments')}
               />
               <MetricTile
                 label="صافي الربح مقابل التكاليف"
-                value={formatCurrency(data.metrics.netMarginUsd)}
+                value={data.dataLimitations?.revenue || data.dataLimitations?.expenses || data.dataLimitations?.aiCost ? 'غير متاح' : formatCurrency(data.metrics.netMarginUsd)}
                 subtext={
-                  data.metrics.netMarginPercent !== null
+                  data.dataLimitations?.revenue || data.dataLimitations?.expenses || data.dataLimitations?.aiCost ? 'يتطلب ربط دفتر الفوترة والتكاليف' : data.metrics.netMarginPercent !== null
                     ? `هامش التشغيل: ${data.metrics.netMarginPercent}%`
                     : 'بانتظار فواتير محصلة'
                 }
