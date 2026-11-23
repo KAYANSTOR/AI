@@ -302,7 +302,7 @@ function ChannelDialog({
                 onError={(message) => setNotice({ ok: false, text: message })}
               />
               <p className="text-xs leading-5 text-text-muted">
-                الربط الفعلي يتم من زر Meta فقط. حفظ الرقم وحده لا يستقبل رسائل العملاء.
+                استخدم زر Meta للربط الرسمي، أو اختر QR/رمز الهاتف أدناه لربط تطبيق واتساب مباشرة. حفظ الرقم وحده لا يستقبل رسائل العملاء.
               </p>
             </div>
           ) : null}

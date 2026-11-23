@@ -186,6 +186,27 @@ async function startSocket(channelId, options = {}) {
   })
   sock.ev.on('connection.update', async update => {
     try {
+      if (session.mode === 'pairing_code' && !session.creds.registered &&
+          (update.connection === 'connecting' || Boolean(update.qr)) &&
+          !session.pairingRequested) {
+        session.pairingRequested = true
+        try {
+          const code = await sock.requestPairingCode(session.phoneNumber.replace(/\D/g, ''))
+          session.status = 'pairing_code'
+          session.pairingCode = code
+          session.qrDataUrl = null
+          session.lastError = null
+          await persistSocketState(session)
+        } catch (error) {
+          session.pairingRequested = false
+          session.status = 'failed'
+          session.lastError = 'pairing_code_request_failed'
+          await persistSocketState(session)
+          await query("UPDATE public.channels SET is_active=false,verification_status='failed',updated_at=now() WHERE id=$1 AND connection_mode='qr_unofficial'", [channelId])
+          console.error('whatsapp_qr_pairing_code_request_failed', { channelId, reason: error instanceof Error ? error.message : 'pairing_error' })
+        }
+      }
+
       if (update.qr && session.mode !== 'pairing_code') {
         session.status = 'qr_required'
         session.qrDataUrl = await QRCode.toDataURL(update.qr, { width: 320, margin: 1 })
@@ -240,22 +261,7 @@ async function startSocket(channelId, options = {}) {
     if (event.type !== 'notify') return
     for (const message of event.messages || []) await forwardInbound(session, message)
   })
-  if (session.mode === 'pairing_code' && !creds.registered) {
-    try {
-      const code = await sock.requestPairingCode(session.phoneNumber.replace(/\D/g, ''))
-      session.status = 'pairing_code'
-      session.pairingCode = code
-      session.qrDataUrl = null
-      await persistSocketState(session)
-    } catch (error) {
-      session.status = 'failed'
-      session.lastError = 'pairing_code_request_failed'
-      await persistSocketState(session)
-      await query("UPDATE public.channels SET is_active=false,verification_status='failed',updated_at=now() WHERE id=$1 AND connection_mode='qr_unofficial'", [channelId])
-      console.error('whatsapp_qr_pairing_code_request_failed', { channelId })
-      throw Object.assign(new Error('pairing_code_request_failed'), { status: 502 })
-    }
-  }
+
   return session
 }
 async function startSession(input) {
