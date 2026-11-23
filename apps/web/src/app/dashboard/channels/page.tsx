@@ -74,6 +74,7 @@ export default async function ChannelsPage({
       description: mode.description,
       publicNumberLabel: 'رقم واتساب',
       publicNumber: row?.external_identifier ?? null,
+      identifier: row?.provider_account_id ?? null,
       connected: Boolean(row?.id),
       verificationStatus: row?.verification_status ?? null,
       isActive: row?.is_active === true,
