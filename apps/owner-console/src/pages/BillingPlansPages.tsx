@@ -347,7 +347,6 @@ export function PlansSubscriptionsPage({
                     <th className="px-4 py-3 text-start font-semibold">المستخدم</th>
                     <th className="px-4 py-3 text-start font-semibold">الباقة</th>
                     <th className="px-4 py-3 text-start font-semibold">الحالة</th>
-                    <th className="px-4 py-3 text-start font-semibold">التجديد</th>
                     <th className="px-4 py-3 text-start font-semibold">تاريخ الانتهاء</th>
                     <th className="px-4 py-3 text-end font-semibold">التحكم</th>
                   </tr>
