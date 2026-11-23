@@ -599,7 +599,7 @@ export async function beginMessengerConnectionAction(input:{accessToken:string;s
 export async function completeMessengerConnectionAction(input:{pageId:string}):Promise<ChannelActionResult>{
   try{
     const org=await requireChannelAdmin(),pageId=String(input.pageId??'').trim()
-    if(!/^\\d{5,30}$/.test(pageId))return{ok:false,error:'معرّف صفحة Facebook غير صالح.'}
+    if(!/^\d{5,30}$/.test(pageId))return{ok:false,error:'معرّف صفحة Facebook غير صالح.'}
     const db=createAdminClient()
     const {data:channel,error}=await db.from('channels').select('id,business_id')
       .eq('organization_id',org.organizationId).eq('channel_type','messenger').maybeSingle()
