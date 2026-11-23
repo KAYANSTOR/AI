@@ -188,6 +188,31 @@ export async function platformEntitlements() {
   return {flags,userOverrides,activations,history};
 }
 
+export async function platformBillingLedger() {
+  const paymentIntents=await query(`SELECT i.id::text id,i.external_order_id,i.plan_code,i.billing_cycle,i.amount_usd::numeric amount_usd,i.amount_yer::bigint amount_yer,
+    i.exchange_rate::numeric exchange_rate,i.provider,i.payment_reference,i.provider_payment_id,i.status,i.failure_code,
+    i.expires_at::text expires_at,i.verified_at::text verified_at,i.created_at::text created_at,o.name workspace_name,
+    p.name plan_name,u.id::text user_id,${fullName} user_name,u.email user_email
+    FROM billing_payment_intents i JOIN organizations o ON o.id=i.organization_id LEFT JOIN plans p ON p.id=i.plan_id
+    LEFT JOIN LATERAL(SELECT user_id FROM organization_members WHERE organization_id=o.id AND role='owner' ORDER BY created_at LIMIT 1) own ON TRUE
+    LEFT JOIN auth.users u ON u.id=own.user_id ORDER BY i.created_at DESC LIMIT 1000`);
+  const [s]=await query(`SELECT COALESCE(SUM(amount_usd) FILTER(WHERE status='verified'),0)::numeric collected,
+    COALESCE(SUM(amount_usd) FILTER(WHERE status IN('pending','wrong_amount')),0)::numeric pending,
+    COUNT(*) FILTER(WHERE status='verified')::int verified_count,COUNT(*) FILTER(WHERE status='pending')::int pending_count,
+    COUNT(*) FILTER(WHERE status='wrong_amount')::int wrong_amount_count,COUNT(*) FILTER(WHERE status IN('failed','expired','cancelled'))::int closed_count
+    FROM billing_payment_intents`);
+  const [mrr]=await query(`SELECT COALESCE(SUM(p.monthly_price),0)::numeric amount FROM subscriptions s JOIN plans p ON p.id=s.plan_id
+    WHERE s.status='active' AND COALESCE(s.billing_cycle,'monthly')='monthly'`);
+  const gateways=[
+    {code:'esaalat',name:'إيصالات / المحافظ اليمنية',configured:Boolean(process.env.ESAALAT_API_KEY?.trim()),webhookConfigured:Boolean(process.env.ESAALAT_WEBHOOK_SECRET?.trim()),supportsRefund:false},
+    {code:'stripe',name:'Stripe',configured:Boolean(process.env.STRIPE_SECRET_KEY?.trim()),webhookConfigured:Boolean(process.env.STRIPE_WEBHOOK_SECRET?.trim()),supportsRefund:false}
+  ];
+  return {invoices:[],expenses:[],paymentIntents,gateways,summary:{
+    collectedRevenueUsd:Number(s?.collected||0),unpaidInvoicesUsd:Number(s?.pending||0),refundedUsd:0,estimatedMrrUsd:Number(mrr?.amount||0),recordedExpensesUsd:0,
+    verifiedPayments:Number(s?.verified_count||0),pendingPayments:Number(s?.pending_count||0),wrongAmountPayments:Number(s?.wrong_amount_count||0),closedPaymentIntents:Number(s?.closed_count||0)
+  },dataLimitations:{invoices:'المخطط الحالي يسجل طلبات الدفع والتحقق منها، ولا يحتوي دفتر فواتير منفصلاً.',expenses:'لا يوجد جدول مصروفات تشغيلية في قاعدة المنصة.',refunds:'بوابة إيصالات لا تدعم الاسترداد البرمجي في التدفق الحالي.'}};
+}
+
 export async function platformOverview(period:string,startDate?:string,endDate?:string) {
   const end=endDate?new Date(endDate+'T23:59:59.999Z'):new Date(),start=startDate?new Date(startDate+'T00:00:00.000Z'):new Date(end);
   if(!startDate){if(period==='day')start.setUTCHours(0,0,0,0);else if(period==='week')start.setUTCDate(start.getUTCDate()-6);else if(period==='year')start.setUTCMonth(0,1);else start.setUTCDate(1);}
