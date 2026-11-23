@@ -754,7 +754,7 @@ export async function testPlatformChannel(channelId:string) {
       if(channel.channel_type==='whatsapp'||channel.channel_type==='instagram'||channel.channel_type==='messenger'){
         const token=values.access_token||values.page_access_token;
         if(!token||!channel.provider_account_id)throw new Error('بيانات القناة الأساسية غير مكتملة (المعرّف أو رمز الوصول).');
-        const base=(process.env.META_GRAPH_BASE_URL||'https://graph.facebook.com/v23.0').replace(/\\/+$/,'');
+        const base=(process.env.META_GRAPH_BASE_URL||'https://graph.facebook.com/v23.0').replace(/\/+$/,'');
         const response=await fetch(base+'/'+encodeURIComponent(String(channel.provider_account_id))+'?fields=id',{
           headers:{Authorization:'Bearer '+token},signal:timeout
         });
