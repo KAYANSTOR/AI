@@ -12,6 +12,7 @@ import { BrandMark, BRAND_NAME, BRAND_TAGLINE } from '@/components/site/brand'
 import { GlobalSearch } from '@/components/dashboard/global-search'
 import { NotificationsBell } from '@/components/dashboard/notifications-bell'
 import { getLocalDateLabel } from '@/lib/i18n/current-date'
+import { getVertical } from '@/lib/verticals/registry'
 
 const PAGE_META = [
   { prefix: '/dashboard/contacts', title: 'جهات الاتصال', subtitle: 'إدارة بيانات العملاء ووسائل التواصل', icon: Contact },
@@ -19,6 +20,10 @@ const PAGE_META = [
   { prefix: '/dashboard/analytics', title: 'التقارير والتحليلات', subtitle: 'راقب نشاط مؤسستك من البيانات الفعلية', icon: BarChart3 },
   { prefix: '/dashboard/reports', title: 'التقارير المحفوظة', subtitle: 'التقارير المجدولة وسجل تشغيلها', icon: FileText },
   { prefix: '/dashboard/appointments', title: 'المواعيد', subtitle: 'مواعيد العملاء ومتابعتها', icon: CalendarDays },
+  { prefix: '/dashboard/leads', title: 'العملاء المحتملون', subtitle: 'الاستفسارات والفرص الجديدة', icon: Users },
+  { prefix: '/dashboard/services', title: 'الخدمات', subtitle: 'إدارة ما تقدمه للعملاء', icon: Workflow },
+  { prefix: '/dashboard/quotes', title: 'عروض الأسعار', subtitle: 'إعداد عروض الأسعار ومتابعتها', icon: CreditCard },
+  { prefix: '/dashboard/orders', title: 'الطلبات', subtitle: 'متابعة طلبات العملاء', icon: Contact },
   { prefix: '/dashboard/agent', title: 'المساعد الذكي', subtitle: 'إعداد الوكيل واختباره وتدريبه', icon: Bot },
   { prefix: '/dashboard/channels', title: 'القنوات', subtitle: 'إدارة قنوات التواصل والربط', icon: RadioTower },
   { prefix: '/dashboard/knowledge', title: 'قاعدة المعرفة', subtitle: 'المعلومات التي يعتمد عليها المساعد', icon: BookOpen },
@@ -34,19 +39,31 @@ const PAGE_META = [
 
 export function Header({
   organizationName,
+  businessTypeId,
   timezone,
 }: {
   organizationName: string
+  businessTypeId: string | null
   timezone: string
 }) {
   const pathname = usePathname()
   const router = useRouter()
   const [searchOpen, setSearchOpen] = useState(false)
   const isHome = pathname === '/dashboard'
+  const vertical = getVertical(businessTypeId)
   const meta = PAGE_META
     .filter((item) => pathname === item.prefix || pathname.startsWith(item.prefix + '/'))
     .sort((a, b) => b.prefix.length - a.prefix.length)[0]
-  const page = meta ?? { title: 'مساحة العمل', subtitle: 'إدارة نشاطك من مكان واحد', icon: Activity }
+  const verticalTitle = pathname.startsWith('/dashboard/appointments') ? vertical.labels.appointments
+    : pathname.startsWith('/dashboard/leads') ? vertical.labels.leads
+    : pathname.startsWith('/dashboard/contacts') ? vertical.labels.contacts
+    : pathname.startsWith('/dashboard/services') ? vertical.labels.services
+    : pathname.startsWith('/dashboard/quotes') ? vertical.labels.quotes
+    : pathname.startsWith('/dashboard/orders') ? vertical.labels.orders
+    : null
+  const page = meta
+    ? { ...meta, title: verticalTitle ?? meta.title }
+    : { title: 'مساحة العمل', subtitle: 'إدارة نشاطك من مكان واحد', icon: Activity }
   const PageIcon = page.icon
 
   const today = getLocalDateLabel(timezone)

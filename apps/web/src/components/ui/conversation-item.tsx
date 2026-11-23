@@ -42,8 +42,8 @@ function ChannelDot({ channel = 'whatsapp' }: { channel?: ConversationChannel })
     sms: 'bg-sms',
     phone: 'bg-secondary',
     web: 'bg-accent',
-    telegram: 'bg-[#229ED9]',
-    messenger: 'bg-[#0866FF]',
+    telegram: 'bg-sky-500',
+    messenger: 'bg-blue-600',
   }[channel]
 
   return (

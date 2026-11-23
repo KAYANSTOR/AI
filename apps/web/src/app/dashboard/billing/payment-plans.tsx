@@ -2,25 +2,41 @@
 
 import { useState, useTransition } from 'react'
 import { Check, LoaderCircle, Wallet } from 'lucide-react'
-import { PLAN_CATALOG, type BillingCycle, type PlanCode } from '@/lib/billing/plan-catalog'
+import { type BillingCycle, type PlanCode, type PlanLimits } from '@/lib/billing/plan-catalog'
 import type { EsaalatWallet } from '@/lib/billing/esaalat'
-import { startEsaalatCheckoutAction } from './actions'
+import { startEsaalatCheckoutAction, submitManualWalletPaymentAction } from './actions'
+
+type ManualWallet = { id: string; provider_code: string; display_name: string; account_name: string; account_number: string; instructions: string | null }
+type PlanOffer = { code: PlanCode; name: string; monthlyPrice: number; annualPrice: number; featured: boolean; limits: PlanLimits }
 
 export function PaymentPlans({
   wallets,
   configured,
   canManage,
+  manualWallets,
+  yerPerUsd,
+  planOffers,
 }: {
   wallets: EsaalatWallet[]
   configured: boolean
   canManage: boolean
+  manualWallets: ManualWallet[]
+  yerPerUsd: number
+  planOffers: PlanOffer[]
 }) {
   const [cycle, setCycle] = useState<BillingCycle>('monthly')
   const [walletId, setWalletId] = useState(wallets[0]?.id ?? '')
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
+  const [manualWalletId, setManualWalletId] = useState(manualWallets[0]?.id ?? '')
+  const [manualPlanCode, setManualPlanCode] = useState<PlanCode | null>(null)
+  const [senderName, setSenderName] = useState('')
+  const [transferReference, setTransferReference] = useState('')
+  const [receiptFile, setReceiptFile] = useState<File | null>(null)
+  const [manualResult, setManualResult] = useState<string | null>(null)
+  const [manualError, setManualError] = useState<string | null>(null)
 
-  const paidPlans = PLAN_CATALOG.filter((plan) => plan.code !== 'trial')
+  const paidPlans = planOffers
   const walletAvailable = configured && wallets.length > 0
 
   async function choosePlan(planCode: PlanCode) {
@@ -37,6 +53,36 @@ export function PaymentPlans({
         return
       }
       window.location.assign(result.url)
+    })
+  }
+
+  async function submitManualTransfer() {
+    if (!manualPlanCode || !manualWalletId || !receiptFile || pending) return
+    setManualError(null)
+    setManualResult(null)
+    const bytes = new Uint8Array(await receiptFile.arrayBuffer())
+    let binary = ''
+    for (let index = 0; index < bytes.length; index += 1) binary += String.fromCharCode(bytes[index])
+    const receiptBase64 = window.btoa(binary)
+    startTransition(async () => {
+      const result = await submitManualWalletPaymentAction({
+        planCode: manualPlanCode,
+        billingCycle: cycle,
+        walletId: manualWalletId,
+        senderName,
+        transferReference,
+        receiptMimeType: receiptFile.type,
+        receiptBase64,
+      })
+      if (!result.ok) {
+        setManualError(result.error)
+        return
+      }
+      setManualResult(`${result.message} المبلغ المسجل: ${result.amountYer.toLocaleString('en-US')} ر.ي.`)
+      setManualPlanCode(null)
+      setSenderName('')
+      setTransferReference('')
+      setReceiptFile(null)
     })
   }
 
@@ -137,12 +183,49 @@ export function PaymentPlans({
                 {pending ? <LoaderCircle size={16} className="animate-spin" /> : null}
                 {canManage ? 'المتابعة للدفع' : 'متاح لمالك الحساب'}
               </button>
+              {manualWallets.length > 0 ? (
+                <button type="button" onClick={() => { setManualPlanCode(plan.code); setManualError(null); setManualResult(null) }} disabled={!canManage || pending} className="mt-2 min-h-10 w-full rounded-xl border border-border px-3 text-xs font-semibold text-text-muted disabled:opacity-50">
+                  أرسلت تحويلًا لمحفظة يمنية؟ أرفق الإيصال
+                </button>
+              ) : null}
             </article>
           )
         })}
       </div>
 
+      {manualPlanCode ? (
+        <div className="space-y-4 rounded-xl border border-secondary/30 bg-background p-4">
+          <div>
+            <h3 className="font-bold text-text">إرسال إثبات تحويل يدوي</h3>
+            <p className="mt-1 text-xs leading-5 text-text-muted">لن يتفعّل الاشتراك إلا بعد مراجعة المرجع والمبلغ والإيصال في لوحة Kayan AI Admin.</p>
+            <p className="mt-1 text-sm font-bold text-text">المبلغ المتوقع: {Math.round((planOffers.find((plan) => plan.code === manualPlanCode)?.monthlyPrice ?? 0) * (cycle === 'yearly' ? 10 : 1) * yerPerUsd).toLocaleString('en-US')} ر.ي.</p>
+          </div>
+          <label className="block text-sm font-medium text-text">محفظة الاستلام
+            <select value={manualWalletId} onChange={(event) => setManualWalletId(event.target.value)} className="mt-1.5 min-h-11 w-full rounded-xl border border-border bg-surface px-3 text-text">
+              {manualWallets.map((wallet) => <option key={wallet.id} value={wallet.id}>{wallet.display_name} · {wallet.account_number}</option>)}
+            </select>
+          </label>
+          {manualWallets.find((wallet) => wallet.id === manualWalletId) ? (
+            <div className="rounded-lg bg-surface p-3 text-sm text-text">
+              <p>اسم المستفيد: <strong>{manualWallets.find((wallet) => wallet.id === manualWalletId)?.account_name}</strong></p>
+              <p dir="ltr" className="mt-1 text-start">{manualWallets.find((wallet) => wallet.id === manualWalletId)?.account_number}</p>
+              {manualWallets.find((wallet) => wallet.id === manualWalletId)?.instructions ? <p className="mt-2 text-xs text-text-muted">{manualWallets.find((wallet) => wallet.id === manualWalletId)?.instructions}</p> : null}
+            </div>
+          ) : null}
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="block text-sm font-medium text-text">اسم المرسل<input value={senderName} onChange={(event) => setSenderName(event.target.value)} maxLength={160} className="mt-1.5 min-h-11 w-full rounded-xl border border-border bg-surface px-3" /></label>
+            <label className="block text-sm font-medium text-text">مرجع التحويل<input value={transferReference} onChange={(event) => setTransferReference(event.target.value)} maxLength={128} className="mt-1.5 min-h-11 w-full rounded-xl border border-border bg-surface px-3" /></label>
+          </div>
+          <label className="block text-sm font-medium text-text">صورة الإيصال (JPG / PNG / WEBP، حتى 2 ميغابايت)
+            <input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => setReceiptFile(event.target.files?.[0] ?? null)} className="mt-1.5 block w-full text-sm text-text" />
+          </label>
+          {manualError ? <p role="alert" className="text-sm text-error">{manualError}</p> : null}
+          <div className="flex gap-2"><button type="button" onClick={submitManualTransfer} disabled={!canManage || !manualWalletId || !senderName.trim() || !transferReference.trim() || !receiptFile || pending} className="min-h-11 rounded-xl bg-primary px-4 text-sm font-bold text-primary-foreground disabled:opacity-50">{pending ? 'جارٍ الإرسال…' : 'إرسال للمراجعة'}</button><button type="button" onClick={() => setManualPlanCode(null)} className="min-h-11 rounded-xl border border-border px-4 text-sm">إلغاء</button></div>
+        </div>
+      ) : null}
+
       {error ? <p role="alert" className="text-sm font-medium text-error">{error}</p> : null}
+      {manualResult ? <p role="status" className="rounded-xl border border-success/30 bg-success/10 p-3 text-sm text-text">{manualResult}</p> : null}
       <p className="text-xs leading-6 text-text-muted">
         يتم تفعيل الاشتراك تلقائياً بعد تأكيد التحويل ومطابقة المحفظة والمرجع والمبلغ. لا تعتمد المنصة على صورة التحويل وحدها.
       </p>

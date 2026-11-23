@@ -11,11 +11,13 @@ export function DashboardShell({
   children,
   setupBanner,
   organizationName,
+  businessTypeId,
   timezone,
 }: {
   children: React.ReactNode
   setupBanner?: React.ReactNode
   organizationName: string
+  businessTypeId: string | null
   timezone: string
 }) {
   return (
@@ -26,12 +28,12 @@ export function DashboardShell({
         <NavigationProgress />
       </Suspense>
       <div className="dashboard-app-shell">
-        <Header organizationName={organizationName} timezone={timezone} />
+        <Header organizationName={organizationName} businessTypeId={businessTypeId} timezone={timezone} />
         {setupBanner ? <div className="dashboard-setup-banner">{setupBanner}</div> : null}
         <main className="dashboard-main-scroll" id="dashboard-main">
           <div className="dashboard-page-content animate-page-enter">{children}</div>
         </main>
-        <MobileTabBar />
+        <MobileTabBar businessTypeId={businessTypeId} />
       </div>
     </div>
   )

@@ -18,8 +18,25 @@ export default async function BillingPage() {
 
   const snapshot = await loadBillingSnapshot(db, context.organizationId)
   const canManage = context.role === 'owner' || context.role === 'admin'
-  const currentPlan = PLAN_CATALOG.find((plan) => plan.code === snapshot.planCode)
+  const { data: planRows } = await db.from('plans').select('code,name,monthly_price,limits,is_active')
+    .in('code', ['starter', 'growth', 'pro'])
+  const planOffers = PLAN_CATALOG.filter((plan) => plan.code !== 'trial').flatMap((fallback) => {
+    const row = (planRows ?? []).find((item) => item.code === fallback.code)
+    if (!row || row.is_active !== true) return []
+    const limits = (row.limits ?? {}) as Partial<typeof fallback.limits>
+    const monthlyPrice = Number(row.monthly_price)
+    if (!Number.isFinite(monthlyPrice) || monthlyPrice <= 0) return []
+    return [{ ...fallback, name: String(row.name || fallback.name), monthlyPrice, annualPrice: monthlyPrice * 10, limits: { ...fallback.limits, ...limits } }]
+  })
+  const currentPlan = planOffers.find((plan) => plan.code === snapshot.planCode) ?? PLAN_CATALOG.find((plan) => plan.code === snapshot.planCode)
   const walletCheckoutConfigured = isEsaalatPaymentConfigured()
+  const { data: manualWalletRows } = await db.from('manual_yemen_wallets')
+    .select('id,provider_code,display_name,account_name,account_number,instructions')
+    .eq('is_active', true).order('display_name')
+  const manualWallets = (manualWalletRows ?? []) as Array<{
+    id: string; provider_code: string; display_name: string; account_name: string; account_number: string; instructions: string | null
+  }>
+  const yerPerUsd = Number(process.env.YER_PER_USD) || 0
   let wallets: EsaalatWallet[] = []
 
   if (walletCheckoutConfigured) {
@@ -144,7 +161,7 @@ export default async function BillingPage() {
         </div>
       </div>
 
-      <PaymentPlans wallets={wallets} configured={walletCheckoutConfigured} canManage={canManage} />
+      <PaymentPlans wallets={wallets} configured={walletCheckoutConfigured} canManage={canManage} manualWallets={manualWallets} yerPerUsd={yerPerUsd} planOffers={planOffers} />
     </div>
   )
 }

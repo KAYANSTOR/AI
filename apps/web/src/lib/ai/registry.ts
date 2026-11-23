@@ -227,6 +227,83 @@ export const TOOL_POLICIES: Record<string, ToolPolicy> = {
       additionalProperties: false
     }
   },
+  check_slots: {
+    name: 'check_slots',
+    description: 'Check available service appointment slots for a date.',
+    capability: 'appointments', risk: 'read', requiresConfirmation: false,
+    allowedActors: ['agent', 'staff'], tenantScope: 'organization', auditClass: 'read',
+    inputSchema: { type: 'object', properties: { date: { type: 'string' }, service_id: { type: 'string' }, service_name: { type: 'string' } }, required: ['date'], additionalProperties: false },
+  },
+  book_appointment: {
+    name: 'book_appointment',
+    description: 'Book an appointment after the customer confirms the proposed time.',
+    capability: 'appointments', risk: 'write', requiresConfirmation: true,
+    allowedActors: ['agent', 'staff'], tenantScope: 'organization', auditClass: 'sensitive_write',
+    inputSchema: { type: 'object', properties: { phone: { type: 'string' }, name: { type: 'string' }, service_id: { type: 'string' }, starts_at: { type: 'string' } }, required: ['phone', 'service_id', 'starts_at'], additionalProperties: false },
+  },
+  cancel_appointment: {
+    name: 'cancel_appointment',
+    description: 'Cancel the requesting customer’s own appointment after confirmation.',
+    capability: 'appointments', risk: 'write', requiresConfirmation: true,
+    allowedActors: ['agent', 'staff'], tenantScope: 'organization', auditClass: 'sensitive_write',
+    inputSchema: { type: 'object', properties: { appointment_id: { type: 'string' }, reason: { type: 'string' } }, required: ['appointment_id'], additionalProperties: false },
+  },
+  search_products: {
+    name: 'search_products',
+    description: 'Search the business catalog for active products or services and their configured prices.',
+    capability: 'orders', risk: 'read', requiresConfirmation: false,
+    allowedActors: ['agent', 'staff'], tenantScope: 'organization', auditClass: 'read',
+    inputSchema: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'], additionalProperties: false },
+  },
+  track_order: {
+    name: 'track_order',
+    description: 'Check the status of an order belonging to the requesting customer.',
+    capability: 'orders', risk: 'read', requiresConfirmation: false,
+    allowedActors: ['agent', 'staff'], tenantScope: 'organization', auditClass: 'read',
+    inputSchema: { type: 'object', properties: { order_number: { type: 'string' } }, required: ['order_number'], additionalProperties: false },
+  },
+  check_date_availability: {
+    name: 'check_date_availability',
+    description: 'Check available booking slots on a requested date.',
+    capability: 'appointments', risk: 'read', requiresConfirmation: false,
+    allowedActors: ['agent', 'staff'], tenantScope: 'organization', auditClass: 'read',
+    inputSchema: { type: 'object', properties: { date: { type: 'string' }, service_id: { type: 'string' } }, required: ['date'], additionalProperties: false },
+  },
+  book_reservation: {
+    name: 'book_reservation',
+    description: 'Create a reservation using the organization’s configured booking calendar after customer confirmation.',
+    capability: 'appointments', risk: 'write', requiresConfirmation: true,
+    allowedActors: ['agent', 'staff'], tenantScope: 'organization', auditClass: 'sensitive_write',
+    inputSchema: { type: 'object', properties: { phone: { type: 'string' }, name: { type: 'string' }, service_id: { type: 'string' }, starts_at: { type: 'string' } }, required: ['phone', 'service_id', 'starts_at'], additionalProperties: false },
+  },
+  send_packages: {
+    name: 'send_packages',
+    description: 'Find approved package information in this business’s knowledge base.',
+    capability: 'quotes', risk: 'read', requiresConfirmation: false,
+    allowedActors: ['agent', 'staff'], tenantScope: 'organization', auditClass: 'read',
+    inputSchema: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'], additionalProperties: false },
+  },
+  capture_lead: {
+    name: 'capture_lead',
+    description: 'Capture a qualified customer enquiry as a lead.',
+    capability: 'lead_capture', risk: 'write', requiresConfirmation: false,
+    allowedActors: ['agent', 'staff'], tenantScope: 'organization', auditClass: 'sensitive_write',
+    inputSchema: { type: 'object', properties: { phone: { type: 'string' }, name: { type: 'string' }, intent: { type: 'string' }, estimated_value: { type: 'number' }, notes: { type: 'string' } }, required: ['phone'], additionalProperties: false },
+  },
+  schedule_call: {
+    name: 'schedule_call',
+    description: 'Schedule a consultation call in the configured appointment calendar after confirmation.',
+    capability: 'appointments', risk: 'write', requiresConfirmation: true,
+    allowedActors: ['agent', 'staff'], tenantScope: 'organization', auditClass: 'sensitive_write',
+    inputSchema: { type: 'object', properties: { phone: { type: 'string' }, name: { type: 'string' }, service_id: { type: 'string' }, starts_at: { type: 'string' } }, required: ['phone', 'service_id', 'starts_at'], additionalProperties: false },
+  },
+  send_brochure: {
+    name: 'send_brochure',
+    description: 'Return the configured public brochure link for the business, if one is available.',
+    capability: 'lead_capture', risk: 'read', requiresConfirmation: false,
+    allowedActors: ['agent', 'staff'], tenantScope: 'organization', auditClass: 'read',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+  },
 }
 
 

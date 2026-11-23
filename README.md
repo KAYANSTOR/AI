@@ -66,8 +66,10 @@ npm run dev
 | `CREDENTIAL_ENCRYPTION_KEY` | مفتاح تشفير بيانات اعتماد القنوات، 32 بايت بصيغة base64 |
 | `NEXT_PUBLIC_SITE_URL` | الرابط العام للتطبيق |
 | `GEMINI_API_KEY` | مفتاح نموذج الذكاء الاصطناعي |
+| `KAYAN_ADMIN_API_TOKEN` | سر خادمي مشترك لربط Kayan AI Admin بمسارات الإدارة الداخلية؛ لا يُعرض للمتصفح |
 
 بقية المتغيرات (Meta وTwilio وVapi وStripe وCRON_SECRET) موضحة في `.env.example`.
+عقد التكامل ومسارات مراجعة المحافظ والخطط والسجل المالي موثقة في [دليل Kayan AI Admin API](docs/KAYAN_ADMIN_API.md).
 
 ## الأوامر
 

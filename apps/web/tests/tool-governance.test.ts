@@ -62,11 +62,11 @@ describe('capability registry', () => {
       expect(policy.allowedActors.length).toBeGreaterThan(0)
       expect(['organization', 'conversation', 'channel']).toContain(policy.tenantScope)
       expect(['read', 'sensitive_write']).toContain(policy.auditClass)
-      // A write tool either requires explicit confirmation, or is one of the two writes that
+      // A write tool either requires explicit confirmation, or is one of the safe self-initiated writes
       // are safe to run on the customer's own initiative: reaching a human, and recording the
       // enquiry the customer just made. Anything else must ask first.
       if (policy.risk === 'write' && !policy.requiresConfirmation) {
-        expect(['request_human_handoff', 'create_lead']).toContain(name)
+        expect(['request_human_handoff', 'create_lead', 'capture_lead']).toContain(name)
       }
       expect(policy.inputSchema).toHaveProperty('type', 'object')
     }

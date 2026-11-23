@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/db/server'
 import type { DbClient } from '@/lib/db/client'
+import { getVertical } from '@/lib/verticals/registry'
 
 export type BusinessType = {
   id: string
@@ -46,19 +47,34 @@ export async function applyBusinessType(
   businessTypeId: string,
   enabledIds?: string[]
 ): Promise<void> {
+  const vertical = getVertical(businessTypeId)
+  const verticalConfig = {
+    baseEngine: vertical.baseEngine,
+    enabledModules: vertical.enabledModules,
+    enabledTools: vertical.enabledTools,
+    labels: vertical.labels,
+    systemPrompt: vertical.defaultSystemPrompt,
+    kbTemplates: vertical.kbTemplates,
+    requiredFields: vertical.requiredFields,
+  }
   const { error: pErr } = await db
     .from('business_profiles')
-    .update({ business_type_id: businessTypeId })
+    .update({ business_type_id: vertical.id })
     .eq('organization_id', organizationId)
 
   if (pErr) throw new Error(pErr.message)
+
+  const { error: orgError } = await db.from('organizations')
+    .update({ business_type: vertical.id, vertical_config: verticalConfig })
+    .eq('id', organizationId)
+  if (orgError) throw new Error(orgError.message)
 
   let ids = enabledIds
   if (!ids) {
     const { data: defaults } = await db
       .from('business_type_capabilities')
       .select('capability_id')
-      .eq('business_type_id', businessTypeId)
+      .eq('business_type_id', vertical.id)
       .eq('is_default', true)
     ids = (defaults ?? []).map((d) => d.capability_id as string)
   }

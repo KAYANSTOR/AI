@@ -1,5 +1,6 @@
 import type { DbClient } from '@/lib/db/client'
 import { retrieveContextualKnowledge } from '@/lib/knowledge/layer'
+import { getVertical } from '@/lib/verticals/registry'
 
 export async function buildBusinessSystemPrompt(
   db: DbClient,
@@ -12,7 +13,7 @@ export async function buildBusinessSystemPrompt(
     { data: profile, error: profileError },
     { data: orgCaps, error: capsError },
   ] = await Promise.all([
-    db.from('organizations').select('name').eq('id', organizationId).maybeSingle(),
+    db.from('organizations').select('name,business_type,vertical_config').eq('id', organizationId).maybeSingle(),
     db
       .from('business_profiles')
       .select('industry, timezone, system_prompt_addition, business_type_id, business_types(name)')
@@ -26,6 +27,13 @@ export async function buildBusinessSystemPrompt(
   ])
 
   if (orgError || profileError || capsError) throw new Error('Unable to load business context')
+
+  const businessTypeId = (profile?.business_type_id ?? org?.business_type ?? null) as string | null
+  const vertical = getVertical(businessTypeId)
+  const verticalConfig = (org?.vertical_config ?? {}) as Record<string, unknown>
+  const verticalPrompt = typeof verticalConfig.systemPrompt === 'string' && verticalConfig.systemPrompt.trim()
+    ? verticalConfig.systemPrompt.trim()
+    : vertical.defaultSystemPrompt
 
   let versionAddition = ''
   if (agentId) {
@@ -139,6 +147,9 @@ export async function buildBusinessSystemPrompt(
     'Use WhatsApp formatting only: bold text uses one pair of asterisks (*نص*). Never use double asterisks (**) or Markdown heading markers (#).',
     '',
     'BUSINESS IDENTITY',
+    'Business engine: ' + vertical.baseEngine,
+    'Sector UI labels: ' + Object.entries((verticalConfig.labels as Record<string, string> | undefined) ?? vertical.labels).map(([key, value]) => `${key}=${value}`).join(', '),
+    'Sector-specific instruction: ' + verticalPrompt,
     'Business name: ' + (org?.name ?? 'Business'),
     'Industry: ' + (profile?.industry ?? 'custom'),
     'Business type: ' +

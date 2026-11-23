@@ -7,6 +7,7 @@ import {
   Plus, X, Home, Contact, BarChart3, MessageSquareText,
   CalendarPlus, FilePlus2, ClipboardList, Megaphone, Bot,
 } from 'lucide-react'
+import { getVertical } from '@/lib/verticals/registry'
 
 const tabs = [
   { href: '/dashboard', label: 'الرئيسية', icon: Home },
@@ -24,14 +25,22 @@ const quickActions = [
   { href: '/dashboard/agent', label: 'إعداد المساعد', description: 'راجع الوكيل الذكي', icon: Bot },
 ]
 
-export function MobileTabBar() {
+export function MobileTabBar({ businessTypeId }: { businessTypeId: string | null }) {
   const pathname = usePathname()
+  const vertical = getVertical(businessTypeId)
   const [open, setOpen] = useState(false)
   const triggerRef = useRef<HTMLButtonElement>(null)
   const sheetRef = useRef<HTMLDivElement>(null)
   const isActive = (href: string) => href === '/dashboard'
     ? pathname === href
     : pathname === href || pathname.startsWith(href + '/')
+  const verticalActions = vertical.baseEngine === 'booking_engine'
+    ? [{ href: '/dashboard/appointments', label: `${vertical.labels.appointments} جديد`, description: 'احجز موعداً أو جلسة', icon: CalendarPlus }, ...quickActions.filter((action) => action.href !== '/dashboard/appointments')]
+    : vertical.baseEngine === 'commerce_engine'
+      ? [{ href: '/dashboard/orders/new', label: `${vertical.labels.orders} جديد`, description: 'سجّل طلب عميل', icon: ClipboardList }, ...quickActions.filter((action) => action.href !== '/dashboard/orders/new' && action.href !== '/dashboard/appointments')]
+      : vertical.baseEngine === 'event_engine'
+        ? [{ href: '/dashboard/appointments', label: `${vertical.labels.appointments} جديد`, description: 'تحقق من التاريخ وسجّل الحجز', icon: CalendarPlus }, ...quickActions.filter((action) => action.href !== '/dashboard/appointments')]
+        : [{ href: '/dashboard/leads', label: `${vertical.labels.leads} جديد`, description: 'سجّل استفساراً جديداً', icon: Contact }, ...quickActions.filter((action) => action.href !== '/dashboard/appointments')]
 
   useEffect(() => {
     if (!open) return
@@ -65,7 +74,7 @@ export function MobileTabBar() {
           {tabs.slice(0, 2).map(({ href, label, icon: Icon }) => (
             <Link key={href} href={href} aria-current={isActive(href) ? 'page' : undefined} className={'dashboard-bottom-tab' + (isActive(href) ? ' is-active' : '')}>
               <Icon size={20} strokeWidth={isActive(href) ? 2.5 : 1.8} aria-hidden="true" />
-              <span>{label}</span>
+              <span>{href === '/dashboard/contacts' ? vertical.labels.contacts : label}</span>
             </Link>
           ))}
           <button ref={triggerRef} type="button" onClick={() => setOpen(true)} aria-label="فتح الإجراءات السريعة" aria-expanded={open} className="dashboard-fab">
@@ -91,7 +100,7 @@ export function MobileTabBar() {
               <button type="button" onClick={close} aria-label="إغلاق" className="dashboard-icon-button"><X size={18} aria-hidden="true" /></button>
             </div>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-              {quickActions.map(({ href, label, description, icon: Icon }) => (
+              {verticalActions.map(({ href, label, description, icon: Icon }) => (
                 <Link key={href} href={href} onClick={() => setOpen(false)} className="dashboard-quick-action">
                   <span className="dashboard-quick-action-icon"><Icon size={21} aria-hidden="true" /></span>
                   <span className="text-sm font-bold text-text">{label}</span>

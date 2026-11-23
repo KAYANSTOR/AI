@@ -6,6 +6,7 @@ import { getEnabledCapabilities } from '@/lib/ai/capabilities'
 import { createPendingAction } from '@/lib/runtime/pending'
 import { searchKnowledge } from '@/lib/knowledge/retrieval'
 import { TOOL_POLICIES } from '@/lib/ai/registry'
+import { getVertical } from '@/lib/verticals/registry'
 
 // The registry is the only place tools are declared.
 export { TOOL_NAMES } from '@/lib/ai/registry'
@@ -37,9 +38,15 @@ type StoredQuoteItem = {
 
 export async function getToolDefinitionsForAgent(db:DbClient,organizationId:string,agentId?:string|null,actor:ToolActor='agent'){
   const enabled=await getEnabledCapabilities(db,organizationId)
-  const definitions:Array<{name:string,description:string,input_schema:Record<string,unknown>}>=[]
+  const {data:profile}=await db.from('business_profiles').select('business_type_id').eq('organization_id',organizationId).maybeSingle()
+  // Organizations created before the vertical registry retain the complete legacy tool set
+  // until their profile is explicitly selected/migrated through onboarding.
+  const vertical=profile?.business_type_id ? getVertical(String(profile.business_type_id)) : null
+  const verticalTools=new Set(vertical ? [...vertical.enabledTools,'get_customer','search_knowledge','request_human_handoff'] : Object.keys(TOOL_POLICIES))
+  const definitions:Array<{name:string,description:string,input_schema:Record<string,unknown>}> = []
 
   for(const name of Object.keys(TOOL_POLICIES)){
+    if(!verticalTools.has(name)) continue
     const policy=getToolPolicy(name)
     if(!policy) continue
     if(!isActorAllowed(policy,actor)) continue
@@ -105,6 +112,17 @@ export async function executeTool(name:string,rawArgs:Record<string,unknown>,ctx
       case 'create_quote': result=await toolCreateQuote(ctx,rawArgs); break
       case 'create_order': result=await toolCreateOrder(ctx,rawArgs); break
       case 'convert_quote_to_order': result=await toolConvertQuoteToOrder(ctx,rawArgs); break
+      case 'check_slots':
+      case 'check_date_availability': result=await toolFindSlots(ctx,rawArgs); break
+      case 'book_appointment':
+      case 'book_reservation':
+      case 'schedule_call': result=await toolCreateAppointment(ctx,rawArgs); break
+      case 'cancel_appointment': result=await toolCancelAppointment(ctx,rawArgs); break
+      case 'search_products': result=await toolSearchProducts(ctx,rawArgs); break
+      case 'track_order': result=await toolTrackOrder(ctx,rawArgs); break
+      case 'send_packages': result=await toolSendPackages(ctx,rawArgs); break
+      case 'capture_lead': result=await toolCreateLead(ctx,rawArgs); break
+      case 'send_brochure': result=await toolSendBrochure(ctx); break
     }
     if(result === undefined) return {ok:false as const,error:'Tool '+name+' has no implementation.'}
     if(policy.auditClass==='sensitive_write') await writeToolAudit(ctx,name,policy.capability,result)
@@ -145,10 +163,17 @@ async function toolFindSlots(ctx:ToolContext,args:Record<string,unknown>){
 }
 
 async function toolCreateAppointment(ctx:ToolContext,args:Record<string,unknown>){
-  const phone=String(args.phone ?? '').trim()
+  let phone=String(args.phone ?? '').trim()
   const serviceId=String(args.service_id ?? '').trim()
   const startsAt=String(args.starts_at ?? '').trim()
-  const name=args.name ? String(args.name).trim() : null
+  let name=args.name ? String(args.name).trim() : null
+  if (!phone && ctx.contactId) {
+    const { data: currentContact, error: contactError } = await ctx.db.from('contacts')
+      .select('phone,full_name').eq('id', ctx.contactId).eq('organization_id', ctx.organizationId).maybeSingle()
+    if (contactError) throw new Error(contactError.message)
+    phone = String(currentContact?.phone ?? '').trim()
+    if (!name) name = currentContact?.full_name ? String(currentContact.full_name) : null
+  }
   if(!phone || !serviceId || !startsAt) throw new Error('phone, service_id, and starts_at are required')
   const contact=await resolveContactByPhone(ctx.db,ctx.organizationId,phone,name)
   const {data:service,error}=await ctx.db.from('services').select('id,duration_minutes,name').eq('id',serviceId).eq('organization_id',ctx.organizationId).maybeSingle()
@@ -191,6 +216,67 @@ async function toolSearchKnowledge(ctx:ToolContext,args:Record<string,unknown>){
     return {found:false,matches:[],message:'No knowledge base entry covers this question. Do not guess; offer a human handoff.'}
   }
   return {found:true,matches:matches.map(m=>({title:m.title,category:m.category,content:m.content}))}
+}
+
+async function toolSearchProducts(ctx: ToolContext, args: Record<string, unknown>) {
+  const query = String(args.query ?? '').trim()
+  if (query.length < 2) throw new Error('query is required')
+  const { data, error } = await ctx.db.from('services')
+    .select('id,name,description,price_amount,price_currency')
+    .eq('organization_id', ctx.organizationId).eq('is_active', true)
+    .ilike('name', `%${query}%`).limit(10)
+  if (error) throw new Error(error.message)
+  return { products: (data ?? []).map((row) => ({
+    id: row.id, name: row.name, description: row.description,
+    price: row.price_amount, currency: row.price_currency,
+  })) }
+}
+
+async function toolTrackOrder(ctx: ToolContext, args: Record<string, unknown>) {
+  const orderNumber = String(args.order_number ?? '').trim()
+  if (!orderNumber) throw new Error('order_number is required')
+  if (!ctx.contactId) throw new Error('Customer context is required to track an order.')
+  const { data, error } = await ctx.db.from('orders')
+    .select('id,order_number,status,total,currency,created_at,contact_id')
+    .eq('organization_id', ctx.organizationId).eq('order_number', orderNumber)
+    .eq('contact_id', ctx.contactId).maybeSingle()
+  if (error) throw new Error(error.message)
+  if (!data) return { found: false, message: 'No order was found for this customer.' }
+  return { found: true, order: { id: data.id, orderNumber: data.order_number, status: data.status, total: data.total, currency: data.currency, createdAt: data.created_at } }
+}
+
+async function toolCancelAppointment(ctx: ToolContext, args: Record<string, unknown>) {
+  const appointmentId = String(args.appointment_id ?? '').trim()
+  if (!appointmentId) throw new Error('appointment_id is required')
+  if (!ctx.contactId) throw new Error('Customer context is required to cancel an appointment.')
+  const { data: appointment, error } = await ctx.db.from('appointments')
+    .select('id,status,contact_id').eq('id', appointmentId)
+    .eq('organization_id', ctx.organizationId).eq('contact_id', ctx.contactId).maybeSingle()
+  if (error) throw new Error(error.message)
+  if (!appointment) throw new Error('Appointment not found for this customer.')
+  if (appointment.status === 'cancelled') return { appointmentId, status: 'cancelled', alreadyCancelled: true }
+  if (['completed', 'no_show'].includes(String(appointment.status))) throw new Error('This appointment can no longer be cancelled.')
+  const { data, error: updateError } = await ctx.db.from('appointments').update({ status: 'cancelled' })
+    .eq('id', appointmentId).eq('organization_id', ctx.organizationId).eq('contact_id', ctx.contactId)
+    .select('id,status').maybeSingle()
+  if (updateError) throw new Error(updateError.message)
+  if (!data) throw new Error('Appointment could not be cancelled.')
+  return { appointmentId: data.id, status: data.status }
+}
+
+async function toolSendPackages(ctx: ToolContext, args: Record<string, unknown>) {
+  const query = String(args.query ?? '').trim()
+  if (query.length < 2) throw new Error('query is required')
+  return toolSearchKnowledge(ctx, { query, category: 'service_info' })
+}
+
+async function toolSendBrochure(ctx: ToolContext) {
+  const { data, error } = await ctx.db.from('organizations').select('vertical_config').eq('id', ctx.organizationId).maybeSingle()
+  if (error) throw new Error(error.message)
+  const config = data?.vertical_config as Record<string, unknown> | null
+  const url = typeof config?.brochureUrl === 'string' ? config.brochureUrl.trim() : ''
+  if (!url || !/^https:\/\//i.test(url)) return { available: false, message: 'No public brochure link is configured.' }
+  return { available: true, url }
 }
 
 /** Audit trail for tool writes, written through the membership-guarded path. */
