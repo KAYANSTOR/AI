@@ -42,7 +42,7 @@ export function EntitlementsPage({
   const [overrideModal, setOverrideModal] = React.useState(false);
 
   const [ovUserId, setOvUserId] = React.useState('');
-  const [ovFeatureKey, setOvFeatureKey] = React.useState('vapi_voice_agent');
+  const [ovFeatureKey, setOvFeatureKey] = React.useState('');
   const [ovState, setOvState] = React.useState<'granted' | 'revoked'>('granted');
   const [ovLimit, setOvLimit] = React.useState('');
   const [ovReason, setOvReason] = React.useState('');
@@ -57,10 +57,11 @@ export function EntitlementsPage({
         setData(ent);
         setUsers(u.items);
         if (!ovUserId && u.items[0]) setOvUserId(u.items[0].id);
+        if (!ovFeatureKey && ent.flags[0]) setOvFeatureKey(ent.flags[0].key);
       })
       .catch((err) => onNotify('error', err instanceof Error ? err.message : 'تعذر تحميل التفعيلات والمزايا.'))
       .finally(() => setLoading(false));
-  }, [ovUserId, onNotify]);
+  }, [ovUserId, ovFeatureKey, onNotify]);
 
   React.useEffect(() => {
     load();
@@ -93,7 +94,7 @@ export function EntitlementsPage({
     <div className="space-y-6">
       <PageHeader
         title="مركز إدارة التفعيلات والصلاحيات والمزايا"
-        subtitle="المرجع المركزي على الخادم (Server-Side Entitlements & Feature Flags) للتحكم في جميع مزايا Kayan AI على مستوى المنصة والباقات والمستخدمين."
+        subtitle="إدارة كتالوج قدرات المنصة ومنحها أو سحبها على مستوى المؤسسة، مع تسجيل التغييرات في سجل المالك."
         action={
           <button type="button" onClick={() => setOverrideModal(true)} className={primaryBtnClass}>
             <ShieldAlert className="w-4 h-4" />
