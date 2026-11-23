@@ -73,19 +73,44 @@ export async function platformUsers(f:{search?:string;status?:string;paymentStat
 }
 
 export async function platformUserDetail(id:string) {
-  const [user]=await query(`SELECT u.id::text id,${fullName} full_name,u.email,u.phone,u.created_at::text created_at,u.last_sign_in_at::text last_active_at,
-    CASE WHEN u.banned_until>NOW() THEN 'suspended' ELSE 'active' END account_status,u.raw_user_meta_data user_metadata FROM auth.users u WHERE u.id=$1::uuid AND u.deleted_at IS NULL`,[id]);
+  const [user]=await query(\`SELECT u.id::text id,\${fullName} full_name,u.email,u.phone,u.created_at::text created_at,u.last_sign_in_at::text last_active_at,
+    CASE WHEN u.banned_until>NOW() THEN 'suspended' ELSE 'active' END account_status,u.raw_user_meta_data user_metadata,
+    COALESCE(u.raw_user_meta_data->>'admin_notes','') admin_notes FROM auth.users u WHERE u.id=$1::uuid AND u.deleted_at IS NULL\`,[id]);
   if(!user)return null;
-  const [workspaces,subscriptions,agents,channels,conversations,usage]=await Promise.all([
-    query(`SELECT o.id::text id,o.name,b.id::text business_id,b.name business_name,b.business_type_id business_type,COALESCE(b.status,'active') status,o.created_at::text created_at
-      FROM organization_members m JOIN organizations o ON o.id=m.organization_id LEFT JOIN businesses b ON b.organization_id=o.id WHERE m.user_id=$1::uuid AND m.role='owner' ORDER BY o.created_at DESC`,[id]),
-    query(`SELECT s.id::text id,s.organization_id::text organization_id,s.plan_tier plan_code,COALESCE(p.name,INITCAP(s.plan_tier)) plan_name,p.monthly_price::numeric price_monthly,p.currency,s.billing_cycle,s.status,s.period_start::text current_period_start,s.period_end::text current_period_end,s.minutes_used,s.sms_used,s.created_at::text created_at FROM subscriptions s LEFT JOIN plans p ON p.id=s.plan_id JOIN organization_members m ON m.organization_id=s.organization_id WHERE m.user_id=$1::uuid AND m.role='owner' ORDER BY s.created_at DESC`,[id]),
-    query(`SELECT a.id::text id,a.organization_id::text organization_id,a.business_id::text workspace_id,a.name,a.model_provider provider_code,a.status,a.temperature,a.locale,a.created_at::text created_at FROM ai_agents a JOIN organization_members m ON m.organization_id=a.organization_id WHERE m.user_id=$1::uuid AND m.role='owner' ORDER BY a.created_at DESC`,[id]),
-    query(`SELECT c.id::text id,c.organization_id::text organization_id,c.channel_type,c.is_active,c.verification_status,c.external_identifier,c.created_at::text created_at FROM channels c JOIN organization_members m ON m.organization_id=c.organization_id WHERE m.user_id=$1::uuid AND m.role='owner' ORDER BY c.created_at DESC`,[id]),
-    query(`SELECT c.id::text id,c.status,c.state,c.channel_id::text channel_id,c.last_message_at::text last_message_at,ch.channel_type,COALESCE(ct.first_name,'')||CASE WHEN ct.last_name IS NULL THEN '' ELSE ' '||ct.last_name END customer_name FROM conversations c JOIN organization_members m ON m.organization_id=c.organization_id LEFT JOIN channels ch ON ch.id=c.channel_id LEFT JOIN contacts ct ON ct.id=c.contact_id WHERE m.user_id=$1::uuid AND m.role='owner' ORDER BY c.last_message_at DESC LIMIT 50`,[id]),
-    query(`SELECT COUNT(*)::int requests,COALESCE(SUM(COALESCE(r.input_tokens,0)),0)::bigint input_tokens,COALESCE(SUM(COALESCE(r.output_tokens,0)),0)::bigint output_tokens,COALESCE(SUM(COALESCE(r.input_tokens,0)+COALESCE(r.output_tokens,0)),0)::bigint total_tokens FROM agent_runs r JOIN organization_members m ON m.organization_id=r.organization_id WHERE m.user_id=$1::uuid AND m.role='owner'`,[id])
+  const [workspaces,subscriptions,agents,channels,conversations,usage,payments,entitlements,recentEvents,auditActivity,knowledgeSources,errors]=await Promise.all([
+    query(\`SELECT o.id::text id,o.name,b.id::text business_id,b.name business_name,b.business_type_id business_type,COALESCE(b.status,'active') status,o.created_at::text created_at
+      FROM organization_members m JOIN organizations o ON o.id=m.organization_id LEFT JOIN businesses b ON b.organization_id=o.id WHERE m.user_id=$1::uuid AND m.role='owner' ORDER BY o.created_at DESC\`,[id]),
+    query(\`SELECT s.id::text id,s.organization_id::text organization_id,s.plan_tier plan_code,COALESCE(p.name,INITCAP(s.plan_tier)) plan_name,p.monthly_price::numeric price_monthly,p.currency,s.billing_cycle,s.status,s.period_start::text current_period_start,s.period_end::text current_period_end,s.minutes_used,s.sms_used,s.created_at::text created_at FROM subscriptions s LEFT JOIN plans p ON p.id=s.plan_id JOIN organization_members m ON m.organization_id=s.organization_id WHERE m.user_id=$1::uuid AND m.role='owner' ORDER BY s.created_at DESC\`,[id]),
+    query(\`SELECT a.id::text id,a.organization_id::text organization_id,a.business_id::text workspace_id,a.name,a.model_provider provider_code,a.status,a.temperature,a.locale,a.created_at::text created_at FROM ai_agents a JOIN organization_members m ON m.organization_id=a.organization_id WHERE m.user_id=$1::uuid AND m.role='owner' ORDER BY a.created_at DESC\`,[id]),
+    query(\`SELECT c.id::text id,c.organization_id::text organization_id,c.channel_type,c.is_active,c.verification_status,c.external_identifier,c.created_at::text created_at FROM channels c JOIN organization_members m ON m.organization_id=c.organization_id WHERE m.user_id=$1::uuid AND m.role='owner' ORDER BY c.created_at DESC\`,[id]),
+    query(\`SELECT c.id::text id,c.status,c.state,c.channel_id::text channel_id,c.last_message_at::text last_message_at,ch.channel_type,
+      COALESCE(NULLIF(ci.external_phone,''),NULLIF(ci.external_username,''),NULLIF(ci.external_user_id,''),ct.first_name) customer_name
+      FROM conversations c JOIN organization_members m ON m.organization_id=c.organization_id LEFT JOIN channels ch ON ch.id=c.channel_id
+      LEFT JOIN contacts ct ON ct.id=c.contact_id LEFT JOIN LATERAL(SELECT external_phone,external_username,external_user_id FROM contact_identities
+        WHERE contact_id=c.contact_id AND channel=ch.channel_type ORDER BY created_at DESC LIMIT 1) ci ON TRUE
+      WHERE m.user_id=$1::uuid AND m.role='owner' ORDER BY c.last_message_at DESC LIMIT 50\`,[id]),
+    query(\`SELECT COUNT(*)::int requests,COALESCE(SUM(COALESCE(r.input_tokens,0)),0)::bigint input_tokens,
+      COALESCE(SUM(COALESCE(r.output_tokens,0)),0)::bigint output_tokens,
+      COALESCE(SUM(COALESCE(r.input_tokens,0)+COALESCE(r.output_tokens,0)),0)::bigint total_tokens
+      FROM agent_runs r JOIN organization_members m ON m.organization_id=r.organization_id WHERE m.user_id=$1::uuid AND m.role='owner'\`,[id]),
+    query(\`SELECT i.id::text id,i.external_order_id,i.plan_code,i.amount_usd::numeric amount_usd,i.amount_yer::bigint amount_yer,i.status,i.provider,i.payment_reference,i.created_at::text created_at
+      FROM billing_payment_intents i JOIN organization_members m ON m.organization_id=i.organization_id WHERE m.user_id=$1::uuid AND m.role='owner' ORDER BY i.created_at DESC LIMIT 100\`,[id]),
+    query(\`SELECT oc.organization_id::text organization_id,oc.capability_id feature_key,c.name feature_name,oc.is_enabled,
+      be.limit_value,be.period,be.enabled quota_enabled FROM organization_capabilities oc JOIN capabilities c ON c.id=oc.capability_id
+      JOIN organization_members m ON m.organization_id=oc.organization_id LEFT JOIN billing_entitlements be ON be.organization_id=oc.organization_id AND be.feature_key=oc.capability_id
+      WHERE m.user_id=$1::uuid AND m.role='owner' ORDER BY c.name\`,[id]),
+    query(\`SELECT r.id::text id,r.model_provider,r.model,r.status,r.input_tokens,r.output_tokens,r.latency_ms,r.error_code,r.created_at::text created_at
+      FROM agent_runs r JOIN organization_members m ON m.organization_id=r.organization_id WHERE m.user_id=$1::uuid AND m.role='owner' ORDER BY r.created_at DESC LIMIT 30\`,[id]),
+    query(\`SELECT e.id::text id,e.action,e.entity_type,e.entity_id::text entity_id,e.metadata,e.created_at::text created_at
+      FROM audit_events e JOIN organization_members m ON m.organization_id=e.organization_id WHERE m.user_id=$1::uuid AND m.role='owner' ORDER BY e.created_at DESC LIMIT 50\`,[id]),
+    query(\`SELECT d.id::text id,d.file_name title,d.mime_type file_type,d.status,d.created_at::text created_at,
+      (SELECT COUNT(*) FROM knowledge_chunks k WHERE k.document_id=d.id)::int chunk_count
+      FROM knowledge_documents d JOIN organization_members m ON m.organization_id=d.organization_id WHERE m.user_id=$1::uuid AND m.role='owner' ORDER BY d.created_at DESC LIMIT 100\`,[id]),
+    query(\`SELECT r.id::text id,r.model_provider,r.model,r.error_code,r.created_at::text created_at
+      FROM agent_runs r JOIN organization_members m ON m.organization_id=r.organization_id WHERE m.user_id=$1::uuid AND m.role='owner' AND r.status='failed' ORDER BY r.created_at DESC LIMIT 50\`,[id])
   ]);
-  return {user,workspaces,subscriptions,invoices:[],payments:[],agents,channels,knowledgeSources:[],conversations,aiUsage:{summary:usage[0]||{},recentEvents:[]},auditActivity:[],sessions:[],errors:[],entitlements:[]};
+  return {user,workspaces,subscriptions,invoices:[],payments,agents,channels,knowledgeSources,conversations,
+    aiUsage:{summary:usage[0]||{},recentEvents},auditActivity,sessions:[],errors,entitlements};
 }
 
 export async function platformWorkspaces(search?:string) {
@@ -307,14 +332,19 @@ export async function platformOverview(period:string,startDate?:string,endDate?:
     dataLimitations:{revenue:'الإيراد المحصل محسوب من طلبات الدفع المؤكدة؛ لا يوجد دفتر فواتير منفصل.',expenses:'لا يوجد دفتر مصروفات تشغيلي في المخطط الحالي.',aiCost:aiCostAvailable?undefined:'سجل الرموز لا يحتوي تكلفة موثقة حتى الآن.',systemErrors:'لا يوجد سجل أخطاء تشغيلي موحد في مخطط PostgreSQL الحالي.'}};
 }
 
-export async function updatePlatformUser(id:string,p:{fullName?:string;email?:string;phone?:string|null}) {
-  const set:string[]=[],args:unknown[]=[];if(p.email!==undefined){args.push(p.email.trim().toLowerCase());set.push(`email=$${args.length}`);}
-  if(p.phone!==undefined){args.push(p.phone||null);set.push(`phone=$${args.length}`);}
-  if(p.fullName!==undefined){args.push(JSON.stringify({full_name:p.fullName.trim()}));set.push(`raw_user_meta_data=COALESCE(raw_user_meta_data,'{}'::jsonb)||$${args.length}::jsonb`);}
+export async function updatePlatformUser(id:string,p:{fullName?:string;email?:string;phone?:string|null;adminNotes?:string}) {
+  const set:string[]=[],args:unknown[]=[];
+  if(p.email!==undefined){args.push(p.email.trim().toLowerCase());set.push(\`email=$\${args.length}\`);}
+  if(p.phone!==undefined){args.push(p.phone||null);set.push(\`phone=$\${args.length}\`);}
+  const metadata:Record<string,string>={};
+  if(p.fullName!==undefined)metadata.full_name=p.fullName.trim();
+  if(p.adminNotes!==undefined)metadata.admin_notes=String(p.adminNotes||'').slice(0,4000);
+  if(Object.keys(metadata).length){args.push(JSON.stringify(metadata));set.push(\`raw_user_meta_data=COALESCE(raw_user_meta_data,'{}'::jsonb)||$\${args.length}::jsonb\`);}
   if(!set.length)throw new Error('لا توجد تغييرات لحفظها.');args.push(id);
-  const [r]=await query(`UPDATE auth.users SET ${set.join(',')},updated_at=NOW() WHERE id=$${args.length}::uuid AND deleted_at IS NULL RETURNING id::text id,email,phone`,args);
+  const [r]=await query(\`UPDATE auth.users SET \${set.join(',')},updated_at=NOW() WHERE id=$\${args.length}::uuid AND deleted_at IS NULL RETURNING id::text id,email,phone\`,args);
   if(!r)throw new Error('المستخدم غير موجود.');return r;
 }
+
 export async function platformUserAction(id:string,action:string) {
   if(!['suspend','reactivate'].includes(action))throw new Error('الإجراء غير مدعوم.');
   const [r]=await query(`UPDATE auth.users SET banned_until=${action==='suspend'?"NOW()+INTERVAL '100 years'":'NULL'},session_version=COALESCE(session_version,0)+1,updated_at=NOW()
