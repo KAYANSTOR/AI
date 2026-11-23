@@ -27,7 +27,7 @@ interface UserRow {
   workspaces_count: number;
   agents_count: number;
   total_tokens: number;
-  total_ai_cost_usd: number;
+  total_ai_cost_usd: number | null;
   conversations_count: number;
   last_active_at: string | null;
   created_at: string;
@@ -303,7 +303,7 @@ export function UsersPage({
                     <td className="px-4 py-3 font-mono tabular-nums">
                       <div>{formatNumber(u.total_tokens)} tok</div>
                       <div className="text-[11px] text-[var(--k-ink-muted)]">
-                        {formatCurrency(u.total_ai_cost_usd)}
+                        {u.total_ai_cost_usd == null ? 'غير متاح' : formatCurrency(u.total_ai_cost_usd)}
                       </div>
                     </td>
                     <td className="px-4 py-3 font-mono tabular-nums">{formatNumber(u.conversations_count)}</td>
