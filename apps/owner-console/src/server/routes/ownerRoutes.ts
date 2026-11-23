@@ -203,7 +203,7 @@ platformDataRouter.get('/entitlements', async (_req, res) => {
   try { res.json(await platformEntitlements()); } catch (err) { handleError(res, err, 503); }
 });
 platformDataRouter.post('/entitlements/overrides', requirePermission('users:write'), async (req, res) => {
-  try { const result=await platformEntitlementOverride(req.body||{}); writeAuditLog({actor:req.ownerAdmin!,action:'entitlement.overridden',entityType:'entitlement',entityId:String(result.id),summary:'تعديل استحقاق المؤسسة في PostgreSQL.',after:result,ipAddress:getClientIp(req)}); res.json(result); }
+  try { const result=await platformEntitlementOverride(req.body||{}); writeAuditLog({actor:req.ownerAdmin!,action:'entitlement.overridden',entityType:'entitlement',entityId:String(result.id),summary:String(req.body?.reason||'تعديل استحقاق المؤسسة في PostgreSQL.'),after:result,ipAddress:getClientIp(req)}); res.json(result); }
   catch (err) { handleError(res, err); }
 });
 
