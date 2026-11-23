@@ -5,12 +5,14 @@ let ephemeralEncryptionKey: Buffer | null = null;
 function getEncryptionKey(): Buffer {
   const configured = process.env.CREDENTIAL_ENCRYPTION_KEY?.trim();
   if (configured) {
-    // Support 32-byte base64 or arbitrary passphrase derived via SHA-256
-    const decoded = Buffer.from(configured, 'base64');
-    if (decoded.length === 32) {
-      return decoded;
+    // Match the main KAYAN AI CredentialService exactly: 64-char hex or base64 of 32 bytes.
+    const decoded = /^[0-9a-fA-F]{64}$/.test(configured)
+      ? Buffer.from(configured, 'hex')
+      : Buffer.from(configured, 'base64');
+    if (decoded.length !== 32) {
+      throw new Error('CREDENTIAL_ENCRYPTION_KEY must be 32 bytes encoded as base64 or 64-character hex.');
     }
-    return crypto.createHash('sha256').update(configured).digest();
+    return decoded;
   }
   if (!ephemeralEncryptionKey) {
     ephemeralEncryptionKey = crypto.randomBytes(32);
@@ -62,18 +64,20 @@ export function encryptSecret(plaintext: string): string {
   const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
   const encrypted = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
   const tag = cipher.getAuthTag();
-  return `v1:${iv.toString('base64')}:${tag.toString('base64')}:${encrypted.toString('base64')}`;
+  // Same versioned envelope as apps/web CredentialService.
+  return `v1:1:${iv.toString('base64')}:${tag.toString('base64')}:${encrypted.toString('base64')}`;
 }
 
 export function decryptSecret(ciphertext: string): string {
   const parts = ciphertext.split(':');
-  if (parts.length !== 4 || parts[0] !== 'v1') {
-    throw new Error('Invalid encrypted secret format.');
-  }
+  const legacy = parts.length === 4 && parts[0] === 'v1';
+  const current = parts.length === 5 && parts[0] === 'v1';
+  if (!legacy && !current) throw new Error('Invalid encrypted secret format.');
   const key = getEncryptionKey();
-  const iv = Buffer.from(parts[1], 'base64');
-  const tag = Buffer.from(parts[2], 'base64');
-  const encrypted = Buffer.from(parts[3], 'base64');
+  const iv = Buffer.from(parts[legacy ? 1 : 2], 'base64');
+  const tag = Buffer.from(parts[legacy ? 2 : 3], 'base64');
+  const encrypted = Buffer.from(parts[legacy ? 3 : 4], 'base64');
+  if (iv.length !== 12 || tag.length !== 16) throw new Error('Malformed encrypted secret.');
   const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
   decipher.setAuthTag(tag);
   return Buffer.concat([decipher.update(encrypted), decipher.final()]).toString('utf8');
