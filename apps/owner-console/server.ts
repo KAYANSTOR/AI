@@ -7,7 +7,7 @@ import { getDb } from './src/server/db/connection';
 import { ownerRouter } from './src/server/routes/ownerRoutes';
 import { logSystemError } from './src/server/services/monitoringService';
 import { isEncryptionKeyConfigured } from './src/server/security/crypto';
-import { platformPing } from './src/server/services/platformDataService';
+import { platformPing, platformStatus } from './src/server/services/platformDataService';
 
 export async function createAppServer() {
   // Production must never encrypt credentials with an ephemeral key.
@@ -34,7 +34,8 @@ export async function createAppServer() {
   app.get('/api/health', async (_req: Request, res: Response) => {
     try {
       await platformPing();
-      res.json({ status: 'ok', service: 'kayan-owner-console', platformDatabase: 'connected', timestamp: new Date().toISOString() });
+      await platformStatus();
+      res.json({ status: 'ok', service: 'kayan-owner-console', platformDatabase: 'connected', platformDataQueries: 'ok', timestamp: new Date().toISOString() });
     } catch (err) {
       const failure = err as { code?: string; message?: string };
       console.error('owner_console_platform_db_health_failed', { code: failure.code || 'unknown', message: failure.message || 'database connection failed' });
