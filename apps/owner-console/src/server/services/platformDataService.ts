@@ -163,15 +163,29 @@ export async function platformConversations(f:{search?:string;status?:string;cha
     ${clauses.length?'WHERE '+clauses.join(' AND '):''} ORDER BY c.last_message_at DESC LIMIT 1000`,args);
 }
 export async function platformEntitlements() {
-  const flags=await query(`SELECT feature_key id,feature_key key,feature_key name,'مزايا المؤسسة' description,'platform' category,'paid' tier_type,
-    CASE WHEN BOOL_OR(enabled) THEN 1 ELSE 0 END::int platform_enabled,ARRAY[]::text[] allowed_plan_codes,NULL::int default_quota,
-    COUNT(*) FILTER(WHERE enabled)::int active_users_estimate,COUNT(*) FILTER(WHERE source='owner_override' AND enabled)::int granted_overrides,
-    COUNT(*) FILTER(WHERE source='owner_override' AND NOT enabled)::int revoked_overrides
-    FROM billing_entitlements GROUP BY feature_key ORDER BY feature_key`);
-  const userOverrides=await query(`SELECT e.id::text id,e.organization_id::text organization_id,o.name organization_name,e.feature_key,e.limit_value custom_limit,
-    e.period,e.enabled override_enabled,e.source,e.updated_at::text updated_at FROM billing_entitlements e
-    JOIN organizations o ON o.id=e.organization_id WHERE e.source='owner_override' ORDER BY e.updated_at DESC LIMIT 2000`);
-  return {flags,userOverrides,activations:[],history:[]};
+  const flags=await query(`SELECT c.id,c.id key,c.name,c.description,'capability' category,'paid' tier_type,1::int platform_enabled,
+    ARRAY[]::text[] allowed_plan_codes,NULL::int default_quota,
+    (SELECT COUNT(DISTINCT m.user_id) FROM organization_capabilities oc JOIN organization_members m ON m.organization_id=oc.organization_id AND m.role='owner'
+      WHERE oc.capability_id=c.id AND oc.is_enabled)::int active_users_estimate,0::int granted_overrides,0::int revoked_overrides
+    FROM capabilities c ORDER BY c.name`);
+  const userOverrides=await query(`SELECT (oc.organization_id::text||':'||oc.capability_id) id,oc.organization_id::text organization_id,o.name organization_name,
+    oc.capability_id feature_key,c.name feature_name,
+    COALESCE(NULLIF(u.raw_user_meta_data->>'full_name',''),NULLIF(u.raw_user_meta_data->>'name',''),u.email) user_name,u.email user_email,
+    CASE WHEN oc.is_enabled THEN 'granted' ELSE 'revoked' END override_state,NULL::numeric custom_limit,oc.created_at::text updated_at
+    FROM organization_capabilities oc JOIN organizations o ON o.id=oc.organization_id JOIN capabilities c ON c.id=oc.capability_id
+    LEFT JOIN LATERAL(SELECT user_id FROM organization_members WHERE organization_id=oc.organization_id AND role='owner' ORDER BY created_at LIMIT 1) own ON TRUE
+    LEFT JOIN auth.users u ON u.id=own.user_id ORDER BY oc.created_at DESC LIMIT 2000`);
+  const activations=await query(`SELECT u.id::text id,COALESCE(NULLIF(u.raw_user_meta_data->>'full_name',''),NULLIF(u.raw_user_meta_data->>'name',''),u.email) full_name,u.email,
+    CASE WHEN u.banned_until>NOW() THEN 'suspended' ELSE 'active' END account_status,s.status activation_status,
+    s.period_start::text activation_start_at,s.period_end::text activation_end_at,p.name plan_name,NULL::text activation_source,NULL::text deactivation_reason
+    FROM auth.users u LEFT JOIN LATERAL(SELECT * FROM subscriptions WHERE organization_id IN(SELECT organization_id FROM organization_members WHERE user_id=u.id AND role='owner')
+      ORDER BY created_at DESC LIMIT 1) s ON TRUE LEFT JOIN plans p ON p.id=s.plan_id
+    WHERE u.deleted_at IS NULL ORDER BY u.created_at DESC LIMIT 1000`);
+  const history=await query(`SELECT e.id::text id,e.organization_id::text organization_id,o.name organization_name,e.actor_type,e.actor_id::text actor_id,
+    e.action,e.entity_type,e.entity_id::text entity_id,e.metadata,e.created_at::text created_at,u.email actor_email
+    FROM audit_events e LEFT JOIN organizations o ON o.id=e.organization_id LEFT JOIN auth.users u ON u.id=e.actor_id
+    ORDER BY e.created_at DESC LIMIT 60`);
+  return {flags,userOverrides,activations,history};
 }
 
 export async function platformOverview(period:string,startDate?:string,endDate?:string) {
@@ -248,11 +262,22 @@ export async function updatePlatformAgent(id:string,p:{status?:string}) {
 export async function platformEntitlementOverride(p:{userId:string;featureKey:string;overrideState?:'granted'|'revoked';enabled?:boolean;customLimit?:number|null;limit?:number|null;period?:string}) {
   const [org]=await query<{organization_id:string}>(`SELECT organization_id::text organization_id FROM organization_members WHERE user_id=$1::uuid AND role='owner' ORDER BY created_at LIMIT 1`,[p.userId]);
   if(!org)throw new Error('لا توجد مؤسسة مملوكة لهذا المستخدم.');
-  const period=['daily','monthly','unlimited'].includes(p.period||'')?p.period:'monthly';
-  const [r]=await query(`INSERT INTO billing_entitlements(organization_id,feature_key,limit_value,period,enabled,source,updated_at)
-    VALUES($1::uuid,$2,$3,$4,$5,'owner_override',NOW()) ON CONFLICT(organization_id,feature_key)
-    DO UPDATE SET limit_value=EXCLUDED.limit_value,period=EXCLUDED.period,enabled=EXCLUDED.enabled,source='owner_override',updated_at=NOW()
-    RETURNING id::text id,organization_id::text organization_id,feature_key,limit_value,period,enabled,source`,
-    [org.organization_id,p.featureKey,p.customLimit??p.limit??null,period,p.enabled??(p.overrideState!=='revoked')]);
-  return r;
+  const [cap]=await query<{id:string}>(`SELECT id FROM capabilities WHERE id=$1`,[p.featureKey]);
+  if(!cap)throw new Error('الميزة غير موجودة في كتالوج قدرات المنصة.');
+  const enabled=p.enabled??(p.overrideState!=='revoked');
+  const [result]=await query(`INSERT INTO organization_capabilities(organization_id,capability_id,is_enabled)
+    VALUES($1::uuid,$2,$3) ON CONFLICT(organization_id,capability_id) DO UPDATE SET is_enabled=EXCLUDED.is_enabled
+    RETURNING organization_id::text organization_id,capability_id,is_enabled,created_at::text created_at`,
+    [org.organization_id,p.featureKey,enabled]);
+  let quota:Record<string,unknown>|null=null;
+  const limit=p.customLimit??p.limit;
+  if(limit!==undefined&&limit!==null){
+    const period=['daily','monthly','unlimited'].includes(p.period||'')?p.period:'monthly';
+    const [qrow]=await query(`INSERT INTO billing_entitlements(organization_id,feature_key,limit_value,period,enabled,source,updated_at)
+      VALUES($1::uuid,$2,$3,$4,$5,'owner_override',NOW()) ON CONFLICT(organization_id,feature_key)
+      DO UPDATE SET limit_value=EXCLUDED.limit_value,period=EXCLUDED.period,enabled=EXCLUDED.enabled,source='owner_override',updated_at=NOW()
+      RETURNING id::text id,limit_value,period,enabled,source`,[org.organization_id,p.featureKey,limit,period,enabled]);
+    quota=qrow||null;
+  }
+  return {...result,feature_name:p.featureKey,override_state:enabled?'granted':'revoked',quota};
 }
