@@ -4,10 +4,10 @@ import postgres from 'postgres'
 import QRCode from 'qrcode'
 import makeWASocket, { Browsers, BufferJSON, DisconnectReason, initAuthCreds } from '@whiskeysockets/baileys'
 
-const PORT = Number(process.env.PORT || 3001)
+const PORT = Number(process.env.WHATSAPP_GATEWAY_PORT || 3001)
 const DATABASE_URL = requiredEnv('DATABASE_URL')
 const GATEWAY_TOKEN = requiredEnv('WHATSAPP_GATEWAY_TOKEN')
-const APP_INTERNAL_URL = requiredEnv('WHATSAPP_APP_INTERNAL_URL').replace(/\/+$/, '')
+const APP_INTERNAL_URL = (process.env.WHATSAPP_APP_INTERNAL_URL?.trim() || 'http://127.0.0.1:' + (process.env.PORT || 8080)).replace(/\/+$/, '')
 const SESSION_KEY = readEncryptionKey(requiredEnv('WHATSAPP_SESSION_ENCRYPTION_KEY'))
 const sql = postgres(DATABASE_URL, {
   max: 10,
@@ -200,7 +200,7 @@ async function startSocket(channelId, options = {}) {
         session.connectedAt = new Date().toISOString()
         session.lastError = null
         await persistSocketState(session)
-        await query("UPDATE public.channels SET is_active=true,verification_status='verified',updated_at=now() WHERE id=$1 AND channel_type='whatsapp' AND connection_mode='qr_unofficial' AND provider_account_id=$2",
+        await query("UPDATE public.channels SET verification_status='verified',updated_at=now() WHERE id=$1 AND channel_type='whatsapp' AND connection_mode='qr_unofficial' AND provider_account_id=$2",
           [channelId, session.phoneNumber])
       }
       if (update.connection === 'close') {
@@ -350,7 +350,7 @@ async function main() {
       if (status >= 500) console.error('whatsapp_gateway_request_failed', { reason: error instanceof Error ? error.message : 'unknown_error' })
     })
   })
-  server.listen(PORT, '0.0.0.0', () => console.log('whatsapp_gateway_listening', { port: PORT }))
+  server.listen(PORT, '127.0.0.1', () => console.log('whatsapp_gateway_listening', { port: PORT, scope: 'loopback' }))
   await restoreSessions()
 }
 main().catch(error => {

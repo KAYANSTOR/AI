@@ -32,6 +32,9 @@ async function resolveOwnedChannelCredentials(channel: OutboundChannel): Promise
   if (data.connection_mode === 'qr_unofficial' && data.is_active !== true) {
     throw new Error('قناة واتساب متوقفة حالياً.')
   }
+  if (data.connection_mode === 'qr_unofficial') {
+    return { __connection_mode: 'qr_unofficial' }
+  }
   const credentials = await resolveChannelProviderCredentials(admin, {
     channelId: data.id,
     channelType: channel.channelType,

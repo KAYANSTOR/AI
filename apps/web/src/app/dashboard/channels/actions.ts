@@ -670,7 +670,7 @@ export async function startWhatsAppQrSessionAction(input: {
       .maybeSingle()
     if (readError) throw new Error('تعذّرت قراءة قناة واتساب الحالية.')
 
-    if (!existing) {
+    if (!existing || existing.is_active !== true) {
       const tenantDb = await createClient()
       await assertWithinLimit(tenantDb, org.organizationId, 'channels', 1)
     }
@@ -680,7 +680,7 @@ export async function startWhatsAppQrSessionAction(input: {
       provider_account_id: number,
       external_identifier: number,
       connection_mode: 'qr_unofficial',
-      is_active: false,
+      is_active: true,
       verification_status: 'pending',
       updated_at: new Date().toISOString(),
     }
