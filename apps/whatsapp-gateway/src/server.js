@@ -16,6 +16,7 @@ const sql = postgres(DATABASE_URL, {
   ssl: isPrivateDatabaseUrl(DATABASE_URL) ? false : 'require',
 })
 const sockets = new Map()
+const reconnectTimers = new Map()
 
 function requiredEnv(name) {
   const value = process.env[name]?.trim()
@@ -32,6 +33,13 @@ function readEncryptionKey(value) {
   const key = /^[0-9a-f]{64}$/i.test(value) ? Buffer.from(value, 'hex') : Buffer.from(value, 'base64')
   if (key.length !== 32) throw new Error('WHATSAPP_SESSION_ENCRYPTION_KEY_must_decode_to_32_bytes')
   return key
+}
+function normalizePhoneNumber(value) {
+  const phoneNumber = String(value || '').trim()
+  if (!/^\+[1-9]\d{7,14}$/.test(phoneNumber)) {
+    throw Object.assign(new Error('invalid_phone_number'), { status: 400 })
+  }
+  return phoneNumber.slice(1)
 }
 function encryptText(value) {
   const iv = randomBytes(12)
@@ -169,6 +177,12 @@ async function startSocket(channelId, options = {}) {
     retries: options.retries || 0, creds, status: 'starting', qrDataUrl: null,
     pairingCode: null, connectedAt: stored.connected_at || null, lastError: null, sock: null,
   }
+  console.log('whatsapp_qr_socket_starting', {
+    channelId,
+    mode: session.mode,
+    retry: session.retries,
+    hasStoredCredentials: Boolean(stored.auth_creds_ciphertext),
+  })
   const sock = makeWASocket({
     auth: { creds, keys: createKeyStore(channelId) },
     browser: Browsers.ubuntu('Kayan AI'),
@@ -176,8 +190,15 @@ async function startSocket(channelId, options = {}) {
   })
   session.sock = sock
   sockets.set(channelId, session)
-  await persistSocketState(session)
-  await saveCreds(session)
+  try {
+    await persistSocketState(session)
+    await saveCreds(session)
+  } catch (error) {
+    session.stopping = true
+    if (sockets.get(channelId)?.sock === sock) sockets.delete(channelId)
+    try { sock.end(undefined) } catch {}
+    throw error
+  }
   sock.ev.on('creds.update', async update => {
     Object.assign(session.creds, update)
     try { await saveCreds(session) } catch (error) {
@@ -190,8 +211,9 @@ async function startSocket(channelId, options = {}) {
           (update.connection === 'connecting' || Boolean(update.qr)) &&
           !session.pairingRequested) {
         session.pairingRequested = true
+        console.log('whatsapp_qr_pairing_code_requesting', { channelId, connection: update.connection || null, hasQr: Boolean(update.qr) })
         try {
-          const code = await sock.requestPairingCode(session.phoneNumber.replace(/\D/g, ''))
+          const code = await sock.requestPairingCode(normalizePhoneNumber(session.phoneNumber))
           session.status = 'pairing_code'
           session.pairingCode = code
           session.qrDataUrl = null
@@ -217,6 +239,7 @@ async function startSocket(channelId, options = {}) {
         await persistSocketState(session)
       }
       if (update.connection === 'open') {
+        console.log('whatsapp_qr_socket_open', { channelId, mode: session.mode })
         session.status = 'connected'
         session.qrDataUrl = null
         session.pairingCode = null
@@ -233,6 +256,7 @@ async function startSocket(channelId, options = {}) {
         }
         const code = update.lastDisconnect?.error?.output?.statusCode || 0
         const loggedOut = code === DisconnectReason.loggedOut
+        console.warn('whatsapp_qr_socket_closed', { channelId, code, loggedOut, retry: session.retries })
         session.status = loggedOut ? 'disconnected' : 'reconnecting'
         session.qrDataUrl = null
         session.pairingCode = null
@@ -245,9 +269,15 @@ async function startSocket(channelId, options = {}) {
           await query("UPDATE public.channels SET is_active=false,verification_status='failed',updated_at=now() WHERE id=$1 AND connection_mode='qr_unofficial'", [channelId])
         } else if (session.retries < 5) {
           const wait = Math.min(15_000, 2_000 * (session.retries + 1))
-          setTimeout(() => startSocket(channelId, { mode: session.mode, retries: session.retries + 1, resume: true }).catch(error => {
-            console.error('whatsapp_qr_reconnect_failed', { channelId, reason: error instanceof Error ? error.message : 'reconnect_error' })
-          }), wait).unref?.()
+          clearTimeout(reconnectTimers.get(channelId))
+          const timer = setTimeout(() => {
+            reconnectTimers.delete(channelId)
+            startSocket(channelId, { mode: session.mode, retries: session.retries + 1, resume: true }).catch(error => {
+              console.error('whatsapp_qr_reconnect_failed', { channelId, reason: error instanceof Error ? error.message : 'reconnect_error' })
+            })
+          }, wait)
+          reconnectTimers.set(channelId, timer)
+          timer.unref?.()
         } else {
           session.status = 'failed'
           session.lastError = 'reconnect_attempts_exhausted'
@@ -269,8 +299,8 @@ async function startSocket(channelId, options = {}) {
 async function startSession(input) {
   const channelId = String(input.channelId || '')
   if (!/^[0-9a-f-]{36}$/i.test(channelId)) throw Object.assign(new Error('invalid_channel_id'), { status: 400 })
-  const phoneNumber = String(input.phoneNumber || '')
-  if (!/^\+[1-9]\d{7,14}$/.test(phoneNumber)) throw Object.assign(new Error('invalid_phone_number'), { status: 400 })
+  const phoneNumber = String(input.phoneNumber || '').trim()
+  normalizePhoneNumber(phoneNumber)
   if (!['qr', 'pairing_code'].includes(input.method)) throw Object.assign(new Error('invalid_connection_method'), { status: 400 })
   const channelRows = await query("SELECT id,organization_id,provider_account_id,external_identifier,connection_mode FROM public.channels WHERE id=$1 AND organization_id=$2 AND channel_type='whatsapp' LIMIT 1",
     [channelId, String(input.organizationId || '')])
@@ -286,6 +316,8 @@ async function startSession(input) {
     sockets.delete(channelId)
     try { previous.sock.end(undefined) } catch {}
   }
+  clearTimeout(reconnectTimers.get(channelId))
+  reconnectTimers.delete(channelId)
   const oldRows = await query("SELECT phone_number,status,auth_creds_ciphertext FROM public.whatsapp_gateway_sessions WHERE channel_id=$1 LIMIT 1", [channelId])
   const storedCreds = oldRows[0]?.auth_creds_ciphertext
     ? decryptJson(oldRows[0].auth_creds_ciphertext)
@@ -319,6 +351,8 @@ async function sendText(channelId, input) {
   return { messageId: result?.key?.id || null }
 }
 async function logoutSession(channelId) {
+  clearTimeout(reconnectTimers.get(channelId))
+  reconnectTimers.delete(channelId)
   const session = sockets.get(channelId)
   if (session) {
     sockets.delete(channelId)
@@ -330,9 +364,9 @@ async function logoutSession(channelId) {
   return { status: 'disconnected' }
 }
 async function restoreSessions() {
-  const rows = await query("SELECT s.channel_id FROM public.whatsapp_gateway_sessions s JOIN public.channels c ON c.id=s.channel_id WHERE s.status IN ('connected','reconnecting') AND s.auth_creds_ciphertext IS NOT NULL AND c.channel_type='whatsapp' AND c.connection_mode='qr_unofficial'")
+  const rows = await query("SELECT s.channel_id,s.status FROM public.whatsapp_gateway_sessions s JOIN public.channels c ON c.id=s.channel_id WHERE s.status IN ('connected','reconnecting','pairing_code') AND s.auth_creds_ciphertext IS NOT NULL AND c.channel_type='whatsapp' AND c.connection_mode='qr_unofficial'")
   for (const row of rows) {
-    startSocket(row.channel_id, { mode: 'qr', retries: 0, resume: true }).catch(error => {
+    startSocket(row.channel_id, { mode: row.status === 'pairing_code' ? 'pairing_code' : 'qr', retries: 0, resume: true }).catch(error => {
       console.error('whatsapp_qr_session_restore_failed', { channelId: row.channel_id, reason: error instanceof Error ? error.message : 'restore_error' })
     })
   }
@@ -376,6 +410,8 @@ main().catch(error => {
   process.exit(1)
 })
 process.on('SIGTERM', async () => {
+  for (const timer of reconnectTimers.values()) clearTimeout(timer)
+  reconnectTimers.clear()
   for (const session of sockets.values()) { try { session.sock.end(undefined) } catch {} }
   await sql.end({ timeout: 5 }).catch(() => undefined)
   process.exit(0)
