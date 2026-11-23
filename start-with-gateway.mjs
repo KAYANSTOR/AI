@@ -54,9 +54,8 @@ const ownerConsoleEnv = {
   OWNER_EMAIL: process.env.OWNER_CONSOLE_OWNER_EMAIL || 'jarallhalkboudi@gmail.com',
   OWNER_PASSCODE: process.env.OWNER_CONSOLE_OWNER_PASSCODE || '',
 }
-// The owner console has its own persistent SQLite store; never let the main
-// platform DATABASE_URL imply that its SQLite adapter is connected to Postgres.
-delete ownerConsoleEnv.DATABASE_URL
+// The owner console keeps its own SQLite store for owner sessions and audit logs,
+// while its platform data adapter uses the same canonical Railway PostgreSQL URL.
 launch('owner_console', ['--import', 'tsx', 'server.ts'], `${root}/apps/owner-console`, ownerConsoleEnv)
 
 launch('kayan_web', [`${root}/node_modules/next/dist/bin/next`, 'start', '-H', '0.0.0.0', '-p', port], `${root}/apps/web`)
