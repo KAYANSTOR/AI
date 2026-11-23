@@ -607,3 +607,27 @@ export async function platformReport(type:string) {
   const report=reports[type];if(!report)throw new Error('نوع التقرير غير معروف.');
   return {title:report.title,headers:report.headers,rows:await query(report.sql)};
 }
+
+
+export async function platformAiProviders() {
+  const [models]=await query(\`SELECT model_provider provider_code,model model_id,COUNT(*)::int request_count,
+    MAX(created_at)::text last_used_at FROM agent_runs WHERE model IS NOT NULL GROUP BY model_provider,model ORDER BY request_count DESC\`);
+  const providers=[
+    {code:'google',name:'Google Gemini',configured:Boolean(process.env.GEMINI_API_KEY?.trim()),defaultModel:process.env.GEMINI_MODEL||null},
+    {code:'groq',name:'Groq',configured:Boolean(process.env.GROQ_API_KEY?.trim()),defaultModel:process.env.GROQ_MODEL||null},
+    {code:'anthropic',name:'Anthropic',configured:Boolean(process.env.ANTHROPIC_API_KEY?.trim()),defaultModel:process.env.ANTHROPIC_MODEL||null}
+  ];
+  return {providers,models};
+}
+
+export async function platformNotificationsSupport() {
+  const [notifications,activityFeed]=await Promise.all([
+    query(\`SELECT n.id::text id,n.title,n.body,n.notification_type type,n.is_read, n.created_at::text created_at,
+      o.name workspace_name FROM notifications n JOIN organizations o ON o.id=n.organization_id
+      ORDER BY n.created_at DESC LIMIT 300\`),
+    query(\`SELECT e.id::text id,e.action,e.entity_type,e.entity_id::text entity_id,e.actor_type,e.created_at::text created_at,
+      o.name workspace_name,e.metadata FROM audit_events e LEFT JOIN organizations o ON o.id=e.organization_id
+      ORDER BY e.created_at DESC LIMIT 100\`)
+  ]);
+  return {notifications,tickets:[],activityFeed,dataLimitations:{tickets:'لا يوجد جدول تذاكر دعم فني في مخطط قاعدة المنصة الحالي؛ لم يتم عرض تذاكر محلية على أنها تذاكر إنتاجية.'}};
+}
