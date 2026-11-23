@@ -14,7 +14,30 @@ function query<T extends Record<string, unknown> = Record<string, unknown>>(text
 const count = (v: unknown) => Number(v ?? 0);
 const fullName = "COALESCE(NULLIF(u.raw_user_meta_data->>'full_name',''),NULLIF(u.raw_user_meta_data->>'name',''),NULLIF(split_part(COALESCE(u.email,''),'@',1),''),'مستخدم')";
 
-export async function platformPing() { await query('SELECT 1 AS ok'); return true; }
+export async function platformPing() {
+  const checks=[
+    'SELECT id,email,phone,created_at,last_sign_in_at,banned_until,session_version,raw_user_meta_data,deleted_at,updated_at FROM auth.users LIMIT 0',
+    'SELECT id,name,created_at FROM organizations LIMIT 0',
+    'SELECT id,organization_id,user_id,role,created_at FROM organization_members LIMIT 0',
+    'SELECT id,organization_id,name,business_type_id,status,created_at FROM businesses LIMIT 0',
+    'SELECT id,organization_id,plan_id,plan_tier,billing_cycle,status,period_start,period_end,current_period_start,current_period_end,minutes_used,sms_used,created_at,updated_at FROM subscriptions LIMIT 0',
+    'SELECT id,code,name,description,monthly_price,currency,limits,is_active,updated_at FROM plans LIMIT 0',
+    'SELECT id,organization_id,business_id,name,model_provider,status,temperature,locale,slug,created_at,updated_at FROM ai_agents LIMIT 0',
+    'SELECT id,organization_id,agent_id,model_provider,model,status,input_tokens,output_tokens,latency_ms,error_code,created_at FROM agent_runs LIMIT 0',
+    'SELECT id,organization_id,business_id,channel_type,is_active,verification_status,provider_account_id,external_identifier,created_at FROM channels LIMIT 0',
+    'SELECT id,organization_id,contact_id,channel_id,agent_id,status,state,priority,ai_paused_at,handoff_reason,last_message_at,created_at FROM conversations LIMIT 0',
+    'SELECT id,first_name,last_name FROM contacts LIMIT 0',
+    'SELECT id,conversation_id,created_at FROM messages LIMIT 0',
+    'SELECT id,organization_id,feature_key,limit_value,period,enabled,source,updated_at FROM billing_entitlements LIMIT 0',
+    'SELECT id,name,description FROM capabilities LIMIT 0',
+    'SELECT organization_id,capability_id,is_enabled,created_at FROM organization_capabilities LIMIT 0',
+    'SELECT id,organization_id,plan_id,plan_code,billing_cycle,amount_usd,amount_yer,exchange_rate,provider,external_order_id,provider_intent_id,provider_payment_id,payment_reference,status,failure_code,expires_at,verified_at,created_at,updated_at FROM billing_payment_intents LIMIT 0',
+    'SELECT id,organization_id,event_type,units,unit_cost,currency,occurred_at FROM usage_ledger LIMIT 0',
+    'SELECT id,organization_id,actor_type,actor_id,action,entity_type,entity_id,metadata,created_at FROM audit_events LIMIT 0'
+  ];
+  await Promise.all(checks.map((statement)=>query(statement)));
+  return true;
+}
 
 export async function platformStatus() {
   const [r] = await query<{db:string;users:string;orgs:string;subs:string}>(`SELECT current_database() db,(SELECT COUNT(*) FROM auth.users WHERE deleted_at IS NULL)::text users,(SELECT COUNT(*) FROM organizations)::text orgs,(SELECT COUNT(*) FROM subscriptions)::text subs`);
