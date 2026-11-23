@@ -251,12 +251,13 @@ export async function connectWhatsAppChannelAction(input: {
 
     if (!result.ok) return { ok: false, error: result.error }
 
-    const { data: channel } = await db
+    const { data: cloudChannels } = await db
       .from('channels')
-      .select('id')
+      .select('id, connection_mode')
       .eq('organization_id', org.organizationId)
       .eq('channel_type', 'whatsapp')
-      .maybeSingle()
+    const channel = cloudChannels?.find((row) => row.connection_mode === 'cloud_api') ??
+      cloudChannels?.find((row) => !row.connection_mode)
 
     if (channel?.id) {
       await audit(
@@ -288,6 +289,7 @@ export async function connectWhatsAppChannelAction(input: {
 export async function setChannelActiveAction(input: {
   channelType: string
   active: boolean
+  connectionMode?: string | null
 }): Promise<ChannelActionResult> {
   try {
     const org = await requireChannelAdmin()
@@ -297,14 +299,17 @@ export async function setChannelActiveAction(input: {
     const db = await createClient()
     const businessId = await ensurePrimaryBusinessId(org.organizationId, org.organizationName)
 
-    const { data, error } = await db
+    const { data: channelRows, error } = await db
       .from('channels')
       .select('id, is_active, verification_status, connection_mode')
       .eq('organization_id', org.organizationId)
       .eq('channel_type', spec.type)
-      .maybeSingle()
     if (error) throw new Error(error.message)
-    if (!data) return { ok: false, error: 'القناة غير مربوطة بعد.' }
+    const data = spec.type === 'whatsapp'
+      ? channelRows?.find((row) => row.connection_mode === input.connectionMode) ??
+        (input.connectionMode === 'cloud_api' ? channelRows?.find((row) => !row.connection_mode) : undefined)
+      : channelRows?.[0]
+    if (!data) return { ok: false, error: 'قناة طريقة الربط هذه غير مربوطة بعد.' }
 
     if (input.active && spec.type === 'whatsapp' && data.connection_mode === 'qr_unofficial') {
       const status = await callWhatsAppGateway<{ session: WhatsAppGatewaySession }>('GET', '/sessions/' + data.id + '/status')
@@ -368,6 +373,7 @@ export async function setChannelActiveAction(input: {
 
 export async function testChannelAction(input: {
   channelType: string
+  connectionMode?: string | null
 }): Promise<{ ok: boolean; error?: string; result?: BindingTestResult }> {
   try {
     const org = await requireChannelAdmin()
@@ -375,16 +381,19 @@ export async function testChannelAction(input: {
     if (!spec) return { ok: false, error: 'نوع قناة غير معروف.' }
 
     const db = await createClient()
-    const { data, error } = await db
+    const { data: channelRows, error } = await db
       .from('channels')
       .select(
         'id, channel_type, provider_account_id, external_identifier, verification_status, is_active, business_id, updated_at, connection_mode'
       )
       .eq('organization_id', org.organizationId)
       .eq('channel_type', spec.type)
-      .maybeSingle()
     if (error) throw new Error(error.message)
-    if (!data) return { ok: false, error: 'القناة غير مربوطة بعد.' }
+    const data = spec.type === 'whatsapp'
+      ? channelRows?.find((row) => row.connection_mode === input.connectionMode) ??
+        (input.connectionMode === 'cloud_api' ? channelRows?.find((row) => !row.connection_mode) : undefined)
+      : channelRows?.[0]
+    if (!data) return { ok: false, error: 'قناة طريقة الربط هذه غير مربوطة بعد.' }
 
     const result = await verifyChannelBinding(db, data as unknown as ChannelRow)
     if (spec.type === 'whatsapp' && data.connection_mode === 'qr_unofficial') {
@@ -667,6 +676,7 @@ export async function startWhatsAppQrSessionAction(input: {
       .select('id, connection_mode, is_active')
       .eq('organization_id', org.organizationId)
       .eq('channel_type', 'whatsapp')
+      .eq('connection_mode', 'qr_unofficial')
       .maybeSingle()
     if (readError) throw new Error('تعذّرت قراءة قناة واتساب الحالية.')
 
@@ -732,6 +742,7 @@ export async function getWhatsAppQrSessionStatusAction(): Promise<{
       .select('id, connection_mode')
       .eq('organization_id', org.organizationId)
       .eq('channel_type', 'whatsapp')
+      .eq('connection_mode', 'qr_unofficial')
       .maybeSingle()
     if (error) throw new Error('تعذّرت قراءة حالة قناة واتساب.')
     if (!channel || channel.connection_mode !== 'qr_unofficial') {
@@ -753,6 +764,7 @@ export async function disconnectWhatsAppQrSessionAction(): Promise<ChannelAction
       .select('id, business_id, connection_mode')
       .eq('organization_id', org.organizationId)
       .eq('channel_type', 'whatsapp')
+      .eq('connection_mode', 'qr_unofficial')
       .maybeSingle()
     if (error || !channel?.id || channel.connection_mode !== 'qr_unofficial') {
       return { ok: false, error: 'لا توجد جلسة QR مربوطة بهذا النشاط.' }

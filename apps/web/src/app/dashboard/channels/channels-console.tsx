@@ -18,9 +18,11 @@ import { registerWhatsAppCloudApiNumberAction } from '@/app/onboarding/embedded-
 import { ChannelCard as UIChannelCard, type ChannelStatus } from '@/components/ui/channel-card'
 
 type ChannelCard = {
+  key: string
   type: ChannelType
   label: string
   provider: string
+  description: string
   publicNumberLabel: string | null
   publicNumber: string | null
   connected: boolean
@@ -55,16 +57,42 @@ export function ChannelsConsole({
   cards: ChannelCard[]
   canManage: boolean
 }) {
-  const [openType, setOpenType] = useState<ChannelType | null>(null)
-  const [busyType, setBusyType] = useState<ChannelType | null>(null)
+  const [openKey, setOpenKey] = useState<string | null>(null)
+  const [busyKey, setBusyKey] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
-  const openCard = useMemo(() => cards.find((card) => card.type === openType) ?? null, [cards, openType])
+  const openCard = useMemo(() => cards.find((card) => card.key === openKey) ?? null, [cards, openKey])
 
-  if (openCard) return <ChannelDialog card={openCard} canManage={canManage} onClose={() => setOpenType(null)} />
+  if (openCard) return <ChannelDialog card={openCard} canManage={canManage} onClose={() => setOpenKey(null)} />
 
   return (
     <div className="space-y-6">
       {notice ? <p role="status" className="rounded-xl border border-border bg-surface px-4 py-3 text-sm text-text">{notice}</p> : null}
+      <section aria-labelledby="whatsapp-channel-options-title" className="space-y-3">
+        <div>
+          <h2 id="whatsapp-channel-options-title" className="text-base font-bold text-text">قنوات واتساب</h2>
+          <p className="mt-1 text-xs leading-6 text-text-muted">اختر طريقة الربط المناسبة. لكل بطاقة اتصال وإعدادات وحالة مستقلة.</p>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          {cards.filter((card) => card.type === 'whatsapp').map((card) => {
+            const state = stateOf(card)
+            const status: ChannelStatus =
+              state === 'verified' ? 'connected' : state === 'pending' || state === 'error' ? 'needsSetup' : 'disconnected'
+            return (
+              <UIChannelCard
+                key={card.key}
+                name={card.label}
+                description={card.publicNumber ? `${card.publicNumber} · ${card.provider}` : card.description}
+                status={status}
+                icon={<MessageCircle className="h-6 w-6" aria-hidden="true" />}
+                iconBg="bg-[#25D366]"
+                actionLabel={state === 'verified' ? 'إدارة الاتصال' : state === 'pending' ? 'استكمال الربط' : 'إعداد هذه الطريقة'}
+                onAction={() => setOpenKey(card.key)}
+              />
+            )
+          })}
+        </div>
+      </section>
+
       <section aria-labelledby="channels-active-title" className="space-y-3">
         <div className="flex items-center justify-between gap-3">
           <div>
@@ -76,7 +104,7 @@ export function ChannelsConsole({
           </span>
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
-        {cards.filter((card) => card.connected && card.verificationStatus === 'verified').map((card) => {
+        {cards.filter((card) => card.type !== 'whatsapp' && card.connected && card.verificationStatus === 'verified').map((card) => {
           const state = stateOf(card)
           const status: ChannelStatus =
             state === 'verified' ? 'connected' : state === 'pending' || state === 'error' ? 'needsSetup' : 'disconnected'
@@ -102,25 +130,25 @@ export function ChannelsConsole({
           const iconBg = card.type === 'whatsapp' ? 'bg-[#25D366]' : card.type === 'messenger' ? 'bg-[#0866FF]' : 'bg-primary'
 
           const toggleChannel = async () => {
-            if (!canManage || busyType) return
-            setBusyType(card.type)
-            const result = await setChannelActiveAction({ channelType: card.type, active: !card.isActive })
+            if (!canManage || busyKey) return
+            setBusyKey(card.key)
+            const result = await setChannelActiveAction({ channelType: card.type, active: !card.isActive, connectionMode: card.connectionMode })
             setNotice(result.ok ? (result.message ?? 'تم تحديث حالة القناة.') : (result.error ?? 'تعذّر تحديث القناة.'))
-            setBusyType(null)
+            setBusyKey(null)
             if (result.ok) window.location.reload()
           }
 
           return (
-            <div key={card.type} className="space-y-2">
+            <div key={card.key} className="space-y-2">
               <UIChannelCard
-              key={card.type}
+              key={card.key}
               name={card.label}
-              description={card.publicNumber ? `${card.publicNumber} · ${card.provider}` : card.connectionMode === 'coexistence' ? 'يعمل الرقم مع تطبيق WhatsApp Business وKayan AI معاً' : stateCopy[state].hint}
+              description={card.publicNumber ? `${card.publicNumber} · ${card.provider}` : card.description}
               status={status}
               icon={getChannelIcon()}
               iconBg={iconBg}
               actionLabel={state === 'verified' ? 'إدارة القناة' : state === 'pending' ? 'استكمال الربط' : state === 'disabled' ? 'إعادة تفعيل القناة' : 'ربط القناة'}
-              onAction={() => setOpenType(card.type)}
+              onAction={() => setOpenKey(card.key)}
             />
               <div className="flex items-center justify-between rounded-xl border border-border bg-surface px-4 py-3">
                 <span className="text-xs text-text-muted">{state === 'verified' && card.isActive ? 'الرد والتوجيه مفعّلان' : state === 'disabled' ? 'القناة متوقفة' : 'تحتاج إلى إكمال الإعداد'}</span>
@@ -129,7 +157,7 @@ export function ChannelsConsole({
                   role="switch"
                   aria-checked={card.isActive}
                   aria-label={card.isActive ? 'إيقاف القناة' : 'تفعيل القناة'}
-                  disabled={!canManage || busyType === card.type || state === 'pending' || state === 'error' || state === 'not_connected'}
+                  disabled={!canManage || busyKey === card.key || state === 'pending' || state === 'error' || state === 'not_connected'}
                   onClick={toggleChannel}
                   className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${card.isActive ? 'bg-success' : 'bg-border-strong'}`}
                 >
@@ -148,19 +176,19 @@ export function ChannelsConsole({
           <p className="mt-1 text-xs text-text-muted">اختر قناة لإكمال إعدادها وربطها بحسابك</p>
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
-          {cards.filter((card) => !card.connected || card.verificationStatus !== 'verified').map((card) => {
+          {cards.filter((card) => card.type !== 'whatsapp' && (!card.connected || card.verificationStatus !== 'verified')).map((card) => {
             const state = stateOf(card)
             const getIcon = () => card.type === 'phone' ? <Phone className="h-6 w-6" aria-hidden="true" /> : card.type === 'messenger' ? <MessageCircle className="h-6 w-6" aria-hidden="true" /> : <MessageSquare className="h-6 w-6" aria-hidden="true" />
             return (
               <UIChannelCard
-                key={card.type}
+                key={card.key}
                 name={card.label}
                 description={getChannelSpec(card.type)?.bindingHint ?? stateCopy[state].hint}
                 status={state === 'pending' || state === 'error' ? 'needsSetup' : 'disconnected'}
                 icon={getIcon()}
                 iconBg={card.type === 'messenger' ? 'bg-[#0866FF]' : 'bg-primary'}
                 actionLabel="إعداد القناة"
-                onAction={() => setOpenType(card.type)}
+                onAction={() => setOpenKey(card.key)}
               />
             )
           })}
@@ -217,7 +245,7 @@ function ChannelDialog({
       setNotice(null)
       setTestResult(null)
       try {
-        const result = await testChannelAction({ channelType: card.type })
+        const result = await testChannelAction({ channelType: card.type, connectionMode: card.connectionMode })
         setNotice({
           ok: result.ok,
           text: result.ok ? 'تم اجتياز فحص الربط.' : result.error ?? 'فشل الفحص.',
@@ -239,6 +267,7 @@ function ChannelDialog({
       const result = await setChannelActiveAction({
         channelType: card.type,
         active: state === 'disabled',
+        connectionMode: card.connectionMode,
       })
       setNotice({
         ok: result.ok,
@@ -275,14 +304,28 @@ function ChannelDialog({
           <div>
             <p className="text-xs font-semibold text-secondary">إعدادات القنوات</p>
             <h1 id="channel-dialog-title" className="mt-1 text-2xl font-bold text-text">
-              {card.type === 'telegram' ? 'إعدادات تيليجرام' : card.type === 'messenger' ? 'إعدادات Facebook Messenger' : `إعدادات ${card.label}`}
+              {card.type === 'whatsapp'
+                ? card.connectionMode === 'coexistence'
+                  ? 'إعداد واتساب الأعمال عبر Meta'
+                  : card.connectionMode === 'cloud_api'
+                    ? 'إعداد واتساب العادي عبر Meta'
+                    : 'إعداد واتساب عبر QR أو رقم الهاتف'
+                : card.type === 'telegram' ? 'إعدادات تيليجرام' : card.type === 'messenger' ? 'إعدادات Facebook Messenger' : `إعدادات ${card.label}`}
             </h1>
             <p className="mt-2 inline-flex items-center gap-2 rounded-full border border-border bg-background px-3 py-1 text-xs font-semibold text-text-muted">
               <span className={`h-2 w-2 rounded-full ${state === 'verified' ? 'bg-success' : 'bg-text-muted'}`} />
               {state === 'verified' ? 'متصل' : 'غير متصل'}
             </p>
             <p className="mt-3 text-sm leading-6 text-text-muted">
-              {card.type === 'telegram' ? 'اربط بوت تيليجرام ليرد مساعدك على الرسائل التي يرسلها العملاء إليه.' : card.connectionMode === 'coexistence' ? 'الرقم يعمل مع WhatsApp Business App وKayan AI معاً؛ لا يلزم إدخال PIN.' : stateCopy[state].hint}
+              {card.type === 'telegram'
+                ? 'اربط بوت تيليجرام ليرد مساعدك على الرسائل التي يرسلها العملاء إليه.'
+                : card.type === 'whatsapp'
+                  ? card.connectionMode === 'coexistence'
+                    ? 'اربط WhatsApp Business App عبر Meta مع الاستمرار في استخدام التطبيق على الهاتف.'
+                    : card.connectionMode === 'cloud_api'
+                      ? 'اربط WhatsApp Cloud API من Meta دون دمج هذا الاتصال مع بطاقة QR أو بطاقة WhatsApp Business App.'
+                      : 'اربط جهاز واتساب من هاتفك عبر QR أو رمز الربط برقم الهاتف.'
+                  : stateCopy[state].hint}
             </p>
           </div>
           <button type="button" onClick={onClose} className="inline-flex shrink-0 items-center gap-2 rounded-xl border border-border px-3 py-2 text-sm font-semibold text-text hover:bg-background" aria-label="العودة إلى القنوات">
@@ -291,9 +334,20 @@ function ChannelDialog({
         </header>
 
         <div className="space-y-6 px-5 py-6 sm:px-7">
-          {card.type === 'whatsapp' && (state !== 'verified' || card.connectionMode === 'qr_unofficial') ? (
-            <div className="space-y-2">
+          {card.type === 'whatsapp' && card.connectionMode !== 'qr_unofficial' ? (
+            <section className="space-y-3 rounded-2xl border border-border bg-background p-4">
+              <div>
+                <h2 className="text-sm font-bold text-text">
+                  {card.connectionMode === 'coexistence' ? 'الربط عبر WhatsApp Business App' : 'الربط عبر WhatsApp Cloud API'}
+                </h2>
+                <p className="mt-1 text-xs leading-6 text-text-muted">
+                  {card.connectionMode === 'coexistence'
+                    ? 'هذا المسار مخصص لرقم يعمل في تطبيق WhatsApp Business، مع إبقاء التطبيق متاحاً على الهاتف.'
+                    : 'هذا المسار مخصص لربط رقم WhatsApp Cloud API مباشرة. إذا كان الرقم مستخدماً في تطبيق واتساب، فقد تطلب Meta نقله إلى منصة الأعمال قبل إكمال الإعداد.'}
+                </p>
+              </div>
               <WhatsAppEmbeddedSignupButton
+                mode={card.connectionMode === 'coexistence' ? 'coexistence' : 'cloud_api'}
                 disabled={!canManage}
                 onSuccess={(message) => {
                   setNotice({ ok: true, text: message })
@@ -301,13 +355,12 @@ function ChannelDialog({
                 }}
                 onError={(message) => setNotice({ ok: false, text: message })}
               />
-              <p className="text-xs leading-5 text-text-muted">
-                استخدم زر Meta للربط الرسمي، أو اختر QR/رمز الهاتف أدناه لربط تطبيق واتساب مباشرة. حفظ الرقم وحده لا يستقبل رسائل العملاء.
-              </p>
-            </div>
+            </section>
           ) : null}
 
-          {card.type === 'whatsapp' ? <WhatsAppQrConnector disabled={!canManage} connectionMode={card.connectionMode} publicNumber={card.publicNumber} /> : null}
+          {card.type === 'whatsapp' && card.connectionMode === 'qr_unofficial' ? (
+            <WhatsAppQrConnector disabled={!canManage} connectionMode={card.connectionMode} publicNumber={card.publicNumber} />
+          ) : null}
 
           {card.type === 'whatsapp' && card.connected && card.connectionMode === 'coexistence' ? (
             <section className="space-y-2 rounded-2xl border border-success/30 bg-success/5 p-4">
@@ -319,7 +372,7 @@ function ChannelDialog({
             </section>
           ) : null}
 
-          {card.type === 'whatsapp' && card.connected && card.connectionMode !== 'coexistence' && card.connectionMode !== 'qr_unofficial' && state !== 'verified' ? (
+          {card.type === 'whatsapp' && card.connected && card.connectionMode === 'cloud_api' && state !== 'verified' ? (
             <section className="space-y-3 rounded-2xl border border-warning/40 bg-warning/5 p-4">
               <div>
                 <h3 className="text-sm font-bold text-text">تسجيل رقم الإرسال على WhatsApp</h3>
@@ -430,34 +483,30 @@ function ChannelDialog({
                 <span className="mt-1 block text-xs text-text-muted">يُحفظ المفتاح مشفّرًا ولا يظهر مجددًا بعد نجاح الربط.</span>
               </label>
             </section>
-          ) : (
+          ) : card.type !== 'whatsapp' ? (
             <label className="block">
               <span className="text-sm font-semibold text-text">
-                {card.type === 'whatsapp'
-                  ? 'رقم واتساب للأعمال (اختياري قبل الربط)'
-                  : card.type === 'instagram'
-                    ? 'معرّف حساب Instagram Business'
-                    : card.type === 'phone' ? 'معرّف رقم Vapi' : 'رقم Twilio'}
+                {card.type === 'instagram'
+                  ? 'معرّف حساب Instagram Business'
+                  : card.type === 'phone' ? 'معرّف رقم Vapi' : 'رقم Twilio'}
               </span>
               <span className="mt-1 block text-xs leading-5 text-text-muted">
-                {card.type === 'whatsapp'
-                  ? 'احفظ الرقم للمرجع فقط. الربط الرسمي عبر زر Meta أعلاه.'
-                  : card.type === 'instagram'
-                    ? 'يُستخدم فقط لإنشاء الربط؛ لن نعرضه في الصفحة بعد الحفظ.'
-                    : 'أدخل المعرّف أو الرقم المطلوب للقناة.'}
+                {card.type === 'instagram'
+                  ? 'يُستخدم فقط لإنشاء الربط؛ لن نعرضه في الصفحة بعد الحفظ.'
+                  : 'أدخل المعرّف أو الرقم المطلوب للقناة.'}
               </span>
               <input
                 value={identifier}
                 onChange={(event) => setIdentifier(event.target.value)}
                 dir="ltr"
                 autoComplete="off"
-                inputMode={card.type === 'whatsapp' || card.type === 'sms' ? 'tel' : 'numeric'}
-                placeholder={card.type === 'whatsapp' ? '+967777123456' : spec.bindingPlaceholder}
+                inputMode={card.type === 'sms' ? 'tel' : 'numeric'}
+                placeholder={spec.bindingPlaceholder}
                 className="mt-2 min-h-12 w-full rounded-xl border border-border bg-background px-3 text-base text-text outline-none focus:border-secondary focus:ring-2 focus:ring-accent/40"
                 disabled={busy || !canManage}
               />
             </label>
-          )}
+          ) : null}
 
           <div className="rounded-2xl border border-border bg-background p-4">
             <div className="flex items-center justify-between gap-3">
@@ -508,7 +557,7 @@ function ChannelDialog({
           ) : null}
 
           <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-            {canManage && card.type !== 'messenger' && !(card.type === 'whatsapp' && card.connectionMode === 'qr_unofficial') ? (
+            {canManage && card.type !== 'messenger' && card.type !== 'whatsapp' ? (
               <button
                 type="button"
                 onClick={submit}

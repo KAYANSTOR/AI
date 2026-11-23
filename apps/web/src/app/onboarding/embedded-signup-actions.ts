@@ -80,6 +80,7 @@ export async function completeWhatsAppEmbeddedSignupAction(input: {
   businessPortfolioId?: string | null
   isOnBusinessApp?: boolean
   primaryWaacIds?: string[]
+  requestedMode?: 'coexistence' | 'cloud_api'
 }): Promise<OnboardingResult> {
   try {
     const org = await requireOnboardingAdmin()
@@ -100,6 +101,7 @@ export async function completeWhatsAppEmbeddedSignupAction(input: {
       organizationId: org.organizationId,
       businessId: (profile?.business_id as string | null) ?? null,
       organizationName: org.organizationName,
+      requestedMode: input.requestedMode ?? 'coexistence',
       session: {
         code: input.code,
         phoneNumberId: input.phoneNumberId ?? null,
@@ -150,12 +152,14 @@ export async function registerWhatsAppCloudApiNumberAction(input: {
     const org = await requireOnboardingAdmin()
     const pin = String(input?.pin ?? '').trim()
     const admin = createAdminClient()
-    const { data: channel, error: channelError } = await admin
+    const { data: channelRows, error: channelError } = await admin
       .from('channels')
       .select('id, provider_account_id, business_id, channel_type, connection_mode, waba_id')
       .eq('organization_id', org.organizationId)
       .eq('channel_type', 'whatsapp')
-      .maybeSingle()
+
+    const channel = channelRows?.find((row) => row.connection_mode === 'cloud_api') ??
+      channelRows?.find((row) => !row.connection_mode)
 
     if (channelError) {
       console.error('WhatsApp registration: unable to load owned channel', channelError)

@@ -51,22 +51,54 @@ export default async function ChannelsPage({
     channelsError = databaseErrorMessage(error, ar.errors.load)
   }
 
-  const byType = new Map(rows.map((row) => [row.channel_type, row]))
-  // Render only channel types backed by an existing server-side integration.
-  const cards = CHANNEL_SPECS.map((spec) => {
-      const row = byType.get(spec.type)
-      return {
-        type: spec.type,
-        label: spec.label,
-        provider: spec.provider,
-        publicNumberLabel: spec.publicNumberLabel,
-        publicNumber: row?.external_identifier ?? null,
-        connected: Boolean(row?.id),
-        verificationStatus: row?.verification_status ?? null,
-        isActive: row?.is_active === true,
-        connectionMode: row?.connection_mode ?? null,
-      }
-    })
+  // WhatsApp has three independently managed connection modes. Legacy rows without
+  // a mode are treated as the standard Cloud API connection.
+  const whatsappModes = [
+    { key: 'whatsapp-business-app', connectionMode: 'coexistence', label: 'واتساب الأعمال عبر Meta', provider: 'Meta · WhatsApp Business App', description: 'اربط تطبيق WhatsApp Business مع Kayan AI مع استمرار استخدام التطبيق على الهاتف.' },
+    { key: 'whatsapp-meta-api', connectionMode: 'cloud_api', label: 'واتساب العادي عبر Meta', provider: 'Meta · WhatsApp Cloud API', description: 'اربط رقم WhatsApp Cloud API مباشرة عبر إعداد Meta الرسمي. قد تتطلب Meta نقل الرقم من تطبيق واتساب الحالي.' },
+    { key: 'whatsapp-qr', connectionMode: 'qr_unofficial', label: 'واتساب عبر QR أو رقم الهاتف', provider: 'WhatsApp Web · QR / Pairing Code', description: 'اربط حساب واتساب من هاتفك بمسح QR أو إدخال رمز الربط الذي يولّده رقم الهاتف.' },
+  ] as const
+
+  const whatsappCards = whatsappModes.map((mode) => {
+    const exactRow = rows.find((row) =>
+      row.channel_type === 'whatsapp' && row.connection_mode === mode.connectionMode
+    )
+    const row = exactRow ?? (mode.connectionMode === 'cloud_api'
+      ? rows.find((item) => item.channel_type === 'whatsapp' && !item.connection_mode)
+      : undefined)
+    return {
+      key: mode.key,
+      type: 'whatsapp' as const,
+      label: mode.label,
+      provider: mode.provider,
+      description: mode.description,
+      publicNumberLabel: 'رقم واتساب',
+      publicNumber: row?.external_identifier ?? null,
+      connected: Boolean(row?.id),
+      verificationStatus: row?.verification_status ?? null,
+      isActive: row?.is_active === true,
+      connectionMode: mode.connectionMode,
+    }
+  })
+
+  const otherCards = CHANNEL_SPECS.filter((spec) => spec.type !== 'whatsapp').map((spec) => {
+    const row = rows.find((item) => item.channel_type === spec.type)
+    return {
+      key: spec.type,
+      type: spec.type,
+      label: spec.label,
+      provider: spec.provider,
+      description: spec.bindingHint,
+      publicNumberLabel: spec.publicNumberLabel,
+      publicNumber: row?.external_identifier ?? null,
+      connected: Boolean(row?.id),
+      verificationStatus: row?.verification_status ?? null,
+      isActive: row?.is_active === true,
+      connectionMode: row?.connection_mode ?? null,
+    }
+  })
+
+  const cards = [...whatsappCards, ...otherCards]
 
   return (
     <div className="space-y-6">

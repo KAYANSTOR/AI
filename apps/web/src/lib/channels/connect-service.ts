@@ -42,6 +42,7 @@ export type WhatsAppChannelRow = {
   external_identifier: string | null
   verification_status: string | null
   is_active: boolean | null
+  connection_mode?: string | null
 }
 
 function required(value: string | undefined | null): string | undefined {
@@ -143,16 +144,16 @@ export async function connectWhatsAppChannel(input: {
   try {
     const { data: existing, error: readError } = await input.db
       .from('channels')
-      .select('id, provider_account_id, external_identifier, verification_status, is_active')
+      .select('id, provider_account_id, external_identifier, verification_status, is_active, connection_mode')
       .eq('organization_id', input.organizationId)
       .eq('channel_type', 'whatsapp')
-      .maybeSingle()
 
     if (readError) {
       console.error('Connect: unable to load WhatsApp channel', readError)
     }
 
-    const channel = (existing as unknown as WhatsAppChannelRow | null) ?? null
+    const channel = ((existing ?? []).find((row) => row.connection_mode === 'cloud_api') ??
+      (existing ?? []).find((row) => !row.connection_mode) ?? null) as unknown as WhatsAppChannelRow | null
     const outcome = await resolveWhatsAppBinding({
       db: input.db,
       channel,
@@ -164,6 +165,7 @@ export async function connectWhatsAppChannel(input: {
       provider_account_id: outcome.phoneNumberId,
       external_identifier: number,
       verification_status: outcome.status === 'verified' ? 'verified' : 'pending',
+      connection_mode: 'cloud_api',
       is_active: outcome.status === 'verified',
       updated_at: new Date().toISOString(),
     }

@@ -222,6 +222,7 @@ export const CompleteEmbeddedSignupInputSchema = z.object({
   organizationId: z.string().uuid(),
   businessId: z.string().uuid().nullable(),
   organizationName: z.string().trim().max(200).nullable().optional(),
+  requestedMode: z.enum(['coexistence', 'cloud_api']).default('coexistence'),
   session: EmbeddedSignupSessionSchema,
 }).strict()
 
@@ -704,7 +705,7 @@ export async function completeEmbeddedSignup(input: unknown): Promise<EmbeddedSi
   if (!parsedInput.success) {
     return { ok: false, error: 'بيانات الربط من Meta غير مكتملة أو غير صالحة. أعد بدء الربط.' }
   }
-  const { organizationId, businessId: suppliedBusinessId, organizationName, session } = parsedInput.data
+  const { organizationId, businessId: suppliedBusinessId, organizationName, requestedMode, session } = parsedInput.data
   let tokenBuffer: Buffer | null = null
 
   try {
@@ -727,14 +728,23 @@ export async function completeEmbeddedSignup(input: unknown): Promise<EmbeddedSi
       platformType: phoneState.platformType,
       sessionMarkedCoexistence: session.isOnBusinessApp === true,
     })
+    if (connectionMode !== requestedMode) {
+      throw new Error(requestedMode === 'coexistence'
+        ? 'أكدت Meta أن هذا الرقم لا يعمل في تطبيق WhatsApp Business. استخدم بطاقة واتساب العادي عبر Meta بدلاً من هذه البطاقة.'
+        : 'أكدت Meta أن هذا الرقم مرتبط بتطبيق WhatsApp Business ويدعم الاستمرار معه. استخدم بطاقة واتساب الأعمال عبر Meta.')
+    }
     const displayNumber = phoneState.displayPhoneNumber ??
       (session.displayPhoneNumber ? normalizeChannelNumber(session.displayPhoneNumber) : null)
     const primaryWaacIds = Array.from(new Set((session.primaryWaacIds ?? [])
       .map((id) => String(id).trim()).filter((id) => /^\d{1,40}$/.test(id)))).slice(0, 100)
 
-    const { data: existing, error: readError } = await admin.from('channels').select('id')
-      .eq('organization_id', organizationId).eq('channel_type', 'whatsapp').maybeSingle()
-    if (readError) throw new Error('تعذّر قراءة قناة واتساب الحالية.')
+    const { data: existingRows, error: readError } = await admin.from('channels')
+      .select('id, connection_mode')
+      .eq('organization_id', organizationId)
+      .eq('channel_type', 'whatsapp')
+    if (readError) throw new Error('تعذّر قراءة قنوات واتساب الحالية.')
+    const existing = existingRows?.find((row) => row.connection_mode === connectionMode) ??
+      (connectionMode === 'cloud_api' ? existingRows?.find((row) => !row.connection_mode) : undefined)
 
     const pendingPatch = {
       business_id: resolvedBusinessId,

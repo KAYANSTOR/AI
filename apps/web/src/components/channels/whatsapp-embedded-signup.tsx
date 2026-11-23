@@ -22,7 +22,7 @@ type WhatsAppFacebookLoginOptions = {
   response_type: 'code'
   override_default_response_type: true
   extras: {
-    featureType: 'whatsapp_business_app_onboarding'
+    featureType?: 'whatsapp_business_app_onboarding'
     sessionInfoVersion: '3'
     version: 'v4'
   }
@@ -51,6 +51,7 @@ declare global {
 
 type Props = {
   disabled?: boolean
+  mode?: 'coexistence' | 'cloud_api'
   onSuccess?: (message: string) => void
   onError?: (message: string) => void
   onRefresh?: () => void
@@ -66,13 +67,16 @@ type PendingSignup = {
 
 export function WhatsAppEmbeddedSignupButton({
   disabled,
+  mode = 'coexistence',
   onSuccess,
   onError,
   onRefresh,
   className,
 }: Props) {
   const appId = process.env.NEXT_PUBLIC_META_APP_ID?.trim() ?? ''
-  const configId = process.env.NEXT_PUBLIC_META_EMBEDDED_CONFIG_ID?.trim() ?? ''
+  const configId = mode === 'coexistence'
+    ? process.env.NEXT_PUBLIC_META_EMBEDDED_CONFIG_ID?.trim() ?? ''
+    : process.env.NEXT_PUBLIC_META_CLOUD_API_CONFIG_ID?.trim() ?? ''
   const [busy, setBusy] = useState(false)
   const [sdkReady, setSdkReady] = useState(false)
   const [sdkError, setSdkError] = useState<string | null>(null)
@@ -150,6 +154,7 @@ export function WhatsAppEmbeddedSignupButton({
         businessPortfolioId: pending.session.businessPortfolioId,
         isOnBusinessApp: pending.session.isOnBusinessApp,
         primaryWaacIds: pending.session.primaryWaacIds,
+        requestedMode: mode,
       })
 
       if (!mounted.current) return
@@ -171,7 +176,7 @@ export function WhatsAppEmbeddedSignupButton({
       console.error('Meta Embedded Signup completion failed', error)
       onError?.('انقطع الاتصال أثناء إكمال ربط واتساب. أعد بدء الربط من فضلك.')
     }
-  }, [onError, onRefresh, onSuccess])
+  }, [mode, onError, onRefresh, onSuccess])
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
@@ -260,7 +265,7 @@ export function WhatsAppEmbeddedSignupButton({
         override_default_response_type: true,
         // Match the Meta-hosted Tech Provider configuration for WhatsApp Business App onboarding (Coexistence).
         extras: {
-          featureType: 'whatsapp_business_app_onboarding',
+          ...(mode === 'coexistence' ? { featureType: 'whatsapp_business_app_onboarding' as const } : {}),
           sessionInfoVersion: '3',
           version: 'v4',
         },
@@ -273,7 +278,16 @@ export function WhatsAppEmbeddedSignupButton({
     }
   }
 
-  if (!appId || !configId) return null
+  if (!appId) {
+    return <p className="rounded-xl border border-warning/40 bg-warning/5 px-4 py-3 text-xs leading-6 text-text">ربط Meta غير مهيأ؛ أضف NEXT_PUBLIC_META_APP_ID إلى إعدادات المنصة.</p>
+  }
+  if (!configId) {
+    return <p className="rounded-xl border border-warning/40 bg-warning/5 px-4 py-3 text-xs leading-6 text-text">
+      {mode === 'cloud_api'
+        ? 'لم يتم إعداد تدفق واتساب Cloud API بعد. أضف NEXT_PUBLIC_META_CLOUD_API_CONFIG_ID من إعدادات تطبيق Meta إلى متغيرات Railway.'
+        : 'لم يتم إعداد تدفق واتساب الأعمال عبر Meta. تحقق من NEXT_PUBLIC_META_EMBEDDED_CONFIG_ID في إعدادات Railway.'}
+    </p>
+  }
 
   return (
     <div className="space-y-2">
