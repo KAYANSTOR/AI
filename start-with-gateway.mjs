@@ -1,9 +1,28 @@
 import { spawn } from 'node:child_process'
+import { readFile, writeFile } from 'node:fs/promises'
+import path from 'node:path'
 
 const root = process.cwd()
 const port = String(process.env.PORT || '8080')
 const children = new Map()
 let stopping = false
+
+async function patchBaileysPreLoginAck() {
+  const file = path.join(root, 'node_modules', 'baileys', 'lib', 'Socket', 'messages-recv.js')
+  const source = await readFile(file, 'utf8')
+  const unsafe = 'buildAckStanza(node, errorCode, authState.creds.me.id)'
+  const safe = 'buildAckStanza(node, errorCode, authState.creds.me?.id)'
+  if (source.includes(safe)) {
+    console.info('baileys_pre_login_ack_patch_already_applied')
+    return
+  }
+  const occurrences = source.split(unsafe).length - 1
+  if (occurrences !== 1) {
+    throw new Error('baileys_pre_login_ack_patch_target_mismatch:' + occurrences)
+  }
+  await writeFile(file, source.replace(unsafe, safe), 'utf8')
+  console.info('baileys_pre_login_ack_patch_applied')
+}
 
 function launch(name, args, cwd = root, env = process.env) {
   const child = spawn(process.execPath, args, {
@@ -44,6 +63,7 @@ function stop(code = 0) {
 process.on('SIGTERM', () => stop(0))
 process.on('SIGINT', () => stop(0))
 
+await patchBaileysPreLoginAck()
 launch('whatsapp_gateway', ['apps/whatsapp-gateway/src/server.js'])
 
 const ownerConsoleEnv = {
