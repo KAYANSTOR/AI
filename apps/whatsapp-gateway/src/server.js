@@ -310,7 +310,7 @@ async function startSession(input) {
     throw Object.assign(new Error('qr_channel_not_owned_or_not_configured'), { status: 403 })
   }
   const previous = sockets.get(channelId)
-  if (previous && previous.phoneNumber === phoneNumber &&
+  if (previous && previous.phoneNumber === phoneNumber && previous.mode === input.method &&
       ['starting', 'qr_required', 'pairing_code', 'connected', 'reconnecting'].includes(previous.status)) return previous
   if (previous) {
     previous.stopping = true
