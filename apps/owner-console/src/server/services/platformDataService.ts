@@ -226,12 +226,18 @@ export async function platformOverview(period:string,startDate?:string,endDate?:
       (SELECT COUNT(*) FROM conversations)::int total_conversations,(SELECT COUNT(*) FROM messages)::int total_messages,(SELECT COUNT(*) FROM agent_runs WHERE created_at BETWEEN $1 AND $2)::int ai_requests,
       (SELECT COUNT(*) FROM agent_runs WHERE status='completed' AND created_at BETWEEN $1 AND $2)::int success_runs,(SELECT COUNT(*) FROM agent_runs WHERE status='failed' AND created_at BETWEEN $1 AND $2)::int failed_runs,
       (SELECT COALESCE(SUM(COALESCE(input_tokens,0)+COALESCE(output_tokens,0)),0)::bigint FROM agent_runs WHERE created_at BETWEEN $1 AND $2) total_tokens,
+      (SELECT COALESCE(SUM(amount_usd),0)::numeric FROM billing_payment_intents WHERE status='verified' AND verified_at BETWEEN $1 AND $2) collected_revenue,
+      (SELECT COALESCE(SUM(amount_usd),0)::numeric FROM billing_payment_intents WHERE status IN('pending','wrong_amount') AND created_at BETWEEN $1 AND $2) pending_payments,
+      (SELECT COALESCE(SUM(units*COALESCE(unit_cost,0)),0)::numeric FROM usage_ledger WHERE event_type='ai_tokens' AND currency='USD' AND occurred_at BETWEEN $1 AND $2) ai_cost,
+      (SELECT COUNT(*) FROM usage_ledger WHERE event_type='ai_tokens' AND currency='USD' AND unit_cost IS NOT NULL AND occurred_at BETWEEN $1 AND $2)::int ai_cost_records,
       (SELECT COUNT(*) FROM channels WHERE is_active AND verification_status='verified')::int connected_channels,
       (SELECT COUNT(*) FROM channels WHERE NOT(is_active AND verification_status='verified'))::int disconnected_channels`,[from,to]),
     query(`SELECT to_char(d.day,'YYYY-MM-DD') date,(SELECT COUNT(*) FROM auth.users u WHERE u.created_at::date=d.day AND u.deleted_at IS NULL)::int users,
       (SELECT COUNT(*) FROM subscriptions s WHERE s.created_at::date=d.day)::int subscriptions,(SELECT COUNT(*) FROM agent_runs r WHERE r.created_at::date=d.day)::int ai_requests,
       (SELECT COALESCE(SUM(COALESCE(r.input_tokens,0)+COALESCE(r.output_tokens,0)),0)::bigint FROM agent_runs r WHERE r.created_at::date=d.day) tokens,
       (SELECT COUNT(*) FROM conversations v WHERE v.created_at::date=d.day)::int conversations,(SELECT COUNT(*) FROM messages m WHERE m.created_at::date=d.day)::int messages,
+      (SELECT COALESCE(SUM(amount_usd),0)::numeric FROM billing_payment_intents i WHERE i.status='verified' AND i.verified_at::date=d.day) revenue_usd,
+      (SELECT COALESCE(SUM(units*COALESCE(unit_cost,0)),0)::numeric FROM usage_ledger l WHERE l.event_type='ai_tokens' AND l.currency='USD' AND l.occurred_at::date=d.day) ai_cost_usd,
       (SELECT COUNT(*) FROM agent_runs r WHERE r.created_at::date=d.day AND r.status='completed')::int success_runs,(SELECT COUNT(*) FROM agent_runs r WHERE r.created_at::date=d.day AND r.status='failed')::int failed_runs
       FROM generate_series($1::date,$2::date,interval '1 day') d(day) ORDER BY d.day`,[from,to]),
     query(`SELECT ch.channel_type channel,COUNT(*)::int total,COUNT(*) FILTER(WHERE ch.is_active AND ch.verification_status='verified')::int connected,COALESCE(SUM(mc.messages),0)::int messages
@@ -242,19 +248,20 @@ export async function platformOverview(period:string,startDate?:string,endDate?:
       FROM agent_runs WHERE created_at BETWEEN $1 AND $2 GROUP BY model ORDER BY requests DESC LIMIT 10`,[from,to])
   ]);
   const x=c[0]||{},v=(k:string)=>count(x[k]);
+  const aiCostAvailable=v('ai_cost_records')>0;
   const metrics={totalUsers:v('total_users'),activeUsers:v('active_users'),newUsersInPeriod:v('new_users'),suspendedUsers:v('suspended_users'),trialAccounts:v('trial_subscriptions'),
     activeSubscriptions:v('active_subscriptions'),expiredSubscriptions:v('expired_subscriptions'),cancelledSubscriptions:v('cancelled_subscriptions'),pastDueSubscriptions:v('past_due_subscriptions'),trialSubscriptions:v('trial_subscriptions'),
     totalWorkspaces:v('total_workspaces'),totalAgents:v('total_agents'),activeAgents:v('active_agents'),failingAgents:v('failing_agents'),totalConversations:v('total_conversations'),totalMessages:v('total_messages'),
-    totalAiRequests:v('ai_requests'),successfulAgentRuns:v('success_runs'),failedAgentRuns:v('failed_runs'),totalTokens:v('total_tokens'),aiProviderCostsUsd:0,collectedRevenueUsd:0,unpaidInvoicesUsd:0,recordedExpensesUsd:0,totalOperatingCostsUsd:0,netMarginUsd:0,netMarginPercent:null,
+    totalAiRequests:v('ai_requests'),successfulAgentRuns:v('success_runs'),failedAgentRuns:v('failed_runs'),totalTokens:v('total_tokens'),aiProviderCostsUsd:aiCostAvailable?v('ai_cost'):0,collectedRevenueUsd:v('collected_revenue'),unpaidInvoicesUsd:v('pending_payments'),recordedExpensesUsd:0,totalOperatingCostsUsd:0,netMarginUsd:0,netMarginPercent:null,
     connectedChannels:v('connected_channels'),disconnectedChannels:v('disconnected_channels'),currentSystemErrors:0};
   return {window:{startIso:from,endIso:to,days:Math.max(1,Math.ceil((end.getTime()-start.getTime())/86400000))},
     database:{engine:'PostgreSQL',mode:'بيانات المنصة الحقيقية؛ جلسات المالك وسجل تدقيقه منفصلان',externalPostgresConfigured:true,pathLabel:'Railway Postgres'},integrations:[],metrics,
     comparisons:{newUsersDeltaPct:null,subscriptionsDeltaPct:null,revenueDeltaPct:null,aiRequestsDeltaPct:null,aiCostDeltaPct:null},
-    charts:{timeSeries:series.map((r:any)=>({date:r.date,users:count(r.users),subscriptions:count(r.subscriptions),revenueUsd:0,tokens:count(r.tokens),aiCostUsd:0,conversations:count(r.conversations),messages:count(r.messages),successRuns:count(r.success_runs),failedRuns:count(r.failed_runs)})),
+    charts:{timeSeries:series.map((r:any)=>({date:r.date,users:count(r.users),subscriptions:count(r.subscriptions),revenueUsd:count(r.revenue_usd),tokens:count(r.tokens),aiCostUsd:count(r.ai_cost_usd),conversations:count(r.conversations),messages:count(r.messages),successRuns:count(r.success_runs),failedRuns:count(r.failed_runs)})),
       channelUsage:channels.map((r:any)=>({channel:r.channel,total:count(r.total),connected:count(r.connected),messages:count(r.messages)})),
       planDistribution:plans.map((r:any)=>({code:r.code,name:r.name,subscribers:count(r.subscribers)})),modelUsage:models.map((r:any)=>({modelId:r.model_id,displayName:r.display_name,requests:count(r.requests),tokens:count(r.tokens),costUsd:0}))},
     attentionItems:{pastDueSubscriptions:v('past_due_subscriptions'),failingAgents:v('failing_agents'),disconnectedChannels:v('disconnected_channels'),unresolvedErrors:0,unacknowledgedAlerts:0,openTickets:0},
-    dataLimitations:{revenue:'مخطط PostgreSQL الحالي لا يحتوي جداول فواتير ومدفوعات.',expenses:'لا يوجد دفتر مصروفات تشغيلي في المخطط الحالي.',aiCost:'المتاح سجل الرموز؛ لا توجد تكلفة فعلية مؤكدة لكل تشغيل.',systemErrors:'لا يوجد سجل أخطاء تشغيلي موحد في مخطط PostgreSQL الحالي.'}};
+    dataLimitations:{revenue:'الإيراد المحصل محسوب من طلبات الدفع المؤكدة؛ لا يوجد دفتر فواتير منفصل.',expenses:'لا يوجد دفتر مصروفات تشغيلي في المخطط الحالي.',aiCost:aiCostAvailable?undefined:'سجل الرموز لا يحتوي تكلفة موثقة حتى الآن.',systemErrors:'لا يوجد سجل أخطاء تشغيلي موحد في مخطط PostgreSQL الحالي.'}};
 }
 
 export async function updatePlatformUser(id:string,p:{fullName?:string;email?:string;phone?:string|null}) {
