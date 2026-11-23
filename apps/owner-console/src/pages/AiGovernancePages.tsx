@@ -874,38 +874,6 @@ export function AiUsagePage({
     </div>
   );
 }
- + String(m.input_price_per_1m) + ' / 
-                    </td>
-                    <td className="px-4 py-3">
-                      <div>{String(m.pricing_source)}</div>
-                      <div className="text-[11px] font-mono text-[var(--k-ink-muted)]">
-                        v{String(m.pricing_version)} ({String(m.pricing_effective_date)})
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 font-mono tabular-nums">
-                      {String(m.agents_using)} وكيل · {formatNumber(Number(m.requests_count))} طلب
-                    </td>
-                    <td className="px-4 py-3">
-                      <StatusText
-                        status={Number(m.is_allowed) === 1 ? 'ok' : 'error'}
-                        label={Number(m.is_allowed) === 1 ? 'مسموح' : 'محظور'}
-                      />
-                    </td>
-                    <td className="px-4 py-3 text-end">
-                      <button type="button" onClick={() => toggleModelAllowed(m)} className={secondaryBtnClass}>
-                        {Number(m.is_allowed) === 1 ? 'تعطيل النموذج' : 'السماح بالنموذج'}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </section>
-        </>
-      )}
-    </div>
-  );
-}
 
 // =========================================================================
 // 3. AI USAGE & COST LEDGER PAGE (IDEMPOTENT + ACTUAL VS ESTIMATED)
