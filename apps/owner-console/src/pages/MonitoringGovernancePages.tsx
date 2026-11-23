@@ -109,7 +109,7 @@ export function SystemMonitoringPage({
                         <div className="font-semibold">{String(al.title)}</div>
                         <p className="text-[var(--k-ink-muted)] mt-0.5">{String(al.description)}</p>
                       </div>
-                      {Number(al.acknowledged) === 0 && (
+                      {Number(al.acknowledged) === 0 ? (
                         <button
                           type="button"
                           onClick={async () => {
@@ -122,6 +122,8 @@ export function SystemMonitoringPage({
                           <Check className="w-3.5 h-3.5" />
                           <span>إقرار</span>
                         </button>
+                      ) : (
+                        <span className="shrink-0 text-[10px] text-[var(--k-ink-muted)]">تنبيه آلي من بيانات التشغيل</span>
                       )}
                     </div>
                   ))}
