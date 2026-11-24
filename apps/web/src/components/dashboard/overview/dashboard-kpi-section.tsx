@@ -57,8 +57,8 @@ export async function DashboardKpiSection({ organizationId }: { organizationId: 
 
 function StatusPill({ icon, label, value, tone }: { icon: React.ReactNode; label: string; value: string; tone: 'warning' | 'neutral' | 'primary' }) {
   return (
-    <div className={'dashboard-status-pill tone-' + tone}>
-      <span className="flex items-center justify-center gap-1.5">{icon}<span className="truncate">{label}</span></span>
+    <div className="dashboard-status-pill">
+      <span className="flex items-center justify-center gap-1.5">{icon}<span className="truncate">{label}</span>{tone === 'warning' ? <span className="dashboard-status-dot" aria-hidden="true" /> : null}</span>
       <strong className="mt-1 block text-sm tabular-nums">{value}</strong>
     </div>
   )

@@ -45,8 +45,8 @@ function parentPath(pathname: string) {
 }
 
 /**
- * Mobile-first RTL top bar (KAYAN identity: ink #1F2A1F, sand #D9C7A3,
- * bronze #B08D57). Every action is a 44px target: back, search,
+ * Mobile-first RTL top bar on the unified brand palette (pastel green
+ * #D8E2D0, olive #1F3B22, yellow #F2D600). Every action is a 44px target: back, search,
  * notifications and account. Settings stays reachable from the home header
  * and the account page, keeping inner headers uncluttered.
  */
@@ -145,7 +145,7 @@ export function Header({
         <button type="button" onClick={goBack} aria-label="رجوع" className="kayan-header-action">
           <ArrowRight size={19} aria-hidden="true" />
         </button>
-        <span className="hidden h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[var(--kayan-sand)] text-[var(--kayan-ink)] min-[380px]:flex">
+        <span className="hidden h-11 w-11 shrink-0 items-center justify-center rounded-2xl kayan-header-page-icon min-[380px]:flex">
           <PageIcon size={20} aria-hidden="true" />
         </span>
         <div className="min-w-0 flex-1">

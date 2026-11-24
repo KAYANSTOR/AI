@@ -33,8 +33,9 @@ export function DashboardShell({
         <main className="dashboard-main-scroll" id="dashboard-main">
           <div className="dashboard-page-content animate-page-enter">{children}</div>
         </main>
-        <MobileTabBar businessTypeId={businessTypeId} />
       </div>
+      {/* Fixed to the viewport, outside the overflow-hidden app frame. */}
+      <MobileTabBar businessTypeId={businessTypeId} />
     </div>
   )
 }
