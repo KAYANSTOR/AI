@@ -49,3 +49,6 @@ fig/
 *.key
 *.cert
 secrets/
+
+# vite-plugin-pwa dev service worker output
+apps/owner-console/dev-dist/
