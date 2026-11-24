@@ -120,7 +120,8 @@ platformDataRouter.post('/integrations/api-keys/:id/revoke', requirePermission('
 });
 platformDataRouter.get('/monitoring', async (_req,res)=>{try{res.json(await platformMonitoring());}catch(err){handleError(res,err,503);}});
 platformDataRouter.get('/logs', async (req,res)=>{
-  try {res.json(await platformLogs({category:req.query.category?String(req.query.category):undefined,severity:req.query.severity?String(req.query.severity):undefined,resolved:req.query.resolved?String(req.query.resolved):undefined}));}
+  try {res.json(await platformLogs({category:req.query.category?String(req.query.category):undefined,severity:req.query.severity?String(req.query.severity):undefined,
+    resolved:req.query.resolved==='resolved'?'true':req.query.resolved==='open'?'false':req.query.resolved==='all'?undefined:req.query.resolved?String(req.query.resolved):undefined}));}
   catch(err){handleError(res,err,503);}
 });
 platformDataRouter.get('/notifications-support', async (_req,res)=>{try{res.json(await platformNotificationsSupport());}catch(err){handleError(res,err,503);}});

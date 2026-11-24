@@ -120,7 +120,7 @@ export async function platformWorkspaces(search?:string) {
   const args:unknown[]=[];let where='';
   if(search?.trim()){args.push(`%${search.trim()}%`);where='WHERE o.name ILIKE $1 OR b.name ILIKE $1 OR u.email ILIKE $1';}
   return {items:await query(`SELECT o.id::text id,o.name,b.id::text business_id,b.name business_name,b.business_type_id business_type,
-    COALESCE(b.status,'active') status,o.created_at::text created_at,COALESCE(o.personal_assistant_addon_enabled,FALSE) personal_assistant_addon_enabled,
+    COALESCE(b.status,'active') status,o.created_at::text created_at,COALESCE(o.personal_assistant_addon_enabled,FALSE) personal_assistant_addon_enabled,b.slug,
     u.id::text owner_user_id,${fullName} owner_name,u.email owner_email,
     (SELECT COUNT(*) FROM organization_members m WHERE m.organization_id=o.id)::int member_count,
     (SELECT COUNT(*) FROM ai_agents a WHERE a.organization_id=o.id)::int agents_count,
@@ -134,19 +134,27 @@ export async function platformWorkspaces(search?:string) {
 }
 
 export async function platformPlans() {
-  const rows=await query<{id:string;code:string;name:string;description:string|null;monthly_price:string|number;currency:string;limits:Record<string,unknown>|null;is_active:boolean;active_subscribers:string}>(`SELECT p.id::text id,p.code,p.name,p.description,p.monthly_price::text monthly_price,p.currency,p.limits,p.is_active,
+  const rows=await query<{id:string;code:string;name:string;description:string|null;monthly_price:string|number;yearly_price:string|number|null;
+    currency:string;limits:Record<string,unknown>|null;is_active:boolean;active_subscribers:string}>(`SELECT p.id::text id,p.code,p.name,p.description,p.monthly_price::text monthly_price,p.currency,p.limits,p.is_active,
+    yearly.amount::text yearly_price,
     (SELECT COUNT(*) FROM subscriptions s WHERE s.plan_id=p.id AND s.status IN ('active','trial'))::text active_subscribers
-    FROM plans p ORDER BY p.monthly_price ASC,p.code ASC`);
+    FROM plans p LEFT JOIN LATERAL(
+      SELECT amount FROM plan_prices WHERE plan_id=p.id AND billing_cycle='yearly' AND currency=p.currency AND is_active=TRUE
+      ORDER BY updated_at DESC LIMIT 1
+    ) yearly ON TRUE ORDER BY p.monthly_price ASC,p.code ASC`);
   return {items:rows.map(p=>{
     const limits=p.limits||{};
     const value=(key:string)=>limits[key]===undefined||limits[key]===null?null:Number(limits[key]);
-    return {id:p.id,code:p.code,name:p.name,name_en:p.name,description:p.description||'',price_monthly:Number(p.monthly_price),price_yearly:null,currency:p.currency,
-      billing_cycle:'monthly',trial_days:null,max_users:null,max_agents:null,max_messages:value('ai_messages'),token_quota:null,max_channels:value('channels'),
-      voice_minutes:value('voice_minutes'),automation_runs:value('automation_runs'),campaign_sends:value('campaign_sends'),storage_mb:null,
-      allowed_models:[],allowed_channels:[],allowed_tools:[],enabled_features:[],blocked_features:[],status:p.is_active?'active':'archived',
-      active_subscribers:Number(p.active_subscribers),editable:false};
+    return {id:p.id,code:p.code,name:p.name,name_en:p.name,description:p.description||'',
+      price_monthly:Number(p.monthly_price),price_yearly:p.yearly_price===null?null:Number(p.yearly_price),currency:p.currency,
+      billing_cycle:'monthly',trial_days:null,max_users:value('users'),max_agents:value('agents'),max_messages:value('ai_messages'),
+      token_quota:null,max_channels:value('channels'),voice_minutes:value('voice_minutes'),automation_runs:value('automation_runs'),
+      campaign_sends:value('campaign_sends'),storage_mb:value('storage_mb'),allowed_models:[],allowed_channels:[],
+      allowed_tools:[],enabled_features:[],blocked_features:[],status:p.is_active?'active':'archived',
+      active_subscribers:Number(p.active_subscribers),editable:true};
   })};
 }
+
 
 export async function platformSubscriptions(status?:string) {
   const args:unknown[]=[];const where=status&&status!=='all'?(args.push(status),'WHERE s.status=$1'):'';
@@ -334,7 +342,8 @@ export async function platformBillingLedger() {
       LEFT JOIN auth.users u ON u.id=own.user_id ORDER BY i.created_at DESC LIMIT 1000`),
     query(`SELECT r.id::text id,r.organization_id::text organization_id,r.plan_code,r.billing_cycle,r.amount_usd::numeric amount_usd,
       r.amount_yer::bigint amount_yer,r.exchange_rate::numeric exchange_rate,r.sender_name,r.transfer_reference,r.status,
-      r.review_note,r.reviewed_by,r.reviewed_at::text reviewed_at,r.created_at::text created_at,w.display_name wallet_name,w.provider_code,
+      r.review_note,r.reviewed_by,r.reviewed_at::text reviewed_at,r.created_at::text created_at,
+      (r.receipt_image_base64 IS NOT NULL) has_receipt,w.display_name wallet_name,w.provider_code,
       o.name workspace_name,p.name plan_name,u.id::text user_id,${fullName} user_name,u.email user_email
       FROM manual_wallet_payment_requests r JOIN organizations o ON o.id=r.organization_id
       JOIN manual_yemen_wallets w ON w.id=r.wallet_id LEFT JOIN plans p ON p.id=r.plan_id
@@ -575,30 +584,55 @@ export async function savePlatformPlan(p:Record<string,unknown>,id?:string) {
   const code=String(p.code||'').trim().toLowerCase(),name=String(p.name||'').trim();
   if(!code||!name)throw new Error('رمز الباقة واسمها مطلوبان.');
   if(!['trial','starter','growth','pro'].includes(code))throw new Error('رمز الباقة غير مدعوم في اشتراكات المنصة الحالية.');
-  const yearly=Number(p.priceYearly||0);
-  if(yearly>0)throw new Error('مخطط المنصة الحالي يدعم السعر الشهري فقط؛ لم يتم حفظ سعر سنوي غير مدعوم.');
   const monthly=Number(p.priceMonthly);
+  const yearlyInput=p.priceYearly;
+  const yearly=yearlyInput===undefined||yearlyInput===null||String(yearlyInput).trim()===''?null:Number(yearlyInput);
   if(!Number.isFinite(monthly)||monthly<0)throw new Error('السعر الشهري غير صالح.');
+  if(yearly!==null&&(!Number.isFinite(yearly)||yearly<0))throw new Error('السعر السنوي غير صالح.');
   if(p.status==='draft')throw new Error('قاعدة الباقات الفعلية لا تدعم حالة المسودة.');
   const limits:Record<string,number>={};
-  const mappings:Record<string,string>={maxMessages:'ai_messages',maxChannels:'channels',voiceMinutes:'voice_minutes',automationRuns:'automation_runs',campaignSends:'campaign_sends'};
-  for(const [input,key] of Object.entries(mappings)){const value=p[input];if(value!==undefined&&value!==null&&String(value)!==''){const n=Number(value);if(!Number.isFinite(n)||n<0)throw new Error('حدود الباقة يجب أن تكون أرقاماً غير سالبة.');limits[key]=n;}}
+  const mappings:Record<string,string>={maxUsers:'users',maxAgents:'agents',maxMessages:'ai_messages',maxChannels:'channels',
+    voiceMinutes:'voice_minutes',automationRuns:'automation_runs',campaignSends:'campaign_sends',storageMb:'storage_mb'};
+  for(const [input,key] of Object.entries(mappings)){
+    const value=p[input];
+    if(value!==undefined&&value!==null&&String(value).trim()!==''){
+      const n=Number(value);
+      if(!Number.isFinite(n)||n<0)throw new Error('حدود الباقة يجب أن تكون أرقاماً غير سالبة.');
+      limits[key]=n;
+    }
+  }
   const description=String(p.description||'');
   const currency=String(p.currency||'USD').toUpperCase();
   if(!['USD','YER','SAR'].includes(currency))throw new Error('عملة الباقة غير مدعومة.');
   const active=p.status!=='archived';
-  if(id){
-    const [row]=await query(`UPDATE plans SET code=$2,name=$3,description=$4,monthly_price=$5,currency=$6,
-      limits=COALESCE(limits,'{}'::jsonb)||$7::jsonb,is_active=$8,updated_at=NOW() WHERE id=$1::uuid
-      RETURNING id::text id,code,name,description,monthly_price::numeric price_monthly,currency,limits,is_active`,
-      [id,code,name,description,monthly,currency,JSON.stringify(limits),active]);
-    if(!row)throw new Error('الباقة غير موجودة.');
-    return row;
-  }
-  const [row]=await query(`INSERT INTO plans(code,name,description,monthly_price,currency,limits,is_active)
-    VALUES($1,$2,$3,$4,$5,$6::jsonb,$7) RETURNING id::text id,code,name,description,monthly_price::numeric price_monthly,currency,limits,is_active`,
-    [code,name,description,monthly,currency,JSON.stringify(limits),active]);
-  return row;
+  return await sql().begin(async tx=>{
+    let row:Record<string,unknown>|undefined;
+    if(id){
+      const [updated]=await tx.unsafe(`UPDATE plans SET code=$2,name=$3,description=$4,monthly_price=$5,currency=$6,
+        limits=COALESCE(limits,'{}'::jsonb)||$7::jsonb,is_active=$8,updated_at=NOW()
+        WHERE id=$1::uuid RETURNING id::text id,code,name,description,monthly_price::numeric price_monthly,currency,limits,is_active`,
+        [id,code,name,description,monthly,currency,JSON.stringify(limits),active]);
+      row=updated;
+      if(!row)throw new Error('الباقة غير موجودة.');
+    } else {
+      const [created]=await tx.unsafe(`INSERT INTO plans(code,name,description,monthly_price,currency,limits,is_active)
+        VALUES($1,$2,$3,$4,$5,$6::jsonb,$7)
+        RETURNING id::text id,code,name,description,monthly_price::numeric price_monthly,currency,limits,is_active`,
+        [code,name,description,monthly,currency,JSON.stringify(limits),active]);
+      row=created;
+    }
+    const planId=String(row.id);
+    if(yearly!==null&&yearly>0){
+      await tx.unsafe(`INSERT INTO plan_prices(plan_id,billing_cycle,currency,amount,is_active,updated_at)
+        VALUES($1::uuid,'yearly',$2,$3,TRUE,NOW())
+        ON CONFLICT(plan_id,billing_cycle,currency) DO UPDATE SET amount=EXCLUDED.amount,is_active=TRUE,updated_at=NOW()`,
+        [planId,currency,yearly]);
+    } else {
+      await tx.unsafe(`UPDATE plan_prices SET is_active=FALSE,updated_at=NOW()
+        WHERE plan_id=$1::uuid AND billing_cycle='yearly' AND currency=$2`,[planId,currency]);
+    }
+    return {...row,price_yearly:yearly&&yearly>0?yearly:null};
+  });
 }
 
 
