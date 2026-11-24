@@ -18,6 +18,7 @@ function cleanGeminiSchema(schema: unknown): unknown {
   return copy
 }
 function retryableStatus(status: number) { return status === 408 || status === 425 || status === 429 || status >= 500 }
+function quotaExhausted(status: number, message: string) { return status === 429 && /(quota|resource_exhausted|billing)/i.test(message) }
 function sleep(ms: number) { return new Promise((resolve) => setTimeout(resolve, ms)) }
 export const geminiProvider: AIProvider = {
   async call(input) {
@@ -45,7 +46,7 @@ export const geminiProvider: AIProvider = {
     const tools = input.tools.length ? [{ functionDeclarations: input.tools.map((tool) => ({ name: tool.name, description: tool.description, parameters: cleanGeminiSchema(tool.input_schema) })) }] : undefined
     const systemInstruction = input.system ? { parts: [{ text: input.system }] } : undefined
     const candidateModels = Array.from(new Set([configuredModel, 'gemini-3.1-flash-lite-preview']))
-    let lastError = 'All candidate models failed'; let lastStatus: number | null = null; let lastModel = configuredModel; let lastRetryable = true; let attempts = 0
+    let lastError = 'All candidate models failed'; let lastStatus: number | null = null; let lastModel = configuredModel; let lastRetryable = true; let quotaFallback = false; let attempts = 0
     for (const model of candidateModels) {
       lastModel = model
       for (let retry = 0; retry < 3; retry += 1) {
@@ -59,6 +60,13 @@ export const geminiProvider: AIProvider = {
           const payload = (await response.json()) as GeminiResponse
           if (!response.ok) {
             lastError = payload.error?.message || response.statusText || 'request_failed'; lastStatus = response.status; lastRetryable = retryableStatus(response.status)
+            if (quotaExhausted(response.status,lastError)) {
+              // A hard quota exhaustion will not clear by retrying the same provider/model.
+              // Keep the error fallback-eligible, but switch providers immediately.
+              quotaFallback = true
+              lastRetryable = true
+              break
+            }
             if (!lastRetryable) break
             await sleep(250 * (retry + 1)); continue
           }
@@ -74,7 +82,7 @@ export const geminiProvider: AIProvider = {
         }
         if (!lastRetryable) break
       }
-      if (!lastRetryable && lastStatus !== 404) break
+      if (quotaFallback || (!lastRetryable && lastStatus !== 404)) break
     }
     throw new AIProviderError('Gemini API error' + (lastStatus ? ' (' + lastStatus + ')' : '') + ' using ' + lastModel + ': ' + lastError, { provider: 'gemini', status: lastStatus, retryable: lastRetryable, model: lastModel })
   },
