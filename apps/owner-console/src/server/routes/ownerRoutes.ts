@@ -242,11 +242,6 @@ platformDataRouter.get('/plans', async (_req, res) => { try { res.json(await pla
 platformDataRouter.post('/users', requirePermission('users:write'), unavailablePlatformData);
 platformDataRouter.post('/knowledge', requirePermission('ops:write'), unavailablePlatformData);
 platformDataRouter.post('/integrations/webhooks', requirePermission('ops:write'), unavailablePlatformData);
-platformDataRouter.post('/notifications', requirePermission('ops:write'), unavailablePlatformData);
-platformDataRouter.post('/tickets', requirePermission('ops:write'), unavailablePlatformData);
-platformDataRouter.patch('/tickets/:id/status', requirePermission('ops:write'), unavailablePlatformData);
-platformDataRouter.post('/alerts/:id/ack', requirePermission('ops:write'), unavailablePlatformData);
-platformDataRouter.post('/logs/:id/resolve', requirePermission('ops:write'), unavailablePlatformData);
 platformDataRouter.post('/channels/:id/test', requirePermission('ops:write'), async (req,res)=>{
   try {const result=await testPlatformChannel(String(req.params.id));writeAuditLog({actor:req.ownerAdmin!,action:'channel.connection_tested',entityType:'channel',entityId:String(req.params.id),summary:result.diagnostic,after:result,ipAddress:getClientIp(req)});res.json(result);}
   catch(err){handleError(res,err);}
@@ -285,7 +280,6 @@ platformDataRouter.get('/ai/providers', async (_req,res)=>{try{res.json(await pl
 platformDataRouter.patch('/ai/models/:modelId', requirePermission('ai:write'), unavailablePlatformData);
 platformDataRouter.post('/ai/usage', requirePermission('ai:write'), unavailablePlatformData);
 platformDataRouter.patch('/entitlements/flags/:key', requirePermission('users:write'), unavailablePlatformData);
-platformDataRouter.post('/conversations', requirePermission('ops:write'), unavailablePlatformData);
 platformDataRouter.post('/channels', requirePermission('ops:write'), unavailablePlatformData);
 
 platformDataRouter.post('/plans', requirePermission('billing:write'), async (req,res)=>{
