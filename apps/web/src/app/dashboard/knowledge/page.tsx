@@ -2,6 +2,8 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { requireCapability, CapabilityDisabledError } from '@/lib/capabilities/guard'
 import { ar } from '@/lib/i18n/ar'
+import { TrainerPanel } from '@/components/dashboard/trainer/trainer-panel'
+import { trainingChecklist } from '@/lib/trainer/checklists'
 import { KnowledgeManager, type KnowledgeDocumentRow, type KnowledgeRow } from './knowledge-manager'
 
 export default async function KnowledgePage({ searchParams }: { searchParams: Promise<{ page?: string }> }) {
@@ -52,9 +54,10 @@ export default async function KnowledgePage({ searchParams }: { searchParams: Pr
   ])
 
   const canManage = ctx.role === 'owner' || ctx.role === 'admin'
+  const showTrainer = canManage && trainingChecklist(ctx.businessTypeId).target === 'knowledge'
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-28">
       <div>
         <h1 className="text-2xl font-bold tracking-tight text-text">{ar.knowledge.title}</h1>
         <p className="mt-1 text-sm text-text-muted">{ar.knowledge.description}</p>
@@ -74,6 +77,8 @@ export default async function KnowledgePage({ searchParams }: { searchParams: Pr
           <p className="mt-1 text-2xl font-semibold text-text tabular-nums">{chunkCount ?? 0}</p>
         </div>
       </div>
+
+      {showTrainer ? <TrainerPanel /> : null}
 
       <KnowledgeManager rows={(data ?? []) as KnowledgeRow[]} documents={(documents ?? []) as KnowledgeDocumentRow[]} canManage={canManage} currentPage={currentPage} totalPages={totalPages} />
     </div>

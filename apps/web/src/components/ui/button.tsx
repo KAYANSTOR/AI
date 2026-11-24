@@ -6,9 +6,9 @@ export type ButtonVariant = 'primary' | 'secondary' | 'accent' | 'outline' | 'gh
 export type ButtonSize = 'sm' | 'md' | 'lg' | 'icon'
 
 const variantClasses: Record<ButtonVariant, string> = {
-  primary: 'border-primary bg-primary text-white hover:bg-primary-dark active:bg-primary-strong',
+  primary: 'border-primary-dark bg-primary-dark text-white hover:bg-primary-dark/90 active:bg-primary-dark/80',
   secondary: 'border-border-strong bg-surface text-text hover:bg-surface-muted active:bg-border',
-  accent: 'border-accent bg-accent text-white hover:bg-accent-strong active:bg-accent-strong',
+  accent: 'border-accent bg-accent text-primary-dark hover:bg-accent/90 active:bg-accent/80',
   outline: 'border-border-strong bg-transparent text-text hover:bg-surface-muted active:bg-border',
   ghost: 'border-transparent bg-transparent text-text-muted hover:bg-surface-muted hover:text-text active:bg-border',
   danger: 'border-error bg-error text-error-foreground hover:bg-error-strong active:bg-error-strong',

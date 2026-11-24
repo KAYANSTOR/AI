@@ -8,6 +8,7 @@ import { Dialog } from '@/components/ui/overlay'
 import { TabsList, TabsTrigger } from '@/components/ui/navigation'
 import { cx } from '@/components/ui/cx'
 import { PersonalAssistantMemoryPanel } from '@/components/dashboard/personal-assistant-memory-panel'
+import { TrainerPanel } from '@/components/dashboard/trainer/trainer-panel'
 
 export type AssistantTab = 'chat' | 'tasks' | 'memory'
 
@@ -62,7 +63,7 @@ function useVisiblePolling(callback: () => void, enabled: boolean) {
   }, [enabled])
 }
 
-export function PersonalExecutiveApp({ initialTab }: { initialTab: AssistantTab }) {
+export function PersonalExecutiveApp({ initialTab, showTrainer = false }: { initialTab: AssistantTab; showTrainer?: boolean }) {
   const router = useRouter()
   const [tab, setTab] = useState<AssistantTab>(initialTab)
   const [agent, setAgent] = useState<AgentData | null>(null)
@@ -141,7 +142,7 @@ export function PersonalExecutiveApp({ initialTab }: { initialTab: AssistantTab 
       <div role="tabpanel" id={`pa-panel-${tab}`} aria-labelledby={`pa-tab-${tab}`}>
         {tab === 'chat' ? <ChatTab /> : null}
         {tab === 'tasks' ? <TasksTab data={agent} onChanged={loadAgent} /> : null}
-        {tab === 'memory' ? <PersonalAssistantMemoryPanel /> : null}
+        {tab === 'memory' ? <div className="space-y-4">{showTrainer ? <TrainerPanel /> : null}<PersonalAssistantMemoryPanel /></div> : null}
       </div>
 
       <Dialog

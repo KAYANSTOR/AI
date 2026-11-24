@@ -1,7 +1,9 @@
 import { after, NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/db/admin'
 import { acquireWebhookEvent, markWebhookProcessed } from '@/lib/channels/idempotency'
-import { isCentralPhoneNumberId } from '@/lib/central-bot/config'
+import { getTrainerBotConfig, isCentralPhoneNumberId, isTrainerPhoneNumberId } from '@/lib/central-bot/config'
+import { buildTrainerDeps } from '@/lib/trainer/deps'
+import { routeTrainerInbound } from '@/lib/trainer/router'
 import { buildCentralDeps } from '@/lib/central-bot/deps'
 import { parseCentralMessage } from '@/lib/central-bot/parse'
 import { handleCentralInbound } from '@/lib/central-bot/router'
@@ -120,6 +122,29 @@ export async function POST(req: NextRequest) {
       const phoneNumberId = String(value.metadata?.phone_number_id ?? '').trim()
       const profileName = String(value.contacts?.[0]?.profile?.name ?? '').trim()
       const field = value.field ?? 'messages'
+
+      // Optional dedicated «مدرب كيان» number: owner/admin training traffic only.
+      if (!isKapsoWebhook && isTrainerPhoneNumberId(phoneNumberId)) {
+        const trainerConfig = getTrainerBotConfig()
+        const trainerDeps = trainerConfig ? buildTrainerDeps(db, trainerConfig) : null
+        for (const raw of value.messages ?? []) {
+          const parsed = parseCentralMessage(raw)
+          if (!parsed || !trainerDeps) continue
+          const claim = await acquireWebhookEvent(db, 'kayan_trainer_whatsapp', parsed.messageId, { id: parsed.messageId, type: parsed.type })
+          if (claim.status !== 'acquired') continue
+          const trainerDb = db
+          after(async () => {
+            try {
+              await routeTrainerInbound(trainerDb, parsed, trainerDeps, 'trainer')
+              await markWebhookProcessed(trainerDb, claim.eventRowId, 'processed')
+            } catch (error) {
+              console.error('trainer_bot_failed', { reason: error instanceof Error ? error.message.slice(0, 120) : 'unknown' })
+              await markWebhookProcessed(trainerDb, claim.eventRowId, 'failed', 'trainer_bot_failed')
+            }
+          })
+        }
+        continue
+      }
 
       // Central Kayan AI number: personal-assistant traffic, never a business inbox.
       if (!isKapsoWebhook && isCentralPhoneNumberId(phoneNumberId)) {

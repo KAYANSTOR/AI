@@ -54,17 +54,17 @@ export async function sendCentralButtons(
   }, fetchImpl)
 }
 
-const MAX_AUDIO_BYTES = 16 * 1024 * 1024
+const MAX_MEDIA_BYTES = 16 * 1024 * 1024
 
 /** Media API: resolve the media URL, then download the bytes with the same token. */
 export async function downloadCentralMedia(config: CentralBotConfig, mediaId: string, fetchImpl: FetchLike = fetch) {
   if (!/^[0-9A-Za-z_-]{1,128}$/.test(mediaId)) throw new CentralMetaError('invalid_media_id', 400)
   const meta = await (await graph(config, encodeURIComponent(mediaId), { method: 'GET' }, fetchImpl)).json() as { url?: string; mime_type?: string; file_size?: number }
   if (!meta.url || !/^https:\/\//.test(meta.url)) throw new CentralMetaError('media_url_missing', 502)
-  if (Number(meta.file_size ?? 0) > MAX_AUDIO_BYTES) throw new CentralMetaError('media_too_large', 413)
+  if (Number(meta.file_size ?? 0) > MAX_MEDIA_BYTES) throw new CentralMetaError('media_too_large', 413)
   const response = await fetchImpl(meta.url, { headers: { Authorization: `Bearer ${config.accessToken}` }, signal: AbortSignal.timeout(20_000) })
   if (!response.ok) throw new CentralMetaError(`central_media_http_${response.status}`, response.status)
   const bytes = Buffer.from(await response.arrayBuffer())
-  if (bytes.length > MAX_AUDIO_BYTES) throw new CentralMetaError('media_too_large', 413)
+  if (bytes.length > MAX_MEDIA_BYTES) throw new CentralMetaError('media_too_large', 413)
   return { bytes, mimeType: (meta.mime_type ?? 'audio/ogg').split(';')[0].trim() }
 }

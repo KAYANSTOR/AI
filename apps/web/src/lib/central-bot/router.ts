@@ -4,6 +4,7 @@ import { normalizeE164 } from '@/lib/channels/contacts'
 import { appendThreadMessage, threadHasExternalMessage } from '@/lib/personal-assistant/thread'
 import { decideApproval, setKillSwitch, type EngineDeps } from '@/lib/personal-assistant/executive/engine'
 import { appBaseUrl } from './config'
+import { routeTrainerInbound, type TrainerDeps } from '@/lib/trainer/router'
 
 /**
  * Multi-tenant router for the central Kayan AI number.
@@ -15,9 +16,14 @@ import { appBaseUrl } from './config'
 export type CentralInbound = {
   from: string
   messageId: string
-  type: 'text' | 'audio' | 'button' | 'other'
+  type: 'text' | 'audio' | 'image' | 'document' | 'button' | 'other'
   text?: string
   audioId?: string
+  /** Media id for audio/image/document (Meta Media API). */
+  mediaId?: string
+  mimeType?: string
+  fileName?: string
+  caption?: string
   buttonId?: string
 }
 
@@ -32,6 +38,8 @@ export type CentralDeps = {
   runTurn: (db: DbClient, owner: Owner, text: string) => Promise<{ reply: string }>
   signupUrl?: string
   engine?: EngineDeps
+  /** «مدرب كيان» training mode on the central number (batch 3B). */
+  trainer?: TrainerDeps
 }
 
 const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
@@ -117,8 +125,20 @@ export async function handleCentralInbound(db: DbClient, msg: CentralInbound, de
   const activation = msg.type === 'text' ? ACTIVATION_RE.exec(text) : null
   if (activation) return activate(db, phone, activation[1], msg, deps)
 
+  if (deps.trainer) {
+    const routed = await routeTrainerInbound(db, msg, deps.trainer, 'central')
+    if (routed) return routed
+  }
+
   const { data: link } = await db.from('personal_assistant_links').select('*').eq('whatsapp_phone', phone).maybeSingle()
   if (!link || !link.verified_at) {
+    if (deps.trainer) {
+      const { data: trainerLink } = await db.from('whatsapp_trainer_links').select('id, verified_at').eq('whatsapp_phone', phone).maybeSingle()
+      if (trainerLink?.verified_at) {
+        await deps.sendText(msg.from, 'رقمك مرتبط بمدرب كيان. أرسل «وضع التدريب» لبدء تدريب وكيلك وتحديث قاعدة المعرفة.')
+        return 'trainer_hint'
+      }
+    }
     const signup = deps.signupUrl ?? `${appBaseUrl()}/signup`
     await deps.sendText(msg.from, `مرحباً، أنا Kayan AI — مساعد شخصي ينفّذ مهامك من واتساب.\nهذا الرقم غير مرتبط بحساب. اشترك من هنا ثم فعّل الربط من لوحة التحكم: ${signup}`)
     return 'intro'

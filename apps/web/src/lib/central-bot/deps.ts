@@ -10,6 +10,7 @@ import { appBaseUrl, getCentralBotConfig } from './config'
 import { downloadCentralMedia, sendCentralButtons, sendCentralText } from './meta-client'
 import { transcribeAudioWithGemini } from './transcribe'
 import type { CentralDeps } from './router'
+import { buildTrainerDeps } from '@/lib/trainer/deps'
 
 /** Production wiring. Tests inject their own deps instead. */
 async function linkedPhone(db: DbClient, owner: Owner) {
@@ -86,6 +87,7 @@ export function buildCentralDeps(db: DbClient): CentralDeps | null {
     runTurn: (client, owner, text) => runPersonalAssistantTurn(client, owner, text, { engine }),
     signupUrl: `${appBaseUrl()}/signup`,
     engine,
+    trainer: buildTrainerDeps(db, config),
   }
 }
 
