@@ -5,7 +5,7 @@ export const ownerRouter = Router();
 function handleError(res:Response,err:unknown,status=400){res.status(status).json({error:'request_failed',message:err instanceof Error?err.message:'حدث خطأ غير متوقع في الخادم.'})}
 ownerRouter.get('/auth/status', async (_req,res)=>{try{res.json(await getAuthStatus())}catch(e){handleError(res,e,503)}});
 ownerRouter.post('/auth/claim', async (req,res)=>{try{const input={email:String(req.body?.email||''),fullName:String(req.body?.fullName||''),password:String(req.body?.password||''),ipAddress:getClientIp(req),userAgent:String(req.headers['user-agent']||'unknown')};await claimFirstRunOwner(input);const auth=await loginOwner(input);setSessionCookie(res,auth.token,auth.expiresAt);res.status(201).json(auth)}catch(e){handleError(res,e)}});
-ownerRouter.post('/auth/login', async (req,res)=>{try{const auth=await loginOwner({email:String(req.body?.email||''),password:String(req.body?.password||''),totpCode:req.body?.totpCode?String(req.body.totpCode):undefined,ipAddress:getClientIp(req),userAgent:String(req.headers['user-agent']||'unknown')});if('requiresMfa' in auth&&auth.requiresMfa){res.json(auth);return;}setSessionCookie(res,auth.token,auth.expiresAt);res.json(auth)}catch(e){handleError(res,e,401)}});
+ownerRouter.post('/auth/login', async (req,res)=>{try{const auth=await loginOwner({email:String(req.body?.email||''),password:String(req.body?.password||''),totpCode:req.body?.totpCode?String(req.body.totpCode):undefined,ipAddress:getClientIp(req),userAgent:String(req.headers['user-agent']||'unknown')});if('requiresMfa' in auth&&auth.requiresMfa){res.json(auth);return;}if(!('token' in auth)||typeof auth.token!=='string'||!('expiresAt' in auth)||typeof auth.expiresAt!=='string'){res.status(401).json({error:'authentication_incomplete'});return;}setSessionCookie(res,auth.token,auth.expiresAt);res.json(auth)}catch(e){handleError(res,e,401)}});
 const platformDataRouter = Router();
 
 platformDataRouter.get('/platform-data/status', async (_req, res) => {
@@ -283,7 +283,7 @@ platformDataRouter.patch('/entitlements/flags/:key', requirePermission('users:wr
 platformDataRouter.post('/channels', requirePermission('ops:write'), unavailablePlatformData);
 
 platformDataRouter.post('/plans', requirePermission('billing:write'), async (req,res)=>{
-  try {const result=await savePlatformPlan(req.body||{});writeAuditLog({actor:req.ownerAdmin!,action:'plan.created',entityType:'plan',entityId:String(result.id),summary:'إنشاء باقة في كتالوج PostgreSQL.',after:result,ipAddress:getClientIp(req)});res.status(201).json(result);}
+  try {const result=await savePlatformPlan(req.body||{});writeAuditLog({actor:req.ownerAdmin!,action:'plan.created',entityType:'plan',entityId:String((result as Record<string,unknown>).id),summary:'إنشاء باقة في كتالوج PostgreSQL.',after:result,ipAddress:getClientIp(req)});res.status(201).json(result);}
   catch(err){handleError(res,err);}
 });
 platformDataRouter.put('/plans/:id', requirePermission('billing:write'), async (req,res)=>{
