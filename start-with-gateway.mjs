@@ -52,13 +52,11 @@ launch('inbound_worker', ['--import', 'tsx', 'src/lib/runtime/inbound-worker.ts'
 const ownerConsoleEnv = {
   ...process.env,
   PORT: String(process.env.OWNER_CONSOLE_PORT || '8090'),
-  KAYAN_OWNER_DB_PATH: process.env.OWNER_CONSOLE_DB_PATH || '/data/kayan_owner.db',
   CREDENTIAL_ENCRYPTION_KEY: process.env.OWNER_CONSOLE_CREDENTIAL_ENCRYPTION_KEY || '',
   OWNER_EMAIL: process.env.OWNER_CONSOLE_OWNER_EMAIL || 'jarallhalkboudi@gmail.com',
   OWNER_PASSCODE: process.env.OWNER_CONSOLE_OWNER_PASSCODE || '',
 }
-// The owner console keeps its own SQLite store for owner sessions and audit logs,
-// while its platform data adapter uses the same canonical Railway PostgreSQL URL.
+// The owner console uses the same canonical Railway PostgreSQL URL for its control plane and platform data.
 launch('owner_console', ['--import', 'tsx', 'server.ts'], `${root}/apps/owner-console`, ownerConsoleEnv)
 
 launch('kayan_web', [`${root}/node_modules/next/dist/bin/next`, 'start', '-H', '0.0.0.0', '-p', port], `${root}/apps/web`)

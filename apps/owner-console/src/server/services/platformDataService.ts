@@ -43,7 +43,7 @@ export async function platformPing() {
 
 export async function platformStatus() {
   const [r] = await query<{db:string;users:string;orgs:string;subs:string}>(`SELECT current_database() db,(SELECT COUNT(*) FROM auth.users WHERE deleted_at IS NULL)::text users,(SELECT COUNT(*) FROM organizations)::text orgs,(SELECT COUNT(*) FROM subscriptions)::text subs`);
-  return { connected:true, engine:'PostgreSQL', database:r.db, counts:{users:count(r.users),organizations:count(r.orgs),subscriptions:count(r.subs)}, ownerSecurityStore:'SQLite منفصلة للجلسات وسجل تدقيق المالك' };
+  return { connected:true, engine:'PostgreSQL', database:r.db, counts:{users:count(r.users),organizations:count(r.orgs),subscriptions:count(r.subs)}, ownerSecurityStore:'PostgreSQL control plane' };
 }
 
 export async function platformUsers(f:{search?:string;status?:string;paymentStatus?:string;sortBy?:string;sortDir?:'asc'|'desc';page?:number;pageSize?:number}) {

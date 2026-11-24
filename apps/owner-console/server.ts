@@ -3,9 +3,7 @@ import express, { type Request, type Response, type NextFunction } from 'express
 import fs from 'node:fs';
 import path from 'node:path';
 import { createServer as createViteServer } from 'vite';
-import { getDb } from './src/server/db/connection';
 import { ownerRouter } from './src/server/routes/ownerRoutes';
-import { logSystemError } from './src/server/services/monitoringService';
 import { isEncryptionKeyConfigured } from './src/server/security/crypto';
 import { platformPing, platformStatus } from './src/server/services/platformDataService';
 
@@ -14,9 +12,6 @@ export async function createAppServer() {
   if (process.env.NODE_ENV === 'production' && !isEncryptionKeyConfigured()) {
     throw new Error('OWNER CONSOLE: CREDENTIAL_ENCRYPTION_KEY is required in production.');
   }
-
-  // Initialize the owner-only persistent database and apply migrations on boot.
-  getDb();
 
   const app = express();
   app.set('trust proxy', true);
@@ -53,13 +48,7 @@ export async function createAppServer() {
 
   // Global error handler (never leaks raw secrets or stack traces)
   app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
-    logSystemError({
-      category: 'server',
-      severity: 'error',
-      serviceName: 'express-server',
-      message: err.message || 'Unhandled server error',
-      details: err.stack?.slice(0, 600) || '',
-    });
+    console.error('owner_console_unhandled_error', err.message || 'Unhandled server error');
     res.status(500).json({ error: 'internal_error', message: 'حدث خطأ داخلي في الخادم وتم تسجيله في سجل الأخطاء.' });
   });
 
