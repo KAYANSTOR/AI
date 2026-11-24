@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { CircleAlert, CheckCircle2, History, Loader2, Save, Send } from 'lucide-react'
-import type { ToolPolicy } from '@/lib/ai/registry'
+import { TOOL_LABELS_AR, type ToolPolicy } from '@/lib/ai/registry'
 import { ar } from '@/lib/i18n/ar'
 import { capabilityLabel } from '@/lib/i18n/labels'
 import {
@@ -143,7 +143,7 @@ export function AgentConsole({ data }: { data: AgentConsoleData }) {
       <section className="rounded-xl border border-border bg-surface p-5 shadow-sm">
         <h2 className="text-sm font-semibold text-text">هوية الوكيل</h2>
         <p className="mt-0.5 text-xs text-text-muted">
-          النموذج المستخدم: <span dir="ltr">{data.modelProvider}</span>
+          محرك الذكاء الاصطناعي: <span className="font-semibold text-success">مفعّل</span>
         </p>
 
         <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -179,17 +179,16 @@ export function AgentConsole({ data }: { data: AgentConsoleData }) {
             </select>
           </label>
           <label className="block">
-            <span className="mb-1 block text-xs font-medium text-text">درجة الإبداع (0–1)</span>
-            <input
-              type="number"
-              min={0}
-              max={1}
-              step={0.05}
-              value={temperature}
-              onChange={(event) => setTemperature(Number(event.target.value))}
+            <span className="mb-1 block text-xs font-medium text-text">مرونة الردود</span>
+            <select
+              value={temperature <= 0.2 ? 'precise' : temperature >= 0.5 ? 'flexible' : 'balanced'}
+              onChange={(event) => setTemperature(event.target.value === 'precise' ? 0.15 : event.target.value === 'flexible' ? 0.65 : 0.35)}
               className="min-h-11 w-full rounded-lg border border-border bg-background px-3 py-2 text-base text-text focus:border-secondary focus:outline-none focus:ring-2 focus:ring-accent/20 md:text-sm"
-              dir="ltr"
-            />
+            >
+              <option value="precise">دقيق</option>
+              <option value="balanced">متوازن</option>
+              <option value="flexible">مرن</option>
+            </select>
           </label>
         </div>
 
@@ -198,7 +197,7 @@ export function AgentConsole({ data }: { data: AgentConsoleData }) {
             type="button"
             onClick={saveProfile}
             disabled={pending}
-            className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary-dark px-4 py-2 text-base font-medium text-primary-foreground transition-colors hover:bg-primary disabled:opacity-60 md:w-auto md:text-sm"
+            className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary-dark px-4 py-2 text-base font-medium text-white transition-colors hover:bg-primary disabled:opacity-60 md:w-auto md:text-sm"
           >
             {pending ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
             حفظ الهوية
@@ -226,7 +225,7 @@ export function AgentConsole({ data }: { data: AgentConsoleData }) {
             type="button"
             onClick={publish}
             disabled={pending}
-            className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary-dark px-4 py-2 text-base font-medium text-primary-foreground transition-colors hover:bg-primary disabled:opacity-60 md:w-auto md:text-sm"
+            className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary-dark px-4 py-2 text-base font-medium text-white transition-colors hover:bg-primary disabled:opacity-60 md:w-auto md:text-sm"
           >
             {pending ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
             نشر التعليمات
@@ -277,11 +276,10 @@ export function AgentConsole({ data }: { data: AgentConsoleData }) {
           {tools.map((tool) => (
             <li key={tool.policy.name} className="rounded-lg border border-border bg-background p-3">
               <p className="font-medium text-text" dir="ltr">
-                {tool.policy.name}
+                {TOOL_LABELS_AR[tool.policy.name]?.label ?? 'أداة الوكيل'}
               </p>
               <p className="mt-1 text-[11px] text-text-muted">
-                {ar.agent.toolDescriptions[tool.policy.name as keyof typeof ar.agent.toolDescriptions] ??
-                  tool.policy.description}
+                {TOOL_LABELS_AR[tool.policy.name]?.description ?? tool.policy.description}
               </p>
               <div className="mt-3 flex flex-wrap gap-4 text-xs">
                 <label className="inline-flex min-h-11 items-center gap-2 text-text">
@@ -326,11 +324,10 @@ export function AgentConsole({ data }: { data: AgentConsoleData }) {
                 <tr key={tool.policy.name} className="border-b border-border/60 align-top">
                   <td className="py-2 pe-3">
                     <span className="font-medium text-text" dir="ltr">
-                      {tool.policy.name}
+                      {TOOL_LABELS_AR[tool.policy.name]?.label ?? 'أداة الوكيل'}
                     </span>
                     <span className="mt-0.5 block text-[11px] text-text-muted">
-                      {ar.agent.toolDescriptions[tool.policy.name as keyof typeof ar.agent.toolDescriptions] ??
-                        tool.policy.description}
+                      {TOOL_LABELS_AR[tool.policy.name]?.description ?? tool.policy.description}
                     </span>
                   </td>
                   <td className="py-2 pe-3">
@@ -358,7 +355,7 @@ export function AgentConsole({ data }: { data: AgentConsoleData }) {
                         checked={tool.isAllowed}
                         disabled={pending}
                         onChange={(event) => toggleTool(tool.policy.name, { isAllowed: event.target.checked }, tool)}
-                        aria-label={'السماح بالأداة ' + tool.policy.name}
+                        aria-label={'السماح بأداة ' + (TOOL_LABELS_AR[tool.policy.name]?.label ?? 'الوكيل')}
                         className="h-5 w-5 accent-[var(--color-primary-dark)]"
                       />
                     </label>
@@ -372,7 +369,7 @@ export function AgentConsole({ data }: { data: AgentConsoleData }) {
                         onChange={(event) =>
                           toggleTool(tool.policy.name, { requiresConfirmation: event.target.checked }, tool)
                         }
-                        aria-label={'طلب تأكيد للأداة ' + tool.policy.name}
+                          aria-label={'طلب تأكيد لأداة ' + (TOOL_LABELS_AR[tool.policy.name]?.label ?? 'الوكيل')}
                         className="h-5 w-5 accent-[var(--color-primary-dark)]"
                       />
                     </label>

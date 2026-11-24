@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/db/server'
 import { getDashboardContext } from '@/lib/dashboard/context'
-import { TOOL_POLICIES } from '@/lib/ai/registry'
+import { HIDDEN_TOOL_NAMES, TOOL_POLICIES } from '@/lib/ai/registry'
 import { calculateAgentReadiness } from '@/lib/ai/readiness'
 import type { AgentConsoleData } from './agent-console'
 
@@ -101,7 +101,7 @@ export async function loadAgentContext() {
         publishedAt: (row.published_at as string | null) ?? null,
         characters: ((row.system_prompt_addition as string | null) ?? '').length,
       })),
-      tools: Object.values(TOOL_POLICIES).map((policy) => {
+      tools: Object.values(TOOL_POLICIES).filter((policy) => !HIDDEN_TOOL_NAMES.has(policy.name)).map((policy) => {
         const override = policyByTool.get(policy.name)
         return {
           policy,

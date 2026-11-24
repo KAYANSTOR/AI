@@ -5,6 +5,8 @@ import { DashboardKpiSection, DashboardKpiSkeleton } from '@/components/dashboar
 import { HomeServicesGrid } from '@/components/dashboard/overview/home-services-grid'
 import { DashboardActivitySection, DashboardActivitySkeleton } from '@/components/dashboard/overview/dashboard-activity-section'
 import { DashboardAgentHealthSection, DashboardAgentHealthSkeleton } from '@/components/dashboard/overview/dashboard-agent-health-section'
+import Link from 'next/link'
+import { Brain, ListTodo } from 'lucide-react'
 
 export const dynamic = 'force-dynamic'
 
@@ -17,6 +19,19 @@ export default async function DashboardPage() {
         <DashboardKpiSection organizationId={context.organizationId} />
       </Suspense>
       <HomeServicesGrid enabledCapabilities={context.enabledCapabilities} />
+      <section className="rounded-2xl border border-secondary/30 bg-gradient-to-br from-primary-dark to-primary p-5 text-white shadow-sm">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-xs font-bold text-white/75">مساحتك الخاصة</p>
+            <h2 className="mt-1 text-xl font-extrabold">المساعد الشخصي</h2>
+            <p className="mt-1 max-w-xl text-sm leading-6 text-white/80">احتفظ بذاكرتك ومهامك وملخصك اليومي بعيداً عن بيانات نشاطك التجاري.</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Link href="/dashboard/assistant/tasks" className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-white px-4 py-2 text-sm font-bold text-primary-dark hover:bg-white/90"><ListTodo size={16} /> المهام والتذكيرات</Link>
+            <Link href="/dashboard/assistant/memories" className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-white/40 px-4 py-2 text-sm font-bold text-white hover:bg-white/10"><Brain size={16} /> الذاكرة</Link>
+          </div>
+        </div>
+      </section>
       <Suspense fallback={<DashboardActivitySkeleton />}>
         <DashboardActivitySection organizationId={context.organizationId} timezone={context.timezone} />
       </Suspense>

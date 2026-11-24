@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react'
 import { toggleCapabilityAction } from './actions'
 import { Loader2 } from 'lucide-react'
 import { ar } from '@/lib/i18n/ar'
+import { capabilityDescription, capabilityLabel } from '@/lib/i18n/labels'
 
 type Row = {
   id: string
@@ -42,9 +43,9 @@ export function CapabilityManager({ rows }: { rows: Row[] }) {
         {rows.map((r) => (
           <li key={r.id} className="flex min-h-14 items-center justify-between gap-4 px-4 py-3">
             <div>
-              <p className="text-sm font-medium text-text">{r.name}</p>
+              <p className="text-sm font-medium text-text">{capabilityLabel(r.id, r.name)}</p>
               {r.description && (
-                <p className="mt-0.5 text-xs text-text-muted">{r.description}</p>
+                <p className="mt-0.5 text-xs text-text-muted">{capabilityDescription(r.id, r.description)}</p>
               )}
             </div>
             <button
@@ -55,7 +56,7 @@ export function CapabilityManager({ rows }: { rows: Row[] }) {
                 r.enabled ? 'bg-primary-dark' : 'bg-border'
               }`}
               aria-pressed={r.enabled}
-              aria-label={r.name}
+              aria-label={capabilityLabel(r.id, r.name)}
             >
               {pending && pendingId === r.id ? (
                 <Loader2 className="absolute inset-0 m-auto animate-spin text-text" size={14} />

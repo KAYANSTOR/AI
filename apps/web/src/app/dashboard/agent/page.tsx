@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { Bot, MessageSquare, Settings2, Sparkles } from 'lucide-react'
+import { Bot, MessageSquare, Settings2, Sparkles, Brain, ListTodo } from 'lucide-react'
 import { loadAgentContext } from './load-agent-context'
 import { MobileEmptyState } from '@/components/ui/empty-state'
 import { KpiCard } from '@/components/ui/kpi-card'
@@ -55,7 +55,7 @@ export default async function AgentHubPage() {
         <p className="text-xs font-semibold text-secondary">جاهزية الوكيل · {readiness.score}%</p>
         <h2 className="mt-1 text-lg font-bold text-text">{businessName}</h2>
         <p className="mt-1 text-sm text-text-muted">
-          الحالة: {statusLabel} · النموذج: {consoleData.modelProvider}
+          الحالة: {statusLabel} · محرك الذكاء الاصطناعي: مفعّل
         </p>
         <Link
           href="/dashboard/agent/settings"
@@ -63,6 +63,16 @@ export default async function AgentHubPage() {
         >
           إدارة إعدادات الوكيل
         </Link>
+      </section>
+
+      <section className="rounded-2xl border border-secondary/30 bg-primary-dark p-4 text-white shadow-sm">
+        <p className="text-xs font-bold text-white/70">مساعدك الخاص</p>
+        <h2 className="mt-1 text-lg font-extrabold">المساعد الشخصي</h2>
+        <p className="mt-1 text-sm leading-6 text-white/80">ذاكرة ومهام وملخص يومي لك، منفصلة عن وكيل النشاط.</p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Link href="/dashboard/assistant/tasks" className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-white px-3 py-2 text-xs font-bold text-primary-dark"><ListTodo size={15} /> المهام والملخص</Link>
+          <Link href="/dashboard/assistant/memories" className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-white/40 px-3 py-2 text-xs font-bold text-white"><Brain size={15} /> الذاكرة</Link>
+        </div>
       </section>
 
       <div>

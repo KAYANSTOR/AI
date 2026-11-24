@@ -28,6 +28,29 @@ export type ToolPolicy = {
   inputSchema: Record<string, unknown>
 }
 
+/** أسماء وأوصاف العرض العربية؛ تبقى أسماء الأدوات البرمجية داخلية للتوافق الخلفي. */
+export const TOOL_LABELS_AR: Record<string, { label: string; description: string }> = {
+  get_customer: { label: 'البحث عن العميل', description: 'البحث عن العميل برقم الهاتف وعرض ملفه ومواعيده القادمة.' },
+  find_available_slots: { label: 'البحث عن المواعيد المتاحة', description: 'عرض الأوقات المتاحة لخدمة في تاريخ محدد.' },
+  create_appointment: { label: 'إنشاء حجز', description: 'إنشاء موعد بعد تأكيد العميل للوقت المقترح.' },
+  create_lead: { label: 'استقطاب عميل محتمل', description: 'تسجيل استفسار مؤهل كعميل محتمل مع اهتمامه.' },
+  search_knowledge: { label: 'البحث في قاعدة المعرفة', description: 'البحث في معلومات النشاط قبل الإجابة عن الأسئلة.' },
+  request_human_handoff: { label: 'التحويل إلى موظف', description: 'تحويل المحادثة إلى موظف وإيقاف الأتمتة مؤقتاً.' },
+  create_quote: { label: 'إنشاء عرض سعر', description: 'إنشاء مسودة عرض سعر للعميل.' },
+  create_order: { label: 'إنشاء طلب', description: 'إنشاء مسودة طلب للعميل.' },
+  convert_quote_to_order: { label: 'تحويل العرض إلى طلب', description: 'تحويل عرض سعر مقبول إلى طلب.' },
+  cancel_appointment: { label: 'إلغاء حجز', description: 'إلغاء حجز العميل بعد التأكيد.' },
+  search_products: { label: 'البحث في المنتجات والخدمات', description: 'البحث في كتالوج النشاط وأسعاره.' },
+  track_order: { label: 'متابعة الطلب', description: 'عرض حالة طلب العميل.' },
+  send_packages: { label: 'عرض الباقات', description: 'البحث عن معلومات الباقات المعتمدة.' },
+  send_brochure: { label: 'إرسال الملف التعريفي', description: 'إرجاع رابط الملف التعريفي العام للنشاط.' },
+}
+
+// أسماء قديمة لها نفس التنفيذ الحديث. إخفاؤها من لوحة التحكم لا يغيّر التوافق مع المحادثات القائمة.
+export const HIDDEN_TOOL_NAMES = new Set([
+  'check_slots', 'check_date_availability', 'book_appointment', 'book_reservation', 'schedule_call', 'capture_lead',
+])
+
 export const TOOL_POLICIES: Record<string, ToolPolicy> = {
   get_customer: {
     name: 'get_customer',

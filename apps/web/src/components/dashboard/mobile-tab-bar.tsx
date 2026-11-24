@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
   Plus, X, Home, Contact, BarChart3, MessageSquareText,
-  CalendarPlus, FilePlus2, ClipboardList, Megaphone, Bot,
+  CalendarPlus, FilePlus2, ClipboardList, Megaphone, Bot, Brain, ListTodo, Sun,
 } from 'lucide-react'
 import { getVertical } from '@/lib/verticals/registry'
 
@@ -23,6 +23,9 @@ const quickActions = [
   { href: '/dashboard/orders/new', label: 'طلب جديد', description: 'سجّل طلباً جديداً', icon: ClipboardList },
   { href: '/dashboard/campaigns', label: 'حملة تواصل', description: 'جهّز حملة كمسودة', icon: Megaphone },
   { href: '/dashboard/agent', label: 'إعداد المساعد', description: 'راجع الوكيل الذكي', icon: Bot },
+  { href: '/dashboard/assistant/memories', label: 'الذاكرة الشخصية', description: 'راجع ما يتذكره مساعدك', icon: Brain },
+  { href: '/dashboard/assistant/tasks', label: 'المهام والتذكيرات', description: 'أدر مهامك ومواعيدك', icon: ListTodo },
+  { href: '/dashboard/assistant/tasks#daily-summary', label: 'الملخص اليومي', description: 'اضبط وقت الملخص اليومي', icon: Sun },
 ]
 
 export function MobileTabBar({ businessTypeId }: { businessTypeId: string | null }) {

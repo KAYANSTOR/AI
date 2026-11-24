@@ -68,7 +68,7 @@ export function PersonalAssistantTasksPanel() {
         <Button type="submit" loading={saving} disabled={!title.trim()}>إضافة</Button>
       </form>
     </div>
-    <div className="rounded-2xl border border-border bg-surface p-4">
+    <div id="daily-summary" className="rounded-2xl border border-border bg-surface p-4 scroll-mt-6">
       <h2 className="text-base font-extrabold text-text">التذكيرات والملخص اليومي</h2>
       <p className="mt-1 text-sm leading-6 text-text-muted">تظل هذه الإعدادات خاصة بك. رسائل Meta الاستباقية لا تُرسل إلا عبر قالب معتمد.</p>
       <div className="mt-3 grid gap-3 sm:grid-cols-2">

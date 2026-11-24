@@ -329,7 +329,7 @@ export function ConfirmActionModal({
             className={`px-4 py-2 text-xs font-semibold rounded-lg whitespace-nowrap transition-opacity disabled:opacity-50 ${
               danger
                 ? 'bg-[var(--k-danger)] text-white'
-                : 'bg-[var(--k-accent)] text-[var(--k-accent-ink)]'
+                : 'bg-[var(--k-brand-forest)] text-white'
             }`}
           >
             {busy ? 'جاري التنفيذ...' : confirmLabel}
@@ -341,7 +341,7 @@ export function ConfirmActionModal({
 }
 
 export const primaryBtnClass =
-  'inline-flex items-center justify-center gap-2 px-4 py-2 text-xs font-semibold rounded-lg bg-[var(--k-accent)] text-[var(--k-accent-ink)] hover:opacity-90 transition-opacity whitespace-nowrap shrink-0 disabled:opacity-50';
+  'inline-flex items-center justify-center gap-2 px-4 py-2 text-xs font-semibold rounded-lg bg-[var(--k-brand-forest)] text-white hover:opacity-90 transition-opacity whitespace-nowrap shrink-0 disabled:opacity-50';
 
 export const secondaryBtnClass =
   'inline-flex items-center justify-center gap-2 px-3.5 py-2 text-xs font-medium rounded-lg border border-[var(--k-line-strong)] bg-[var(--k-surface)] text-[var(--k-ink)] hover:bg-[var(--k-surface-subtle)] transition-colors whitespace-nowrap shrink-0 disabled:opacity-50';

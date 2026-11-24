@@ -361,11 +361,12 @@ export const ar = {
   capabilities: {
     lead_capture: { label: 'إدارة العملاء المحتملين', description: 'تسجيل فرص العملاء وتأهيلها ومتابعتها.' },
     appointments: { label: 'المواعيد والحجوزات', description: 'حجز المواعيد وإعادة جدولتها وإلغاؤها.' },
-    quotes: { label: 'عروض الأسعار', description: 'إدارة الباقات والأسعار والعروض المقدّمة.' },
+    quotes: { label: 'عروض الأسعار والباقات', description: 'إدارة الباقات والأسعار والعروض المقدّمة.' },
     orders: { label: 'الطلبات', description: 'متابعة الطلبات وطلبات العملاء.' },
     follow_up: { label: 'المتابعة التلقائية', description: 'متابعة العملاء وفق تسلسلات محددة.' },
-    inbox: { label: 'صندوق المحادثات', description: 'إدارة المحادثات الواردة من قنوات متعددة.' },
+    inbox: { label: 'صندوق الوارد الموحّد', description: 'إدارة المحادثات الواردة من قنوات متعددة.' },
     knowledge_base: { label: 'قاعدة المعرفة', description: 'إجابات النشاط وأسئلته الشائعة للوكيل.' },
+    personal_assistant: { label: 'المساعد الشخصي', description: 'ذاكرة ومهام وملخص يومي خاص بالمستخدم.' },
   },
   leadStatus: {
     new: 'جديد',
