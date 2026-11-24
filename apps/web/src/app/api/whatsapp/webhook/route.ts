@@ -1,6 +1,10 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { after, NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/db/admin'
 import { acquireWebhookEvent, markWebhookProcessed } from '@/lib/channels/idempotency'
+import { isCentralPhoneNumberId } from '@/lib/central-bot/config'
+import { buildCentralDeps } from '@/lib/central-bot/deps'
+import { parseCentralMessage } from '@/lib/central-bot/parse'
+import { handleCentralInbound } from '@/lib/central-bot/router'
 import { normalizeE164, resolveContactIdentity } from '@/lib/channels/contacts'
 import { ensureOpenConversation } from '@/lib/runtime/conversation'
 import { processInboundMessage, recordInboundMediaMessage } from '@/lib/runtime/process-inbound'
@@ -116,6 +120,29 @@ export async function POST(req: NextRequest) {
       const phoneNumberId = String(value.metadata?.phone_number_id ?? '').trim()
       const profileName = String(value.contacts?.[0]?.profile?.name ?? '').trim()
       const field = value.field ?? 'messages'
+
+      // Central Kayan AI number: personal-assistant traffic, never a business inbox.
+      if (!isKapsoWebhook && isCentralPhoneNumberId(phoneNumberId)) {
+        const centralDeps = buildCentralDeps(db)
+        for (const raw of value.messages ?? []) {
+          const parsed = parseCentralMessage(raw)
+          if (!parsed || !centralDeps) continue
+          const claim = await acquireWebhookEvent(db, 'kayan_central_whatsapp', parsed.messageId, { id: parsed.messageId, type: parsed.type })
+          if (claim.status !== 'acquired') continue
+          const centralDb = db
+          // Ack Meta immediately; the AI turn runs after the response is sent.
+          after(async () => {
+            try {
+              await handleCentralInbound(centralDb, parsed, centralDeps)
+              await markWebhookProcessed(centralDb, claim.eventRowId, 'processed')
+            } catch (error) {
+              console.error('central_bot_failed', { reason: error instanceof Error ? error.message.slice(0, 120) : 'unknown' })
+              await markWebhookProcessed(centralDb, claim.eventRowId, 'failed', 'central_bot_failed')
+            }
+          })
+        }
+        continue
+      }
 
       // Persist Coexistence account lifecycle events and disable offboarded tenants.
       if (field === 'account_update') {

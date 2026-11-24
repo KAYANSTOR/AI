@@ -24,12 +24,17 @@ const quickActions = [
   { href: '/dashboard/orders/new', label: 'طلب جديد', description: 'سجّل طلباً جديداً', icon: ClipboardList },
   { href: '/dashboard/campaigns', label: 'حملة تواصل', description: 'جهّز حملة كمسودة', icon: Megaphone },
   { href: '/dashboard/agent', label: 'إعداد المساعد', description: 'راجع الوكيل الذكي', icon: Bot },
-  { href: '/dashboard/assistant/memories', label: 'الذاكرة الشخصية', description: 'راجع ما يتذكره مساعدك', icon: Brain },
+]
+
+/** Shown only when the personal-assistant sector or add-on is active. */
+const personalAssistantActions = [
+  { href: '/dashboard/assistant', label: 'Kayan AI الشخصي', description: 'محادثة ومهام وموافقات', icon: Bot },
+  { href: '/dashboard/assistant?tab=memory', label: 'الذاكرة الشخصية', description: 'راجع ما يتذكره مساعدك', icon: Brain },
   { href: '/dashboard/assistant/tasks', label: 'المهام والتذكيرات', description: 'أدر مهامك ومواعيدك', icon: ListTodo },
   { href: '/dashboard/assistant/tasks#daily-summary', label: 'الملخص اليومي', description: 'اضبط وقت الملخص اليومي', icon: Sun },
 ]
 
-export function MobileTabBar({ businessTypeId }: { businessTypeId: string | null }) {
+export function MobileTabBar({ businessTypeId, personalAssistantEnabled = false }: { businessTypeId: string | null; personalAssistantEnabled?: boolean }) {
   const pathname = usePathname()
   const vertical = getVertical(businessTypeId)
   const [open, setOpen] = useState(false)
@@ -46,6 +51,8 @@ export function MobileTabBar({ businessTypeId }: { businessTypeId: string | null
       : vertical.baseEngine === 'event_engine'
         ? [{ href: '/dashboard/appointments', label: `${vertical.labels.appointments} جديد`, description: 'تحقق من التاريخ وسجّل الحجز', icon: CalendarPlus }, ...quickActions.filter((action) => action.href !== '/dashboard/appointments')]
         : [{ href: '/dashboard/leads', label: `${vertical.labels.leads} جديد`, description: 'سجّل استفساراً جديداً', icon: Contact }, ...quickActions.filter((action) => action.href !== '/dashboard/appointments')]
+
+  const sheetActions = personalAssistantEnabled ? [...verticalActions, ...personalAssistantActions] : verticalActions
 
   useEffect(() => {
     if (!open) return
@@ -105,7 +112,7 @@ export function MobileTabBar({ businessTypeId }: { businessTypeId: string | null
               <button type="button" onClick={close} aria-label="إغلاق" className="dashboard-icon-button"><X size={18} aria-hidden="true" /></button>
             </div>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-              {verticalActions.map(({ href, label, description, icon: Icon }) => (
+              {sheetActions.map(({ href, label, description, icon: Icon }) => (
                 <Link key={href} href={href} onClick={dismissForNavigation} className="dashboard-quick-action">
                   <span className="dashboard-quick-action-icon"><Icon size={21} aria-hidden="true" /></span>
                   <span className="text-sm font-bold text-text">{label}</span>

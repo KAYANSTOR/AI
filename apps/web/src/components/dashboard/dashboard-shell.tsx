@@ -13,12 +13,14 @@ export function DashboardShell({
   organizationName,
   businessTypeId,
   timezone,
+  personalAssistantEnabled = false,
 }: {
   children: React.ReactNode
   setupBanner?: React.ReactNode
   organizationName: string
   businessTypeId: string | null
   timezone: string
+  personalAssistantEnabled?: boolean
 }) {
   return (
     <div className="dashboard-viewport" dir="rtl">
@@ -35,7 +37,7 @@ export function DashboardShell({
         </main>
       </div>
       {/* Fixed to the viewport, outside the overflow-hidden app frame. */}
-      <MobileTabBar businessTypeId={businessTypeId} />
+      <MobileTabBar businessTypeId={businessTypeId} personalAssistantEnabled={personalAssistantEnabled} />
     </div>
   )
 }

@@ -22,7 +22,7 @@ const groups = [
   ]},
   { title: 'المساعد والقنوات', items: [
     { href:'/dashboard/agent',title:'المساعد الذكي',description:'إعداد الوكيل واختباره',icon:Bot },
-    { href:'/dashboard/assistant/memories',title:'الذاكرة الشخصية',description:'إدارة معلوماتك المحفوظة الخاصة بك',icon:Brain },
+    { href:'/dashboard/assistant?tab=memory',title:'الذاكرة الشخصية',description:'إدارة معلوماتك المحفوظة الخاصة بك',icon:Brain,personalAssistant:true },
     { href:'/dashboard/knowledge',title:'قاعدة المعرفة',description:'معلومات النشاط ومصادر الإجابة',icon:BookOpen,capability:'knowledge_base' },
     { href:'/dashboard/channels',title:'القنوات والربط',description:'واتساب والقنوات المتصلة',icon:RadioTower },
     { href:'/dashboard/integrations',title:'التكاملات',description:'الخدمات والاتصالات الخارجية',icon:Zap },
@@ -47,18 +47,19 @@ const groups = [
 export function SettingsHub(props: {
   organizationName:string; accountId:string; accountIdentity:string; role:string;
   setupComplete:boolean; planName:string; subscriptionStatus:string;
-  capabilityRows:CapabilityRow[]; isAdmin:boolean;
+  capabilityRows:CapabilityRow[]; isAdmin:boolean; personalAssistantEnabled:boolean;
 }) {
   const [query,setQuery]=useState('')
   const visibleGroups=useMemo(()=>groups.map(group=>({
     ...group,
     items:group.items.filter(item=>{
+      if ('personalAssistant' in item && item.personalAssistant && !props.personalAssistantEnabled) return false
       if ('adminOnly' in item && item.adminOnly && !props.isAdmin) return false
       if ('capability' in item && item.capability && !props.capabilityRows.some(row=>row.id===item.capability && row.enabled)) return false
       const term=query.trim().toLocaleLowerCase()
       return !term || (group.title+' '+item.title+' '+item.description).toLocaleLowerCase().includes(term)
     })
-  })).filter(group=>group.items.length>0),[props.capabilityRows,props.isAdmin,query])
+  })).filter(group=>group.items.length>0),[props.capabilityRows,props.isAdmin,props.personalAssistantEnabled,query])
 
   return (
     <div className="space-y-5">

@@ -1,17 +1,14 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/db/server'
-import { getCurrentOrg } from '@/lib/org'
+import { requirePersonalAssistantApi } from '@/lib/personal-assistant/api-context'
 import { completePersonalTask, createPersonalTask, getPersonalSettings, listPersonalTasks, snoozePersonalTask, updatePersonalTask, upsertPersonalSettings } from '@/lib/personal-assistant/tasks'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 async function context() {
-  const org = await getCurrentOrg()
-  if (!org) return null
-  const db = await createClient()
-  const { data: { user } } = await db.auth.getUser()
-  return user && user.id === org.userId ? { db, owner: { organizationId: org.organizationId, userId: user.id } } : null
+  const access = await requirePersonalAssistantApi()
+  if (access instanceof NextResponse) return access
+  return { db: access.db, owner: access.owner }
 }
 function bodyObject(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null
@@ -24,7 +21,7 @@ function errorResponse(error: unknown) {
 
 export async function GET(request: Request) {
   const current = await context()
-  if (!current) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  if (current instanceof NextResponse) return current
   const status = new URL(request.url).searchParams.get('status') as 'all' | 'pending' | 'done' | 'snoozed' | null
   try {
     const [tasks, settings, channels] = await Promise.all([
@@ -38,7 +35,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   const current = await context()
-  if (!current) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  if (current instanceof NextResponse) return current
   const body = bodyObject(await request.json().catch(() => null))
   if (!body) return NextResponse.json({ error: 'invalid_request_body' }, { status: 400 })
   try {
@@ -60,7 +57,7 @@ export async function POST(request: Request) {
 
 export async function PATCH(request: Request) {
   const current = await context()
-  if (!current) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  if (current instanceof NextResponse) return current
   const body = bodyObject(await request.json().catch(() => null))
   if (!body || typeof body.id !== 'string') return NextResponse.json({ error: 'invalid_id' }, { status: 400 })
   try {
@@ -76,7 +73,7 @@ export async function PATCH(request: Request) {
 
 export async function DELETE(request: Request) {
   const current = await context()
-  if (!current) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  if (current instanceof NextResponse) return current
   const id = new URL(request.url).searchParams.get('id')
   if (!id) return NextResponse.json({ error: 'invalid_id' }, { status: 400 })
   const { data, error } = await current.db.from('personal_tasks').delete().eq('id', id).eq('organization_id', current.owner.organizationId).eq('user_id', current.owner.userId).select('id')

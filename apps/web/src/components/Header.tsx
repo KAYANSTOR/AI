@@ -27,6 +27,7 @@ const PAGE_META = [
   { prefix: '/dashboard/orders', title: 'الطلبات', subtitle: 'متابعة طلبات العملاء', icon: Contact },
   { prefix: '/dashboard/agent', title: 'المساعد الذكي', subtitle: 'إعداد الوكيل واختباره وتدريبه', icon: Bot },
   { prefix: '/dashboard/assistant/memories', title: 'الذاكرة الشخصية', subtitle: 'إدارة معلوماتك الخاصة بالمساعد', icon: Brain },
+  { prefix: '/dashboard/assistant', title: 'Kayan AI الشخصي', subtitle: 'مساعد تنفيذي بموافقة ومحضر أعمال', icon: Bot },
   { prefix: '/dashboard/channels', title: 'القنوات', subtitle: 'إدارة قنوات التواصل والربط', icon: RadioTower },
   { prefix: '/dashboard/knowledge', title: 'قاعدة المعرفة', subtitle: 'المعلومات التي يعتمد عليها المساعد', icon: BookOpen },
   { prefix: '/dashboard/campaigns', title: 'الحملات', subtitle: 'إعداد حملات التواصل ومراجعتها', icon: Megaphone },

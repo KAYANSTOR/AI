@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/db/server'
-import { getCurrentOrg } from '@/lib/org'
+import { requirePersonalAssistantApi } from '@/lib/personal-assistant/api-context'
 import {
   embedKnowledgeText,
   KNOWLEDGE_EMBEDDING_MODEL,
@@ -10,7 +9,7 @@ import { memoryContentHash } from '@/lib/personal-assistant/memory-normalize'
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-const CATEGORIES = ['fact', 'preference', 'contact', 'project'] as const
+const CATEGORIES = ['fact', 'preference', 'contact', 'project', 'document'] as const
 type MemoryCategory = (typeof CATEGORIES)[number]
 const MAX_CONTENT_CHARS = 500
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -22,16 +21,9 @@ type MemoryRequest = {
 }
 
 async function getMemoryContext() {
-  const org = await getCurrentOrg()
-  if (!org) return null
-
-  const db = await createClient()
-  const {
-    data: { user },
-  } = await db.auth.getUser()
-  if (!user || user.id !== org.userId) return null
-
-  return { db, userId: user.id, organizationId: org.organizationId }
+  const access = await requirePersonalAssistantApi()
+  if (access instanceof NextResponse) return access
+  return { db: access.db, userId: access.owner.userId, organizationId: access.owner.organizationId }
 }
 
 function parseBody(value: unknown): MemoryRequest | null {
@@ -54,7 +46,7 @@ function databaseError() {
 
 export async function GET() {
   const context = await getMemoryContext()
-  if (!context) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  if (context instanceof NextResponse) return context
 
   const { data, error } = await context.db
     .from('user_memories')
@@ -73,7 +65,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   const context = await getMemoryContext()
-  if (!context) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  if (context instanceof NextResponse) return context
 
   const body = parseBody(await request.json().catch(() => null))
   if (!body) return NextResponse.json({ error: 'invalid_request_body' }, { status: 400 })
@@ -108,7 +100,7 @@ export async function POST(request: Request) {
 
 export async function PATCH(request: Request) {
   const context = await getMemoryContext()
-  if (!context) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  if (context instanceof NextResponse) return context
 
   const body = parseBody(await request.json().catch(() => null))
   if (!body || typeof body.id !== 'string' || !UUID_RE.test(body.id)) {
@@ -154,7 +146,7 @@ export async function PATCH(request: Request) {
 
 export async function DELETE(request: Request) {
   const context = await getMemoryContext()
-  if (!context) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  if (context instanceof NextResponse) return context
 
   const id = new URL(request.url).searchParams.get('id')
   if (!id || !UUID_RE.test(id)) return NextResponse.json({ error: 'invalid_id' }, { status: 400 })

@@ -46,7 +46,7 @@ export async function retrievePersonalMemories(db: DbClient, owner: { organizati
 export async function savePersonalMemory(db: DbClient, owner: { organizationId: string; userId: string }, input: { category: string; content: string; confidence?: number }) {
   const content = input.content.trim().slice(0, 500)
   if (!content) throw new Error('empty_memory')
-  if (!['fact', 'preference', 'contact', 'project'].includes(input.category)) throw new Error('invalid_memory_category')
+  if (!['fact', 'preference', 'contact', 'project', 'document'].includes(input.category)) throw new Error('invalid_memory_category')
   const embedding = await embedKnowledgeText(content, 'document', 'Personal memory')
   const { data, error } = await db.from('user_memories').upsert({
     organization_id: owner.organizationId,

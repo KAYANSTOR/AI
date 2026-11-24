@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { Button } from '@/components/ui/button'
 
-type MemoryCategory = 'fact' | 'preference' | 'contact' | 'project'
+type MemoryCategory = 'fact' | 'preference' | 'contact' | 'project' | 'document'
 type Memory = {
   id: string
   category: MemoryCategory
@@ -13,11 +13,13 @@ type Memory = {
 }
 
 const ENDPOINT = '/api/assistant/memories'
-const CATEGORIES: { id: MemoryCategory; label: string }[] = [
-  { id: 'fact', label: 'معلومة' },
-  { id: 'preference', label: 'تفضيل' },
-  { id: 'contact', label: 'جهة اتصال' },
-  { id: 'project', label: 'مشروع' },
+/** Transparent memory groups: identity, preferences, tasks, documents, relationships. */
+const CATEGORIES: { id: MemoryCategory; label: string; hint: string }[] = [
+  { id: 'fact', label: 'الهوية', hint: 'من أنت وما يخصك' },
+  { id: 'preference', label: 'التفضيلات', hint: 'أسلوبك وما تحب' },
+  { id: 'project', label: 'المهام والمشاريع', hint: 'ما تعمل عليه' },
+  { id: 'document', label: 'المستندات', hint: 'ملفات ومراجع مهمة' },
+  { id: 'contact', label: 'العلاقات', hint: 'أشخاص وجهات تتعامل معها' },
 ]
 const CATEGORY_LABEL = Object.fromEntries(CATEGORIES.map(({ id, label }) => [id, label])) as Record<MemoryCategory, string>
 const fieldClass = 'min-h-11 w-full rounded-xl border border-border bg-surface px-3.5 py-2.5 text-sm text-text outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/15'
@@ -155,13 +157,23 @@ export function PersonalAssistantMemoryPanel() {
           <span className="text-xs text-text-muted">{items.length} / 200</span>
         </div>
         <p className="mt-1 text-sm leading-6 text-text-muted">يمكنك تعديل أي معلومة أو حذفها نهائياً في أي وقت.</p>
+        <p className="mt-2 rounded-xl border border-border bg-surface-muted p-3 text-xs font-semibold leading-5 text-text">
+          ضمان الخصوصية: ذاكرتك خاصة بحسابك فقط، ولا تُستخدم أبداً لتدريب أي نموذج ذكاء اصطناعي.
+        </p>
 
         {error ? <p role="alert" className="mt-3 rounded-xl bg-error/10 p-3 text-sm text-error">{error}</p> : null}
         {loading ? <p className="py-6 text-center text-sm text-text-muted">جارٍ تحميل الذاكرة…</p> : null}
         {!loading && items.length === 0 ? <p className="py-6 text-center text-sm text-text-muted">لا توجد معلومات محفوظة بعد.</p> : null}
 
-        <ul className="mt-3 space-y-3">
-          {items.map((memory) => (
+        <div className="mt-3 space-y-4">
+          {CATEGORIES.map((group) => {
+            const count = items.filter((memory) => memory.category === group.id).length
+            if (!count) return null
+            return (
+              <section key={group.id} aria-label={group.label} className="space-y-2">
+                <h3 className="flex items-baseline gap-2 text-sm font-extrabold text-text">{group.label}<span className="text-xs font-normal text-text-muted">{group.hint} · {count}</span></h3>
+              <ul className="space-y-3">
+          {items.filter((memory) => memory.category === group.id).map((memory) => (
             <li key={memory.id} className="rounded-xl border border-border p-3">
               <span className="text-xs font-semibold text-text-muted">{CATEGORY_LABEL[memory.category]}</span>
               {editingId === memory.id ? (
@@ -187,7 +199,11 @@ export function PersonalAssistantMemoryPanel() {
               ) : null}
             </li>
           ))}
-        </ul>
+              </ul>
+              </section>
+            )
+          })}
+        </div>
       </div>
     </section>
   )

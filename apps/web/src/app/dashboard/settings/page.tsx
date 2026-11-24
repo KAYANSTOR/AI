@@ -43,6 +43,7 @@ export default async function SettingsPage() {
       subscriptionStatus={statusLabels[snapshot.status] ?? snapshot.status}
       capabilityRows={capabilityRows}
       isAdmin={context.role === 'owner' || context.role === 'admin'}
+      personalAssistantEnabled={context.personalAssistantEnabled}
     />
   )
 }

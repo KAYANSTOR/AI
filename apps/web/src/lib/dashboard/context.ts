@@ -1,6 +1,8 @@
 import { cache } from 'react'
 import { createClient } from '@/lib/db/server'
 import { getCurrentOrg, type OrgContext } from '@/lib/org'
+import { createAdminClient } from '@/lib/db/admin'
+import { loadPersonalAssistantAccess, PERSONAL_ASSISTANT_CAPABILITY } from '@/lib/personal-assistant/access'
 
 export type DashboardContext = OrgContext & {
   businessId: string | null
@@ -11,6 +13,8 @@ export type DashboardContext = OrgContext & {
   activationState: string
   activationStep: number
   smokeTestStatus: string
+  /** Sector is personal_assistant or the owner console enabled the add-on. */
+  personalAssistantEnabled: boolean
 }
 
 export const getDashboardContext = cache(
@@ -19,7 +23,7 @@ export const getDashboardContext = cache(
     if (!org) return null
 
     const db = await createClient()
-    const [{ data: profile, error: profileError }, { data: capabilities, error: capabilitiesError }] =
+    const [{ data: profile, error: profileError }, { data: capabilities, error: capabilitiesError }, personalAssistantEnabled] =
       await Promise.all([
         db
           .from('business_profiles')
@@ -31,11 +35,13 @@ export const getDashboardContext = cache(
           .select('capability_id')
           .eq('organization_id', org.organizationId)
           .eq('is_enabled', true),
+        loadPersonalAssistantAccess(createAdminClient(), org.organizationId),
       ])
     if (profileError || capabilitiesError) {
       console.error('Unable to load dashboard context', { profileError, capabilitiesError })
     }
     const enabledCapabilities = (capabilities ?? []).map((row) => row.capability_id as string)
+    if (personalAssistantEnabled) enabledCapabilities.push(PERSONAL_ASSISTANT_CAPABILITY)
     const businessTypeId = (profile?.business_type_id as string | null) ?? null
 
     const activationState = profile?.activation_state || 'workspace_ready'
@@ -51,6 +57,7 @@ export const getDashboardContext = cache(
       activationState,
       activationStep,
       smokeTestStatus,
+      personalAssistantEnabled,
       setupComplete: activationState === 'active',
     }
   }
