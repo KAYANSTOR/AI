@@ -2,8 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/db/admin'
 import { secretEquals } from '@/lib/credentials/service'
 import { acquireWebhookEvent, markWebhookProcessed } from '@/lib/channels/idempotency'
-import { processInboundMessage } from '@/lib/runtime/process-inbound'
-import { deliverOutbound, recordDeliveredOutboundMessage } from '@/lib/runtime/outbound'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -49,28 +47,30 @@ export async function POST(req: NextRequest) {
       organization_id: channel.organization_id, channel_id: channel.id,
       event_type: 'message.received', signature_verified: true,
     }).eq('id', eventRowId)
-    const result = await processInboundMessage(db, {
-      organizationId: channel.organization_id, businessId: channel.business_id,
-      channelId: channel.id, channelType: 'whatsapp', provider: 'whatsapp',
-      externalEventId, externalUserId: input.senderPhone || senderJid,
-      senderPhone: input.senderPhone || null, displayName: input.displayName || null, text,
+    const { error: jobError } = await db.from('inbound_jobs').insert({
+      organization_id: channel.organization_id,
+      business_id: channel.business_id,
+      channel_id: channel.id,
+      webhook_event_id: eventRowId,
+      idempotency_key: externalEventId,
+      payload: {
+        channelId: channel.id,
+        organizationId: channel.organization_id,
+        businessId: channel.business_id,
+        externalEventId,
+        senderJid,
+        senderPhone: input.senderPhone || null,
+        displayName: input.displayName || null,
+        text,
+        providerAccountId: channel.provider_account_id,
+        externalIdentifier: channel.external_identifier,
+      },
     })
-    if (result.reply) {
-      const delivery = await deliverOutbound(db, {
-        channel: {
-          id: channel.id, organizationId: channel.organization_id, businessId: channel.business_id,
-          channelType: 'whatsapp', providerAccountId: channel.provider_account_id,
-          externalIdentifier: channel.external_identifier,
-        },
-        recipient: input.senderPhone || senderJid, body: result.reply,
-        idempotencyKey: externalEventId + ':reply', conversationId: result.conversationId,
-      })
-      if (delivery === 'sent') await recordDeliveredOutboundMessage(db, {
-        organizationId: channel.organization_id, conversationId: result.conversationId,
-        body: result.reply, idempotencyKey: externalEventId + ':reply',
-      })
+    if (jobError) {
+      await markWebhookProcessed(db, eventRowId, 'failed', jobError.message)
+      eventRowId = null
+      return NextResponse.json({ error: 'inbound_job_enqueue_failed' }, { status: 500 })
     }
-    await markWebhookProcessed(db, eventRowId, 'processed')
     eventRowId = null
     return NextResponse.json({ ok: true })
   } catch (error) {

@@ -3,6 +3,7 @@ import { createCipheriv, createDecipheriv, randomBytes, timingSafeEqual } from '
 import postgres from 'postgres'
 import QRCode from 'qrcode'
 import makeWASocket, { Browsers, BufferJSON, DisconnectReason, initAuthCreds } from 'baileys'
+import { shouldReconnectAfterDisconnect } from './reconnect-policy.js'
 
 const PORT = Number(process.env.WHATSAPP_GATEWAY_PORT || 3001)
 const DATABASE_URL = requiredEnv('DATABASE_URL')
@@ -285,7 +286,7 @@ async function startSocket(channelId, options = {}) {
           return
         }
         const code = update.lastDisconnect?.error?.output?.statusCode || 0
-        const loggedOut = code === DisconnectReason.loggedOut
+        const loggedOut = code === DisconnectReason.loggedOut || code === 401
         // A phone-number pairing session is not a resumable WhatsApp Web
         // session until the code has been entered on the phone. Retrying it
         // with the half-registered auth state creates a new server session
@@ -316,8 +317,8 @@ async function startSocket(channelId, options = {}) {
           await query("UPDATE public.whatsapp_gateway_sessions SET auth_creds_ciphertext=NULL,updated_at=now() WHERE channel_id=$1", [channelId])
           await query("DELETE FROM public.whatsapp_gateway_auth_keys WHERE channel_id=$1", [channelId])
           await query("UPDATE public.channels SET is_active=false,verification_status='failed',updated_at=now() WHERE id=$1 AND connection_mode='qr_unofficial'", [channelId])
-        } else if (session.retries < 5) {
-          const wait = Math.min(15_000, 2_000 * (session.retries + 1))
+        } else if (shouldReconnectAfterDisconnect({ code, retries: session.retries })) {
+          const wait = Math.min(30_000, 1_000 * (2 ** session.retries))
           clearTimeout(reconnectTimers.get(channelId))
           const timer = setTimeout(() => {
             reconnectTimers.delete(channelId)
@@ -413,12 +414,25 @@ async function logoutSession(channelId) {
   return { status: 'disconnected' }
 }
 async function restoreSessions() {
-  const rows = await query("SELECT s.channel_id,s.status FROM public.whatsapp_gateway_sessions s JOIN public.channels c ON c.id=s.channel_id WHERE s.status IN ('connected','reconnecting','pairing_code') AND s.auth_creds_ciphertext IS NOT NULL AND c.channel_type='whatsapp' AND c.connection_mode='qr_unofficial'")
+  const rows = await query("SELECT s.channel_id,s.status,s.auth_creds_ciphertext FROM public.whatsapp_gateway_sessions s JOIN public.channels c ON c.id=s.channel_id WHERE c.is_active=true AND c.channel_type='whatsapp' AND c.connection_mode='qr_unofficial' AND s.auth_creds_ciphertext IS NOT NULL")
+  let restored = 0
+  let skipped = 0
   for (const row of rows) {
-    startSocket(row.channel_id, { mode: row.status === 'pairing_code' ? 'pairing_code' : 'qr', retries: 0, resume: true }).catch(error => {
+    let registered = false
+    try { registered = Boolean(decryptJson(row.auth_creds_ciphertext).registered) } catch {
+      console.error('whatsapp_qr_session_restore_invalid_credentials', { channelId: row.channel_id })
+    }
+    if (!registered) {
+      skipped += 1
+      console.warn('whatsapp_qr_session_restore_skipped_unregistered', { channelId: row.channel_id, status: row.status })
+      continue
+    }
+    restored += 1
+    startSocket(row.channel_id, { mode: 'qr', retries: 0, resume: true }).catch(error => {
       console.error('whatsapp_qr_session_restore_failed', { channelId: row.channel_id, reason: error instanceof Error ? error.message : 'restore_error' })
     })
   }
+  console.log('whatsapp_qr_sessions_restore_summary', { found: rows.length, restored, skipped })
 }
 async function handleRequest(request, response) {
   const url = new URL(request.url || '/', 'http://localhost')

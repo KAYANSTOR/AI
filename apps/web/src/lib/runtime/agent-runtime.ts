@@ -145,6 +145,13 @@ async function runAgentLoop(args: AgentLoopArgs): Promise<AgentLoopResult> {
     }, activeProvider)
     activeProvider = generated.provider
     const result = generated.result
+    console.info('agent_ai_round', {
+      conversationId: args.conversationId ?? null,
+      provider: generated.provider,
+      model: result.model ?? null,
+      attempts: result.attempts ?? 1,
+      round: round + 1,
+    })
     activeModel = result.model || activeModel
 
     inputTokens += result.inputTokens

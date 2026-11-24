@@ -72,6 +72,26 @@ describe('Gemini 3.8 provider contract', () => {
     expect(body?.generationConfig).toEqual({ maxOutputTokens: 400 })
   })
 
+  test('retries transient 503 responses before switching to the Flash fallback model', async () => {
+    const models: string[] = []
+    globalThis.fetch = (async (input) => {
+      models.push(String(input).split('/models/')[1]?.split(':')[0] ?? '')
+      if (models.length <= 3) return new Response(JSON.stringify({ error: { message: 'temporarily unavailable' } }), { status: 503 })
+      return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: 'تم بعد إعادة المحاولة' }] } }] }), { status: 200 })
+    }) as typeof fetch
+
+    const result = await geminiProvider.call({
+      system: 'system',
+      messages: [{ role: 'user', content: 'hello' }],
+      tools: [],
+    })
+
+    expect(models).toHaveLength(4)
+    expect(models.slice(0, 3)).toEqual(['gemini-3.8-flash', 'gemini-3.8-flash', 'gemini-3.8-flash'])
+    expect(models[3]).toBe('gemini-3.1-flash-lite-preview')
+    expect(result.attempts).toBe(4)
+  })
+
   test('preserves function-call id when sending a tool result back to Gemini', async () => {
     let body: Record<string, unknown> | undefined
 

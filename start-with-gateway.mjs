@@ -47,6 +47,7 @@ process.on('SIGTERM', () => stop(0))
 process.on('SIGINT', () => stop(0))
 
 launch('whatsapp_gateway', ['apps/whatsapp-gateway/src/server.js'])
+launch('inbound_worker', ['--import', 'tsx', 'src/lib/runtime/inbound-worker.ts'], `${root}/apps/web`)
 
 const ownerConsoleEnv = {
   ...process.env,

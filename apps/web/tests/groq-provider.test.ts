@@ -115,4 +115,32 @@ describe('Groq provider contract', () => {
       expect(error.retryable).toBe(true)
     }
   })
+
+  test('falls back to a text-only request when the tool-enabled response is empty', async () => {
+    const bodies: Array<Record<string, unknown>> = []
+    globalThis.fetch = (async (_input, init) => {
+      bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>)
+      if (bodies.length === 1) {
+        return new Response(JSON.stringify({ model: 'openai/gpt-oss-120b', choices: [{ message: { content: null, tool_calls: [] } }] }), { status: 200 })
+      }
+      return new Response(JSON.stringify({
+        model: 'openai/gpt-oss-120b',
+        choices: [{ message: { content: 'إليك الإجابة النصية.' } }],
+        usage: { prompt_tokens: 20, completion_tokens: 6 },
+      }), { status: 200 })
+    }) as typeof fetch
+
+    const result = await groqProvider.call({
+      system: 'تعليمات الوكيل وقاعدة المعرفة',
+      messages: [{ role: 'user', content: 'ما الحالة؟' }],
+      tools: [{ name: 'lookup', description: 'lookup', input_schema: { type: 'object' } }],
+    })
+
+    expect(bodies).toHaveLength(2)
+    expect(bodies[0].tools).toBeDefined()
+    expect(bodies[1].tools).toBeUndefined()
+    expect((bodies[1].messages as Array<Record<string, unknown>>)[0]).toEqual({ role: 'system', content: 'تعليمات الوكيل وقاعدة المعرفة' })
+    expect(result.content).toEqual([{ type: 'text', text: 'إليك الإجابة النصية.' }])
+    expect(result.attempts).toBe(2)
+  })
 })

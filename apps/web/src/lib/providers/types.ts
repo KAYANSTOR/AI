@@ -24,6 +24,7 @@ export type ModelResult = {
   outputTokens: number
   providerPayload?: unknown
   model?: string
+  attempts?: number
 }
 
 export class AIProviderError extends Error {

@@ -25,11 +25,15 @@ export async function callProvider(
   preferredProvider: AIProviderName = 'gemini'
 ): Promise<ProviderCallResult> {
   if (preferredProvider === 'groq') {
-    return { provider: 'groq', result: await groqProvider.call(input) }
+    const result = await groqProvider.call(input)
+    console.info('ai_provider_selected', { provider: 'groq', model: result.model, attempts: result.attempts ?? 1 })
+    return { provider: 'groq', result }
   }
 
   try {
-    return { provider: 'gemini', result: await geminiProvider.call(input) }
+    const result = await geminiProvider.call(input)
+    console.info('ai_provider_selected', { provider: 'gemini', model: result.model, attempts: result.attempts ?? 1 })
+    return { provider: 'gemini', result }
   } catch (error) {
     const canFallback =
       error instanceof AIProviderError &&
@@ -45,6 +49,8 @@ export async function callProvider(
       reason: error.message.slice(0, 180),
     })
 
-    return { provider: 'groq', result: await groqProvider.call(input) }
+    const result = await groqProvider.call(input)
+    console.info('ai_provider_selected', { provider: 'groq', model: result.model, attempts: result.attempts ?? 1 })
+    return { provider: 'groq', result }
   }
 }
