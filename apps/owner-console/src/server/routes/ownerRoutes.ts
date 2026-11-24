@@ -1,11 +1,11 @@
 import { Router, type Request, type Response } from 'express';
-import { claimFirstRunOwner, confirmOwnerMfa, getAuthStatus, getClientIp, loginOwner, requireOwnerAuth, requirePermission, setupOwnerMfa, writeAuditLog, revokeOwnerSession } from '../security/auth';
-import { platformStatus, platformUsers, platformUserDetail, platformWorkspaces, platformPlans, platformSubscriptions, platformAgents, platformAgentDetail, platformAiUsage, platformChannels, platformConversations, platformEntitlements, platformBillingLedger, platformOverview, updatePlatformUser, platformUserAction, subscriptionAction, updatePlatformAgent, platformEntitlementOverride, platformConversationDetail, platformQueueConversationIntervention, updatePlatformWorkspaceStatus, platformCreateWorkspace, savePlatformPlan, platformAutomations, createPlatformAutomation, updatePlatformAutomation, platformKnowledge, platformApiIntegrations, createPlatformApiKey, revokePlatformApiKey, platformMonitoring, platformLogs, platformReport, platformAiProviders, platformNotificationsSupport, rotatePlatformChannelSecret, testPlatformChannel } from '../services/platformDataService';
+import { claimFirstRunOwner, confirmOwnerMfa, getAuthStatus, getClientIp, loginOwner, requireOwnerAuth, requirePermission, setupOwnerMfa, writeAuditLog, revokeOwnerSession, setSessionCookie, clearSessionCookie } from '../security/auth';
+import { platformStatus, platformUsers, platformUserDetail, platformWorkspaces, platformPlans, platformSubscriptions, platformAgents, platformAgentDetail, platformCreateAgent, platformAiUsage, platformChannels, platformConversations, platformEntitlements, platformBillingLedger, platformOverview, updatePlatformUser, platformUserAction, subscriptionAction, updatePlatformAgent, platformEntitlementOverride, platformConversationDetail, platformQueueConversationIntervention, updatePlatformWorkspaceStatus, platformCreateWorkspace, savePlatformPlan, platformAutomations, createPlatformAutomation, updatePlatformAutomation, platformKnowledge, platformApiIntegrations, createPlatformApiKey, revokePlatformApiKey, platformMonitoring, platformLogs, platformReport, platformAiProviders, platformNotificationsSupport, rotatePlatformChannelSecret, testPlatformChannel } from '../services/platformDataService';
 export const ownerRouter = Router();
 function handleError(res:Response,err:unknown,status=400){res.status(status).json({error:'request_failed',message:err instanceof Error?err.message:'حدث خطأ غير متوقع في الخادم.'})}
 ownerRouter.get('/auth/status', async (_req,res)=>{try{res.json(await getAuthStatus())}catch(e){handleError(res,e,503)}});
-ownerRouter.post('/auth/claim', async (req,res)=>{try{res.status(201).json(await claimFirstRunOwner({email:String(req.body?.email||''),fullName:String(req.body?.fullName||''),password:String(req.body?.password||''),ipAddress:getClientIp(req),userAgent:String(req.headers['user-agent']||'unknown')}))}catch(e){handleError(res,e)}});
-ownerRouter.post('/auth/login', async (req,res)=>{try{res.json(await loginOwner({email:String(req.body?.email||''),password:String(req.body?.password||''),totpCode:req.body?.totpCode?String(req.body.totpCode):undefined,ipAddress:getClientIp(req),userAgent:String(req.headers['user-agent']||'unknown')}))}catch(e){handleError(res,e,401)}});
+ownerRouter.post('/auth/claim', async (req,res)=>{try{const input={email:String(req.body?.email||''),fullName:String(req.body?.fullName||''),password:String(req.body?.password||''),ipAddress:getClientIp(req),userAgent:String(req.headers['user-agent']||'unknown')};await claimFirstRunOwner(input);const auth=await loginOwner(input);setSessionCookie(res,auth.token,auth.expiresAt);res.status(201).json(auth)}catch(e){handleError(res,e)}});
+ownerRouter.post('/auth/login', async (req,res)=>{try{const auth=await loginOwner({email:String(req.body?.email||''),password:String(req.body?.password||''),totpCode:req.body?.totpCode?String(req.body.totpCode):undefined,ipAddress:getClientIp(req),userAgent:String(req.headers['user-agent']||'unknown')});setSessionCookie(res,auth.token,auth.expiresAt);res.json(auth)}catch(e){handleError(res,e,401)}});
 const platformDataRouter = Router();
 
 platformDataRouter.get('/platform-data/status', async (_req, res) => {
@@ -154,7 +154,13 @@ platformDataRouter.patch('/workspaces/:id/status', requirePermission('users:writ
   try {const result=await updatePlatformWorkspaceStatus(String(req.params.id),String(req.body?.status||''));writeAuditLog({actor:req.ownerAdmin!,action:'workspace.status_updated',entityType:'workspace',entityId:String(req.params.id),summary:'تحديث حالة نشاط مساحة العمل.',after:result,ipAddress:getClientIp(req)});res.json(result);}
   catch(err){handleError(res,err);}
 });
-platformDataRouter.post('/agents', requirePermission('ai:write'), unavailablePlatformData);
+platformDataRouter.post('/agents', requirePermission('ai:write'), async (req,res)=>{
+  try {
+    const result=await platformCreateAgent({workspaceId:String(req.body?.workspaceId||''),userId:req.body?.userId?String(req.body.userId):undefined,name:String(req.body?.name||''),systemPrompt:req.body?.systemPrompt?String(req.body.systemPrompt):undefined,dailyRequestLimit:req.body?.dailyRequestLimit===undefined?undefined:Number(req.body.dailyRequestLimit)});
+    writeAuditLog({actor:req.ownerAdmin!,action:'agent.created',entityType:'agent',entityId:String(result.agent.id),summary:'إنشاء وكيل ذكاء اصطناعي في PostgreSQL.',after:result.agent,ipAddress:getClientIp(req)});
+    res.status(201).json(result);
+  } catch(err){handleError(res,err);}
+});
 platformDataRouter.get('/ai/providers', async (_req,res)=>{try{res.json(await platformAiProviders());}catch(err){handleError(res,err,503);}});
 platformDataRouter.patch('/ai/models/:modelId', requirePermission('ai:write'), unavailablePlatformData);
 platformDataRouter.post('/ai/usage', requirePermission('ai:write'), unavailablePlatformData);
@@ -178,6 +184,6 @@ platformDataRouter.post('/expenses', unavailablePlatformData);
 ownerRouter.use(requireOwnerAuth);
 ownerRouter.use(platformDataRouter);
 ownerRouter.get('/auth/me',(req,res)=>res.json({admin:req.ownerAdmin}));
-ownerRouter.post('/auth/logout',async(req,res)=>{try{res.json(await revokeOwnerSession(req.ownerAdmin!.sessionId,req.ownerAdmin!,getClientIp(req)))}catch(e){handleError(res,e)}});
+ownerRouter.post('/auth/logout',async(req,res)=>{try{const result=await revokeOwnerSession(req.ownerAdmin!.sessionId,req.ownerAdmin!,getClientIp(req));clearSessionCookie(res);res.json(result)}catch(e){handleError(res,e)}});
 ownerRouter.post('/auth/mfa/setup',(_req,res)=>{try{res.json(setupOwnerMfa())}catch(e){handleError(res,e)}});
 ownerRouter.post('/auth/mfa/confirm',(_req,res)=>{try{res.json(confirmOwnerMfa())}catch(e){handleError(res,e)}});

@@ -68,7 +68,38 @@ const SettingsSecurityPage = React.lazy(() =>
   import('./pages/MonitoringGovernancePages').then((m) => ({ default: m.SettingsSecurityPage }))
 );
 
+class OwnerErrorBoundary extends React.Component<React.PropsWithChildren, { hasError: boolean }> {
+  state = { hasError: false };
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: Error) {
+    console.error('owner_console_render_failed', { message: error.message });
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen flex items-center justify-center p-6 bg-[var(--k-canvas)] text-[var(--k-ink)]">
+          <div className="max-w-md rounded-xl border border-[var(--k-line)] bg-[var(--k-surface)] p-6 text-center space-y-3">
+            <h1 className="font-bold">تعذر عرض هذه الشاشة</h1>
+            <p className="text-sm text-[var(--k-ink-muted)]">حدث خطأ في واجهة الإدارة. أعد تحميل الصفحة، ولن يتم تسجيل خروجك بسبب خطأ في مسار فرعي.</p>
+            <button type="button" className="px-4 py-2 rounded-lg bg-[var(--k-brand-forest)] text-white text-sm" onClick={() => this.setState({ hasError: false })}>إعادة المحاولة</button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 export default function App() {
+  return <OwnerErrorBoundary><OwnerConsoleApp /></OwnerErrorBoundary>;
+}
+
+function OwnerConsoleApp() {
   const [admin, setAdmin] = React.useState<OwnerAdminProfile | null>(null);
   const [activeRoute, setActiveRoute] = React.useState<OwnerRouteId>('overview');
   const [selectedUserId, setSelectedUserId] = React.useState<string | null>(null);

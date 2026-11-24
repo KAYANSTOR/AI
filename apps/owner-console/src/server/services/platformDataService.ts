@@ -167,6 +167,34 @@ export async function platformAgents(f:{search?:string;status?:string;provider?:
     LEFT JOIN auth.users u ON u.id=own.user_id ${clauses.length?'WHERE '+clauses.join(' AND '):''} ORDER BY a.created_at DESC LIMIT 500`,args);
 }
 
+export async function platformCreateAgent(p:{workspaceId:string;name:string;systemPrompt?:string;dailyRequestLimit?:number;userId?:string}) {
+  const workspaceId=p.workspaceId.trim(),name=p.name.trim();
+  if(!workspaceId||!name)throw new Error('مساحة العمل واسم الوكيل مطلوبان.');
+  if(name.length>100)throw new Error('اسم الوكيل يجب ألا يتجاوز 100 حرف.');
+  const dailyLimit=Number(p.dailyRequestLimit??500);
+  if(!Number.isFinite(dailyLimit)||dailyLimit<0)throw new Error('حد الطلبات اليومي غير صالح.');
+  const [workspace]=await query<{organization_id:string;business_id:string;owner_user_id:string}>(`SELECT o.id::text organization_id,b.id::text business_id,
+    (SELECT user_id::text FROM organization_members WHERE organization_id=o.id AND role='owner' ORDER BY created_at LIMIT 1) owner_user_id
+    FROM organizations o LEFT JOIN businesses b ON b.organization_id=o.id WHERE o.id=$1::uuid`,[workspaceId]);
+  if(!workspace?.organization_id||!workspace.business_id)throw new Error('مساحة العمل أو نشاطها غير موجود.');
+  if(p.userId&&workspace.owner_user_id!==p.userId)throw new Error('المستخدم المحدد ليس مالك مساحة العمل.');
+  const slug=(name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,90)||'agent')+'-'+crypto.randomUUID().slice(0,8);
+  return sql().begin(async tx=>{
+    const [agent]=await tx.unsafe(`INSERT INTO ai_agents(organization_id,business_id,name,slug,model_provider,temperature,status,locale)
+      VALUES($1::uuid,$2::uuid,$3,$4,'gemini',0.7,'active','ar')
+      RETURNING id::text id,organization_id::text organization_id,business_id::text workspace_id,name,model_provider provider_code,status,temperature,locale,slug,created_at::text created_at`,
+      [workspace.organization_id,workspace.business_id,name,slug]);
+    if(!agent)throw new Error('تعذر إنشاء الوكيل.');
+    await tx.unsafe(`INSERT INTO agent_prompt_versions(agent_id,version,system_prompt_addition,status,published_at)
+      VALUES($1::uuid,1,$2,'published',NOW()) ON CONFLICT(agent_id,version) DO NOTHING`,[agent.id,String(p.systemPrompt||'').trim()||null]);
+    await tx.unsafe(`INSERT INTO billing_entitlements(organization_id,feature_key,limit_value,period,enabled)
+      VALUES($1::uuid,'agent_daily_requests',$2,'daily',TRUE)
+      ON CONFLICT(organization_id,feature_key) DO UPDATE SET limit_value=EXCLUDED.limit_value,period=EXCLUDED.period,enabled=TRUE`,
+      [workspace.organization_id,dailyLimit]);
+    return {agent};
+  });
+}
+
 export async function platformAgentDetail(id:string) {
   const [agent]=await query(`SELECT a.id::text id,a.organization_id::text organization_id,a.business_id::text workspace_id,a.name,a.model_provider provider_code,a.status,a.temperature,a.locale,a.slug,a.created_at::text created_at,
     o.name workspace_name,u.email owner_email,${fullName} owner_name FROM ai_agents a JOIN organizations o ON o.id=a.organization_id
@@ -651,16 +679,20 @@ export async function platformMonitoring() {
   const uptimeSec=Math.floor(process.uptime());
   const [counts]=await query(`SELECT (SELECT COUNT(*) FROM agent_runs WHERE status='failed' AND created_at>NOW()-INTERVAL '24 hours')::int failed_runs,
     (SELECT COUNT(*) FROM webhook_events WHERE processing_status='failed' AND received_at>NOW()-INTERVAL '24 hours')::int failed_webhooks,
-    (SELECT COUNT(*) FROM outbox_events WHERE status IN('failed','dead_letter') AND updated_at>NOW()-INTERVAL '24 hours')::int failed_outbound`);
+    (SELECT COUNT(*) FROM inbound_jobs WHERE status='dead_letter' AND updated_at>NOW()-INTERVAL '24 hours')::int failed_inbound,
+    (SELECT COUNT(*) FROM outbox_events WHERE status IN('failed','dead_letter') AND updated_at>NOW()-INTERVAL '24 hours')::int failed_outbound,
+    (SELECT COUNT(*) FROM whatsapp_gateway_sessions WHERE status<>'connected' AND last_error IS NOT NULL)::int gateway_errors`);
   const migrations=await query(`SELECT version::text version,name,applied_at::text applied_at FROM public.schema_migrations WHERE failed_at IS NULL ORDER BY version DESC LIMIT 30`);
-  const failedRuns=count(counts?.failed_runs),failedWebhooks=count(counts?.failed_webhooks),failedOutbound=count(counts?.failed_outbound);
+  const failedRuns=count(counts?.failed_runs),failedWebhooks=count(counts?.failed_webhooks),failedInbound=count(counts?.failed_inbound),failedOutbound=count(counts?.failed_outbound),gatewayErrors=count(counts?.gateway_errors);
   const alerts=[];
   if(failedRuns>0)alerts.push({id:'failed-agent-runs',title:'إخفاقات تشغيل الوكلاء',description:String(failedRuns)+' إخفاقاً خلال آخر 24 ساعة',acknowledged:'system',severity:'warning'});
   if(failedWebhooks>0)alerts.push({id:'failed-webhooks',title:'أحداث Webhook فاشلة',description:String(failedWebhooks)+' حدثاً فاشلاً خلال آخر 24 ساعة',acknowledged:'system',severity:'warning'});
   if(failedOutbound>0)alerts.push({id:'failed-outbound',title:'رسائل لم تُرسل',description:String(failedOutbound)+' محاولة إرسال فاشلة أو في قائمة العزل',acknowledged:'system',severity:'warning'});
+  if(failedInbound>0)alerts.push({id:'failed-inbound',title:'رسائل واردة في قائمة العزل',description:String(failedInbound)+' مهمة inbound dead-letter خلال آخر 24 ساعة',acknowledged:'system',severity:'warning'});
+  if(gatewayErrors>0)alerts.push({id:'gateway-errors',title:'أخطاء جلسات WhatsApp Web',description:String(gatewayErrors)+' جلسة بها خطأ مسجل',acknowledged:'system',severity:'warning'});
   return {
     runtime:{nodeVersion:process.version,platform:process.platform+' '+process.arch,uptimeSec,
-      memoryMb:Number((mem.rss/1024/1024).toFixed(1)),unresolvedErrors:failedRuns+failedWebhooks+failedOutbound,
+      memoryMb:Number((mem.rss/1024/1024).toFixed(1)),unresolvedErrors:failedRuns+failedWebhooks+failedInbound+failedOutbound+gatewayErrors,
       unauthorizedAttempts24h:'غير متاح من مصدر بيانات المنصة الحالي'},
     services:[
       {id:'backend_api',name:'خادم KAYAN AI',status:'operational',latencyMs:null,detail:'خدمة التطبيق ولوحة المالك تعملان ضمن خدمة Railway نفسها.'},
@@ -677,7 +709,16 @@ export async function platformLogs(f:{category?:string;severity?:string;resolved
   const webhookRows=await query(`SELECT id::text id,'webhook' category,'error' severity,COALESCE(error_message,'webhook_failed') message,
     provider||' · '||COALESCE(event_type,'') details,FALSE resolved,received_at::text created_at,'webhook_event' source
     FROM webhook_events WHERE processing_status='failed' ORDER BY received_at DESC LIMIT 200`);
-  const items=[...rows,...webhookRows].filter((r:any)=>(!f.category||f.category==='all'||r.category===f.category)&&(!f.severity||f.severity==='all'||r.severity===f.severity)&&(!f.resolved||f.resolved==='all'||(f.resolved==='true'?r.resolved:!r.resolved)));
+  const inboundRows=await query(`SELECT id::text id,'inbound' category,'error' severity,COALESCE(last_error,'inbound_dead_letter') message,
+    'attempts='||attempts::text details,status='completed' resolved,updated_at::text created_at,'inbound_job' source
+    FROM inbound_jobs WHERE status='dead_letter' ORDER BY updated_at DESC LIMIT 200`);
+  const outboxRows=await query(`SELECT id::text id,'outbox' category,'error' severity,COALESCE(last_error,'outbound_failed') message,
+    event_type||' · '||COALESCE(payload->>'provider','unknown_provider') details,status='sent' resolved,updated_at::text created_at,'outbox_event' source
+    FROM outbox_events WHERE status IN('failed','dead_letter') ORDER BY updated_at DESC LIMIT 200`);
+  const gatewayRows=await query(`SELECT id::text id,'whatsapp_gateway' category,'error' severity,COALESCE(last_error,'gateway_session_error') message,
+    status||' · channel='||channel_id::text details,status='connected' resolved,updated_at::text created_at,'whatsapp_gateway_session' source
+    FROM whatsapp_gateway_sessions WHERE last_error IS NOT NULL ORDER BY updated_at DESC LIMIT 200`);
+  const items=[...rows,...webhookRows,...inboundRows,...outboxRows,...gatewayRows].filter((r:any)=>(!f.category||f.category==='all'||r.category===f.category)&&(!f.severity||f.severity==='all'||r.severity===f.severity)&&(!f.resolved||f.resolved==='all'||(f.resolved==='true'?r.resolved:!r.resolved)));
   return {items:items.sort((a:any,b:any)=>String(b.created_at).localeCompare(String(a.created_at)))};
 }
 
