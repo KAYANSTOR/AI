@@ -200,59 +200,34 @@ export function TableSkeleton({ rows = 5 }: { rows?: number }) {
 }
 
 export function ModalDialog({
-  open,
-  title,
-  subtitle,
-  onClose,
-  children,
-  maxWidth = 'max-w-xl',
-}: {
-  open: boolean;
-  title: string;
-  subtitle?: string;
-  onClose: () => void;
-  children: React.ReactNode;
-  maxWidth?: string;
+  open,title,subtitle,onClose,children,maxWidth='max-w-xl',
+}:{
+  open:boolean;title:string;subtitle?:string;onClose:()=>void;children:React.ReactNode;maxWidth?:string;
 }) {
-  const titleId = React.useId();
-
-  React.useEffect(() => {
-    if (!open) return;
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', handleKey);
-    return () => window.removeEventListener('keydown', handleKey);
-  }, [open, onClose]);
-
-  if (!open) return null;
+  const titleId=React.useId();
+  React.useEffect(()=>{
+    if(!open)return;
+    const handleKey=(e:KeyboardEvent)=>{if(e.key==='Escape')onClose();};
+    window.addEventListener('keydown',handleKey);
+    return ()=>window.removeEventListener('keydown',handleKey);
+  },[open,onClose]);
+  if(!open)return null;
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 overflow-y-auto"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby={titleId}
-      onClick={onClose}
-    >
-      <div
-        className={`w-full ${maxWidth} rounded-xl border border-[var(--k-line)] bg-[var(--k-surface)] shadow-xl overflow-hidden my-auto`}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-start justify-between gap-4 px-5 py-4 border-b border-[var(--k-line)]">
-          <div>
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/55 p-3 sm:p-4 overflow-y-auto"
+      role="dialog" aria-modal="true" aria-labelledby={titleId} onClick={onClose}>
+      <div className={`flex max-h-[calc(100dvh-1.5rem)] w-full ${maxWidth} flex-col overflow-hidden rounded-xl border border-[var(--k-line)] bg-[var(--k-surface)] shadow-2xl sm:max-h-[calc(100dvh-2rem)]`}
+        onClick={(e)=>e.stopPropagation()}>
+        <div className="sticky top-0 z-10 flex shrink-0 items-start justify-between gap-4 border-b border-[var(--k-line)] bg-[var(--k-surface)] px-4 py-4 sm:px-5">
+          <div className="min-w-0">
             <h2 id={titleId} className="text-base font-bold text-[var(--k-ink)]">{title}</h2>
-            {subtitle && <p className="text-xs text-[var(--k-ink-muted)] mt-0.5">{subtitle}</p>}
+            {subtitle&&<p className="mt-0.5 text-xs text-[var(--k-ink-muted)]">{subtitle}</p>}
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="إغلاق النافذة"
-            className="p-2 rounded-lg text-[var(--k-ink-muted)] hover:text-[var(--k-ink)] hover:bg-[var(--k-surface-subtle)] transition-colors"
-          >
-            <X className="w-4 h-4" />
+          <button type="button" onClick={onClose} aria-label="إغلاق النافذة"
+            className="inline-flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-lg text-[var(--k-ink-muted)] transition-colors hover:bg-[var(--k-surface-subtle)] hover:text-[var(--k-ink)]">
+            <X className="h-4 w-4"/>
           </button>
         </div>
-        <div className="p-5 max-h-[80vh] overflow-y-auto">{children}</div>
+        <div className="min-h-0 flex-1 overflow-y-auto p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] sm:p-5">{children}</div>
       </div>
     </div>
   );
@@ -341,13 +316,15 @@ export function ConfirmActionModal({
 }
 
 export const primaryBtnClass =
-  'inline-flex items-center justify-center gap-2 px-4 py-2 text-xs font-semibold rounded-lg bg-[var(--k-brand-forest)] text-white hover:opacity-90 transition-opacity whitespace-nowrap shrink-0 disabled:opacity-50';
+  'inline-flex min-h-[44px] items-center justify-center gap-2 px-4 py-2 text-xs font-semibold rounded-lg bg-[var(--k-brand-forest)] text-white hover:opacity-90 transition-opacity whitespace-nowrap shrink-0 disabled:opacity-50';
 
 export const secondaryBtnClass =
-  'inline-flex items-center justify-center gap-2 px-3.5 py-2 text-xs font-medium rounded-lg border border-[var(--k-line-strong)] bg-[var(--k-surface)] text-[var(--k-ink)] hover:bg-[var(--k-surface-subtle)] transition-colors whitespace-nowrap shrink-0 disabled:opacity-50';
+  'inline-flex min-h-[44px] min-w-[44px] items-center justify-center gap-2 px-3.5 py-2 text-xs font-medium rounded-lg border border-[var(--k-line-strong)] bg-[var(--k-surface)] text-[var(--k-ink)] hover:bg-[var(--k-surface-subtle)] transition-colors whitespace-nowrap shrink-0 disabled:opacity-50';
 
 export const dangerBtnClass =
-  'inline-flex items-center justify-center gap-2 px-3.5 py-2 text-xs font-medium rounded-lg border border-[var(--k-danger)]/40 text-[var(--k-danger)] hover:bg-[var(--k-danger)]/10 transition-colors whitespace-nowrap shrink-0 disabled:opacity-50';
+  'inline-flex min-h-[44px] min-w-[44px] items-center justify-center gap-2 px-3.5 py-2 text-xs font-medium rounded-lg border border-[var(--k-danger)]/40 text-[var(--k-danger)] hover:bg-[var(--k-danger)]/10 transition-colors whitespace-nowrap shrink-0 disabled:opacity-50';
+
+
 
 export const inputClass =
   'w-full px-3 py-2 text-base sm:text-sm rounded-lg border border-[var(--k-line-strong)] bg-[var(--k-surface)] text-[var(--k-ink)] placeholder:text-[var(--k-ink-muted)] focus:outline-none focus:border-[var(--k-brand-forest)]';

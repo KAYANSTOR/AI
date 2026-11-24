@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, branch1]
   pull_request:
-    branches: [main]
+    branches: [main, branch1]
 
 jobs:
   web:
@@ -25,6 +25,10 @@ jobs:
       - uses: oven-sh/setup-bun@v2
       - name: Install
         run: npm ci
+      - name: Diff Whitespace Check
+        run: git diff --check HEAD^ HEAD
+      - name: Owner Console Typecheck
+        run: npm run lint --workspace @kayan-ai/owner-console
       - name: Lint
         run: npm run lint
       - name: Typecheck

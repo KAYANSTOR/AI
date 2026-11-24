@@ -25,34 +25,26 @@ export async function getOrganizationPlanLimits(
   db: DbClient,
   organizationId: string
 ): Promise<{ status: string; limits: PlanLimits; planCode: string }> {
-  const { data: sub } = await db
-    .from('subscriptions')
-    .select('status, plan_id, plan_tier, plans(limits, code)')
-    .eq('organization_id', organizationId)
-    .maybeSingle()
-
-  if (!sub) {
-    return { status: 'trial', limits: { ...TRIAL_LIMITS }, planCode: 'trial' }
-  }
-
-  const plans = sub.plans as unknown as { limits?: PlanLimits; code?: string } | null
-  if (plans?.limits) {
-    return {
-      status: String(sub.status ?? 'active'),
-      limits: plans.limits,
-      planCode: plans.code ?? 'custom',
-    }
-  }
-
-  // Legacy subscriptions without plans join (0000 schema used plan_tier).
-  const tier = String(sub.plan_tier ?? 'starter')
-  const tierLimits: Record<string, PlanLimits> = PLAN_LIMITS_BY_CODE
-
-  return {
-    status: String(sub.status ?? 'active'),
-    limits: tierLimits[tier] ?? tierLimits.starter,
-    planCode: tier,
-  }
+  const [subscriptionResult, overrideResult] = await Promise.all([
+    db.from('subscriptions').select('status, plan_id, plan_tier, plans(limits, code)').eq('organization_id', organizationId).maybeSingle(),
+    db.from('billing_entitlements').select('limit_value, enabled, period, source')
+      .eq('organization_id', organizationId).eq('feature_key', 'ai_messages_monthly').maybeSingle(),
+  ]);
+  if (subscriptionResult.error) throw new Error('subscription_limits_lookup_failed');
+  if (overrideResult.error) throw new Error('owner_entitlement_lookup_failed');
+  const override = overrideResult.data as {limit_value?:number|string|null;enabled?:boolean;period?:string|null}|null;
+  const applyOwnerCredit = (limits:PlanLimits):PlanLimits => {
+    const value=Number(override?.limit_value);
+    return override?.enabled && override.period==='monthly' && Number.isFinite(value) && value>=0
+      ? {...limits,ai_messages:value} : limits;
+  };
+  const sub=subscriptionResult.data;
+  if(!sub)return {status:'trial',limits:applyOwnerCredit({...TRIAL_LIMITS}),planCode:'trial'};
+  const plans=sub.plans as unknown as {limits?:PlanLimits;code?:string}|null;
+  if(plans?.limits)return {status:String(sub.status??'active'),limits:applyOwnerCredit(plans.limits),planCode:plans.code??'custom'};
+  const tier=String(sub.plan_tier??'starter');
+  const tierLimits:Record<string,PlanLimits>=PLAN_LIMITS_BY_CODE;
+  return {status:String(sub.status??'active'),limits:applyOwnerCredit(tierLimits[tier]??tierLimits.starter),planCode:tier};
 }
 
 export async function assertSubscriptionActive(

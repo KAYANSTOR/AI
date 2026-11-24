@@ -253,7 +253,7 @@ function OwnerConsoleApp() {
       {/* Accessible Live Toast Container */}
       <div
         aria-live="polite"
-        className="fixed bottom-20 lg:bottom-5 end-5 z-50 flex flex-col gap-2 max-w-sm pointer-events-none"
+        className="fixed bottom-20 lg:bottom-5 end-5 z-[110] flex flex-col gap-2 max-w-sm pointer-events-none"
       >
         {toasts.map((t) => (
           <div
