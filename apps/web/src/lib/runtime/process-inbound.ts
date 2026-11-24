@@ -1,3 +1,4 @@
+import { isOwnerPauseActive } from '@/lib/runtime/owner-presence'
 import type { DbClient } from '@/lib/db/client'
 import { createAdminClient } from '@/lib/db/admin'
 import { findUserById, normalizePhone } from '@/lib/auth/users'
@@ -170,6 +171,12 @@ export async function processInboundMessage(
   const consent = await getConsentStatus(db, contact.contactId, input.channelType)
   if (consent === 'opted_out') {
     return skipReply('contact_opted_out', input, conversationId, contact.contactId)
+  }
+
+  // Owner presence: while the owner is replying by hand from WhatsApp, the agent stays
+  // silent. The message above is already stored; the worker catches up after the pause.
+  if (input.channelId && await isOwnerPauseActive(db, { channelId: input.channelId, conversationId })) {
+    return skipReply('owner_active_pause', input, conversationId, contact.contactId)
   }
 
   // Explicit "let me talk to a person" requests are honoured before any model call:

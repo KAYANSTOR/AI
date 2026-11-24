@@ -1,6 +1,7 @@
 import type { DbClient } from '@/lib/db/client'
 import { resolveContactIdentity } from '@/lib/channels/contacts'
 import { ensureOpenConversation } from '@/lib/runtime/conversation'
+import { recordOwnerActivity } from '@/lib/runtime/owner-presence'
 
 export type OwnerWhatsAppMessage = {
   channelId: string
@@ -85,5 +86,9 @@ export async function syncOwnerWhatsAppMessage(db: DbClient, input: OwnerWhatsAp
   await db.from('conversations')
     .update({ last_message_at: input.sentAt, last_outbound_at: input.sentAt })
     .eq('id', conversationId).eq('organization_id', channel.organization_id)
+  // Every manual owner message renews the sliding pause (default 30 minutes).
+  await recordOwnerActivity(db, {
+    channelId: channel.id, organizationId: channel.organization_id, conversationId, sentAt: input.sentAt,
+  })
   return { status: 'stored', conversationId }
 }

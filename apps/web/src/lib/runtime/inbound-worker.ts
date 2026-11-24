@@ -4,6 +4,7 @@ import { markWebhookProcessed } from '@/lib/channels/idempotency'
 import { processInboundMessage } from '@/lib/runtime/process-inbound'
 import { deliverOutbound, recordDeliveredOutboundMessage } from '@/lib/runtime/outbound'
 import { drainOutbox } from '@/lib/channels/outbox-drain'
+import { catchUpStillNeeded, runOwnerPresenceCatchUp } from '@/lib/runtime/owner-presence'
 
 type InboundPayload = {
   channelId: string
@@ -16,6 +17,9 @@ type InboundPayload = {
   text: string
   providerAccountId?: string | null
   externalIdentifier?: string | null
+  /** Queued by the owner-presence sweep after the owner's pause expired. */
+  catchUp?: boolean
+  conversationId?: string
 }
 type InboundJob = {
   id: string
@@ -29,6 +33,8 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 let stopping = false
 let lastRecoveryAt = 0
 let lastOutboxDrainAt = 0
+let lastOwnerCatchUpAt = 0
+const OWNER_CATCH_UP_INTERVAL_MS = Number(process.env.OWNER_CATCH_UP_INTERVAL_MS || 30_000)
 const OUTBOX_DRAIN_INTERVAL_MS = Number(process.env.OUTBOX_DRAIN_INTERVAL_MS || 10_000)
 
 /**
@@ -45,6 +51,17 @@ async function drainOutboxPeriodically(db: ReturnType<typeof createAdminClient>)
     if (result.processed > 0) console.log('outbox_drain_completed', { workerId, ...result })
   } catch (error) {
     console.error('outbox_drain_failed', { workerId, reason: error instanceof Error ? error.message : 'drain_error' })
+  }
+}
+
+/** Owner presence: after a manual-reply pause expires, queue the unanswered conversations once. */
+async function ownerCatchUpPeriodically(db: ReturnType<typeof createAdminClient>) {
+  if (Date.now() - lastOwnerCatchUpAt < OWNER_CATCH_UP_INTERVAL_MS) return
+  lastOwnerCatchUpAt = Date.now()
+  try {
+    await runOwnerPresenceCatchUp(db)
+  } catch (error) {
+    console.error('owner_presence_catch_up_failed', { workerId, reason: error instanceof Error ? error.message : 'catch_up_error' })
   }
 }
 
@@ -70,6 +87,12 @@ async function claimJob(db: ReturnType<typeof createAdminClient>): Promise<Inbou
 async function processJob(db: ReturnType<typeof createAdminClient>, job: InboundJob) {
   const input = job.payload
   console.log('inbound_job_processing', { jobId: job.id, channelId: input.channelId, attempt: job.attempts })
+  // The owner may have answered between the sweep and now: never double-reply.
+  if (input.catchUp && input.conversationId && !(await catchUpStillNeeded(db, input.conversationId))) {
+    await completeJob(db, job.id)
+    console.log('inbound_job_catch_up_skipped', { jobId: job.id, conversationId: input.conversationId })
+    return
+  }
   const result = await processInboundMessage(db, {
     organizationId: input.organizationId,
     businessId: input.businessId,
@@ -112,12 +135,16 @@ async function processJob(db: ReturnType<typeof createAdminClient>, job: Inbound
     }
   }
   if (job.webhook_event_id) await markWebhookProcessed(db, job.webhook_event_id, 'processed')
+  await completeJob(db, job.id)
+  console.log('inbound_job_completed', { jobId: job.id, channelId: input.channelId, hadReply: Boolean(result.reply) })
+}
+
+async function completeJob(db: ReturnType<typeof createAdminClient>, jobId: string) {
   const { error } = await db.from('inbound_jobs').update({
     status: 'completed', locked_at: null, locked_by: null, last_error: null,
     completed_at: new Date().toISOString(), updated_at: new Date().toISOString(),
-  }).eq('id', job.id).eq('status', 'processing')
+  }).eq('id', jobId).eq('status', 'processing')
   if (error) throw new Error(error.message)
-  console.log('inbound_job_completed', { jobId: job.id, channelId: input.channelId, hadReply: Boolean(result.reply) })
 }
 
 async function failJob(db: ReturnType<typeof createAdminClient>, job: InboundJob, error: unknown) {
@@ -143,6 +170,7 @@ async function main() {
   while (!stopping) {
     await recoverStaleJobs(db)
     await drainOutboxPeriodically(db)
+    await ownerCatchUpPeriodically(db)
     try {
       const job = await claimJob(db)
       if (!job) {

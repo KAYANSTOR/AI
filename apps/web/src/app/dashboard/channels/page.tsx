@@ -3,6 +3,8 @@ import { createClient } from '@/lib/db/server'
 import { getDashboardContext } from '@/lib/dashboard/context'
 import { CHANNEL_SPECS } from '@/lib/channels/management'
 import { ChannelsConsole } from './channels-console'
+import { OwnerPresencePanel, type OwnerPresenceChannel } from './owner-presence-panel'
+import { normalizeSettings } from '@/lib/runtime/owner-presence'
 import { ar } from '@/lib/i18n/ar'
 import { databaseErrorMessage, logDatabaseError } from '@/lib/db/errors'
 
@@ -102,6 +104,32 @@ export default async function ChannelsPage({
 
   const cards = [...whatsappCards, ...otherCards]
 
+  // Owner-presence settings live in their own query so the page still renders
+  // if the columns are not migrated yet.
+  let presenceChannels: OwnerPresenceChannel[] = []
+  try {
+    const presence = await db
+      .from('channels')
+      .select('id, external_identifier, connection_mode, human_takeover_enabled, human_takeover_pause_minutes, human_takeover_scope, human_paused_until')
+      .eq('organization_id', context.organizationId)
+      .eq('channel_type', 'whatsapp')
+    if (presence.error) logDatabaseError('channels page: load owner presence', presence.error)
+    presenceChannels = (presence.data ?? []).map((row) => {
+      const settings = normalizeSettings(row)
+      const mode = whatsappModes.find((item) => item.connectionMode === row.connection_mode)
+      return {
+        id: String(row.id),
+        label: [mode?.label ?? 'واتساب', row.external_identifier].filter(Boolean).join(' · '),
+        enabled: settings.enabled,
+        pauseMinutes: settings.pauseMinutes,
+        scope: settings.scope,
+        pausedNow: isPausedNow(row.human_paused_until),
+      }
+    })
+  } catch (error) {
+    logDatabaseError('channels page: load owner presence', error)
+  }
+
   return (
     <div className="space-y-6">
       <header className="space-y-4 rounded-[1.15rem] border border-border bg-background/55 p-5 sm:p-6">
@@ -131,8 +159,14 @@ export default async function ChannelsPage({
 
       <ChannelsConsole cards={cards} canManage={canManage} />
 
+      <OwnerPresencePanel channels={presenceChannels} canManage={canManage} />
+
     </div>
   )
+}
+
+function isPausedNow(value: unknown): boolean {
+  return typeof value === 'string' && Date.parse(value) > Date.now()
 }
 
 function Notice({ tone, message }: { tone: 'error' | 'warning' | 'success'; message: string }) {
