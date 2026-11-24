@@ -4,7 +4,7 @@ import { trainingChecklist } from '@/lib/trainer/checklists'
 
 export const dynamic = 'force-dynamic'
 
-const TABS: AssistantTab[] = ['chat', 'tasks', 'memory']
+const TABS: AssistantTab[] = ['chat', 'tasks', 'memory', 'tools']
 
 export default async function PersonalAssistantPage({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
   const { tab } = await searchParams

@@ -141,6 +141,7 @@ async function handle(req: NextRequest) {
         body: advance.templateContent,
         idempotencyKey: `followup:${advance.enrollmentId}:${advance.stepId}`,
         queueOnFailure: true,
+        initiatedBy: 'business',
       })
 
       if (delivery === 'blocked') {

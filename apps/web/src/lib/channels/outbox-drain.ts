@@ -5,6 +5,9 @@ import {
   OUTBOX_STALE_LOCK_MS,
   nextOutboxFailureState,
 } from '@/lib/channels/outbox'
+import { isBusinessInitiatedEvent } from '@/lib/channels/whatsapp-window'
+import { renderTemplateBody, type WhatsAppTemplateRow } from '@/lib/channels/whatsapp-templates'
+import { planBusinessWhatsApp, type WhatsAppTemplatePayload } from '@/lib/channels/whatsapp-dispatch'
 
 export class OutboxDrainError extends Error {}
 
@@ -23,7 +26,7 @@ export async function drainOutbox(
   const claimable = `status.in.(pending,failed),and(status.eq.processing,locked_at.lt.${staleBefore})`
   // `only` drains a single just-queued reply (dashboard send) without touching other tenants' rows.
   let query = db.from('outbox_events')
-    .select('id, organization_id, channel_id, recipient, payload, attempts, idempotency_key')
+    .select('id, organization_id, channel_id, event_type, recipient, payload, attempts, idempotency_key')
   if (only) query = query.eq('organization_id', only.organizationId).eq('idempotency_key', only.idempotencyKey)
   const { data: events, error } = await query
     .or(claimable)
@@ -88,11 +91,69 @@ export async function drainOutbox(
             continue
           }
         }
-        if (channel.connection_mode !== 'qr_unofficial' && !payload.whatsapp_template) {
-          await db.from('outbox_events').update({ status: 'cancelled', locked_at: null, updated_at: new Date().toISOString(), last_error: 'approved_whatsapp_template_required' }).eq('id', event.id).eq('status', 'processing')
-          continue
+      }
+
+      const conversationId = typeof payload.conversation_id === 'string' ? payload.conversation_id : null
+      const explicitTemplate = payload.whatsapp_template as WhatsAppTemplatePayload | undefined
+      let templateToSend: WhatsAppTemplatePayload | undefined
+      let approvedTemplateRow: WhatsAppTemplateRow | null = null
+
+      // Business-initiated WhatsApp messages must respect Meta's 24-hour window: free
+      // text inside it, an approved template outside it, and an explicit failure (with
+      // audit) when no approved template exists instead of a silent provider rejection.
+      if (channel.channel_type === 'whatsapp' && channel.connection_mode !== 'qr_unofficial') {
+        const initiatedBy =
+          payload.initiated_by === 'business' || payload.kind === 'personal_assistant' || isBusinessInitiatedEvent(String(event.event_type ?? ''))
+            ? 'business'
+            : 'customer'
+        if (initiatedBy === 'business') {
+          const plan = await planBusinessWhatsApp(db, {
+            organizationId: event.organization_id,
+            channelId: channel.id,
+            connectionMode: channel.connection_mode,
+            recipient: event.recipient,
+            conversationId,
+            explicitTemplate: explicitTemplate ?? null,
+            templateVariables: payload.template_variables,
+          })
+          if (plan.kind === 'blocked') {
+            await db.from('outbox_events').update({
+              status: 'dead_letter',
+              locked_at: null,
+              last_error: 'whatsapp_template_required_outside_window',
+              updated_at: new Date().toISOString(),
+            }).eq('id', event.id).eq('status', 'processing')
+            await db.from('audit_events').insert({
+              organization_id: event.organization_id,
+              actor_type: 'system',
+              action: 'whatsapp.template_required',
+              entity_type: 'outbox_event',
+              entity_id: String(event.id),
+              metadata: {
+                reason: plan.reason,
+                event_type: event.event_type ?? null,
+                channel_id: channel.id,
+                window: { last_inbound_at: plan.lastInboundAt },
+              },
+            })
+            continue
+          }
+          if (plan.kind === 'template') {
+            templateToSend = plan.template
+            approvedTemplateRow = plan.resolvedRow
+            if (!explicitTemplate) {
+              // Persist the resolved template on the durable intent for auditability.
+              await db.from('outbox_events').update({
+                template_name: plan.template.name,
+                template_language_code: plan.template.languageCode,
+                template_variables_json: plan.template.bodyParameters ?? [],
+                updated_at: new Date().toISOString(),
+              }).eq('id', event.id).eq('status', 'processing')
+            }
+          }
         }
       }
+
       // Same delivery path as the live routes; failures here are recorded by the
       // worker itself so retries and dead-letter stay authoritative.
       const outboundChannel = {
@@ -104,15 +165,15 @@ export async function drainOutbox(
         externalIdentifier: channel.external_identifier,
         connectionMode: channel.connection_mode as string | null,
       }
-      if (payload.kind === 'personal_assistant' && payload.whatsapp_template && channel.connection_mode !== 'qr_unofficial') {
-        await deliverWhatsAppTemplate(db, { channel: outboundChannel, recipient: event.recipient, template: payload.whatsapp_template as { name: string; languageCode: string; bodyParameters?: string[] } })
+      if (templateToSend) {
+        await deliverWhatsAppTemplate(db, { channel: outboundChannel, recipient: event.recipient, template: templateToSend })
       } else {
         await deliverOutbound(db, {
           channel: outboundChannel,
           recipient: event.recipient,
           body,
           idempotencyKey: 'outbox:' + event.id,
-          conversationId: typeof payload.conversation_id === 'string' ? payload.conversation_id : null,
+          conversationId,
           queueOnFailure: false,
         })
       }
@@ -134,10 +195,14 @@ export async function drainOutbox(
       }
 
       if (typeof payload.conversation_id === 'string' && payload.conversation_id) {
+        // The inbox projection shows the rendered template, not an empty text body.
+        const projectionBody = templateToSend
+          ? renderTemplateBody(approvedTemplateRow?.body_text ?? body, templateToSend.bodyParameters ?? []) || body
+          : body
         await recordDeliveredOutboundMessage(db, {
           organizationId: event.organization_id,
           conversationId: payload.conversation_id,
-          body,
+          body: projectionBody,
           idempotencyKey: 'outbox:' + event.id,
           senderType: payload.sender_type === 'ai' || payload.sender_type === 'human_dashboard' || payload.sender_type === 'system' ? payload.sender_type : undefined,
         })

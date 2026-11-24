@@ -10,6 +10,7 @@ import { sendMessengerText } from '@/lib/providers/messenger'
 import { markFirstResponse } from '@/lib/sla'
 import { adapterForWhatsAppMode, type WhatsAppConnectionMode } from '@/lib/channels/whatsapp-provider-adapter'
 import { formatForWhatsApp } from '@/lib/channels/whatsapp-format'
+import { planBusinessWhatsApp, type WhatsAppTemplatePayload } from '@/lib/channels/whatsapp-dispatch'
 
 /**
  * Provider credentials are intentionally inaccessible through the tenant-scoped
@@ -72,6 +73,8 @@ export function isPermanentOutboundError(error: unknown): boolean {
   }
   if (error instanceof Error) {
     if (error.name === 'AbortError' || error.name === 'TimeoutError' || error instanceof TypeError) return false
+    // Outside the 24-hour window, retrying free text can never succeed: a template is required.
+    if (error.message === 'whatsapp_template_required_outside_window') return true
     if (/(?:is required|are required|unsupported_outbound_channel:)/i.test(error.message)) return true
     const status = /HTTP\s+(\d{3})/i.exec(error.message)?.[1]
     if (status) {
@@ -109,6 +112,15 @@ export async function deliverOutbound(
     deliverInline?: boolean
     /** Recorded on the inbox message once the outbox drain delivers it. */
     senderType?: 'ai' | 'human_dashboard' | 'system'
+    /**
+     * Marks an owner/business-initiated WhatsApp message. Such a message obeys Meta's
+     * 24-hour window: an approved template is used automatically when it has closed.
+     */
+    initiatedBy?: 'business' | 'customer'
+    /** Explicit template (e.g. an assistant notification) instead of a DB lookup. */
+    template?: WhatsAppTemplatePayload | null
+    /** Values for the approved template's positional variables. */
+    templateVariables?: unknown
   }
 ): Promise<'sent' | 'queued' | 'blocked'> {
   const queueOnFailure = input.queueOnFailure !== false
@@ -120,7 +132,13 @@ export async function deliverOutbound(
         eventType: 'message.send',
         idempotencyKey: input.idempotencyKey,
         recipient: input.recipient,
-        payload: { body: input.body, conversation_id: input.conversationId ?? null, ...(input.senderType ? { sender_type: input.senderType } : {}) },
+        payload: {
+          body: input.body,
+          conversation_id: input.conversationId ?? null,
+          ...(input.senderType ? { sender_type: input.senderType } : {}),
+          ...(input.initiatedBy ? { initiated_by: input.initiatedBy } : {}),
+          ...(input.templateVariables !== undefined ? { template_variables: input.templateVariables } : {}),
+        },
         reserveOnly: !input.deliverInline,
       })
     : null
@@ -133,10 +151,34 @@ export async function deliverOutbound(
   // intent right away instead of waiting for the external scheduler.
   if (queueOnFailure && !input.deliverInline) return 'queued'
 
+  let directTemplate: WhatsAppTemplatePayload | null = null
+  if (
+    queueOnFailure &&
+    input.initiatedBy === 'business' &&
+    input.channel.channelType === 'whatsapp' &&
+    input.channel.connectionMode !== 'qr_unofficial'
+  ) {
+    const plan = await planBusinessWhatsApp(db, {
+      organizationId: input.channel.organizationId,
+      channelId: input.channel.id,
+      connectionMode: input.channel.connectionMode,
+      recipient: input.recipient,
+      conversationId: input.conversationId ?? null,
+      explicitTemplate: input.template ?? null,
+      templateVariables: input.templateVariables,
+    })
+    if (plan.kind === 'blocked') throw new Error('whatsapp_template_required_outside_window')
+    if (plan.kind === 'template') directTemplate = plan.template
+  }
+
   let credentials: Record<string, string>
   try {
-    credentials = await resolveOwnedChannelCredentials(input.channel)
-    await sendViaProvider(input.channel, credentials, input.recipient, input.body)
+    if (directTemplate) {
+      await deliverWhatsAppTemplate(db, { channel: input.channel, recipient: input.recipient, template: directTemplate })
+    } else {
+      credentials = await resolveOwnedChannelCredentials(input.channel)
+      await sendViaProvider(input.channel, credentials, input.recipient, input.body)
+    }
   } catch (error) {
     if (!queueOnFailure || !claim || claim.status !== 'claimed') throw error
 

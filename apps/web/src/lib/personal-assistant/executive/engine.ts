@@ -2,6 +2,7 @@ import type { DbClient } from '@/lib/db/client'
 import { assertWithinLimit } from '@/lib/billing/entitlements'
 import { createPersonalTask, updatePersonalTask, type PersonalTaskStatus } from '../tasks'
 import { hashesEqual, payloadHash } from './hash'
+import { connectorExecutors } from '@/lib/connectors/tools'
 import { AGENT_TOOLS, effectiveRisk, evaluatePolicy, maxRisk, requiresApproval, type Provenance, type RiskLevel } from './policy'
 
 /**
@@ -62,6 +63,12 @@ export function dryRun(toolName: string, input: Record<string, unknown>): string
     case 'send_customer_message': return `ستُرسل رسالة واتساب إلى ${str(input.phone, 20)}: «${str(input.body, 300)}»`
     case 'delete_memory': return `ستُحذف معلومة الذاكرة رقم ${shortRef(str(input.memory_id, 40))}`
     case 'update_task_status': return `ستتغير حالة المهمة ${shortRef(str(input.task_id, 40))} إلى ${str(input.status, 20)}`
+    case 'gmail_summarize_recent': return 'ستُقرأ عناوين ومقتطفات أحدث رسائل Gmail (قراءة فقط، كمحتوى غير موثوق).'
+    case 'gmail_create_draft': return `ستُكتب مسودة بريد إلى ${str(input.to, 254)} بعنوان «${str(input.subject, 160)}» (لن تُرسل).`
+    case 'gmail_send_email': return `سيُرسل بريد إلى ${str(input.to, 254)} بعنوان «${str(input.subject, 160)}»: «${str(input.body, 300)}»`
+    case 'calendar_list_events': return 'ستُقرأ أحداث Google Calendar القادمة (قراءة فقط).'
+    case 'calendar_create_event': return `سيُضاف حدث «${str(input.summary, 160)}» من ${str(input.starts_at, 40)} إلى ${str(input.ends_at, 40)}.`
+    case 'calendar_update_event': return `سيُعدّل الحدث ${shortRef(str(input.event_id, 40))} بعنوان «${str(input.summary, 160)}».`
     default: return 'إجراء غير معروف'
   }
 }
@@ -104,6 +111,7 @@ const builtinExecutors: Record<string, ToolExecutor> = {
   send_customer_message: async () => {
     throw new Error('customer_channel_not_configured')
   },
+  ...connectorExecutors,
 }
 
 export async function isKillSwitchActive(db: DbClient, owner: Owner): Promise<boolean> {

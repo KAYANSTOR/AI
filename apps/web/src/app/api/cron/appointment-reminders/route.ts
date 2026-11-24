@@ -27,7 +27,7 @@ async function handle(req: NextRequest) {
 
   const { data: appointments, error } = await db
     .from('appointments')
-    .select('id, organization_id, contact_id, starts_at, status, reminder_24h_sent_at, reminder_1h_sent_at')
+    .select('id, organization_id, contact_id, starts_at, status, reminder_24h_sent_at, reminder_1h_sent_at, reminder_template_name, reminder_template_language_code, reminder_template_variables')
     .in('status', ['pending', 'confirmed'])
     .gte('starts_at', new Date(now).toISOString())
     .lte('starts_at', new Date(now + WINDOW_24H_MS + SKEW_MS).toISOString())
@@ -158,7 +158,28 @@ async function handle(req: NextRequest) {
       eventType: 'appointment.reminder',
       idempotencyKey: `appt-reminder:${appt.id}:${kind}`,
       recipient,
-      payload: { body, appointment_id: appt.id, kind },
+      // Reminders are business-initiated: outside Meta's 24-hour window the outbox
+      // automatically sends the approved template instead of failing silently.
+      payload: {
+        body,
+        appointment_id: appt.id,
+        kind,
+        initiated_by: 'business',
+        ...(appt.reminder_template_name
+          ? {
+              whatsapp_template: {
+                name: appt.reminder_template_name,
+                languageCode: appt.reminder_template_language_code || 'ar',
+                bodyParameters: Array.isArray(appt.reminder_template_variables)
+                  ? appt.reminder_template_variables.map((value: unknown) => String(value ?? ''))
+                  : [],
+              },
+              template_variables: Array.isArray(appt.reminder_template_variables)
+                ? appt.reminder_template_variables
+                : [],
+            }
+          : {}),
+      },
     })
 
     const { error: markError } = await db

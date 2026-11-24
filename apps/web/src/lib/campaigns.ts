@@ -158,7 +158,13 @@ export async function processCampaignBatch(
         eventType: 'campaign.send',
         idempotencyKey: `campaign:${campaign.id}:${row.contact_id}`,
         recipient,
-        payload: { body: renderCampaignTemplate(campaign.template_body, contact?.full_name as string | null), campaign_id: campaign.id },
+        payload: {
+          body: renderCampaignTemplate(campaign.template_body, contact?.full_name as string | null),
+          campaign_id: campaign.id,
+          // Campaigns are business-initiated and therefore template-bound after 24h.
+          initiated_by: 'business',
+          template_variables: [String(contact?.full_name ?? 'عميلنا العزيز')],
+        },
       })
 
       await db

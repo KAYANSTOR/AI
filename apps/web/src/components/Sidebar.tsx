@@ -81,6 +81,7 @@ const navSections: NavSection[] = [
     items: [
       { name: 'الباقات والاستهلاك', href: '/dashboard/billing', icon: CircleDollarSign, capability: null },
       { name: 'الحملات', href: '/dashboard/campaigns', icon: Megaphone, capability: 'campaigns' },
+      { name: 'قوالب واتساب', href: '/dashboard/settings/templates', icon: FileText, capability: 'campaigns' },
       { name: 'التقارير', href: '/dashboard/reports', icon: ChartNoAxesCombined, capability: null },
       { name: 'Copilot', href: '/dashboard/copilot', icon: Sparkles, capability: null },
       { name: 'مفاتيح API', href: '/dashboard/settings/api-keys', icon: KeyRound, capability: null },

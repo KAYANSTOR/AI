@@ -27,6 +27,15 @@ export const AGENT_TOOLS: Record<string, ToolSpec> = {
   send_customer_message: { name: 'send_customer_message', risk: 'high', readOnly: false, labelAr: 'إرسال رسالة واتساب لعميل', untouchedAr: 'لم تُرسل رسائل لأي رقم آخر ولم تُعدّل بيانات العميل.' },
   delete_memory: { name: 'delete_memory', risk: 'high', readOnly: false, labelAr: 'حذف معلومة من الذاكرة', untouchedAr: 'لم تُحذف أي ذاكرة أخرى.' },
   update_task_status: { name: 'update_task_status', risk: 'medium', readOnly: false, labelAr: 'تعديل حالة مهمة', untouchedAr: 'لم تُعدّل مهام أخرى.' },
+  // Productivity connectors. Gmail/Calendar output is untrusted data, and anything
+  // that leaves the platform is either high risk or escalates to high when the trigger
+  // came from outside the owner.
+  gmail_summarize_recent: { name: 'gmail_summarize_recent', risk: 'low', readOnly: true, labelAr: 'قراءة وتلخيص بريد Gmail الحديث', untouchedAr: 'قراءة فقط، لم يُرسل ولم يُعدّل أي بريد.' },
+  gmail_create_draft: { name: 'gmail_create_draft', risk: 'medium', readOnly: false, labelAr: 'إنشاء مسودة بريد في Gmail', untouchedAr: 'مسودة فقط، لم تُرسل لأي مستلم.' },
+  gmail_send_email: { name: 'gmail_send_email', risk: 'high', readOnly: false, labelAr: 'إرسال بريد عبر Gmail', untouchedAr: 'لم يُرسل بريد لأي مستلم آخر ولم تُعدّل رسائل موجودة.' },
+  calendar_list_events: { name: 'calendar_list_events', risk: 'low', readOnly: true, labelAr: 'قراءة جدول Google Calendar', untouchedAr: 'قراءة فقط، لم يُضف أو يُعدّل أي حدث.' },
+  calendar_create_event: { name: 'calendar_create_event', risk: 'medium', readOnly: false, labelAr: 'إضافة حدث في Google Calendar', untouchedAr: 'لم يُعدّل أي حدث آخر ولم يُحذف شيء.' },
+  calendar_update_event: { name: 'calendar_update_event', risk: 'medium', readOnly: false, labelAr: 'تعديل حدث في Google Calendar', untouchedAr: 'لم يُعدّل أي حدث آخر ولم يُحذف شيء.' },
 }
 
 const RISK_ORDER: RiskLevel[] = ['low', 'medium', 'high', 'financial']

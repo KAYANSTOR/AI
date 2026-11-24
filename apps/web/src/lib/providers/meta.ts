@@ -13,7 +13,7 @@ export type MetaMessageCredentials = {
   account_id?: string
 }
 
-function requireGraphBase() {
+export function requireGraphBase() {
   const value = process.env.META_GRAPH_BASE_URL
   if (!value) throw new Error('META_GRAPH_BASE_URL is required')
   return value.replace(/\/+$/, '')

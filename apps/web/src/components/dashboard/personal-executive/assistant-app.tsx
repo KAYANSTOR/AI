@@ -2,15 +2,16 @@
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
-import { Brain, CheckCircle2, ClipboardList, Link2, MessageCircle, Mic, OctagonX, Paperclip, Play, Send, ShieldCheck, Smartphone, Square, XCircle } from 'lucide-react'
+import { Brain, CheckCircle2, ClipboardList, Link2, MessageCircle, Mic, OctagonX, Paperclip, Play, Plug, Send, ShieldCheck, Smartphone, Square, XCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog } from '@/components/ui/overlay'
 import { TabsList, TabsTrigger } from '@/components/ui/navigation'
 import { cx } from '@/components/ui/cx'
 import { PersonalAssistantMemoryPanel } from '@/components/dashboard/personal-assistant-memory-panel'
 import { TrainerPanel } from '@/components/dashboard/trainer/trainer-panel'
+import { ToolsPanel } from '@/components/dashboard/personal-executive/tools-panel'
 
-export type AssistantTab = 'chat' | 'tasks' | 'memory'
+export type AssistantTab = 'chat' | 'tasks' | 'memory' | 'tools'
 
 type ThreadMessage = { id: string; direction: 'inbound' | 'outbound'; source: 'web' | 'whatsapp' | 'system'; message_type: string; content: string; created_at: string }
 type MediaLimits = { audioMaxSeconds: number; mediaMaxBytes: number; documents: boolean; maxInputChars: number }
@@ -34,6 +35,7 @@ const TAB_LABELS: { id: AssistantTab; label: string; icon: typeof MessageCircle 
   { id: 'chat', label: 'المحادثة', icon: MessageCircle },
   { id: 'tasks', label: 'المهام والمحاضر', icon: ClipboardList },
   { id: 'memory', label: 'الذاكرة', icon: Brain },
+  { id: 'tools', label: 'الموصلات والخزنة', icon: Plug },
 ]
 
 const STATE_LABEL: Record<string, string> = {
@@ -140,7 +142,7 @@ export function PersonalExecutiveApp({ initialTab, showTrainer = false }: { init
         </button>
       </section>
 
-      <TabsList className="grid w-full grid-cols-3">
+      <TabsList className="grid w-full grid-cols-4">
         {TAB_LABELS.map(({ id, label, icon: Icon }) => (
           <TabsTrigger key={id} active={tab === id} onClick={() => selectTab(id)} aria-controls={`pa-panel-${id}`} id={`pa-tab-${id}`} className="inline-flex items-center justify-center gap-1.5 text-xs sm:text-sm">
             <Icon size={15} aria-hidden />
@@ -154,6 +156,7 @@ export function PersonalExecutiveApp({ initialTab, showTrainer = false }: { init
         {tab === 'chat' ? <ChatTab /> : null}
         {tab === 'tasks' ? <TasksTab data={agent} onChanged={loadAgent} /> : null}
         {tab === 'memory' ? <div className="space-y-4">{showTrainer ? <TrainerPanel /> : null}<PersonalAssistantMemoryPanel /></div> : null}
+        {tab === 'tools' ? <ToolsPanel /> : null}
       </div>
 
       <Dialog

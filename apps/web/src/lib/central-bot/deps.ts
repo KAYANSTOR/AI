@@ -43,6 +43,8 @@ async function sendCustomerMessage(db: DbClient, owner: Owner, input: Record<str
     body,
     idempotencyKey: `agent-msg:${payloadHash({ org: owner.organizationId, phone, body })}`,
     senderType: 'ai',
+    // The owner is starting this conversation, so the 24-hour window applies.
+    initiatedBy: 'business',
   })
   if (status === 'blocked') throw new Error('customer_message_blocked')
   return { to: phone, status }
