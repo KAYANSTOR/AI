@@ -1,6 +1,6 @@
 import postgres from 'postgres';
 import crypto from 'node:crypto';
-import { sha256Hex, encryptSecret, decryptSecret } from '../security/crypto';
+import { sha256Hex, encryptSecret, decryptSecret, hashPassword } from '../security/crypto';
 
 type Pool = ReturnType<typeof postgres>;
 let pool: Pool | undefined;
@@ -679,7 +679,7 @@ export async function platformMonitoring() {
   const uptimeSec=Math.floor(process.uptime());
   const [counts]=await query(`SELECT (SELECT COUNT(*) FROM agent_runs WHERE status='failed' AND created_at>NOW()-INTERVAL '24 hours')::int failed_runs,
     (SELECT COUNT(*) FROM webhook_events WHERE processing_status='failed' AND received_at>NOW()-INTERVAL '24 hours')::int failed_webhooks,
-    (SELECT COUNT(*) FROM inbound_jobs WHERE status='dead_letter' AND updated_at>NOW()-INTERVAL '24 hours')::int failed_inbound,
+    (SELECT COUNT(*) FROM inbound_jobs WHERE status IN('failed','dead_letter') AND updated_at>NOW()-INTERVAL '24 hours')::int failed_inbound,
     (SELECT COUNT(*) FROM outbox_events WHERE status IN('failed','dead_letter') AND updated_at>NOW()-INTERVAL '24 hours')::int failed_outbound,
     (SELECT COUNT(*) FROM whatsapp_gateway_sessions WHERE status<>'connected' AND last_error IS NOT NULL)::int gateway_errors`);
   const migrations=await query(`SELECT version::text version,name,applied_at::text applied_at FROM public.schema_migrations WHERE failed_at IS NULL ORDER BY version DESC LIMIT 30`);
@@ -711,16 +711,132 @@ export async function platformLogs(f:{category?:string;severity?:string;resolved
     FROM webhook_events WHERE processing_status='failed' ORDER BY received_at DESC LIMIT 200`);
   const inboundRows=await query(`SELECT id::text id,'inbound' category,'error' severity,COALESCE(last_error,'inbound_dead_letter') message,
     'attempts='||attempts::text details,status='completed' resolved,updated_at::text created_at,'inbound_job' source
-    FROM inbound_jobs WHERE status='dead_letter' ORDER BY updated_at DESC LIMIT 200`);
+    FROM inbound_jobs WHERE status IN('failed','dead_letter') ORDER BY updated_at DESC LIMIT 200`);
   const outboxRows=await query(`SELECT id::text id,'outbox' category,'error' severity,COALESCE(last_error,'outbound_failed') message,
     event_type||' · '||COALESCE(payload->>'provider','unknown_provider') details,status='sent' resolved,updated_at::text created_at,'outbox_event' source
     FROM outbox_events WHERE status IN('failed','dead_letter') ORDER BY updated_at DESC LIMIT 200`);
   const gatewayRows=await query(`SELECT id::text id,'whatsapp_gateway' category,'error' severity,COALESCE(last_error,'gateway_session_error') message,
-    status||' · channel='||channel_id::text details,status='connected' resolved,updated_at::text created_at,'whatsapp_gateway_session' source
+    status||' · channel='||channel_id::text details,FALSE resolved,updated_at::text created_at,'whatsapp_gateway_session' source
     FROM whatsapp_gateway_sessions WHERE last_error IS NOT NULL ORDER BY updated_at DESC LIMIT 200`);
-  const items=[...rows,...webhookRows,...inboundRows,...outboxRows,...gatewayRows].filter((r:any)=>(!f.category||f.category==='all'||r.category===f.category)&&(!f.severity||f.severity==='all'||r.severity===f.severity)&&(!f.resolved||f.resolved==='all'||(f.resolved==='true'?r.resolved:!r.resolved)));
+  const platformAuditRows=await query(`SELECT id::text id,'admin_audit' category,'info' severity,summary message,
+    action||' · '||entity_type||' · '||entity_id details,TRUE resolved,created_at::text created_at,'platform_audit_log' source
+    FROM platform_audit_logs ORDER BY created_at DESC LIMIT 200`);
+  const items=[...rows,...webhookRows,...inboundRows,...outboxRows,...gatewayRows,...platformAuditRows].filter((r:any)=>(!f.category||f.category==='all'||r.category===f.category)&&(!f.severity||f.severity==='all'||r.severity===f.severity)&&(!f.resolved||f.resolved==='all'||(f.resolved==='true'?r.resolved:!r.resolved)));
   return {items:items.sort((a:any,b:any)=>String(b.created_at).localeCompare(String(a.created_at)))};
 }
+
+
+export async function platformSearch(term:string) {
+  const q = term.trim().slice(0,120);
+  if (q.length < 2) return {users:[],workspaces:[],agents:[],conversations:[],subscriptions:[],invoices:[],usageEvents:[],channels:[],systemLogs:[],auditLogs:[]};
+  const like = `%${q}%`;
+  const [users,workspaces,agents,conversations,subscriptions,usageEvents,channels,auditLogs] = await Promise.all([
+    query(`SELECT u.id::text id,${fullName} full_name,u.email FROM auth.users u
+      WHERE u.deleted_at IS NULL AND (u.email ILIKE $1 OR ${fullName} ILIKE $1) ORDER BY u.created_at DESC LIMIT 8`,[like]),
+    query(`SELECT o.id::text id,o.name,COALESCE(b.slug,'') slug FROM organizations o
+      LEFT JOIN businesses b ON b.organization_id=o.id WHERE o.name ILIKE $1 OR b.slug ILIKE $1
+      ORDER BY o.created_at DESC LIMIT 8`,[like]),
+    query(`SELECT a.id::text id,a.name,a.model_provider model_id FROM ai_agents a
+      LEFT JOIN organizations o ON o.id=a.organization_id WHERE a.name ILIKE $1 OR a.model_provider ILIKE $1 OR o.name ILIKE $1
+      ORDER BY a.created_at DESC LIMIT 8`,[like]),
+    query(`SELECT c.id::text id,COALESCE(NULLIF(ci.external_phone,''),NULLIF(ci.external_username,''),NULLIF(ci.external_user_id,''),NULLIF(ct.first_name,''),'عميل') customer_handle,
+      COALESCE(ch.channel_type,'unknown') channel_type FROM conversations c
+      LEFT JOIN contacts ct ON ct.id=c.contact_id LEFT JOIN channels ch ON ch.id=c.channel_id
+      LEFT JOIN LATERAL(SELECT external_phone,external_username,external_user_id FROM contact_identities
+        WHERE contact_id=c.contact_id AND channel=ch.channel_type ORDER BY created_at DESC LIMIT 1) ci ON TRUE
+      JOIN organizations o ON o.id=c.organization_id
+      WHERE o.name ILIKE $1 OR COALESCE(ct.first_name,'') ILIKE $1 OR COALESCE(ci.external_phone,'') ILIKE $1 OR COALESCE(ci.external_username,'') ILIKE $1
+      ORDER BY c.last_message_at DESC LIMIT 8`,[like]),
+    query(`SELECT s.id::text id,${fullName} user_name,COALESCE(p.name,s.plan_tier) plan_name
+      FROM subscriptions s JOIN organizations o ON o.id=s.organization_id
+      LEFT JOIN plans p ON p.id=s.plan_id
+      LEFT JOIN LATERAL(SELECT user_id FROM organization_members WHERE organization_id=o.id AND role='owner' ORDER BY created_at LIMIT 1) own ON TRUE
+      LEFT JOIN auth.users u ON u.id=own.user_id
+      WHERE o.name ILIKE $1 OR s.plan_tier ILIKE $1 OR u.email ILIKE $1 OR ${fullName} ILIKE $1
+      ORDER BY s.created_at DESC LIMIT 8`,[like]),
+    query(`SELECT r.id::text id,COALESCE(r.model,'غير محدد') model_id,
+      (COALESCE(r.input_tokens,0)+COALESCE(r.output_tokens,0))::bigint total_tokens
+      FROM agent_runs r WHERE COALESCE(r.model,'') ILIKE $1 OR COALESCE(r.model_provider,'') ILIKE $1
+      ORDER BY r.created_at DESC LIMIT 8`,[like]),
+    query(`SELECT c.id::text id,COALESCE(NULLIF(c.external_identifier,''),c.channel_type) display_name,c.channel_type
+      FROM channels c JOIN organizations o ON o.id=c.organization_id
+      WHERE c.channel_type ILIKE $1 OR COALESCE(c.external_identifier,'') ILIKE $1 OR o.name ILIKE $1
+      ORDER BY c.created_at DESC LIMIT 8`,[like]),
+    query(`SELECT id::text id,action,summary FROM platform_audit_logs
+      WHERE action ILIKE $1 OR summary ILIKE $1 OR actor_email ILIKE $1 OR entity_id ILIKE $1
+      ORDER BY created_at DESC LIMIT 8`,[like])
+  ]);
+  return {users,workspaces,agents,conversations,subscriptions,invoices:[],usageEvents,channels,systemLogs:[],auditLogs};
+}
+
+export async function platformAuditLogs(f:{search?:string;entityType?:string;page?:number;pageSize?:number}={}) {
+  const page = Math.max(1,Math.floor(f.page||1));
+  const pageSize = Math.min(100,Math.max(10,Math.floor(f.pageSize||25)));
+  const clauses:string[] = [];
+  const args:unknown[] = [];
+  if (f.entityType && f.entityType !== 'all') { args.push(f.entityType); clauses.push(`entity_type=$${args.length}`); }
+  if (f.search?.trim()) {
+    args.push(`%${f.search.trim().slice(0,120)}%`);
+    const n=args.length;
+    clauses.push(`(summary ILIKE $${n} OR action ILIKE $${n} OR actor_email ILIKE $${n} OR entity_id ILIKE $${n})`);
+  }
+  const where=clauses.length?`WHERE ${clauses.join(' AND ')}`:'';
+  const [totalRow] = await query(`SELECT COUNT(*)::int total FROM platform_audit_logs ${where}`,args);
+  args.push(pageSize,(page-1)*pageSize);
+  const items=await query(`SELECT id::text id,actor_id::text actor_id,actor_email,actor_role,action,entity_type,entity_id,summary,
+    before_json,after_json,ip_address::text ip_address,created_at::text created_at
+    FROM platform_audit_logs ${where} ORDER BY created_at DESC LIMIT $${args.length-1} OFFSET $${args.length}`,args);
+  const total=count(totalRow?.total);
+  return {items,pagination:{page,pageSize,total,totalPages:Math.max(1,Math.ceil(total/pageSize))}};
+}
+
+export async function platformSettings() {
+  return {items:await query(`SELECT s.key,CASE WHEN jsonb_typeof(s.value)='object' AND s.value ? 'value' THEN s.value->'value' ELSE s.value END value,
+    COALESCE(s.value->>'category',split_part(s.key,'.',1)) category,
+    COALESCE(s.value->>'description',s.key) description,
+    COALESCE(a.email,'system') updated_by,s.updated_at::text updated_at
+    FROM platform_settings s LEFT JOIN platform_admins a ON a.id=s.updated_by
+    WHERE s.key NOT LIKE 'owner_mfa_pending:%' ORDER BY category,s.key`)};
+}
+
+export async function updatePlatformSetting(key:string,value:unknown,adminId:string) {
+  const cleanKey=key.trim();
+  if (!cleanKey || cleanKey.length>120 || cleanKey.startsWith('owner_mfa_pending:')) throw new Error('مفتاح الإعداد غير صالح.');
+  const encoded=JSON.stringify(value===undefined?null:value);
+  if (encoded.length>10000) throw new Error('قيمة الإعداد أكبر من الحد المسموح.');
+  const [row]=await query(`INSERT INTO platform_settings(key,value,updated_by,updated_at)
+    VALUES($1,$2::jsonb,$3::uuid,NOW())
+    ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value,updated_by=EXCLUDED.updated_by,updated_at=NOW()
+    RETURNING key,value,updated_at::text updated_at`,[cleanKey,encoded,adminId]);
+  return row;
+}
+
+export async function platformSecurity(currentAdmin:{id:string;email:string;role:string;sessionId:string;mfaEnabled:boolean}) {
+  const [sessionsRows,loginAttempts,admins]=await Promise.all([
+    query(`SELECT s.id::text id,a.email,s.ip_address::text ip_address,s.user_agent,s.expires_at::text expires_at,
+      s.revoked_at::text revoked_at,s.created_at::text created_at
+      FROM platform_admin_sessions s JOIN platform_admins a ON a.id=s.admin_id
+      WHERE s.expires_at>NOW() OR s.revoked_at IS NOT NULL ORDER BY s.created_at DESC LIMIT 100`),
+    query(`SELECT id::text id,email,ip_address::text ip_address,user_agent,success,failure_reason,created_at::text created_at
+      FROM platform_admin_login_attempts ORDER BY created_at DESC LIMIT 100`),
+    query(`SELECT id::text id,email,full_name,role,status,(mfa_secret_encrypted IS NOT NULL) mfa_enabled,
+      created_at::text created_at,last_login_at::text last_login_at FROM platform_admins ORDER BY created_at`)
+  ]);
+  return {currentAdmin,sessions:sessionsRows,loginAttempts,admins,encryptionKeyConfigured:Boolean(process.env.CREDENTIAL_ENCRYPTION_KEY?.trim())};
+}
+
+export async function createPlatformAdmin(p:{fullName:string;email:string;role:'super_admin'|'ops_auditor';password:string}) {
+  const fullNameValue=p.fullName.trim(),email=p.email.trim().toLowerCase();
+  if(fullNameValue.length<2||fullNameValue.length>120||!/^\S+@\S+\.\S+$/.test(email)) throw new Error('اسم المدير أو بريده الإلكتروني غير صالح.');
+  if(p.password.length<10) throw new Error('يجب أن تتكون كلمة المرور من 10 أحرف على الأقل.');
+  if(!['super_admin','ops_auditor'].includes(p.role)) throw new Error('الدور الإداري غير صالح.');
+  const perms=p.role==='super_admin'?['users:write','billing:write','ai:write','ops:write','settings:write']:[];
+  const [row]=await query(`INSERT INTO platform_admins(email,full_name,role,permissions,password_hash)
+    VALUES($1,$2,$3,$4::jsonb,$5) RETURNING id::text id,email,full_name,role,status,permissions`,
+    [email,fullNameValue,p.role,JSON.stringify(perms),hashPassword(p.password)]);
+  return row;
+}
+
 
 export async function platformReport(type:string) {
   const reports:Record<string,{title:string;headers:{key:string;label:string}[];sql:string}> = {

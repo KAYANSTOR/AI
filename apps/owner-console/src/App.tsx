@@ -101,6 +101,7 @@ export default function App() {
 
 function OwnerConsoleApp() {
   const [admin, setAdmin] = React.useState<OwnerAdminProfile | null>(null);
+  const [authChecking, setAuthChecking] = React.useState(true);
   const [activeRoute, setActiveRoute] = React.useState<OwnerRouteId>('overview');
   const [selectedUserId, setSelectedUserId] = React.useState<string | null>(null);
   const [selectedAgentId, setSelectedAgentId] = React.useState<string | null>(null);
@@ -126,8 +127,27 @@ function OwnerConsoleApp() {
   React.useEffect(() => {
     registerUnauthorizedHandler(() => {
       setAdmin(null);
+      setOwnerToken(null);
       notify('info', 'انتهت جلسة المالك أو تم إبطالها. يرجى إعادة تسجيل الدخول.');
     });
+  }, [notify]);
+
+  React.useEffect(() => {
+    let active = true;
+    apiFetch<{ admin: OwnerAdminProfile }>('/api/owner/auth/me', { skipAuth: true })
+      .then((result) => {
+        if (active && result?.admin) setAdmin(result.admin);
+      })
+      .catch((error) => {
+        const status = (error as { status?: number })?.status;
+        if (active && status !== 401) {
+          notify('error', error instanceof Error ? error.message : 'تعذر استعادة جلسة المالك.');
+        }
+      })
+      .finally(() => {
+        if (active) setAuthChecking(false);
+      });
+    return () => { active = false; };
   }, [notify]);
 
   async function handleLogout() {
@@ -158,6 +178,16 @@ function OwnerConsoleApp() {
   function handleSelectAgent(agentId: string) {
     setSelectedAgentId(agentId);
     setActiveRoute('agents');
+  }
+
+  if (authChecking) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[var(--k-canvas)] text-[var(--k-ink)]" dir="rtl">
+        <div className="rounded-xl border border-[var(--k-line)] bg-[var(--k-surface)] px-6 py-5 text-sm text-[var(--k-ink-muted)]">
+          جاري التحقق من جلسة مالك المنصة...
+        </div>
+      </div>
+    );
   }
 
   if (!admin) {

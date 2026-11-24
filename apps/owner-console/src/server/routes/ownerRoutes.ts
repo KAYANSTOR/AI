@@ -1,11 +1,11 @@
 import { Router, type Request, type Response } from 'express';
 import { claimFirstRunOwner, confirmOwnerMfa, getAuthStatus, getClientIp, loginOwner, requireOwnerAuth, requirePermission, setupOwnerMfa, writeAuditLog, revokeOwnerSession, setSessionCookie, clearSessionCookie } from '../security/auth';
-import { platformStatus, platformUsers, platformUserDetail, platformWorkspaces, platformPlans, platformSubscriptions, platformAgents, platformAgentDetail, platformCreateAgent, platformAiUsage, platformChannels, platformConversations, platformEntitlements, platformBillingLedger, platformOverview, updatePlatformUser, platformUserAction, subscriptionAction, updatePlatformAgent, platformEntitlementOverride, platformConversationDetail, platformQueueConversationIntervention, updatePlatformWorkspaceStatus, platformCreateWorkspace, savePlatformPlan, platformAutomations, createPlatformAutomation, updatePlatformAutomation, platformKnowledge, platformApiIntegrations, createPlatformApiKey, revokePlatformApiKey, platformMonitoring, platformLogs, platformReport, platformAiProviders, platformNotificationsSupport, rotatePlatformChannelSecret, testPlatformChannel } from '../services/platformDataService';
+import { platformStatus, platformUsers, platformUserDetail, platformWorkspaces, platformPlans, platformSubscriptions, platformAgents, platformAgentDetail, platformCreateAgent, platformAiUsage, platformChannels, platformConversations, platformEntitlements, platformBillingLedger, platformOverview, updatePlatformUser, platformUserAction, subscriptionAction, updatePlatformAgent, platformEntitlementOverride, platformConversationDetail, platformQueueConversationIntervention, updatePlatformWorkspaceStatus, platformCreateWorkspace, savePlatformPlan, platformAutomations, createPlatformAutomation, updatePlatformAutomation, platformKnowledge, platformApiIntegrations, createPlatformApiKey, revokePlatformApiKey, platformMonitoring, platformLogs, platformReport, platformAiProviders, platformNotificationsSupport, rotatePlatformChannelSecret, testPlatformChannel, platformSearch, platformAuditLogs, platformSettings, updatePlatformSetting, platformSecurity, createPlatformAdmin } from '../services/platformDataService';
 export const ownerRouter = Router();
 function handleError(res:Response,err:unknown,status=400){res.status(status).json({error:'request_failed',message:err instanceof Error?err.message:'حدث خطأ غير متوقع في الخادم.'})}
 ownerRouter.get('/auth/status', async (_req,res)=>{try{res.json(await getAuthStatus())}catch(e){handleError(res,e,503)}});
 ownerRouter.post('/auth/claim', async (req,res)=>{try{const input={email:String(req.body?.email||''),fullName:String(req.body?.fullName||''),password:String(req.body?.password||''),ipAddress:getClientIp(req),userAgent:String(req.headers['user-agent']||'unknown')};await claimFirstRunOwner(input);const auth=await loginOwner(input);setSessionCookie(res,auth.token,auth.expiresAt);res.status(201).json(auth)}catch(e){handleError(res,e)}});
-ownerRouter.post('/auth/login', async (req,res)=>{try{const auth=await loginOwner({email:String(req.body?.email||''),password:String(req.body?.password||''),totpCode:req.body?.totpCode?String(req.body.totpCode):undefined,ipAddress:getClientIp(req),userAgent:String(req.headers['user-agent']||'unknown')});setSessionCookie(res,auth.token,auth.expiresAt);res.json(auth)}catch(e){handleError(res,e,401)}});
+ownerRouter.post('/auth/login', async (req,res)=>{try{const auth=await loginOwner({email:String(req.body?.email||''),password:String(req.body?.password||''),totpCode:req.body?.totpCode?String(req.body.totpCode):undefined,ipAddress:getClientIp(req),userAgent:String(req.headers['user-agent']||'unknown')});if('requiresMfa' in auth&&auth.requiresMfa){res.json(auth);return;}setSessionCookie(res,auth.token,auth.expiresAt);res.json(auth)}catch(e){handleError(res,e,401)}});
 const platformDataRouter = Router();
 
 platformDataRouter.get('/platform-data/status', async (_req, res) => {
@@ -126,6 +126,50 @@ platformDataRouter.post('/entitlements/overrides', requirePermission('users:writ
   catch (err) { handleError(res, err); }
 });
 
+
+platformDataRouter.get('/search', async (req,res)=>{
+  try { res.json(await platformSearch(String(req.query.q||''))); }
+  catch(err){handleError(res,err,503);}
+});
+platformDataRouter.get('/audit-logs', async (req,res)=>{
+  try { res.json(await platformAuditLogs({search:req.query.search?String(req.query.search):undefined,
+    entityType:req.query.entityType?String(req.query.entityType):undefined,
+    page:req.query.page?Number(req.query.page):1,pageSize:25})); }
+  catch(err){handleError(res,err,503);}
+});
+platformDataRouter.get('/settings', async (_req,res)=>{
+  try { res.json(await platformSettings()); } catch(err){handleError(res,err,503);}
+});
+platformDataRouter.patch('/settings/:key', requirePermission('settings:write'), async (req,res)=>{
+  try {
+    const result=await updatePlatformSetting(String(req.params.key),req.body?.value,req.ownerAdmin!.id);
+    await writeAuditLog({actor:req.ownerAdmin!,action:'platform_setting.updated',entityType:'platform_setting',entityId:String(req.params.key),
+      summary:'تحديث إعداد عام في PostgreSQL.',after:result,ipAddress:getClientIp(req)});
+    res.json({item:result});
+  } catch(err){handleError(res,err);}
+});
+platformDataRouter.get('/security', async (req,res)=>{
+  try { res.json(await platformSecurity(req.ownerAdmin!)); } catch(err){handleError(res,err,503);}
+});
+platformDataRouter.post('/security/admins', requirePermission('settings:write'), async (req,res)=>{
+  if(req.ownerAdmin?.role!=='platform_owner'){res.status(403).json({error:'forbidden',message:'إضافة المديرين متاحة لمالك المنصة فقط.'});return;}
+  try {
+    const created=await createPlatformAdmin({fullName:String(req.body?.fullName||''),email:String(req.body?.email||''),
+      role:req.body?.role,password:String(req.body?.password||'')});
+    await writeAuditLog({actor:req.ownerAdmin!,action:'admin.created',entityType:'admin',entityId:String(created.id),
+      summary:'إضافة مدير داخلي بصلاحيات محددة.',after:{id:created.id,email:created.email,role:created.role},ipAddress:getClientIp(req)});
+    res.status(201).json({admin:created});
+  } catch(err){handleError(res,err);}
+});
+platformDataRouter.post('/security/sessions/:id/revoke', requirePermission('settings:write'), async (req,res)=>{
+  try {
+    const sessionId=String(req.params.id);
+    await revokeOwnerSession(sessionId,req.ownerAdmin!,getClientIp(req));
+    if(sessionId===req.ownerAdmin!.sessionId) clearSessionCookie(res);
+    res.json({ok:true});
+  } catch(err){handleError(res,err);}
+});
+
 // These areas have no canonical PostgreSQL source yet. Block the former local/demo store rather than displaying misleading data.
 const unavailablePlatformData = (_req: Request, res: Response) => res.status(501).json({error:'not_integrated',message:'هذا القسم لم يُربط بعد بمصدر بيانات المنصة الحقيقي؛ لم نعد نعرض بيانات المخزن المحلي على أنها بيانات إنتاجية.'});
 platformDataRouter.get('/plans', async (_req, res) => { try { res.json(await platformPlans()); } catch (err) { handleError(res, err, 503); } });
@@ -185,5 +229,5 @@ ownerRouter.use(requireOwnerAuth);
 ownerRouter.use(platformDataRouter);
 ownerRouter.get('/auth/me',(req,res)=>res.json({admin:req.ownerAdmin}));
 ownerRouter.post('/auth/logout',async(req,res)=>{try{const result=await revokeOwnerSession(req.ownerAdmin!.sessionId,req.ownerAdmin!,getClientIp(req));clearSessionCookie(res);res.json(result)}catch(e){handleError(res,e)}});
-ownerRouter.post('/auth/mfa/setup',(_req,res)=>{try{res.json(setupOwnerMfa())}catch(e){handleError(res,e)}});
-ownerRouter.post('/auth/mfa/confirm',(_req,res)=>{try{res.json(confirmOwnerMfa())}catch(e){handleError(res,e)}});
+ownerRouter.post('/auth/mfa/setup',async(req,res)=>{try{res.json(await setupOwnerMfa(req.ownerAdmin!))}catch(e){handleError(res,e)}});
+ownerRouter.post('/auth/mfa/confirm',async(req,res)=>{try{res.json(await confirmOwnerMfa(req.ownerAdmin!,String(req.body?.code||'')))}catch(e){handleError(res,e)}});
