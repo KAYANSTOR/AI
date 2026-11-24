@@ -1,5 +1,6 @@
 'use client'
 
+import { KayanSelect } from '@/components/ui/kayan-select'
 import { useState, useTransition } from 'react'
 import { createEscalationPolicyAction } from './actions'
 
@@ -32,7 +33,7 @@ export function EscalationForm() {
         className="w-full rounded-lg border border-border px-3 py-2 text-sm"
         required
       />
-      <select
+      <KayanSelect
         value={trigger}
         onChange={(e) => setTrigger(e.target.value)}
         className="w-full rounded-lg border border-border px-3 py-2 text-sm"
@@ -41,7 +42,7 @@ export function EscalationForm() {
         <option value="sla_warning">تحذير SLA</option>
         <option value="handoff">تسليم بشري</option>
         <option value="high_priority">أولوية عالية</option>
-      </select>
+      </KayanSelect>
       <button
         type="submit"
         disabled={pending}

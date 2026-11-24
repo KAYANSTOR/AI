@@ -1,4 +1,6 @@
-import { CheckCheck, Sparkles } from 'lucide-react'
+import { AlertCircle, Check, CheckCheck, Clock, Sparkles } from 'lucide-react'
+import { parseInlineBold } from '@/lib/text/inline-bold'
+import type { DeliveryStatus } from '@/lib/inbox/optimistic'
 import { cx } from './cx'
 
 export type ChatBubbleType = 'customer' | 'ai' | 'human' | 'note' | 'system'
@@ -9,6 +11,8 @@ export type ChatBubbleProps = {
   time?: string
   sender?: string
   className?: string
+  /** Outbound delivery tick; omitted for inbound/system bubbles. */
+  status?: DeliveryStatus | null
 }
 
 export function ChatBubble({
@@ -17,6 +21,7 @@ export function ChatBubble({
   time = '10:24',
   sender,
   className,
+  status,
 }: ChatBubbleProps) {
   if (type === 'system') {
     return (
@@ -58,12 +63,25 @@ export function ChatBubble({
         </div>
       )}
       <div className={cx('px-4 py-3 text-[14px] leading-7 sm:text-[15px]', bubbleStyles)}>
-        <p className="whitespace-pre-wrap break-words">{text}</p>
+        <p className="whitespace-pre-wrap break-words">
+          {parseInlineBold(text).map((segment, index) => (segment.bold ? <strong key={index} className="font-bold">{segment.text}</strong> : <span key={index}>{segment.text}</span>))}
+        </p>
       </div>
       <div className={cx('flex items-center gap-1.5 px-1 text-[10px] text-text-muted', isCustomer ? 'justify-start' : 'justify-end')}>
-        {!isCustomer && <CheckCheck className="h-3.5 w-3.5 text-secondary" aria-label="تم الإرسال" />}
+        {!isCustomer && !isNote ? <DeliveryTick status={status ?? 'sent'} /> : null}
         {time && <time>{time}</time>}
       </div>
     </article>
   )
+}
+
+function DeliveryTick({ status }: { status: DeliveryStatus }) {
+  if (status === 'sending') {
+    return <span className="inline-flex items-center gap-1 text-text-muted"><Clock className="h-3 w-3" aria-hidden="true" />جارٍ الإرسال</span>
+  }
+  if (status === 'failed') {
+    return <span className="inline-flex items-center gap-1 font-semibold text-error"><AlertCircle className="h-3 w-3" aria-hidden="true" />لم يُرسل</span>
+  }
+  if (status === 'delivered') return <CheckCheck className="h-3.5 w-3.5 text-secondary" aria-label="تم التسليم" />
+  return <Check className="h-3.5 w-3.5 text-secondary" aria-label="تم الإرسال" />
 }

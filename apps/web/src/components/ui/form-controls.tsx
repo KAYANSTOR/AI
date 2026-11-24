@@ -3,10 +3,10 @@ import {
   type InputHTMLAttributes,
   type LabelHTMLAttributes,
   type ReactNode,
-  type SelectHTMLAttributes,
   type TextareaHTMLAttributes,
 } from 'react'
-import { Check, ChevronDown } from 'lucide-react'
+import { Check } from 'lucide-react'
+import { KayanSelect, type KayanSelectProps } from './kayan-select'
 import { cx } from './cx'
 
 export const controlClass =
@@ -80,25 +80,10 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<H
   }
 )
 
-export const Select = forwardRef<HTMLSelectElement, SelectHTMLAttributes<HTMLSelectElement>>(
-  function Select({ className, children, ...props }, ref) {
-    return (
-      <span className="relative block">
-        <select
-          ref={ref}
-          className={cx(controlClass, 'appearance-none pe-10', className)}
-          {...props}
-        >
-          {children}
-        </select>
-        <ChevronDown
-          className="pointer-events-none absolute end-3 top-1/2 h-icon-sm w-icon-sm -translate-y-1/2 text-text-muted"
-          aria-hidden="true"
-        />
-      </span>
-    )
-  }
-)
+/** Brand bottom-sheet select (replaces the native element); accepts option children. */
+export function Select({ className, ...props }: KayanSelectProps) {
+  return <KayanSelect className={cx(controlClass, className)} {...props} />
+}
 
 export const Checkbox = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(
   function Checkbox({ className, ...props }, ref) {

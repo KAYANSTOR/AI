@@ -1,5 +1,6 @@
 import type { DbClient } from '@/lib/db/client'
 import { buildBusinessSystemPrompt } from '@/lib/ai/prompt'
+import { buildCustomerContextBlock } from '@/lib/ai/customer-context'
 import { triggerHumanHandoff } from '@/lib/ai/handoff-alert'
 import {
   applyChannelFormatRules,
@@ -252,7 +253,7 @@ export async function runAgentTurn(args: {
   /** Plan cap on customer input characters passed to the model (history included). */
   inputCharLimit?: number
 }) {
-  const [{ data: history, error: historyError }, prompt, toolSet] = await Promise.all([
+  const [{ data: history, error: historyError }, basePrompt, toolSet, { data: contactRow }, { data: profileRow }] = await Promise.all([
     args.db
       .from('messages')
       .select('direction,content,created_at')
@@ -262,8 +263,16 @@ export async function runAgentTurn(args: {
       .limit(20),
     buildBusinessSystemPrompt(args.db, args.organizationId, args.agentId, args.userText),
     getToolDefinitionsForAgent(args.db, args.organizationId, args.agentId),
+    args.db.from('contacts').select('id,full_name,phone').eq('id', args.contactId).eq('organization_id', args.organizationId).maybeSingle(),
+    args.db.from('business_profiles').select('timezone').eq('organization_id', args.organizationId).maybeSingle(),
   ])
   if (historyError) throw new Error(historyError.message)
+  // Known customer identity (from the channel) and the business-local clock, so the agent
+  // never re-asks for a known number and maps «غداً 3 عصراً» to the right ISO time.
+  const prompt = `${basePrompt}\n\n${buildCustomerContextBlock({
+    contact: contactRow ? { id: String(contactRow.id), name: (contactRow.full_name as string | null) ?? null, phone: (contactRow.phone as string | null) ?? null } : { id: args.contactId, name: null, phone: null },
+    timezone: (profileRow?.timezone as string | null | undefined) ?? 'Asia/Aden',
+  })}`
 
   const messages: ModelMessage[] = (history ?? [])
     .reverse()

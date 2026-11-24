@@ -1,5 +1,6 @@
 'use client'
 
+import { KayanSelect } from '@/components/ui/kayan-select'
 import { useState, useTransition } from 'react'
 import {
   Check,
@@ -351,7 +352,7 @@ export function PhonePanel({
               <span>٢. شركة ومزوّد الاتصالات لشريحتك</span>
               <span className="text-[11px] font-semibold text-secondary">🇾🇪 شبكات اليمن</span>
             </label>
-            <select
+            <KayanSelect
               value={form.carrierProfileId ?? ''}
               disabled={!canManage}
               onChange={(event) =>
@@ -374,7 +375,7 @@ export function PhonePanel({
                   )
                 })
               )}
-            </select>
+            </KayanSelect>
             <p className="text-[11px] text-text-muted">
               يتم توليد كود التحويل المعتمد لدى شبكتك المختارة تلقائياً ومجاناً.
             </p>

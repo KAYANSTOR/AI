@@ -41,6 +41,20 @@ function toIso(value: unknown) {
   return Number.isFinite(parsed) ? new Date(parsed).toISOString() : new Date(0).toISOString()
 }
 
+export const THREAD_MESSAGE_COLUMNS = 'id, direction, content, message_type, sender_type, created_at, media'
+
+export function toThreadMessage(row: Record<string, unknown>): ThreadMessage {
+  return {
+    id: String(row.id),
+    direction: row.direction === 'inbound' ? 'inbound' : 'outbound',
+    content: typeof row.content === 'string' ? row.content : '',
+    messageType: typeof row.message_type === 'string' ? row.message_type : 'text',
+    senderType: typeof row.sender_type === 'string' ? row.sender_type : null,
+    createdAt: toIso(row.created_at),
+    media: row.media && typeof row.media === 'object' && !Array.isArray(row.media) ? row.media as Record<string, unknown> : null,
+  }
+}
+
 /**
  * Newest messages first (keyset pagination), returned in chronological order
  * for rendering. A long conversation therefore always opens on its latest
@@ -54,7 +68,7 @@ export async function loadConversationMessages(
   const cursor = decodeMessageCursor(input.cursor)
   let query = db
     .from('messages')
-    .select('id, direction, content, message_type, sender_type, created_at, media')
+    .select(THREAD_MESSAGE_COLUMNS)
     .eq('conversation_id', input.conversationId)
     .eq('organization_id', input.organizationId)
   if (cursor) {
@@ -67,15 +81,7 @@ export async function loadConversationMessages(
   if (error) throw new Error(error.message)
   const rows = (data ?? []) as Array<Record<string, unknown>>
   const hasMore = rows.length > pageSize
-  const page = rows.slice(0, pageSize).map((row): ThreadMessage => ({
-    id: String(row.id),
-    direction: row.direction === 'inbound' ? 'inbound' : 'outbound',
-    content: typeof row.content === 'string' ? row.content : '',
-    messageType: typeof row.message_type === 'string' ? row.message_type : 'text',
-    senderType: typeof row.sender_type === 'string' ? row.sender_type : null,
-    createdAt: toIso(row.created_at),
-    media: row.media && typeof row.media === 'object' && !Array.isArray(row.media) ? row.media as Record<string, unknown> : null,
-  }))
+  const page = rows.slice(0, pageSize).map(toThreadMessage)
   const oldest = page[page.length - 1]
   return {
     messages: page.reverse(),

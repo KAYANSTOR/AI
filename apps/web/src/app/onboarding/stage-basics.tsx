@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { Loader2, CheckCircle2, ArrowLeft } from 'lucide-react'
-import { getVertical, VERTICAL_GROUPS } from '@/lib/verticals/registry'
+import { getVertical } from '@/lib/verticals/registry'
+import { SectorPicker } from '@/components/ui/sector-picker'
 import { saveBasicsAction } from './actions'
 
 /**
@@ -23,7 +24,6 @@ export function StageBasics({
 }) {
   const [name, setName] = useState(initial.name || businessName)
   const [businessTypeId, setBusinessTypeId] = useState<string>(getVertical(initial.businessTypeId).id)
-  const [verticalSearch, setVerticalSearch] = useState('')
   const [phone, setPhone] = useState(initial.phone)
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle')
   const [error, setError] = useState<string | null>(null)
@@ -104,38 +104,13 @@ export function StageBasics({
           />
         </label>
 
-        <label className="block">
-          <span className="text-sm font-semibold text-text">ما نوع نشاطك؟</span>
-          <input
-            type="search"
-            value={verticalSearch}
-            onChange={(event) => setVerticalSearch(event.target.value)}
-            aria-label="ابحث عن نوع النشاط"
-            placeholder="ابحث عن نشاطك"
-            className="mt-1.5 min-h-11 w-full rounded-xl border border-border bg-surface px-3 text-sm text-text outline-none focus:border-secondary focus:ring-2 focus:ring-accent/40"
-          />
-          <select
-            value={businessTypeId}
-            onChange={(event) => setBusinessTypeId(event.target.value)}
-            className="mt-1.5 min-h-12 w-full rounded-xl border border-border bg-surface px-3 text-base text-text outline-none transition-colors focus:border-secondary focus:ring-2 focus:ring-accent/40"
-          >
-            {VERTICAL_GROUPS.map((group) => {
-              const filtered = group.verticals.filter((vertical) =>
-                `${vertical.nameAr} ${vertical.id}`.toLocaleLowerCase().includes(verticalSearch.trim().toLocaleLowerCase())
-              )
-              return filtered.length ? (
-                <optgroup key={group.id} label={group.nameAr}>
-                  {filtered.map((vertical) => (
-                    <option key={vertical.id} value={vertical.id}>{vertical.nameAr}</option>
-                  ))}
-                </optgroup>
-              ) : null
-            })}
-          </select>
+        <div className="block">
+          <p className="mb-1.5 text-sm font-semibold text-text">ما نوع نشاطك؟</p>
+          <SectorPicker value={businessTypeId} onChange={setBusinessTypeId} />
           <span className="mt-1.5 block text-xs leading-5 text-text-muted">
             يحدد هذا الوحدات التي ستُفعّل تلقائياً (المواعيد، العروض، الطلبات…). يمكنك تغييره لاحقاً.
           </span>
-        </label>
+        </div>
 
         <label className="block">
           <span className="text-sm font-semibold text-text">رقم نشاطك الحالي</span>

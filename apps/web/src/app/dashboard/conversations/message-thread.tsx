@@ -1,11 +1,13 @@
 'use client'
 
-import { useLayoutEffect, useRef, useState, useTransition } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, useTransition } from 'react'
 import { Bot, FileText, ImageIcon, Loader2, Mic, Paperclip } from 'lucide-react'
 import { ChatBubble, type ChatBubbleType } from '@/components/ui/chat-bubble'
 import type { ThreadMessage } from '@/lib/inbox/messages'
 import { mediaBadgeFor, type MediaBadge } from '@/lib/inbox/media-badge'
 import { loadOlderMessagesAction } from './actions'
+import { appendOptimistic, confirmOptimistic, failOptimistic, outboundTickFor, reconcileWithServer, type InboxMessage } from '@/lib/inbox/optimistic'
+import { INBOX_OPTIMISTIC_EVENT, type InboxOptimisticDetail } from '@/lib/inbox/optimistic-events'
 
 const MEDIA_ICONS = { audio: Mic, image: ImageIcon, document: FileText, other: Paperclip } as const
 
@@ -50,7 +52,7 @@ export function MessageThread({
   aiEnabled: boolean
   timezone: string
 }) {
-  const [messages, setMessages] = useState(initialMessages)
+  const [messages, setMessages] = useState<InboxMessage[]>(initialMessages)
   const [cursor, setCursor] = useState(initialCursor)
   const [error, setError] = useState<string | null>(null)
   const [loading, startTransition] = useTransition()
@@ -62,12 +64,22 @@ export function MessageThread({
   const [syncedId, setSyncedId] = useState(lastInitialId)
   if (lastInitialId !== syncedId) {
     setSyncedId(lastInitialId)
-    setMessages((current) => {
-      const known = new Set(initialMessages.map((message) => message.id))
-      const older = current.filter((message) => !known.has(message.id) && message.createdAt < (initialMessages[0]?.createdAt ?? ''))
-      return [...older, ...initialMessages]
-    })
+    setMessages((current) => reconcileWithServer(current, initialMessages))
   }
+
+  useEffect(() => {
+    function onOptimistic(event: Event) {
+      const detail = (event as CustomEvent<InboxOptimisticDetail>).detail
+      if (!detail || detail.conversationId !== conversationId) return
+      setMessages((current) => {
+        if (detail.kind === 'append') return appendOptimistic(current, detail)
+        if (detail.kind === 'confirm') return confirmOptimistic(current, detail.clientId, detail.confirmed, detail.delivery)
+        return failOptimistic(current, detail.clientId)
+      })
+    }
+    window.addEventListener(INBOX_OPTIMISTIC_EVENT, onOptimistic)
+    return () => window.removeEventListener(INBOX_OPTIMISTIC_EVENT, onOptimistic)
+  }, [conversationId])
 
   const scroller = () => topRef.current?.closest('.conversation-messages') as HTMLElement | null
 
@@ -127,20 +139,21 @@ export function MessageThread({
           لا توجد رسائل سابقة في هذه المحادثة
         </div>
       ) : (
-        messages.map((message) => {
+        messages.map((message, index) => {
           const bubble = bubbleFor(message, customerName, aiEnabled)
           const rawBadge = mediaBadgeFor(message.media, message.messageType)
           // The bubble already shows the stored text (transcript / caption + description / file name).
           const badge = rawBadge && rawBadge.detail && message.content.trim().startsWith(rawBadge.detail) ? { ...rawBadge, detail: null } : rawBadge
           const bubbleText = badge?.kind === 'document' && message.content.trim() === badge.title ? 'ملف مرفق' : message.content
           return (
-            <div key={message.id} className={`flex w-full flex-col gap-1 ${message.direction === 'inbound' ? 'items-start' : 'items-end'}`}>
+            <div key={message.clientId ?? message.id} className={`flex w-full flex-col gap-1 ${message.direction === 'inbound' ? 'items-start' : 'items-end'}`}>
               {badge ? <div className="min-w-0 max-w-[88%] sm:max-w-[76%]"><MediaBadgeChip badge={badge} /></div> : null}
               <ChatBubble
                 type={bubble.type}
                 text={bubbleText || (message.messageType !== 'text' ? 'مرفق وسائط' : '')}
                 time={formatter.format(new Date(message.createdAt))}
                 sender={bubble.sender}
+                status={outboundTickFor(messages, index)}
               />
             </div>
           )

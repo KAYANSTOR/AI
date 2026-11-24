@@ -1,5 +1,6 @@
 'use client'
 
+import { KayanSelect } from '@/components/ui/kayan-select'
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { Button } from '@/components/ui/button'
 
@@ -74,7 +75,7 @@ export function PersonalAssistantTasksPanel() {
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
         <label className="flex items-center gap-2 text-sm text-text"><input type="checkbox" checked={settings?.whatsapp_reminders_enabled ?? false} onChange={(event) => void saveSettings({ whatsappRemindersEnabled: event.target.checked })} /> تذكيرات WhatsApp</label>
         <label className="flex items-center gap-2 text-sm text-text"><input type="checkbox" checked={settings?.morning_brief_enabled ?? false} onChange={(event) => void saveSettings({ morningBriefEnabled: event.target.checked })} /> الملخص الصباحي</label>
-        <label className="space-y-1 text-sm text-text">قناة WhatsApp<select value={settings?.whatsapp_channel_id ?? ''} onChange={(event) => void saveSettings({ whatsappChannelId: event.target.value || null })} className={inputClass}><option value="">لا توجد قناة</option>{channels.map((channel) => <option key={channel.id} value={channel.id}>{channel.external_identifier || channel.id}</option>)}</select></label>
+        <label className="space-y-1 text-sm text-text">قناة WhatsApp<KayanSelect value={settings?.whatsapp_channel_id ?? ''} onChange={(event) => void saveSettings({ whatsappChannelId: event.target.value || null })} className={inputClass}><option value="">لا توجد قناة</option>{channels.map((channel) => <option key={channel.id} value={channel.id}>{channel.external_identifier || channel.id}</option>)}</KayanSelect></label>
         <label className="space-y-1 text-sm text-text">وقت الملخص<input type="time" value={(settings?.morning_brief_local_time ?? '08:00').slice(0, 5)} onChange={(event) => void saveSettings({ morningBriefLocalTime: event.target.value })} className={inputClass} /></label>
       </div>
     </div>

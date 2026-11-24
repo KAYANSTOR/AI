@@ -11,9 +11,12 @@ import { normalizeChannelNumber } from '@/lib/channels/management'
 import { resolveContactIdentity } from '@/lib/channels/contacts'
 import { ensureOpenConversation } from '@/lib/runtime/conversation'
 import { deliverOutbound, deliverWhatsAppTemplate, recordDeliveredOutboundMessage } from '@/lib/runtime/outbound'
-import { loadConversationMessages, type ThreadPage } from '@/lib/inbox/messages'
+import { loadConversationMessages, THREAD_MESSAGE_COLUMNS, toThreadMessage, type ThreadMessage, type ThreadPage } from '@/lib/inbox/messages'
+import { drainOutbox } from '@/lib/channels/outbox-drain'
+import { createAdminClient } from '@/lib/db/admin'
 
 export type InboxResult = { ok: boolean; error?: string; message?: string }
+export type StaffReplyResult = InboxResult & { delivery?: 'sent' | 'queued' | 'blocked'; confirmed?: ThreadMessage | null }
 
 async function loadConversation(ctx: AuthorizedContext, conversationId: string) {
   const { data, error } = await ctx.db
@@ -342,7 +345,7 @@ export async function markAsReadAction(conversationId: string): Promise<InboxRes
 export async function sendHumanReplyAction(
   conversationId: string,
   body: string
-): Promise<InboxResult> {
+): Promise<StaffReplyResult> {
   let ctx: AuthorizedContext
   try {
     ctx = await requireCapability('inbox')
@@ -440,6 +443,8 @@ export async function sendHumanReplyAction(
       senderType: 'human_dashboard',
     })
 
+    let finalDelivery: 'sent' | 'queued' | 'blocked' = delivery
+    let confirmedKey: string | null = null
     if (delivery === 'sent') {
       await recordDeliveredOutboundMessage(ctx.db, {
         organizationId: ctx.organizationId,
@@ -448,6 +453,38 @@ export async function sendHumanReplyAction(
         idempotencyKey,
         senderType: 'human_dashboard',
       })
+      confirmedKey = idempotencyKey
+    } else if (delivery === 'queued') {
+      // Manual dashboard replies must not wait for the cron: drain this one intent now.
+      // The authenticated client only has SELECT on outbox_events, so the scoped
+      // drain runs with the service role, filtered to this org + idempotency key.
+      try {
+        const drained = await drainOutbox(createAdminClient(), {
+          limit: 1,
+          only: { organizationId: ctx.organizationId, idempotencyKey },
+        })
+        if (drained.sentEventIds[0]) {
+          finalDelivery = 'sent'
+          confirmedKey = 'outbox:' + drained.sentEventIds[0]
+        }
+      } catch (drainError) {
+        console.error('Immediate outbox drain failed; the scheduled drain will retry', {
+          conversationId,
+          reason: drainError instanceof Error ? drainError.message.slice(0, 200) : 'unknown',
+        })
+      }
+    }
+
+    let confirmed: ThreadMessage | null = null
+    if (confirmedKey) {
+      const { data: row } = await ctx.db
+        .from('messages')
+        .select(THREAD_MESSAGE_COLUMNS)
+        .eq('organization_id', ctx.organizationId)
+        .eq('conversation_id', conversationId)
+        .eq('external_message_id', confirmedKey)
+        .maybeSingle()
+      confirmed = row ? toThreadMessage(row as Record<string, unknown>) : null
     }
 
     await ctx.db
@@ -459,16 +496,16 @@ export async function sendHumanReplyAction(
       .eq('id', conversationId)
 
     await audit(ctx, 'conversation.staff_reply', 'conversation', conversationId, {
-      delivery,
+      delivery: finalDelivery,
       length: text.length,
     })
 
     revalidatePath('/dashboard/conversations')
     revalidatePath(`/dashboard/conversations/${conversationId}`)
-    return {
-      ok: true,
-      message: delivery === 'sent' ? 'تم إرسال الرد.' : 'أُضيف الرد لطابور الإرسال وسيُرسل قريباً.',
+    if (finalDelivery === 'blocked') {
+      return { ok: false, error: 'تعذّر تسليم الرسالة عبر القناة. تحقق من اتصال القناة.', delivery: finalDelivery, confirmed: null }
     }
+    return { ok: true, delivery: finalDelivery, confirmed }
   } catch (error) {
     return { ok: false, error: actionErrorMessage(error, 'تعذّر إرسال الرد.') }
   }

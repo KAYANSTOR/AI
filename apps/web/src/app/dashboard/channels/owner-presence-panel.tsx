@@ -1,5 +1,6 @@
 'use client'
 
+import { KayanSelect } from '@/components/ui/kayan-select'
 import { useState, useTransition } from 'react'
 import { Loader2, UserRound } from 'lucide-react'
 import { saveOwnerPresenceSettingsAction } from './owner-presence-actions'
@@ -54,12 +55,12 @@ function ChannelRow({ channel, canManage }: { channel: OwnerPresenceChannel; can
         </label>
         <label className="space-y-1 text-sm text-text">
           <span className="block text-text-muted">نطاق الإيقاف</span>
-          <select value={scope} disabled={!canManage || pending || !enabled}
+          <KayanSelect value={scope} disabled={!canManage || pending || !enabled}
             onChange={(event) => setScope(event.target.value === 'conversation' ? 'conversation' : 'channel')}
             className="w-full rounded-lg border border-border bg-background px-3 py-2 text-text">
             <option value="channel">الرقم كاملاً</option>
             <option value="conversation">المحادثة التي رددت فيها فقط</option>
-          </select>
+          </KayanSelect>
         </label>
       </div>
       <p className="text-xs leading-5 text-text-muted">

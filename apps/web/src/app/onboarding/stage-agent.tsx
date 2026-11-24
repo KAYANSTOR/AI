@@ -1,5 +1,6 @@
 'use client'
 
+import { KayanSelect } from '@/components/ui/kayan-select'
 import { useEffect, useRef, useState } from 'react'
 import { ArrowLeft, Loader2, Sparkles } from 'lucide-react'
 import {
@@ -226,7 +227,7 @@ export function StageAgent({
               <div className="grid gap-4 sm:grid-cols-2">
                 <label className="block">
                   <span className="text-xs font-semibold text-text">أسلوب الرد</span>
-                  <select
+                  <KayanSelect
                     value={draft.replyStyle}
                     onChange={(event) =>
                       setDraft({ ...draft, replyStyle: event.target.value as ReplyStyleId })
@@ -238,12 +239,12 @@ export function StageAgent({
                         {label}
                       </option>
                     ))}
-                  </select>
+                  </KayanSelect>
                 </label>
 
                 <label className="block">
                   <span className="text-xs font-semibold text-text">التعامل مع العملاء</span>
-                  <select
+                  <KayanSelect
                     value={draft.handoff}
                     onChange={(event) =>
                       setDraft({ ...draft, handoff: event.target.value as HandoffId })
@@ -255,7 +256,7 @@ export function StageAgent({
                         {label}
                       </option>
                     ))}
-                  </select>
+                  </KayanSelect>
                 </label>
               </div>
 

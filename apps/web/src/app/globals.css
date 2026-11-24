@@ -355,7 +355,7 @@
 .kayan-header-avatar{background:var(--brand-secondary);border-color:var(--brand-secondary);color:var(--brand-primary)}
 .kayan-header-avatar:hover{background:var(--brand-secondary)}
 .kayan-header-search{width:100%;margin-top:10px}
-.kayan-header-page-icon{background:#FFFFFF;color:var(--brand-secondary)}
+.kayan-header-page-icon{background:var(--brand-secondary);color:var(--brand-primary)}
 .kayan-header [aria-label="الإشعارات"]{border:1px solid color-mix(in srgb,var(--brand-secondary) 16%,var(--brand-primary));background:#FFFFFF;color:var(--brand-secondary)}
 
 /* Branded entry animation: shown only when the authenticated dashboard shell mounts. */
@@ -379,3 +379,8 @@
 @keyframes kayanGlow{from{opacity:.35;transform:scale(.88)}to{opacity:.7;transform:scale(1.08)}}
 @keyframes kayanProgress{from{transform:translateX(260%)}to{transform:translateX(-260%)}}
 @media(prefers-reduced-motion:reduce){.kayan-entry-splash{animation:kayanSplashExit 650ms ease-out both}.kayan-entry-splash__content,.kayan-entry-splash__mark,.kayan-entry-splash__orbit,.kayan-entry-splash__glow,.kayan-entry-splash__progress span{animation:none!important}.kayan-entry-splash__content{opacity:1}}
+
+/* Safe-area bottom padding for sticky sheet footers (iOS home indicator). */
+@utility pb-safe {
+  padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+}

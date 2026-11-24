@@ -1,5 +1,6 @@
 'use client'
 
+import { KayanSelect } from '@/components/ui/kayan-select'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createOrderAction } from '../actions'
@@ -81,7 +82,7 @@ export function OrderForm({ contacts, defaultValues }: { contacts: Contact[], de
         <h2 className="text-lg font-bold text-text">معلومات العميل</h2>
         <div>
           <label className="mb-1 block text-sm font-medium text-text">العميل</label>
-          <select 
+          <KayanSelect
             value={contactId} 
             onChange={e => setContactId(e.target.value)}
             className="w-full rounded-lg border border-border bg-background p-2.5 text-sm text-text outline-none focus:border-accent disabled:opacity-50"
@@ -92,7 +93,7 @@ export function OrderForm({ contacts, defaultValues }: { contacts: Contact[], de
             {contacts.map(c => (
               <option key={c.id} value={c.id}>{c.full_name || c.phone || 'بدون اسم'}</option>
             ))}
-          </select>
+          </KayanSelect>
         </div>
       </div>
 

@@ -168,7 +168,8 @@ describe('capability enforcement at execution time', () => {
 })
 
 describe('confirmation-gated writes', () => {
-  const args = { phone: '+15550001', service_id: 'svc-1', starts_at: '2026-03-02T09:00:00.000Z' }
+  // Future date: booking now rejects past times.
+  const args = { phone: '+15550001', service_id: 'svc-1', starts_at: '2099-03-02T09:00:00.000Z' }
 
   test('a sensitive write waits for confirmation and does not execute', async () => {
     const { store, db } = setup(baseTables())

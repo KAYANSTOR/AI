@@ -47,7 +47,7 @@ export const PLAN_CATALOG = [
       audio_max_seconds: 30,
       document_analysis: 0,
       max_input_chars: 500,
-      max_output_tokens: 180,
+      max_output_tokens: 350,
       flood_per_minute: 4,
     },
   },

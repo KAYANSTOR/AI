@@ -3,6 +3,7 @@
  * `on_auth_user_created` provisions the organization, owner membership, business
  * profile and default hours when a row is inserted — exactly as before.
  */
+import { westernDigits } from '@/lib/phone/arab-countries'
 import { getSql } from '@/lib/db/pool'
 import { hashPassword } from './password'
 
@@ -46,7 +47,9 @@ export function normalizeEmail(email: string): string {
 }
 
 export function normalizePhone(phone: string): string {
-  return phone.replace(/[^0-9+]/g, '')
+  // Arabic-Indic digits and a 00 international prefix both map to E.164.
+  const compact = westernDigits(phone).replace(/[^0-9+]/g, '')
+  return compact.startsWith('00') ? `+${compact.slice(2)}` : compact
 }
 
 export async function findUserByEmail(email: string): Promise<AuthUser | null> {

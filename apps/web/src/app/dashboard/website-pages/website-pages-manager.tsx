@@ -1,5 +1,6 @@
 'use client'
 
+import { KayanSelect } from '@/components/ui/kayan-select'
 import { useState, useTransition, type FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import { FileText, Loader2, Plus, Trash2 } from 'lucide-react'
@@ -126,7 +127,7 @@ export function WebsitePagesManager({ pages, canManage }: { pages: WebsitePage[]
           <label className="block space-y-1.5 text-sm font-medium text-text">المسار <span className="text-error">*</span><input name="path" required dir="ltr" className={`${fieldClass} text-start font-mono`} placeholder="/services" /><span className="block text-xs text-text-muted">استخدم أحرفاً إنجليزية صغيرة وأرقاماً وشرطات فقط.</span></label>
           <label className="block space-y-1.5 text-sm font-medium text-text">عنوان الصفحة<input name="title" maxLength={180} className={fieldClass} placeholder="عنوان يظهر في نتائج البحث" /></label>
           <label className="block space-y-1.5 text-sm font-medium text-text">وصف الصفحة<textarea name="description" maxLength={2000} rows={4} className={`${fieldClass} resize-y`} placeholder="اكتب وصفاً مختصراً لمحتوى الصفحة." /></label>
-          <label className="block space-y-1.5 text-sm font-medium text-text">حالة النشر<select name="status" defaultValue="draft" className={fieldClass}><option value="published">منشورة</option><option value="draft">مسودة</option><option value="scheduled">مجدولة</option></select></label>
+          <label className="block space-y-1.5 text-sm font-medium text-text">حالة النشر<KayanSelect name="status" defaultValue="draft" className={fieldClass}><option value="published">منشورة</option><option value="draft">مسودة</option><option value="scheduled">مجدولة</option></KayanSelect></label>
           {error ? <p role="alert" className="rounded-lg border border-error/30 bg-error/10 px-3 py-2 text-sm text-error">{error}</p> : null}
         </form>
       </Dialog>

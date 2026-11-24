@@ -6,8 +6,11 @@ import Link from 'next/link'
 import { Loader2 } from 'lucide-react'
 import { signUpAction } from '@/lib/auth/actions'
 import { NETWORK_ERROR_MESSAGE } from '@/lib/auth/messages'
-import { FormError, TextField, inputClass, submitClass } from '@/components/auth/field'
+import { FormError, TextField, submitClass } from '@/components/auth/field'
 import { BUSINESS_TYPES, DEFAULT_BUSINESS_TYPE } from '@/lib/capabilities/business-types'
+import { SectorPicker } from '@/components/ui/sector-picker'
+import { PhoneField } from '@/components/auth/phone-field'
+import { DEFAULT_COUNTRY, toE164 } from '@/lib/phone/arab-countries'
 import { AuthProviderNotice } from '@/components/auth/provider-notice'
 
 const MIN_PASSWORD_LENGTH = 8
@@ -19,6 +22,7 @@ export function SignupForm({ authConfigured }: { authConfigured: boolean }) {
   const [identityMethod, setIdentityMethod] = useState<'email' | 'phone'>('email')
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
+  const [dial, setDial] = useState(DEFAULT_COUNTRY.dial)
   const [password, setPassword] = useState('')
   const [acceptedTerms, setAcceptedTerms] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -35,7 +39,7 @@ export function SignupForm({ authConfigured }: { authConfigured: boolean }) {
           companyName,
           businessTypeId: businessType,
           email: identityMethod === 'email' ? email : undefined,
-          phone: identityMethod === 'phone' ? phone : undefined,
+          phone: identityMethod === 'phone' ? (toE164(dial, phone) ?? phone) : undefined,
           password,
           acceptedTerms,
         })
@@ -67,22 +71,8 @@ export function SignupForm({ authConfigured }: { authConfigured: boolean }) {
       />
 
       <div>
-        <label htmlFor="businessType" className="block text-sm font-medium text-text">
-          نوع النشاط
-        </label>
-        <select
-          id="businessType"
-          name="businessType"
-          value={businessType}
-          onChange={(event) => setBusinessType(event.target.value)}
-          className={`${inputClass} mt-1.5`}
-        >
-          {BUSINESS_TYPES.map((type) => (
-            <option key={type.id} value={type.id}>
-              {type.label}
-            </option>
-          ))}
-        </select>
+        <p className="mb-1.5 block text-sm font-medium text-text">نوع النشاط</p>
+        <SectorPicker id="businessType" name="businessType" value={businessType} onChange={setBusinessType} />
         {hint ? <p className="mt-1.5 text-xs leading-6 text-text-muted">{hint}</p> : null}
       </div>
 
@@ -117,15 +107,14 @@ export function SignupForm({ authConfigured }: { authConfigured: boolean }) {
             placeholder="name@company.com"
           />
         ) : (
-          <TextField
+          <PhoneField
             id="phone"
-            label="رقم الهاتف بصيغة دولية"
-            type="tel"
+            label="رقم الهاتف"
+            dial={dial}
+            onDialChange={setDial}
             value={phone}
             onChange={setPhone}
-            autoComplete="tel"
-            placeholder="+967777123456"
-            hint="لن نرسل رسالة نصية أو رمز تحقق."
+            hint="اختر رمز الدولة ثم اكتب رقمك بدون الصفر. لن نرسل رسالة نصية أو رمز تحقق."
           />
         )}
       </fieldset>

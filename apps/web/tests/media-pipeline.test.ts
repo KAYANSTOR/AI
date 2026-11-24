@@ -370,7 +370,7 @@ describe('free plan fair-use guards before the model call', () => {
     })
   }
 
-  test('free limits come from the plan: 40/month, 10/day, 5 media, 2 MB, 30 s, no PDF, 500 chars, 180 tokens', () => {
+  test('free limits come from the plan: 40/month, 10/day, 5 media, 2 MB, 30 s, no PDF, 500 chars, 350 tokens', () => {
     expect(FREE.monthlyLimit).toBe(40)
     expect(FREE.dailyLimit).toBe(10)
     expect(FREE.mediaMonthly).toBe(5)
@@ -378,7 +378,7 @@ describe('free plan fair-use guards before the model call', () => {
     expect(FREE.audioMaxSeconds).toBe(30)
     expect(FREE.documentsAllowed).toBe(false)
     expect(FREE.maxInputChars).toBe(500)
-    expect(FREE.maxOutputTokens).toBe(180)
+    expect(FREE.maxOutputTokens).toBe(350)
     expect(FREE.economy).toBe(true)
     expect(PAID.maxInputChars).toBe(2000)
     expect(PAID.mediaMaxBytes).toBe(5 * MB)
@@ -436,13 +436,13 @@ describe('free plan fair-use guards before the model call', () => {
     expect(modelCalls).toHaveLength(4)
   })
 
-  test('free input is truncated to 500 chars, output capped at 180 tokens on the economy model', async () => {
+  test('free input is truncated to 500 chars, output capped at 350 tokens on the economy model', async () => {
     const counter = countingGuards(FREE)
     setInboundGuardsFactory(() => counter.guards)
     const db = runtimeDb().client as unknown as DbClient
     await send(db, 'long', 'س'.repeat(5000))
     expect(modelCalls[0].userText.length).toBe(500)
-    expect(modelCalls[0].maxOutputTokens).toBe(180)
+    expect(modelCalls[0].maxOutputTokens).toBe(350)
     expect(modelCalls[0].economy).toBe(true)
     setInboundGuardsFactory(() => countingGuards(PAID).guards)
     await send(db, 'long-paid', 'س'.repeat(5000))

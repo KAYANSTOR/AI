@@ -69,7 +69,7 @@ describe('Gemini 3.8 provider contract', () => {
       isWhatsApp: true,
     })
 
-    expect(body?.generationConfig).toEqual({ maxOutputTokens: 300, thinkingConfig: { thinkingLevel: 'low' } })
+    expect(body?.generationConfig).toEqual({ maxOutputTokens: 350, thinkingConfig: { thinkingLevel: 'low' } })
   })
 
   test('retries transient 503 responses before switching to the Flash fallback model', async () => {

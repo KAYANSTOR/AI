@@ -3,7 +3,7 @@ import { authorizeKayanAdminRequest } from '@/lib/admin-api-auth'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
-const PROVIDERS = new Set(['jawali', 'jeeb', 'onecash', 'kuraimi', 'other'])
+const PROVIDERS = new Set(['jawali', 'jeeb', 'onecash', 'cacbank', 'kuraimi', 'other'])
 
 export async function GET(request: Request) {
   const auth = authorizeKayanAdminRequest(request)

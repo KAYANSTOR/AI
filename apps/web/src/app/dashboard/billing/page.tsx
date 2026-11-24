@@ -8,6 +8,8 @@ import { PLAN_CATALOG } from '@/lib/billing/plan-catalog'
 import { isEsaalatPaymentConfigured, listEsaalatReceivingWallets } from '@/lib/billing/esaalat'
 import type { EsaalatWallet } from '@/lib/billing/esaalat'
 import { PaymentPlans } from './payment-plans'
+import { createAdminClient } from '@/lib/db/admin'
+import { envYerRate, loadPlatformYerRate } from '@/lib/billing/yer-pricing'
 
 export const dynamic = 'force-dynamic'
 
@@ -45,11 +47,12 @@ export default async function BillingPage() {
   const walletCheckoutConfigured = isEsaalatPaymentConfigured()
   const { data: manualWalletRows } = await db.from('manual_yemen_wallets')
     .select('id,provider_code,display_name,account_name,account_number,instructions')
-    .eq('is_active', true).order('display_name')
+    .eq('is_active', true).order('sort_order').order('display_name')
   const manualWallets = (manualWalletRows ?? []) as Array<{
     id: string; provider_code: string; display_name: string; account_name: string; account_number: string; instructions: string | null
   }>
-  const yerPerUsd = Number(process.env.YER_PER_USD) || 0
+  // Owner-console rate first, env fallback; per-plan YER prices still win in the client.
+  const yerPerUsd = (await loadPlatformYerRate(createAdminClient())) ?? envYerRate() ?? 0
   let wallets: EsaalatWallet[] = []
 
   if (walletCheckoutConfigured) {

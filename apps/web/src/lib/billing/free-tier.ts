@@ -56,7 +56,7 @@ export function aiGuardPolicyFor(planCode: string, limits: Partial<PlanLimits>):
     audioMaxSeconds: num(limits.audio_max_seconds, free ? 30 : 60),
     documentsAllowed: num(limits.document_analysis, free ? 0 : 1) > 0,
     maxInputChars: Math.max(50, num(limits.max_input_chars, free ? 500 : 2000)),
-    maxOutputTokens: optionalNum(limits.max_output_tokens, free ? 180 : null),
+    maxOutputTokens: optionalNum(limits.max_output_tokens, free ? 350 : null),
     floodPerMinute: Math.max(1, num(limits.flood_per_minute, 4)),
     economy: free,
   }

@@ -1,5 +1,6 @@
 'use client'
 
+import { KayanSelect } from '@/components/ui/kayan-select'
 import { useState, useTransition } from 'react'
 import { createCampaignAction } from './actions'
 
@@ -50,13 +51,13 @@ export function CreateCampaignForm({ segments }: { segments: CampaignSegment[] }
         </label>
         <label className="block text-sm">
           <span className="mb-1 block text-text-muted">القناة</span>
-          <select
+          <KayanSelect
             name="channel"
             className="w-full rounded-xl border border-border bg-background px-3 py-2 text-text"
             defaultValue="whatsapp"
           >
             <option value="whatsapp">WhatsApp</option>
-          </select>
+          </KayanSelect>
         </label>
         <label className="block text-sm">
           <span className="mb-1 block text-text-muted">حد الإرسال / دقيقة</span>
@@ -71,7 +72,7 @@ export function CreateCampaignForm({ segments }: { segments: CampaignSegment[] }
         </label>
         <label className="block text-sm sm:col-span-2">
           <span className="mb-1 block text-text-muted">الجمهور المستهدف</span>
-          <select
+          <KayanSelect
             name="audience"
             required
             defaultValue="all_with_phone"
@@ -83,7 +84,7 @@ export function CreateCampaignForm({ segments }: { segments: CampaignSegment[] }
                 شريحة محفوظة: {segment.name}
               </option>
             ))}
-          </select>
+          </KayanSelect>
           <span className="mt-1 block text-xs text-text-muted">
             لن تُرسل الرسائل إلا لجهات الاتصال التي لديها موافقة تسويقية صريحة على WhatsApp.
           </span>

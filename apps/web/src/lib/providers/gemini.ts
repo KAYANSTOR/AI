@@ -55,7 +55,7 @@ export const geminiProvider: AIProvider = {
         try {
           const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(model) + ':generateContent', {
             method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
-            body: JSON.stringify({ systemInstruction, contents, tools, generationConfig: { maxOutputTokens: input.maxOutputTokens ?? (input.isWhatsApp ? 300 : 1024), ...(input.isWhatsApp && /^gemini-3/.test(model) ? { thinkingConfig: { thinkingLevel: 'low' } } : {}) } }), signal: AbortSignal.timeout(15_000),
+            body: JSON.stringify({ systemInstruction, contents, tools, generationConfig: { maxOutputTokens: input.maxOutputTokens ?? (input.isWhatsApp ? 350 : 1024), ...(input.isWhatsApp && /^gemini-3/.test(model) ? { thinkingConfig: { thinkingLevel: 'low' } } : {}) } }), signal: AbortSignal.timeout(15_000),
           })
           const payload = (await response.json()) as GeminiResponse
           if (!response.ok) {

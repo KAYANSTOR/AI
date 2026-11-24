@@ -350,7 +350,7 @@ export async function platformBillingLedger() {
       JOIN manual_yemen_wallets w ON w.id=r.wallet_id LEFT JOIN plans p ON p.id=r.plan_id
       LEFT JOIN LATERAL(SELECT user_id FROM organization_members WHERE organization_id=o.id AND role='owner' ORDER BY created_at LIMIT 1) own ON TRUE
       LEFT JOIN auth.users u ON u.id=own.user_id ORDER BY r.created_at DESC LIMIT 1000`),
-    query(`SELECT id::text id,provider_code,display_name,account_name,account_number,instructions,is_active FROM manual_yemen_wallets ORDER BY display_name`),
+    query(`SELECT id::text id,provider_code,display_name,account_name,account_number,instructions,is_active FROM manual_yemen_wallets ORDER BY sort_order, display_name`),
     query(`SELECT l.id::text id,l.organization_id::text organization_id,l.payment_request_id::text payment_request_id,
       l.amount_yer::bigint amount_yer,l.amount_usd::numeric amount_usd,l.currency,l.provider_code,l.sender_name,
       l.transfer_reference,l.recorded_by,l.recorded_at::text recorded_at,o.name workspace_name
@@ -1211,18 +1211,20 @@ export async function testPlatformChannel(channelId:string) {
 
 
 export async function platformBillingCatalog() {
-  const [prices, wallets, providers, requests] = await Promise.all([
+  const [prices, wallets, providers, requests, rateRows] = await Promise.all([
     query(`SELECT pp.id::text id, p.code plan_code, p.name plan_name, pp.billing_cycle, pp.currency, pp.amount::numeric amount, pp.exchange_rate_to_usd::numeric exchange_rate_to_usd, pp.is_active FROM plan_prices pp JOIN plans p ON p.id=pp.plan_id WHERE pp.is_active=true ORDER BY p.code, pp.billing_cycle, pp.currency`),
-    query(`SELECT id::text id,provider_code,display_name,account_name,account_number,instructions,is_active,created_at::text created_at,updated_at::text updated_at FROM manual_yemen_wallets ORDER BY display_name`),
+    query(`SELECT id::text id,provider_code,display_name,account_name,account_number,instructions,is_active,created_at::text created_at,updated_at::text updated_at FROM manual_yemen_wallets ORDER BY sort_order, display_name`),
     query(`SELECT id::text id,code,display_name,provider_type,configuration,is_active FROM billing_payment_providers ORDER BY display_name`),
     query(`SELECT r.id::text id,r.organization_id::text organization_id,r.plan_code,r.billing_cycle,r.wallet_id::text wallet_id,r.amount_usd::numeric amount_usd,r.amount_yer,r.exchange_rate,r.sender_name,r.transfer_reference,r.receipt_mime_type,r.status,r.review_note,r.reviewed_by,r.reviewed_at::text reviewed_at,r.created_at::text created_at,w.display_name wallet_name,w.account_number,o.name organization_name FROM manual_wallet_payment_requests r JOIN manual_yemen_wallets w ON w.id=r.wallet_id JOIN organizations o ON o.id=r.organization_id ORDER BY r.created_at DESC LIMIT 100`),
+    query(`SELECT CASE WHEN jsonb_typeof(value)='object' THEN value->>'value' ELSE value#>>'{}' END rate FROM platform_settings WHERE key='billing.yer_per_usd' LIMIT 1`),
   ]);
-  return { prices, wallets, providers, requests };
+  const yerPerUsd = Number(rateRows[0]?.rate);
+  return { prices, wallets, providers, requests, yerPerUsd: Number.isFinite(yerPerUsd) && yerPerUsd > 0 ? yerPerUsd : null };
 }
 
 export async function savePlatformWallet(input: Record<string, unknown>) {
   const provider=String(input.provider_code||'').trim(), displayName=String(input.display_name||'').trim(), accountName=String(input.account_name||'').trim(), accountNumber=String(input.account_number||'').trim();
-  if(!['jawali','jeeb','onecash','kuraimi','other'].includes(provider)||displayName.length<2||accountName.length<2||accountNumber.length<3) throw new Error('بيانات المحفظة غير صالحة.');
+  if(!['jawali','jeeb','onecash','cacbank','kuraimi','other'].includes(provider)||displayName.length<2||accountName.length<2||accountNumber.length<3) throw new Error('بيانات المحفظة غير صالحة.');
   const id=String(input.id||'').trim(), values=[provider,displayName,accountName,accountNumber,String(input.instructions||''),input.is_active!==false];
   if(id){ const rows=await query(`UPDATE manual_yemen_wallets SET provider_code=$2,display_name=$3,account_name=$4,account_number=$5,instructions=$6,is_active=$7,updated_at=NOW() WHERE id=$1::uuid RETURNING id::text id,provider_code,display_name,account_name,account_number,instructions,is_active`,[id,...values]); if(!rows[0]) throw new Error('المحفظة غير موجودة.'); return rows[0]; }
   const rows=await query(`INSERT INTO manual_yemen_wallets(provider_code,display_name,account_name,account_number,instructions,is_active,updated_at) VALUES($1,$2,$3,$4,$5,$6,NOW()) RETURNING id::text id,provider_code,display_name,account_name,account_number,instructions,is_active`,values); return rows[0];

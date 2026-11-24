@@ -23,7 +23,7 @@ export const WHATSAPP_BREVITY_RULE = `${WHATSAPP_BREVITY_MARKER}
 - عند الحاجة لمعلومة إضافية اسأل سؤالاً واحداً قصيراً فقط.`
 
 /** Output budget for fast text channels; generous enough for a short list when asked. */
-export const WHATSAPP_MAX_OUTPUT_TOKENS = 300
+export const WHATSAPP_MAX_OUTPUT_TOKENS = 350
 export const DEFAULT_MAX_OUTPUT_TOKENS = 1024
 
 export function maxOutputTokensForChannel(channel: string | null | undefined): number {

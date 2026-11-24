@@ -207,7 +207,7 @@ describe('WhatsApp brevity guard', () => {
   test('maxOutputTokens is capped for WhatsApp channels', () => {
     expect(maxOutputTokensForChannel('whatsapp')).toBe(WHATSAPP_MAX_OUTPUT_TOKENS)
     expect(maxOutputTokensForChannel('whatsapp_qr')).toBe(WHATSAPP_MAX_OUTPUT_TOKENS)
-    expect(WHATSAPP_MAX_OUTPUT_TOKENS).toBeLessThan(301)
+    expect(WHATSAPP_MAX_OUTPUT_TOKENS).toBeLessThan(351)
     expect(maxOutputTokensForChannel('preview')).toBe(1024)
   })
 

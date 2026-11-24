@@ -1,5 +1,6 @@
 'use client'
 
+import { KayanSelect } from '@/components/ui/kayan-select'
 import { useState, useTransition } from 'react'
 import Link from 'next/link'
 import { BookOpen, Loader2, Pencil, Plus, Search, X } from 'lucide-react'
@@ -347,7 +348,7 @@ export function KnowledgeManager({ rows, documents, canManage, currentPage, tota
             </label>
             <label className="text-xs text-text-muted">
               {ar.knowledge.categoryLabel}
-              <select
+              <KayanSelect
                 value={form.category}
                 onChange={(event) => setForm({ ...form, category: event.target.value })}
                 className="mt-1 min-h-11 w-full rounded-lg border border-border px-2 py-1.5 text-base text-text md:text-sm"
@@ -357,7 +358,7 @@ export function KnowledgeManager({ rows, documents, canManage, currentPage, tota
                     {ar.knowledge.categories[category as keyof typeof ar.knowledge.categories] ?? category}
                   </option>
                 ))}
-              </select>
+              </KayanSelect>
             </label>
             <label className="text-xs text-text-muted">
               {ar.knowledge.contentLabel}

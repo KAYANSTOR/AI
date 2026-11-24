@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react'
 import { Loader2, Send } from 'lucide-react'
 import { sendHumanReplyAction } from './actions'
+import { emitInboxOptimistic } from '@/lib/inbox/optimistic-events'
 
 export function ReplyComposer({
   conversationId,
@@ -31,13 +32,24 @@ export function ReplyComposer({
         const body = text.trim()
         if (!body || pending) return
         setFeedback(null)
+        // Show the bubble immediately; the server-confirmed row replaces it without a refresh.
+        const clientId = typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : String(Date.now())
+        emitInboxOptimistic({ kind: 'append', conversationId, clientId, content: body, createdAt: new Date().toISOString() })
+        setText('')
         start(async () => {
-          const response = await sendHumanReplyAction(conversationId, body)
-          if (response.ok) {
-            setText('')
-            setFeedback({ ok: true, text: response.message ?? 'تم الإرسال.' })
-          } else {
-            setFeedback({ ok: false, text: response.error ?? 'تعذّر الإرسال.' })
+          try {
+            const response = await sendHumanReplyAction(conversationId, body)
+            if (response.ok) {
+              emitInboxOptimistic({ kind: 'confirm', conversationId, clientId, confirmed: response.confirmed ?? null, delivery: response.delivery ?? 'queued' })
+            } else {
+              emitInboxOptimistic({ kind: 'fail', conversationId, clientId })
+              setText((current) => current || body)
+              setFeedback({ ok: false, text: response.error ?? 'تعذّر الإرسال.' })
+            }
+          } catch {
+            emitInboxOptimistic({ kind: 'fail', conversationId, clientId })
+            setText((current) => current || body)
+            setFeedback({ ok: false, text: 'تعذّر الاتصال. حاول مرة أخرى.' })
           }
         })
       }}

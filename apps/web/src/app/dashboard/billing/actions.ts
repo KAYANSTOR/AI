@@ -12,6 +12,7 @@ import {
   convertUsdToYer,
 } from '@/lib/billing/esaalat'
 import { PLAN_CATALOG, type BillingCycle, type PlanCode } from '@/lib/billing/plan-catalog'
+import { envYerRate, expectedYerAmount, hasTransferableAccount, loadPlatformYerRate } from '@/lib/billing/yer-pricing'
 
 export type BillingActionResult =
   | { ok: true; url?: string | null; message?: string }
@@ -109,9 +110,10 @@ export async function startEsaalatCheckoutAction(input: {
     const totalUsd = monthlyPrice * (input.billingCycle === 'yearly' ? 10 : 1)
     const { data: storedYerPrice } = await adminDb.from('plan_prices')
       .select('amount,exchange_rate_to_usd').eq('plan_id', storedPlan.id).eq('billing_cycle', input.billingCycle).eq('currency', 'YER').eq('is_active', true).maybeSingle()
-    const configuredYerAmount = Number(storedYerPrice?.amount)
-    const exchangeRate = Number(storedYerPrice?.exchange_rate_to_usd) || Number(process.env.YER_PER_USD)
-    const amountYer = Number.isFinite(configuredYerAmount) && configuredYerAmount > 0 ? Math.round(configuredYerAmount) : convertUsdToYer(totalUsd, exchangeRate)
+    const yer = expectedYerAmount({ usdMonthly: monthlyPrice, cycle: input.billingCycle, yerPrice: storedYerPrice ? { amount: Number(storedYerPrice.amount), rate: Number(storedYerPrice.exchange_rate_to_usd) } : null, platformRate: await loadPlatformYerRate(adminDb), envRate: envYerRate() })
+    if (!yer) return { ok: false, error: 'تعذر احتساب المبلغ. راجع إعدادات سعر الصرف.' }
+    const exchangeRate = yer.rate
+    const amountYer = yer.amountYer || convertUsdToYer(totalUsd, exchangeRate)
     externalOrderId = randomUUID()
 
     const { error: insertError } = await adminDb.from('billing_payment_intents').insert({
@@ -213,22 +215,23 @@ export async function submitManualWalletPaymentAction(input: {
 
     const [{ data: plan, error: planError }, { data: wallet, error: walletError }] = await Promise.all([
       adminDb.from('plans').select('id,monthly_price,currency,is_active,limits').eq('code', input.planCode).maybeSingle(),
-      adminDb.from('manual_yemen_wallets').select('id').eq('id', input.walletId).eq('is_active', true).maybeSingle(),
+      adminDb.from('manual_yemen_wallets').select('id,account_number').eq('id', input.walletId).eq('is_active', true).maybeSingle(),
     ])
     if (planError || !plan || plan.is_active !== true || plan.currency !== 'USD') return { ok: false, error: 'الخطة غير متاحة حالياً.' }
     if (walletError || !wallet) return { ok: false, error: 'المحفظة المختارة غير متاحة.' }
+    if (!hasTransferableAccount(wallet.account_number)) return { ok: false, error: 'رقم هذه المحفظة قيد التحديث. اختر محفظة أخرى.' }
     const { data: storedPrice } = await adminDb.from('plan_prices')
       .select('amount').eq('plan_id', plan.id).eq('billing_cycle', 'monthly').eq('currency', 'USD').eq('is_active', true).maybeSingle()
     const { data: storedYerPrice } = await adminDb.from('plan_prices')
       .select('amount,exchange_rate_to_usd').eq('plan_id', plan.id).eq('billing_cycle', input.billingCycle).eq('currency', 'YER').eq('is_active', true).maybeSingle()
     const monthlyPrice = Number(storedPrice?.amount ?? plan.monthly_price)
-    const configuredYerAmount = Number(storedYerPrice?.amount)
-    const exchangeRate = Number(storedYerPrice?.exchange_rate_to_usd) || Number(process.env.YER_PER_USD)
-    if (!Number.isFinite(monthlyPrice) || monthlyPrice <= 0 || (!Number.isFinite(configuredYerAmount) && (!Number.isFinite(exchangeRate) || exchangeRate <= 0))) {
-      return { ok: false, error: 'تعذر احتساب المبلغ. راجع إعدادات سعر الصرف.' }
-    }
+    const yer = Number.isFinite(monthlyPrice) && monthlyPrice > 0
+      ? expectedYerAmount({ usdMonthly: monthlyPrice, cycle: input.billingCycle, yerPrice: storedYerPrice ? { amount: Number(storedYerPrice.amount), rate: Number(storedYerPrice.exchange_rate_to_usd) } : null, platformRate: await loadPlatformYerRate(adminDb), envRate: envYerRate() })
+      : null
+    if (!yer) return { ok: false, error: 'تعذر احتساب المبلغ. راجع إعدادات سعر الصرف.' }
+    const exchangeRate = yer.rate
     const amountUsd = monthlyPrice * (input.billingCycle === 'yearly' ? 10 : 1)
-    const amountYer = Number.isFinite(configuredYerAmount) && configuredYerAmount > 0 ? Math.round(configuredYerAmount) : convertUsdToYer(amountUsd, exchangeRate)
+    const amountYer = yer.amountYer
     const { data: payment, error: insertError } = await adminDb.from('manual_wallet_payment_requests').insert({
       organization_id: ctx.organizationId,
       plan_id: plan.id,

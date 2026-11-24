@@ -1,6 +1,8 @@
 import type { DbClient } from '@/lib/db/client'
 import { createAppointmentRecord, findAvailableSlots } from '@/lib/calendar/slots'
 import { resolveContactByPhone } from '@/lib/channels/contacts'
+import { syncConversationContact } from '@/lib/contacts/conversation-contact'
+import { resolveArabicDate, resolveArabicDateTime } from '@/lib/calendar/relative-time'
 import { getToolPolicy, isActorAllowed, type ToolActor } from '@/lib/ai/registry'
 import { getEnabledCapabilities } from '@/lib/ai/capabilities'
 import { createPendingAction } from '@/lib/runtime/pending'
@@ -148,9 +150,11 @@ async function toolGetCustomer(ctx:ToolContext,args:Record<string,unknown>){
 }
 
 async function toolFindSlots(ctx:ToolContext,args:Record<string,unknown>){
-  const date=String(args.date ?? '').trim()
+  const rawDate=String(args.date ?? '').trim()
   const serviceName=String(args.service_name ?? '').trim()
-  if(!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error('date must be YYYY-MM-DD')
+  if(!rawDate) missingField('date', 'اسأل العميل عن اليوم المطلوب.')
+  const date=/^\d{4}-\d{2}-\d{2}$/.test(rawDate) ? rawDate : resolveArabicDate(rawDate,{timezone:await organizationTimezone(ctx),now:new Date(Date.now())})
+  if(!date) throw new Error('date must be YYYY-MM-DD')
   let serviceId=args.service_id ? String(args.service_id).trim() : ''
   if(!serviceId){
     if(!serviceName) throw new Error('service_name or service_id is required')
@@ -162,42 +166,81 @@ async function toolFindSlots(ctx:ToolContext,args:Record<string,unknown>){
   return {serviceId,date,slots:await findAvailableSlots(ctx.db,ctx.organizationId,serviceId,date)}
 }
 
-async function toolCreateAppointment(ctx:ToolContext,args:Record<string,unknown>){
-  let phone=String(args.phone ?? '').trim()
-  const serviceId=String(args.service_id ?? '').trim()
-  const startsAt=String(args.starts_at ?? '').trim()
-  let name=args.name ? String(args.name).trim() : null
-  if (!phone && ctx.contactId) {
-    const { data: currentContact, error: contactError } = await ctx.db.from('contacts')
-      .select('phone,full_name').eq('id', ctx.contactId).eq('organization_id', ctx.organizationId).maybeSingle()
-    if (contactError) throw new Error(contactError.message)
-    phone = String(currentContact?.phone ?? '').trim()
-    if (!name) name = currentContact?.full_name ? String(currentContact.full_name) : null
+/** Clear, model-readable error for a missing booking field (the agent asks the customer instead of retrying). */
+function missingField(field: string, hint: string): never {
+  throw new Error(`missing_field:${field} — ${hint}`)
+}
+
+async function organizationTimezone(ctx: ToolContext): Promise<string> {
+  const { data } = await ctx.db.from('business_profiles').select('timezone').eq('organization_id', ctx.organizationId).maybeSingle()
+  return typeof data?.timezone === 'string' && data.timezone ? data.timezone : 'Asia/Aden'
+}
+
+/**
+ * The customer behind this conversation. Name/phone captured in the chat update the
+ * conversation contact (or merge into an existing contact with that phone) — never a
+ * second record for the same person.
+ */
+async function customerForWrite(ctx: ToolContext, args: Record<string, unknown>) {
+  const name = typeof args.name === 'string' && args.name.trim() ? args.name.trim() : null
+  const phone = typeof args.phone === 'string' && args.phone.trim() ? args.phone.trim() : null
+  if (ctx.contactId) {
+    const synced = await syncConversationContact(ctx.db, { organizationId: ctx.organizationId, conversationId: ctx.conversationId, contactId: ctx.contactId, name, phone })
+    ctx.contactId = synced.contactId
+    return { contactId: synced.contactId, phone: synced.phone, fullName: synced.fullName, alternatePhone: synced.alternatePhone ?? null }
   }
-  if(!phone || !serviceId || !startsAt) throw new Error('phone, service_id, and starts_at are required')
-  const contact=await resolveContactByPhone(ctx.db,ctx.organizationId,phone,name)
-  const {data:service,error}=await ctx.db.from('services').select('id,duration_minutes,name').eq('id',serviceId).eq('organization_id',ctx.organizationId).maybeSingle()
-  if(error) throw new Error(error.message)
-  if(!service) throw new Error('Service not found')
-  const start=new Date(startsAt)
-  if(Number.isNaN(start.getTime())) throw new Error('Invalid starts_at')
+  if (!phone) missingField('phone', 'اطلب رقم جوال العميل مرة واحدة.')
+  const contact = await resolveContactByPhone(ctx.db, ctx.organizationId, phone, name)
+  return { contactId: contact.contactId, phone: contact.phone, fullName: contact.fullName, alternatePhone: null }
+}
+
+async function resolveService(ctx: ToolContext, args: Record<string, unknown>) {
+  const serviceId = String(args.service_id ?? '').trim()
+  const serviceName = String(args.service_name ?? '').trim()
+  const columns = 'id,duration_minutes,name'
+  if (/^[0-9a-f-]{36}$/i.test(serviceId)) {
+    const { data, error } = await ctx.db.from('services').select(columns).eq('id', serviceId).eq('organization_id', ctx.organizationId).maybeSingle()
+    if (error) throw new Error(error.message)
+    if (data) return data
+  }
+  const lookup = serviceName || serviceId
+  if (lookup) {
+    const { data, error } = await ctx.db.from('services').select(columns).eq('organization_id', ctx.organizationId).eq('is_active', true).ilike('name', '%' + lookup + '%').limit(1).maybeSingle()
+    if (error) throw new Error(error.message)
+    if (data) return data
+  }
+  const { data: active, error } = await ctx.db.from('services').select(columns).eq('organization_id', ctx.organizationId).eq('is_active', true).limit(2)
+  if (error) throw new Error(error.message)
+  if ((active ?? []).length === 1) return active![0]
+  missingField('service', 'اسأل العميل عن الخدمة المطلوبة بالاسم كما في قائمة الخدمات.')
+}
+
+async function toolCreateAppointment(ctx:ToolContext,args:Record<string,unknown>){
+  const rawStart = String(args.starts_at ?? args.date_time ?? '').trim()
+  if (!rawStart) missingField('starts_at', 'اسأل العميل عن اليوم والساعة المطلوبين.')
+  const timezone = await organizationTimezone(ctx)
+  const startsAt = resolveArabicDateTime(rawStart, { timezone, now: new Date(Date.now()) })
+  if (!startsAt) missingField('starts_at', `لم يُحدَّد وقت واضح في «${rawStart.slice(0, 40)}». اسأل العميل عن الساعة (مثل 3 عصراً).`)
+  const start = new Date(startsAt)
+  if (Number.isNaN(start.getTime())) missingField('starts_at', 'صيغة الوقت غير صالحة؛ استخدم ISO-8601.')
+  if (start.getTime() < Date.now() - 5 * 60_000) missingField('starts_at', 'الوقت المطلوب في الماضي؛ اقترح موعداً قادماً.')
+  const service = await resolveService(ctx, args)
+  const customer = await customerForWrite(ctx, args)
   const end=new Date(start.getTime()+Number(service.duration_minutes ?? 60)*60000)
-  const appointment=await createAppointmentRecord(ctx.db,{organizationId:ctx.organizationId,contactId:contact.contactId,serviceId:service.id,startsAt:start.toISOString(),endsAt:end.toISOString()})
-  const {error:leadError}=await ctx.db.from('leads').insert({organization_id:ctx.organizationId,contact_id:contact.contactId,status:'booked',intent:service.name})
+  const notes = [typeof args.notes === 'string' ? args.notes.trim() : '', customer.alternatePhone ? `رقم تواصل بديل: ${customer.alternatePhone}` : ''].filter(Boolean).join(' · ') || undefined
+  const appointment=await createAppointmentRecord(ctx.db,{organizationId:ctx.organizationId,contactId:customer.contactId,serviceId:service.id,startsAt:start.toISOString(),endsAt:end.toISOString(),notes})
+  const {error:leadError}=await ctx.db.from('leads').insert({organization_id:ctx.organizationId,contact_id:customer.contactId,status:'booked',intent:service.name})
   if(leadError && leadError.code!=='23505') throw new Error(leadError.message)
-  return {appointmentId:appointment.id,service:service.name,startsAt:appointment.starts_at,status:appointment.status,contactId:contact.contactId}
+  return {appointmentId:appointment.id,service:service.name,startsAt:appointment.starts_at,timezone,status:appointment.status,contactId:customer.contactId,customerName:customer.fullName,customerPhone:customer.phone}
 }
 
 async function toolCreateLead(ctx:ToolContext,args:Record<string,unknown>){
-  const phone=String(args.phone ?? '').trim()
-  if(!phone) throw new Error('phone is required')
-  const name=args.name ? String(args.name).trim() : null
   const intent=args.intent ? String(args.intent).trim() : null
   const notes=args.notes ? String(args.notes).trim() : null
   const estimated=args.estimated_value == null ? null : Number(args.estimated_value)
   if(estimated != null && (!Number.isFinite(estimated) || estimated < 0)) throw new Error('estimated_value must be a positive number')
 
-  const contact=await resolveContactByPhone(ctx.db,ctx.organizationId,phone,name)
+  const contact=await customerForWrite(ctx,args)
   const {data,error}=await ctx.db.from('leads').insert({
     organization_id:ctx.organizationId,contact_id:contact.contactId,status:'new',intent,notes,
     estimated_value:estimated,source:ctx.agentId ? 'ai_agent' : 'staff',

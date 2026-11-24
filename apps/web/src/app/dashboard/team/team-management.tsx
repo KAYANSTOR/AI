@@ -1,5 +1,6 @@
 'use client'
 
+import { KayanSelect } from '@/components/ui/kayan-select'
 import { useState, useTransition, type FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import { Loader2, UserPlus } from 'lucide-react'
@@ -93,14 +94,14 @@ export function AddExistingMemberForm({
           <label htmlFor="team-member-role" className="mb-1.5 block text-sm font-semibold text-text">
             الدور
           </label>
-          <select
+          <KayanSelect
             id="team-member-role"
             value={role}
             onChange={(event) => setRole(event.target.value as TeamRole)}
             className="min-h-[52px] w-full rounded-xl border border-border bg-surface px-3 text-sm text-text focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/15"
           >
             <RoleOptions allowOwner={allowOwner} />
-          </select>
+          </KayanSelect>
         </div>
         <button
           type="submit"
@@ -161,7 +162,7 @@ export function TeamMemberControls({
         <label htmlFor={`member-role-${memberId}`} className="sr-only">
           دور العضو
         </label>
-        <select
+        <KayanSelect
           id={`member-role-${memberId}`}
           value={roleIsAssignable ? role : ''}
           disabled={pending || isSelf || !roleIsAssignable}
@@ -170,7 +171,7 @@ export function TeamMemberControls({
         >
           {!roleIsAssignable ? <option value="">{roleLabel(role)}</option> : null}
           <RoleOptions allowOwner={allowOwner} />
-        </select>
+        </KayanSelect>
         <Switch
           checked={isActive}
           onCheckedChange={toggleActive}

@@ -1,5 +1,6 @@
 'use client'
 
+import { KayanSelect } from '@/components/ui/kayan-select'
 import { useState, useTransition } from 'react'
 import { Loader2 } from 'lucide-react'
 import { updateLeadStatusAction } from './actions'
@@ -35,7 +36,7 @@ export function LeadStatusControl({
 
   return (
     <div className="flex flex-col gap-1">
-      <select
+      <KayanSelect
         className="h-9 rounded-lg border border-border bg-background px-2 text-xs text-text"
         value={value}
         disabled={pending}
@@ -58,7 +59,7 @@ export function LeadStatusControl({
             {LABELS[s] ?? s}
           </option>
         ))}
-      </select>
+      </KayanSelect>
       {pending && <Loader2 className="h-3 w-3 animate-spin text-text-muted" />}
       {error && <span className="text-[11px] text-error">{error}</span>}
     </div>

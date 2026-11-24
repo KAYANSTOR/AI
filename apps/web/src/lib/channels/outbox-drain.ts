@@ -13,13 +13,19 @@ export class OutboxDrainError extends Error {}
  * long-running inbound worker so queued replies and retries never depend on
  * the (best-effort, often delayed) external scheduler alone.
  */
-export async function drainOutbox(db: DbClient, { limit = 50 }: { limit?: number } = {}): Promise<{ processed: number; sent: number }> {
+export async function drainOutbox(
+  db: DbClient,
+  { limit = 50, only }: { limit?: number; only?: { organizationId: string; idempotencyKey: string } } = {}
+): Promise<{ processed: number; sent: number; sentEventIds: string[] }> {
   // Stale workers (crashed mid-send) leave rows in 'processing'; they become claimable
   // again after the lock window instead of being stuck forever.
   const staleBefore = new Date(Date.now() - OUTBOX_STALE_LOCK_MS).toISOString()
   const claimable = `status.in.(pending,failed),and(status.eq.processing,locked_at.lt.${staleBefore})`
-  const { data: events, error } = await db.from('outbox_events')
+  // `only` drains a single just-queued reply (dashboard send) without touching other tenants' rows.
+  let query = db.from('outbox_events')
     .select('id, organization_id, channel_id, recipient, payload, attempts, idempotency_key')
+  if (only) query = query.eq('organization_id', only.organizationId).eq('idempotency_key', only.idempotencyKey)
+  const { data: events, error } = await query
     .or(claimable)
     .lte('scheduled_at', new Date().toISOString())
     .lt('attempts', OUTBOX_MAX_ATTEMPTS)
@@ -38,6 +44,7 @@ export async function drainOutbox(db: DbClient, { limit = 50 }: { limit?: number
   for (const row of channelsResult.data ?? []) channelsById.set(row.id as string, row)
 
   let sent = 0
+  const sentEventIds: string[] = []
   for (const event of events ?? []) {
     let providerAccepted = false
     let selectedChannel: { channel_type?: string | null; connection_mode?: string | null } | undefined
@@ -137,6 +144,7 @@ export async function drainOutbox(db: DbClient, { limit = 50 }: { limit?: number
       }
 
       sent++
+      sentEventIds.push(String(event.id))
     } catch (error) {
       const message = error instanceof Error ? error.message : 'outbox delivery failed'
       if (providerAccepted) {
@@ -146,6 +154,7 @@ export async function drainOutbox(db: DbClient, { limit = 50 }: { limit?: number
           connection_mode: selectedChannel?.connection_mode ?? null,
           reason: message.slice(0, 240),
         })
+        sentEventIds.push(String(event.id))
         continue
       }
       const permanent = isPermanentOutboundError(error)
@@ -159,5 +168,5 @@ export async function drainOutbox(db: DbClient, { limit = 50 }: { limit?: number
       }).eq('id', event.id)
     }
   }
-  return { processed: events?.length ?? 0, sent }
+  return { processed: events?.length ?? 0, sent, sentEventIds }
 }

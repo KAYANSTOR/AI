@@ -20,7 +20,7 @@ function toGroqMessages(system: string, source: ModelMessage[]): GroqMessage[] {
 function retryableStatus(status: number, message: string) { return [401, 403, 404, 408, 409, 425, 429].includes(status) || status >= 500 || (status === 400 && /(api.?key|quota|resource_exhausted|rate.?limit|billing)/i.test(message)) }
 function parseToolArguments(value: string | undefined): Record<string, unknown> { try { const parsed: unknown = JSON.parse(value || '{}'); return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {} } catch { return {} } }
 function buildRequestBody(input: Parameters<AIProvider['call']>[0], model: string, withTools: boolean) {
-  const body: Record<string, unknown> = { model, messages: toGroqMessages(input.system, input.messages), max_completion_tokens: input.maxOutputTokens ?? (input.isWhatsApp ? 300 : 1024), parallel_tool_calls: false }
+  const body: Record<string, unknown> = { model, messages: toGroqMessages(input.system, input.messages), max_completion_tokens: input.maxOutputTokens ?? (input.isWhatsApp ? 350 : 1024), parallel_tool_calls: false }
   if (withTools && input.tools.length) {
     body.tools = input.tools.map((tool) => ({ type: 'function', function: { name: tool.name, description: tool.description, parameters: tool.input_schema } }))
     body.tool_choice = 'auto'

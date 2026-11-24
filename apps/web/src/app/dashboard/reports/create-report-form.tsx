@@ -1,5 +1,6 @@
 'use client'
 
+import { KayanSelect } from '@/components/ui/kayan-select'
 import { useState, useTransition } from 'react'
 import { createReportAction } from './actions'
 
@@ -45,7 +46,7 @@ export function CreateReportForm() {
         </label>
         <label className="block text-sm">
           <span className="mb-1 block text-text-muted">النوع</span>
-          <select
+          <KayanSelect
             name="reportType"
             className="w-full rounded-xl border border-border bg-background px-3 py-2 text-text"
             defaultValue="conversations"
@@ -55,7 +56,7 @@ export function CreateReportForm() {
             <option value="analytics">تحليلات</option>
             <option value="orders">طلبات</option>
             <option value="appointments">مواعيد</option>
-          </select>
+          </KayanSelect>
         </label>
         <label className="block text-sm sm:col-span-2">
           <span className="mb-1 block text-text-muted">وصف (اختياري)</span>

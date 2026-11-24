@@ -1,5 +1,6 @@
 'use client'
 
+import { KayanSelect } from '@/components/ui/kayan-select'
 import { useCallback, useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { useHistoryDismiss } from '@/hooks/use-history-dismiss'
@@ -460,10 +461,10 @@ function ChannelDialog({
               {messengerPages.length > 0 ? (
                 <div className="space-y-3 rounded-2xl border border-border bg-background p-4">
                   <label className="block"><span className="text-sm font-semibold text-text">صفحة Facebook</span>
-                    <select value={selectedMessengerPage} onChange={(event)=>setSelectedMessengerPage(event.target.value)} disabled={busy}
+                    <KayanSelect value={selectedMessengerPage} onChange={(event)=>setSelectedMessengerPage(event.target.value)} disabled={busy}
                       className="mt-2 min-h-12 w-full rounded-xl border border-border bg-surface px-3 text-sm text-text">
                       {messengerPages.map(page=><option key={page.id} value={page.id}>{page.name}</option>)}
-                    </select>
+                    </KayanSelect>
                   </label>
                   <button type="button" onClick={()=>startTransition(async()=>{
                     setNotice(null)

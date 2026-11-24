@@ -1,5 +1,6 @@
 'use client'
 
+import { KayanSelect } from '@/components/ui/kayan-select'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createAppointmentAction } from './actions'
@@ -52,21 +53,21 @@ export function AppointmentForm({ services, contacts }: { organizationId: string
       {error && <div className="rounded-lg border border-error/40 bg-error/10 p-3 text-sm text-text">{error}</div>}
       <div>
         <label className="mb-1 block text-sm font-medium text-text">{ar.appointments.contact}</label>
-        <select required value={contactId} onChange={(e) => setContactId(e.target.value)} className="min-h-11 w-full rounded-lg border border-border bg-surface px-3 py-2 text-base text-text focus:outline-none focus:ring-2 focus:ring-accent/30 md:text-sm">
+        <KayanSelect required value={contactId} onChange={(e) => setContactId(e.target.value)} className="min-h-11 w-full rounded-lg border border-border bg-surface px-3 py-2 text-base text-text focus:outline-none focus:ring-2 focus:ring-accent/30 md:text-sm">
           <option value="">{ar.appointments.choose}</option>
           {contacts.map((c) => (
             <option key={c.id} value={c.id}>{c.full_name || c.phone || c.id.slice(0, 8)}</option>
           ))}
-        </select>
+        </KayanSelect>
       </div>
       <div>
         <label className="mb-1 block text-sm font-medium text-text">{ar.appointments.service}</label>
-        <select required value={serviceId} onChange={(e) => setServiceId(e.target.value)} className="min-h-11 w-full rounded-lg border border-border bg-surface px-3 py-2 text-base text-text focus:outline-none focus:ring-2 focus:ring-accent/30 md:text-sm">
+        <KayanSelect required value={serviceId} onChange={(e) => setServiceId(e.target.value)} className="min-h-11 w-full rounded-lg border border-border bg-surface px-3 py-2 text-base text-text focus:outline-none focus:ring-2 focus:ring-accent/30 md:text-sm">
           <option value="">{ar.appointments.choose}</option>
           {services.map((s) => (
             <option key={s.id} value={s.id}>{s.name} ({formatNumber(s.duration_minutes)} {ar.services.minutes})</option>
           ))}
-        </select>
+        </KayanSelect>
       </div>
       <div>
         <label className="mb-1 block text-sm font-medium text-text">{ar.appointments.startsAt}</label>

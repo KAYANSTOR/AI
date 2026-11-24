@@ -1,5 +1,6 @@
 'use client'
 
+import { KayanSelect } from '@/components/ui/kayan-select'
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { CircleAlert, CheckCircle2, History, Loader2, Save, Send } from 'lucide-react'
@@ -157,18 +158,18 @@ export function AgentConsole({ data }: { data: AgentConsoleData }) {
           </label>
           <label className="block">
             <span className="mb-1 block text-xs font-medium text-text">لغة الرد</span>
-            <select
+            <KayanSelect
               value={locale}
               onChange={(event) => setLocale(event.target.value)}
               className="min-h-11 w-full rounded-lg border border-border bg-background px-3 py-2 text-base text-text focus:border-secondary focus:outline-none focus:ring-2 focus:ring-accent/20 md:text-sm"
             >
               <option value="ar">العربية</option>
               <option value="en">الإنجليزية</option>
-            </select>
+            </KayanSelect>
           </label>
           <label className="block">
             <span className="mb-1 block text-xs font-medium text-text">الحالة</span>
-            <select
+            <KayanSelect
               value={status}
               onChange={(event) => setStatus(event.target.value)}
               className="min-h-11 w-full rounded-lg border border-border bg-background px-3 py-2 text-base text-text focus:border-secondary focus:outline-none focus:ring-2 focus:ring-accent/20 md:text-sm"
@@ -176,11 +177,11 @@ export function AgentConsole({ data }: { data: AgentConsoleData }) {
               <option value="draft">مسودة</option>
               <option value="active">نشط</option>
               <option value="paused">متوقف</option>
-            </select>
+            </KayanSelect>
           </label>
           <label className="block">
             <span className="mb-1 block text-xs font-medium text-text">مرونة الردود</span>
-            <select
+            <KayanSelect
               value={temperature <= 0.2 ? 'precise' : temperature >= 0.5 ? 'flexible' : 'balanced'}
               onChange={(event) => setTemperature(event.target.value === 'precise' ? 0.15 : event.target.value === 'flexible' ? 0.65 : 0.35)}
               className="min-h-11 w-full rounded-lg border border-border bg-background px-3 py-2 text-base text-text focus:border-secondary focus:outline-none focus:ring-2 focus:ring-accent/20 md:text-sm"
@@ -188,7 +189,7 @@ export function AgentConsole({ data }: { data: AgentConsoleData }) {
               <option value="precise">دقيق</option>
               <option value="balanced">متوازن</option>
               <option value="flexible">مرن</option>
-            </select>
+            </KayanSelect>
           </label>
         </div>
 

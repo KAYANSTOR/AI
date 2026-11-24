@@ -1,9 +1,11 @@
 'use client'
 
+import { KayanSelect } from '@/components/ui/kayan-select'
+import { SectorPickerField } from '@/components/ui/sector-picker'
 import { useState, useTransition, type FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import { Check, Loader2 } from 'lucide-react'
-import { BUSINESS_TYPES, DEFAULT_BUSINESS_TYPE } from '@/lib/capabilities/business-types'
+import { DEFAULT_BUSINESS_TYPE } from '@/lib/capabilities/business-types'
 import { saveBasicsAction, saveOnboardingStepAction } from './actions'
 import { createServiceAction } from '@/app/dashboard/services/actions'
 import { saveLocationAction } from '@/app/dashboard/locations/actions'
@@ -170,7 +172,7 @@ export function SetupWizard({ step, data }: { step: 1 | 2 | 3 | 4; data: SetupDa
       <form id="setup-step-form" onSubmit={onSubmit} className="mt-6 space-y-4" key={step}>
         {step === 1 ? <>
           <Field label="اسم النشاط" required><input name="name" required minLength={2} maxLength={120} defaultValue={data.businessName || data.organizationName} className={inputClass} placeholder="اسم النشاط التجاري" /></Field>
-          <Field label="نوع النشاط" required><select name="businessTypeId" defaultValue={data.businessTypeId || DEFAULT_BUSINESS_TYPE} className={inputClass}>{BUSINESS_TYPES.map((type) => <option key={type.id} value={type.id}>{type.label}</option>)}</select></Field>
+          <div className="space-y-1.5 text-sm font-medium text-text"><p>نوع النشاط<span className="ms-1 text-error" aria-hidden="true">*</span></p><SectorPickerField name="businessTypeId" defaultValue={data.businessTypeId || DEFAULT_BUSINESS_TYPE} /></div>
           <Field label="المدينة"><input name="city" maxLength={120} defaultValue={data.city} className={inputClass} placeholder="المدينة أو المنطقة" /></Field>
           <Field label="رابط الموقع"><input name="websiteUrl" type="url" dir="ltr" defaultValue={data.websiteUrl} className={`${inputClass} text-start`} placeholder="https://" /></Field>
           <Field label="المنطقة الزمنية"><input dir="ltr" value={timezone} onChange={(event) => setTimezone(event.target.value)} className={`${inputClass} text-start`} placeholder="Asia/Aden" /></Field>
@@ -178,8 +180,8 @@ export function SetupWizard({ step, data }: { step: 1 | 2 | 3 | 4; data: SetupDa
 
         {step === 2 ? data.service ? <div className="rounded-2xl border border-success/30 bg-success/5 p-4"><div className="flex items-center gap-2 text-sm font-semibold text-text"><Check size={17} className="text-success" aria-hidden="true" />تم حفظ خدمة في مساحة عملك</div><p className="mt-2 text-sm text-text-muted">{data.service.name} · {data.service.duration} دقيقة{data.service.price !== null ? ` · ${data.service.price} USD` : ''}</p><p className="mt-3 text-xs text-text-muted">يمكنك إضافة خدمات أخرى أو تعديلها لاحقاً من صفحة الخدمات.</p></div> : <>
           <Field label="اسم الخدمة" required><input name="name" required maxLength={255} className={inputClass} placeholder="مثال: استشارة أولية" /></Field>
-          <Field label="الفئة" required><select name="category" required className={inputClass}><option value="">اختر فئة الخدمة</option><option value="appointments">استشارات ومواعيد</option><option value="wellness">الصحة والعافية</option><option value="consulting">خدمات استشارية</option><option value="other">أخرى</option></select></Field>
-          <div className="grid gap-4 sm:grid-cols-2"><Field label="المدة" required><select name="duration" defaultValue="30" className={inputClass}><option value="30">30 دقيقة</option><option value="45">45 دقيقة</option><option value="60">60 دقيقة</option><option value="90">90 دقيقة</option></select></Field><Field label="السعر (USD)"><input name="price" type="number" min="0" step="0.01" dir="ltr" className={`${inputClass} text-start`} placeholder="0.00" /></Field></div>
+          <Field label="الفئة" required><KayanSelect name="category" required className={inputClass} placeholder="اختر فئة الخدمة" title="فئة الخدمة"><option value="">اختر فئة الخدمة</option><option value="appointments">استشارات ومواعيد</option><option value="wellness">الصحة والعافية</option><option value="consulting">خدمات استشارية</option><option value="other">أخرى</option></KayanSelect></Field>
+          <div className="grid gap-4 sm:grid-cols-2"><Field label="المدة" required><KayanSelect name="duration" defaultValue="30" className={inputClass} title="المدة"><option value="30">30 دقيقة</option><option value="45">45 دقيقة</option><option value="60">60 دقيقة</option><option value="90">90 دقيقة</option></KayanSelect></Field><Field label="السعر (USD)"><input name="price" type="number" min="0" step="0.01" dir="ltr" className={`${inputClass} text-start`} placeholder="0.00" /></Field></div>
         </> : null}
 
         {step === 3 ? <>

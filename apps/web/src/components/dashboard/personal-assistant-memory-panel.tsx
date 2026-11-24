@@ -1,5 +1,6 @@
 'use client'
 
+import { KayanSelect } from '@/components/ui/kayan-select'
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { Button } from '@/components/ui/button'
 
@@ -128,9 +129,9 @@ export function PersonalAssistantMemoryPanel() {
         <form onSubmit={createMemory} className="mt-4 space-y-3">
           <label className="block space-y-1.5 text-sm font-medium text-text">
             نوع المعلومة
-            <select value={newCategory} onChange={(event) => setNewCategory(event.target.value as MemoryCategory)} className={fieldClass}>
+            <KayanSelect value={newCategory} onChange={(event) => setNewCategory(event.target.value as MemoryCategory)} className={fieldClass}>
               {CATEGORIES.map((category) => <option key={category.id} value={category.id}>{category.label}</option>)}
-            </select>
+            </KayanSelect>
           </label>
           <label className="block space-y-1.5 text-sm font-medium text-text">
             المعلومة
