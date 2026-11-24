@@ -1,8 +1,11 @@
 import type { DbClient } from '@/lib/db/client'
+import { createAdminClient } from '@/lib/db/admin'
+import { findUserById, normalizePhone } from '@/lib/auth/users'
 import { resolveContactIdentity } from '@/lib/channels/contacts'
 import { getConsentStatus, isOptOutMessage, recordOptOut } from '@/lib/channels/consent'
 import { checkEligibility } from '@/lib/channels/eligibility'
 import { runAgentTurn } from '@/lib/runtime/agent-runtime'
+import { runPersonalAssistantTurn } from '@/lib/personal-assistant/runtime'
 import { getPendingAction, isAffirmative, isNegative, markPendingAction } from '@/lib/runtime/pending'
 import { ensureOpenConversation, getConversationRef } from '@/lib/runtime/conversation'
 import { resolveBusinessAgent } from '@/lib/runtime/tenant'
@@ -31,11 +34,26 @@ type InboundIdentity = {
   displayName?: string | null
 }
 
+async function resolvePersonalAssistantOwner(input: InboundIdentity) {
+  if (input.channelType !== 'whatsapp' || !input.senderPhone) return null
+  const admin = createAdminClient()
+  const { data: settings } = await admin.from('personal_assistant_settings')
+    .select('user_id').eq('organization_id', input.organizationId)
+    .eq('whatsapp_channel_id', input.channelId).eq('whatsapp_reminders_enabled', true).maybeSingle()
+  if (!settings?.user_id) return null
+  const { data: membership } = await admin.from('organization_members').select('user_id')
+    .eq('organization_id', input.organizationId).eq('user_id', settings.user_id).eq('role', 'owner').maybeSingle()
+  if (!membership?.user_id) return null
+  const owner = await findUserById(String(membership.user_id))
+  if (!owner?.phone || normalizePhone(owner.phone) !== normalizePhone(input.senderPhone)) return null
+  return { userId: String(owner.id) }
+}
+
 /** Resolve the contact and conversation, then persist the inbound message for the inbox. */
 async function storeInboundMessage(
   db: DbClient,
   input: InboundIdentity & { messageType: InboundMessageType; content: string }
-): Promise<{ conversationId: string; contactId: string }> {
+): Promise<{ conversationId: string; contactId: string; messageId: string | null }> {
   const contact = await resolveContactIdentity(db, input.organizationId, {
     channel: input.channelType,
     externalUserId: input.externalUserId,
@@ -58,7 +76,7 @@ async function storeInboundMessage(
     message_type: input.messageType,
     content: input.content,
     external_message_id: input.externalEventId,
-  })
+  }).select('id').maybeSingle()
   if (stored.error && stored.error.code !== '23505') throw new Error(stored.error.message)
 
   await db
@@ -71,7 +89,7 @@ async function storeInboundMessage(
     conversationId,
   })
 
-  return { conversationId, contactId: contact.contactId }
+  return { conversationId, contactId: contact.contactId, messageId: stored.data?.id ? String(stored.data.id) : null }
 }
 
 /**
@@ -93,6 +111,28 @@ export async function processInboundMessage(
   const stored = await storeInboundMessage(db, { ...input, messageType: 'text', content: input.text })
   const conversationId = stored.conversationId
   const contact = { contactId: stored.contactId }
+
+  const personalOwner = await resolvePersonalAssistantOwner(input)
+  if (personalOwner) {
+    try {
+      const result = await runPersonalAssistantTurn(db, {
+        organizationId: input.organizationId,
+        userId: personalOwner.userId,
+      }, input.text)
+      if (stored.messageId) {
+        await createAdminClient().from('personal_assistant_extraction_jobs').insert({
+          organization_id: input.organizationId,
+          user_id: personalOwner.userId,
+          conversation_id: conversationId,
+          source_message_id: stored.messageId,
+        })
+      }
+      return { reply: result.reply, conversationId, contactId: contact.contactId }
+    } catch (error) {
+      console.error('personal_assistant_inbound_failed', error)
+      return { reply: null, conversationId, contactId: contact.contactId }
+    }
+  }
 
   const conversation = await getConversationRef(db, conversationId, input.organizationId)
   if (!conversation || !conversation.aiEnabled || conversation.status === 'handed_off') {

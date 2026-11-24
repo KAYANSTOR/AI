@@ -26,6 +26,7 @@ import {
   Building2,
   UserRound,
   FileText,
+  ListTodo,
 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { BrandMark } from '@/components/site/brand'
@@ -86,6 +87,7 @@ const navSections: NavSection[] = [
       { name: 'سياسات التصعيد', href: '/dashboard/settings/escalation', icon: ShieldAlert, capability: 'inbox' },
       { name: 'إعداد النشاط', href: '/dashboard/setup', icon: Settings, capability: null },
       { name: 'صفحات الموقع', href: '/dashboard/website-pages', icon: FileText, capability: null },
+      { name: 'المساعد الشخصي', href: '/dashboard/assistant/tasks', icon: ListTodo, capability: null, badge: 'خاص' },
     ],
   },
   {

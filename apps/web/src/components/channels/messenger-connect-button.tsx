@@ -15,7 +15,11 @@ export function MessengerConnectButton({disabled,onPages,onError}:{disabled?:boo
    if(window.__kayanMetaSdkAppId!==appId){window.FB.init({appId,cookie:true,xfbml:false,version:'v27.0'});window.__kayanMetaSdkAppId=appId}
    setReady(true);setError(null)
   }
-  if(!appId){setError('معرّف تطبيق Meta غير مضبوط على المنصة.');return()=>{mounted=false}}
+  if(!appId){
+   // Surface a configuration error once the external SDK effect mounts.
+   // eslint-disable-next-line react-hooks/set-state-in-effect
+   setError('معرّف تطبيق Meta غير مضبوط على المنصة.');return()=>{mounted=false}
+  }
   window.fbAsyncInit=initialize
   if(window.FB)queueMicrotask(initialize)
   else{

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { isAuthorizedCronRequest } from '@/lib/cron/auth'
 import { createAdminClient } from '@/lib/db/admin'
-import { deliverOutbound, isPermanentOutboundError, recordDeliveredOutboundMessage } from '@/lib/runtime/outbound'
+import { deliverOutbound, deliverWhatsAppTemplate, isPermanentOutboundError, recordDeliveredOutboundMessage } from '@/lib/runtime/outbound'
 import { publicWebhookError } from '@/lib/runtime/security'
 import {
   OUTBOX_MAX_ATTEMPTS,
@@ -33,7 +33,7 @@ async function handle(req: NextRequest) {
   const channelIds = [...new Set((events ?? []).map((event) => event.channel_id as string | null).filter((id): id is string => Boolean(id)))]
   const channelsResult = channelIds.length
     ? await db.from('channels')
-        .select('id, organization_id, business_id, channel_type, provider_account_id, external_identifier, connection_mode')
+        .select('id, organization_id, business_id, channel_type, provider_account_id, external_identifier, connection_mode, is_active')
         .in('id', channelIds)
     : { data: [] as Array<Record<string, unknown>>, error: null }
   const channelsById = new Map<string, Record<string, unknown>>()
@@ -63,6 +63,7 @@ async function handle(req: NextRequest) {
             provider_account_id: string | null
             external_identifier: string | null
             connection_mode: string | null
+            is_active: boolean
           }
         | undefined
       if (!channel) throw new Error('channel_not_found')
@@ -70,24 +71,46 @@ async function handle(req: NextRequest) {
 
       const payload = event.payload as Record<string, unknown>
       const body = String(payload.body ?? '')
+      const personalTaskId = typeof payload.personal_task_id === 'string' ? payload.personal_task_id : null
+      if (payload.kind === 'personal_assistant') {
+        if (!channel.is_active) throw new Error('personal_assistant_channel_inactive')
+        if (personalTaskId) {
+          const task = await db.from('personal_tasks').select('id, status, due_at, reminder_sent_at')
+            .eq('id', personalTaskId).eq('organization_id', event.organization_id).maybeSingle()
+          const stillDue = task.data && ['pending', 'snoozed'].includes(String(task.data.status)) && !task.data.reminder_sent_at && task.data.due_at && new Date(task.data.due_at).getTime() <= Date.now()
+          if (!stillDue) {
+            await db.from('outbox_events').update({ status: 'cancelled', locked_at: null, updated_at: new Date().toISOString(), last_error: 'personal_task_no_longer_due' }).eq('id', event.id).eq('status', 'processing')
+            continue
+          }
+        }
+        if (channel.connection_mode !== 'qr_unofficial' && !payload.whatsapp_template) {
+          await db.from('outbox_events').update({ status: 'cancelled', locked_at: null, updated_at: new Date().toISOString(), last_error: 'approved_whatsapp_template_required' }).eq('id', event.id).eq('status', 'processing')
+          continue
+        }
+      }
       // Same delivery path as the live routes; failures here are recorded by the
       // worker itself so retries and dead-letter stay authoritative.
-      await deliverOutbound(db, {
-        channel: {
-          id: channel.id,
-          organizationId: channel.organization_id,
-          businessId: channel.business_id,
-          channelType: channel.channel_type,
-          providerAccountId: channel.provider_account_id,
-            externalIdentifier: channel.external_identifier,
-            connectionMode: channel.connection_mode as string | null,
-        },
-        recipient: event.recipient,
-        body,
-        idempotencyKey: 'outbox:' + event.id,
-        conversationId: typeof payload.conversation_id === 'string' ? payload.conversation_id : null,
-        queueOnFailure: false,
-      })
+      const outboundChannel = {
+        id: channel.id,
+        organizationId: channel.organization_id,
+        businessId: channel.business_id,
+        channelType: channel.channel_type,
+        providerAccountId: channel.provider_account_id,
+        externalIdentifier: channel.external_identifier,
+        connectionMode: channel.connection_mode as string | null,
+      }
+      if (payload.kind === 'personal_assistant' && payload.whatsapp_template && channel.connection_mode !== 'qr_unofficial') {
+        await deliverWhatsAppTemplate(db, { channel: outboundChannel, recipient: event.recipient, template: payload.whatsapp_template as { name: string; languageCode: string; bodyParameters?: string[] } })
+      } else {
+        await deliverOutbound(db, {
+          channel: outboundChannel,
+          recipient: event.recipient,
+          body,
+          idempotencyKey: 'outbox:' + event.id,
+          conversationId: typeof payload.conversation_id === 'string' ? payload.conversation_id : null,
+          queueOnFailure: false,
+        })
+      }
 
       // The provider accepted the message. Mark the durable intent sent before
       // maintaining the inbox projection, so a bookkeeping error never resends it.
@@ -99,6 +122,11 @@ async function handle(req: NextRequest) {
         updated_at: new Date().toISOString(),
       }).eq('id', event.id).eq('status', 'processing')
       if (sentError) throw new Error('outbox_sent_state_update_failed: ' + sentError.message)
+
+      if (personalTaskId) {
+        await db.from('personal_tasks').update({ reminder_sent_at: new Date().toISOString() })
+          .eq('id', personalTaskId).eq('organization_id', event.organization_id).is('reminder_sent_at', null)
+      }
 
       if (typeof payload.conversation_id === 'string' && payload.conversation_id) {
         await recordDeliveredOutboundMessage(db, {

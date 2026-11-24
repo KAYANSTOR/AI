@@ -49,6 +49,8 @@ export function PersonalAssistantMemoryPanel() {
   }, [])
 
   useEffect(() => {
+    // Initial data loading is an external synchronization.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void load()
   }, [load])
 
