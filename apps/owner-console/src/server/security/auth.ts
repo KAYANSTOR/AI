@@ -59,7 +59,7 @@ export async function loginOwner(p:{email:string;password:string;totpCode?:strin
 
 export async function requireOwnerAuth(req:Request,res:Response,next:NextFunction) {
   try {
-    const token = String(req.headers.authorization || '').replace(/^Bearer\\s+/i,'') || cookieToken(req);
+    const token = String(req.headers.authorization || '').replace(/^Bearer\s+/i,'') || cookieToken(req);
     if (!token) { res.status(401).json({error:'unauthorized'}); return; }
     const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
     const [row] = await sql()`SELECT a.*,s.id session_id
@@ -121,6 +121,3 @@ export async function confirmOwnerMfa(admin:AuthenticatedAdmin,code:string) {
   await writeAuditLog({actor:admin,action:'auth.mfa_enabled',entityType:'admin',entityId:admin.id,summary:'تفعيل المصادقة الثنائية TOTP لحساب المدير.'});
   return {ok:true};
 }
-
-){throw new Error('MFA centralization is pending migration of the existing TOTP flow.')}
-export function confirmOwnerMfa(){throw new Error('MFA centralization is pending migration of the existing TOTP flow.')}
