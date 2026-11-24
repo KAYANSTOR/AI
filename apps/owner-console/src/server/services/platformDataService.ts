@@ -120,8 +120,7 @@ export async function platformWorkspaces(search?:string) {
   const args:unknown[]=[];let where='';
   if(search?.trim()){args.push(`%${search.trim()}%`);where='WHERE o.name ILIKE $1 OR b.name ILIKE $1 OR u.email ILIKE $1';}
   return {items:await query(`SELECT o.id::text id,o.name,b.id::text business_id,b.name business_name,b.business_type_id business_type,
-    COALESCE(b.status,'active') status,o.created_at::text created_at,
-    COALESCE(o.personal_assistant_addon_enabled,FALSE) personal_assistant_addon_enabled,
+    COALESCE(b.status,'active') status,o.created_at::text created_at,COALESCE(o.personal_assistant_addon_enabled,FALSE) personal_assistant_addon_enabled,
     u.id::text owner_user_id,${fullName} owner_name,u.email owner_email,
     (SELECT COUNT(*) FROM organization_members m WHERE m.organization_id=o.id)::int member_count,
     (SELECT COUNT(*) FROM ai_agents a WHERE a.organization_id=o.id)::int agents_count,
@@ -334,26 +333,22 @@ export async function platformBillingLedger() {
       LEFT JOIN LATERAL(SELECT user_id FROM organization_members WHERE organization_id=o.id AND role='owner' ORDER BY created_at LIMIT 1) own ON TRUE
       LEFT JOIN auth.users u ON u.id=own.user_id ORDER BY i.created_at DESC LIMIT 1000`),
     query(`SELECT r.id::text id,r.organization_id::text organization_id,r.plan_code,r.billing_cycle,r.amount_usd::numeric amount_usd,
-      r.amount_yer::bigint amount_yer,r.exchange_rate::numeric exchange_rate,r.sender_name,r.transfer_reference,
-      r.status,r.review_note,r.reviewed_by,r.reviewed_at::text reviewed_at,r.created_at::text created_at,
-      w.display_name wallet_name,w.provider_code,o.name workspace_name,p.name plan_name,u.id::text user_id,
-      ${fullName} user_name,u.email user_email
+      r.amount_yer::bigint amount_yer,r.exchange_rate::numeric exchange_rate,r.sender_name,r.transfer_reference,r.status,
+      r.review_note,r.reviewed_by,r.reviewed_at::text reviewed_at,r.created_at::text created_at,w.display_name wallet_name,w.provider_code,
+      o.name workspace_name,p.name plan_name,u.id::text user_id,${fullName} user_name,u.email user_email
       FROM manual_wallet_payment_requests r JOIN organizations o ON o.id=r.organization_id
       JOIN manual_yemen_wallets w ON w.id=r.wallet_id LEFT JOIN plans p ON p.id=r.plan_id
       LEFT JOIN LATERAL(SELECT user_id FROM organization_members WHERE organization_id=o.id AND role='owner' ORDER BY created_at LIMIT 1) own ON TRUE
       LEFT JOIN auth.users u ON u.id=own.user_id ORDER BY r.created_at DESC LIMIT 1000`),
-    query(`SELECT id::text id,provider_code,display_name,account_name,account_number,instructions,is_active
-      FROM manual_yemen_wallets ORDER BY display_name`),
-    query(`SELECT id::text id,organization_id::text organization_id,payment_request_id::text payment_request_id,
-      amount_yer::bigint amount_yer,amount_usd::numeric amount_usd,currency,provider_code,sender_name,
-      transfer_reference,recorded_by,recorded_at::text recorded_at,o.name workspace_name
-      FROM billing_ledger_entries l JOIN organizations o ON o.id=l.organization_id
-      ORDER BY recorded_at DESC LIMIT 1000`),
+    query(`SELECT id::text id,provider_code,display_name,account_name,account_number,instructions,is_active FROM manual_yemen_wallets ORDER BY display_name`),
+    query(`SELECT l.id::text id,l.organization_id::text organization_id,l.payment_request_id::text payment_request_id,
+      l.amount_yer::bigint amount_yer,l.amount_usd::numeric amount_usd,l.currency,l.provider_code,l.sender_name,
+      l.transfer_reference,l.recorded_by,l.recorded_at::text recorded_at,o.name workspace_name
+      FROM billing_ledger_entries l JOIN organizations o ON o.id=l.organization_id ORDER BY recorded_at DESC LIMIT 1000`),
     query(`SELECT COALESCE(SUM(amount_usd) FILTER(WHERE status='verified'),0)::numeric collected,
       COALESCE(SUM(amount_usd) FILTER(WHERE status IN('pending','wrong_amount')),0)::numeric pending,
       COUNT(*) FILTER(WHERE status='verified')::int verified_count,COUNT(*) FILTER(WHERE status='pending')::int pending_count,
-      COUNT(*) FILTER(WHERE status='wrong_amount')::int wrong_amount_count,
-      COUNT(*) FILTER(WHERE status IN('failed','expired','cancelled'))::int closed_count
+      COUNT(*) FILTER(WHERE status='wrong_amount')::int wrong_amount_count,COUNT(*) FILTER(WHERE status IN('failed','expired','cancelled'))::int closed_count
       FROM billing_payment_intents`),
     query(`SELECT COALESCE(SUM(p.monthly_price),0)::numeric amount FROM subscriptions s JOIN plans p ON p.id=s.plan_id
       WHERE s.status='active' AND COALESCE(s.billing_cycle,'monthly')='monthly'`)
@@ -363,24 +358,440 @@ export async function platformBillingLedger() {
     {code:'stripe',name:'Stripe',configured:Boolean(process.env.STRIPE_SECRET_KEY?.trim()),webhookConfigured:Boolean(process.env.STRIPE_WEBHOOK_SECRET?.trim()),supportsRefund:false}
   ];
   return {invoices:[],expenses:[],paymentIntents,manualWalletRequests,wallets,ledgerEntries,gateways,summary:{
-    collectedRevenueUsd:Number(s?.collected||0)+manualWalletRequests.filter((r:any)=>r.status==='approved').reduce((v:number,r:any)=>v+Number(r.amount_usd||0),0),
-    unpaidInvoicesUsd:Number(s?.pending||0)+manualWalletRequests.filter((r:any)=>r.status==='pending').reduce((v:number,r:any)=>v+Number(r.amount_usd||0),0),
+    collectedRevenueUsd:Number(s?.[0]?.collected||0)+manualWalletRequests.filter((r:any)=>r.status==='approved').reduce((v:number,r:any)=>v+Number(r.amount_usd||0),0),
+    unpaidInvoicesUsd:Number(s?.[0]?.pending||0)+manualWalletRequests.filter((r:any)=>r.status==='pending').reduce((v:number,r:any)=>v+Number(r.amount_usd||0),0),
     refundedUsd:0,estimatedMrrUsd:Number(mrr?.[0]?.amount||0),recordedExpensesUsd:0,
-    verifiedPayments:Number(s?.verified_count||0),pendingPayments:Number(s?.pending_count||0),wrongAmountPayments:Number(s?.wrong_amount_count||0),
-    manualPendingPayments:manualWalletRequests.filter((r:any)=>r.status==='pending').length,
-    manualApprovedPayments:manualWalletRequests.filter((r:any)=>r.status==='approved').length,
-    closedPaymentIntents:Number(s?.closed_count||0)
+    verifiedPayments:Number(s?.[0]?.verified_count||0),pendingPayments:Number(s?.[0]?.pending_count||0),
+    wrongAmountPayments:Number(s?.[0]?.wrong_amount_count||0),manualPendingPayments:manualWalletRequests.filter((r:any)=>r.status==='pending').length,
+    manualApprovedPayments:manualWalletRequests.filter((r:any)=>r.status==='approved').length,closedPaymentIntents:Number(s?.[0]?.closed_count||0)
   },dataLimitations:{invoices:'المخطط الحالي لا يحتوي دفتر فواتير منفصلاً؛ طلبات الدفع والقيود المالية الفعلية معروضة أدناه.',
     expenses:'لا يوجد جدول مصروفات تشغيلية في قاعدة المنصة؛ لم يتم إنشاء بيانات بديلة.',
     refunds:'إيصالات والمحافظ اليدوية لا تدعم استرداداً آلياً من لوحة المالك.'}};
 }
 
+export async function platformOverview(period:string,startDate?:string,endDate?:string) {
+  const end=endDate?new Date(endDate+'T23:59:59.999Z'):new Date(),start=startDate?new Date(startDate+'T00:00:00.000Z'):new Date(end);
+  if(!startDate){if(period==='day')start.setUTCHours(0,0,0,0);else if(period==='week')start.setUTCDate(start.getUTCDate()-6);else if(period==='year')start.setUTCMonth(0,1);else start.setUTCDate(1);}
+  const from=start.toISOString(),to=end.toISOString();
+  const [c,series,channels,plans,models]=await Promise.all([
+    query(`SELECT (SELECT COUNT(*) FROM auth.users WHERE deleted_at IS NULL)::int total_users,(SELECT COUNT(*) FROM auth.users WHERE deleted_at IS NULL AND (banned_until IS NULL OR banned_until<=NOW()))::int active_users,
+      (SELECT COUNT(*) FROM auth.users WHERE deleted_at IS NULL AND banned_until>NOW())::int suspended_users,(SELECT COUNT(*) FROM auth.users WHERE deleted_at IS NULL AND created_at BETWEEN $1 AND $2)::int new_users,
+      (SELECT COUNT(*) FROM organizations)::int total_workspaces,(SELECT COUNT(*) FROM subscriptions WHERE status='active')::int active_subscriptions,(SELECT COUNT(*) FROM subscriptions WHERE status='trial')::int trial_subscriptions,
+      (SELECT COUNT(*) FROM subscriptions WHERE status='expired')::int expired_subscriptions,(SELECT COUNT(*) FROM subscriptions WHERE status='cancelled')::int cancelled_subscriptions,(SELECT COUNT(*) FROM subscriptions WHERE status='past_due')::int past_due_subscriptions,
+      (SELECT COUNT(*) FROM ai_agents)::int total_agents,(SELECT COUNT(*) FROM ai_agents WHERE status='active')::int active_agents,(SELECT COUNT(*) FROM ai_agents WHERE status='error')::int failing_agents,
+      (SELECT COUNT(*) FROM conversations)::int total_conversations,(SELECT COUNT(*) FROM messages)::int total_messages,(SELECT COUNT(*) FROM agent_runs WHERE created_at BETWEEN $1 AND $2)::int ai_requests,
+      (SELECT COUNT(*) FROM agent_runs WHERE status='completed' AND created_at BETWEEN $1 AND $2)::int success_runs,(SELECT COUNT(*) FROM agent_runs WHERE status='failed' AND created_at BETWEEN $1 AND $2)::int failed_runs,
+      (SELECT COALESCE(SUM(COALESCE(input_tokens,0)+COALESCE(output_tokens,0)),0)::bigint FROM agent_runs WHERE created_at BETWEEN $1 AND $2) total_tokens,
+      (SELECT COALESCE(SUM(amount_usd),0)::numeric FROM billing_payment_intents WHERE status='verified' AND verified_at BETWEEN $1 AND $2) collected_revenue,
+      (SELECT COALESCE(SUM(amount_usd),0)::numeric FROM billing_payment_intents WHERE status IN('pending','wrong_amount') AND created_at BETWEEN $1 AND $2) pending_payments,
+      (SELECT COALESCE(SUM(units*COALESCE(unit_cost,0)),0)::numeric FROM usage_ledger WHERE event_type='ai_tokens' AND currency='USD' AND occurred_at BETWEEN $1 AND $2) ai_cost,
+      (SELECT COUNT(*) FROM usage_ledger WHERE event_type='ai_tokens' AND currency='USD' AND unit_cost IS NOT NULL AND occurred_at BETWEEN $1 AND $2)::int ai_cost_records,
+      (SELECT COUNT(*) FROM channels WHERE is_active AND verification_status='verified')::int connected_channels,
+      (SELECT COUNT(*) FROM channels WHERE NOT(is_active AND verification_status='verified'))::int disconnected_channels`,[from,to]),
+    query(`SELECT to_char(d.day,'YYYY-MM-DD') date,(SELECT COUNT(*) FROM auth.users u WHERE u.created_at::date=d.day AND u.deleted_at IS NULL)::int users,
+      (SELECT COUNT(*) FROM subscriptions s WHERE s.created_at::date=d.day)::int subscriptions,(SELECT COUNT(*) FROM agent_runs r WHERE r.created_at::date=d.day)::int ai_requests,
+      (SELECT COALESCE(SUM(COALESCE(r.input_tokens,0)+COALESCE(r.output_tokens,0)),0)::bigint FROM agent_runs r WHERE r.created_at::date=d.day) tokens,
+      (SELECT COUNT(*) FROM conversations v WHERE v.created_at::date=d.day)::int conversations,(SELECT COUNT(*) FROM messages m WHERE m.created_at::date=d.day)::int messages,
+      (SELECT COALESCE(SUM(amount_usd),0)::numeric FROM billing_payment_intents i WHERE i.status='verified' AND i.verified_at::date=d.day) revenue_usd,
+      (SELECT COALESCE(SUM(units*COALESCE(unit_cost,0)),0)::numeric FROM usage_ledger l WHERE l.event_type='ai_tokens' AND l.currency='USD' AND l.occurred_at::date=d.day) ai_cost_usd,
+      (SELECT COUNT(*) FROM agent_runs r WHERE r.created_at::date=d.day AND r.status='completed')::int success_runs,(SELECT COUNT(*) FROM agent_runs r WHERE r.created_at::date=d.day AND r.status='failed')::int failed_runs
+      FROM generate_series($1::date,$2::date,interval '1 day') d(day) ORDER BY d.day`,[from,to]),
+    query(`SELECT ch.channel_type channel,COUNT(*)::int total,COUNT(*) FILTER(WHERE ch.is_active AND ch.verification_status='verified')::int connected,COALESCE(SUM(mc.messages),0)::int messages
+      FROM channels ch LEFT JOIN (SELECT v.channel_id,COUNT(m.id)::int messages FROM conversations v JOIN messages m ON m.conversation_id=v.id GROUP BY v.channel_id) mc ON mc.channel_id=ch.id
+      GROUP BY ch.channel_type ORDER BY total DESC`),
+    query(`SELECT plan_tier code,INITCAP(plan_tier) name,COUNT(*)::int subscribers FROM subscriptions GROUP BY plan_tier ORDER BY subscribers DESC`),
+    query(`SELECT COALESCE(r.model,'غير محدد') model_id,COALESCE(r.model,'غير محدد') display_name,COUNT(*)::int requests,COALESCE(SUM(COALESCE(r.input_tokens,0)+COALESCE(r.output_tokens,0)),0)::bigint tokens,
+      (SELECT CASE WHEN COUNT(*) FILTER(WHERE l.unit_cost IS NOT NULL)>0 THEN SUM(l.units*COALESCE(l.unit_cost,0))::numeric ELSE NULL END
+        FROM usage_ledger l JOIN agent_runs r2 ON r2.id=l.reference_id WHERE r2.model=r.model AND r2.created_at BETWEEN $1 AND $2 AND l.event_type='ai_tokens' AND l.currency='USD') cost_usd
+      FROM agent_runs r WHERE r.created_at BETWEEN $1 AND $2 GROUP BY r.model ORDER BY requests DESC LIMIT 10`,[from,to])
+  ]);
+  const x=c[0]||{},v=(k:string)=>count(x[k]);
+  const aiCostAvailable=v('ai_cost_records')>0;
+  const metrics={totalUsers:v('total_users'),activeUsers:v('active_users'),newUsersInPeriod:v('new_users'),suspendedUsers:v('suspended_users'),trialAccounts:v('trial_subscriptions'),
+    activeSubscriptions:v('active_subscriptions'),expiredSubscriptions:v('expired_subscriptions'),cancelledSubscriptions:v('cancelled_subscriptions'),pastDueSubscriptions:v('past_due_subscriptions'),trialSubscriptions:v('trial_subscriptions'),
+    totalWorkspaces:v('total_workspaces'),totalAgents:v('total_agents'),activeAgents:v('active_agents'),failingAgents:v('failing_agents'),totalConversations:v('total_conversations'),totalMessages:v('total_messages'),
+    totalAiRequests:v('ai_requests'),successfulAgentRuns:v('success_runs'),failedAgentRuns:v('failed_runs'),totalTokens:v('total_tokens'),aiProviderCostsUsd:aiCostAvailable?v('ai_cost'):0,collectedRevenueUsd:v('collected_revenue'),unpaidInvoicesUsd:v('pending_payments'),recordedExpensesUsd:0,totalOperatingCostsUsd:0,netMarginUsd:0,netMarginPercent:null,
+    connectedChannels:v('connected_channels'),disconnectedChannels:v('disconnected_channels'),currentSystemErrors:0};
+  return {window:{startIso:from,endIso:to,days:Math.max(1,Math.ceil((end.getTime()-start.getTime())/86400000))},
+    database:{engine:'PostgreSQL',mode:'بيانات المنصة الحقيقية؛ جلسات المالك وسجل تدقيقه منفصلان',externalPostgresConfigured:true,pathLabel:'Railway Postgres'},integrations:[],metrics,
+    comparisons:{newUsersDeltaPct:null,subscriptionsDeltaPct:null,revenueDeltaPct:null,aiRequestsDeltaPct:null,aiCostDeltaPct:null},
+    charts:{timeSeries:series.map((r:any)=>({date:r.date,users:count(r.users),subscriptions:count(r.subscriptions),revenueUsd:count(r.revenue_usd),tokens:count(r.tokens),aiCostUsd:count(r.ai_cost_usd),conversations:count(r.conversations),messages:count(r.messages),successRuns:count(r.success_runs),failedRuns:count(r.failed_runs)})),
+      channelUsage:channels.map((r:any)=>({channel:r.channel,total:count(r.total),connected:count(r.connected),messages:count(r.messages)})),
+      planDistribution:plans.map((r:any)=>({code:r.code,name:r.name,subscribers:count(r.subscribers)})),modelUsage:models.map((r:any)=>({modelId:r.model_id,displayName:r.display_name,requests:count(r.requests),tokens:count(r.tokens),costUsd:r.cost_usd==null?null:count(r.cost_usd)}))},
+    attentionItems:{pastDueSubscriptions:v('past_due_subscriptions'),failingAgents:v('failing_agents'),disconnectedChannels:v('disconnected_channels'),unresolvedErrors:0,unacknowledgedAlerts:0,openTickets:0},
+    dataLimitations:{revenue:'الإيراد المحصل محسوب من طلبات الدفع المؤكدة؛ لا يوجد دفتر فواتير منفصل.',expenses:'لا يوجد دفتر مصروفات تشغيلي في المخطط الحالي.',aiCost:aiCostAvailable?undefined:'سجل الرموز لا يحتوي تكلفة موثقة حتى الآن.',systemErrors:'لا يوجد سجل أخطاء تشغيلي موحد في مخطط PostgreSQL الحالي.'}};
+}
+
+export async function updatePlatformUser(id:string,p:{fullName?:string;email?:string;phone?:string|null;adminNotes?:string}) {
+  const set:string[]=[],args:unknown[]=[];
+  if(p.email!==undefined){args.push(p.email.trim().toLowerCase());set.push(`email=$${args.length}`);}
+  if(p.phone!==undefined){args.push(p.phone||null);set.push(`phone=$${args.length}`);}
+  const metadata:Record<string,string>={};
+  if(p.fullName!==undefined)metadata.full_name=p.fullName.trim();
+  if(p.adminNotes!==undefined)metadata.admin_notes=String(p.adminNotes||'').slice(0,4000);
+  if(Object.keys(metadata).length){args.push(JSON.stringify(metadata));set.push(`raw_user_meta_data=COALESCE(raw_user_meta_data,'{}'::jsonb)||$${args.length}::jsonb`);}
+  if(!set.length)throw new Error('لا توجد تغييرات لحفظها.');args.push(id);
+  const [r]=await query(`UPDATE auth.users SET ${set.join(',')},updated_at=NOW() WHERE id=$${args.length}::uuid AND deleted_at IS NULL RETURNING id::text id,email,phone`,args);
+  if(!r)throw new Error('المستخدم غير موجود.');return r;
+}
+
+export async function platformUserAction(id:string,action:string,payload:Record<string,unknown>={}) {
+  const [user]=await query<{id:string;email:string}>(`SELECT id::text id,email FROM auth.users WHERE id=$1::uuid AND deleted_at IS NULL LIMIT 1`,[id]);
+  if(!user)throw new Error('المستخدم غير موجود أو سبق حذفه.');
+  if(['suspend','reactivate','reset_settings','delete'].includes(action)){
+    const [row]=await query(`UPDATE auth.users SET
+      banned_until=CASE WHEN $2 IN('suspend','delete') THEN NOW()+INTERVAL '100 years' ELSE NULL END,
+      deleted_at=CASE WHEN $2='delete' THEN NOW() ELSE deleted_at END,
+      session_version=COALESCE(session_version,0)+1,updated_at=NOW()
+      WHERE id=$1::uuid AND deleted_at IS NULL
+      RETURNING id::text id,banned_until::text banned_until,deleted_at::text deleted_at,session_version`,[id,action]);
+    if(!row)throw new Error('تعذر تحديث حالة المستخدم.');
+    return {...row,account_status:action==='suspend'?'suspended':action==='delete'?'deleted':'active'};
+  }
+  if(['change_plan','extend_subscription','cancel_subscription'].includes(action)){
+    const [subscription]=await query<{id:string}>(`SELECT s.id::text id FROM subscriptions s
+      JOIN organization_members m ON m.organization_id=s.organization_id
+      WHERE m.user_id=$1::uuid AND m.role='owner' ORDER BY s.created_at DESC LIMIT 1`,[id]);
+    if(!subscription)throw new Error('لا يوجد اشتراك مرتبط بهذا المستخدم.');
+    const nextAction=action==='change_plan'?'change_plan':action==='extend_subscription'?'extend':'cancel';
+    return await subscriptionAction(subscription.id,nextAction,{planCode:String(payload.planCode||''),days:payload.days});
+  }
+  if(action==='send_notification'){
+    const title=String(payload.title||'').trim(),body=String(payload.body||'').trim();
+    if(title.length<2||title.length>255||!body||body.length>5000)throw new Error('عنوان الإشعار ومحتواه مطلوبان وبحدود الطول المسموح.');
+    const orgs=await query<{organization_id:string}>(`SELECT organization_id::text organization_id FROM organization_members
+      WHERE user_id=$1::uuid AND role='owner' ORDER BY created_at`,[id]);
+    if(!orgs.length)throw new Error('المستخدم لا يملك مساحة عمل لإرسال الإشعار إليها.');
+    for(const org of orgs)await query(`INSERT INTO notifications(organization_id,member_id,entity_type,entity_id,notification_type,title,body,idempotency_key)
+      VALUES($1::uuid,NULL,'owner_notification',$1::uuid,'workflow',$2,$3,$4)`,
+      [org.organization_id,title,body,'owner-console:'+crypto.randomUUID()]);
+    return {id:user.id,notificationsCreated:orgs.length};
+  }
+  if(action==='add_credit'){
+    const tokens=Number(payload.tokens),reason=String(payload.reason||'').trim();
+    if(!Number.isSafeInteger(tokens)||tokens<1||tokens>10000000)throw new Error('قيمة الرصيد يجب أن تكون عدداً صحيحاً بين 1 و10,000,000.');
+    if(reason.length<5||reason.length>1000)throw new Error('سبب إضافة الرصيد مطلوب (5 أحرف على الأقل).');
+    const orgs=await query<{organization_id:string;plan_limit:number}>(`SELECT DISTINCT o.id::text organization_id,
+      COALESCE(NULLIF(p.limits->>'ai_messages','')::numeric,100)::numeric plan_limit
+      FROM organizations o JOIN organization_members m ON m.organization_id=o.id
+      LEFT JOIN LATERAL(SELECT plan_id FROM subscriptions WHERE organization_id=o.id ORDER BY created_at DESC LIMIT 1) s ON TRUE
+      LEFT JOIN plans p ON p.id=s.plan_id WHERE m.user_id=$1::uuid AND m.role='owner'`,[id]);
+    if(!orgs.length)throw new Error('المستخدم لا يملك مساحة عمل لإضافة الرصيد إليها.');
+    const updated=[];
+    for(const org of orgs){
+      const [quota]=await query(`INSERT INTO billing_entitlements(organization_id,feature_key,limit_value,period,enabled,source,updated_at)
+        VALUES($1::uuid,'ai_messages_monthly',$2,'monthly',TRUE,'owner_override',NOW())
+        ON CONFLICT(organization_id,feature_key) DO UPDATE SET
+          limit_value=GREATEST(COALESCE(billing_entitlements.limit_value,EXCLUDED.limit_value-$3),EXCLUDED.limit_value-$3)+$3,
+          period='monthly',enabled=TRUE,source='owner_override',updated_at=NOW()
+        RETURNING id::text id,limit_value,period,enabled,source`,
+        [org.organization_id,Number(org.plan_limit)+tokens,tokens]);
+      updated.push({organizationId:org.organization_id,quota});
+    }
+    return {id:user.id,tokensAdded:tokens,reason,organizations:updated};
+  }
+  throw new Error('الإجراء الإداري غير مدعوم.');
+}
+
+export async function subscriptionAction(id:string,action:string,p:Record<string,unknown>) {
+  let result:Record<string,unknown>[]=[];
+  if(action==='extend'){const days=Math.max(1,Math.min(730,Math.floor(Number(p.days)||30)));result=await query(`UPDATE subscriptions SET period_end=GREATEST(COALESCE(period_end,current_period_end,NOW()),NOW())+($2::int*INTERVAL '1 day'),current_period_end=GREATEST(COALESCE(current_period_end,period_end,NOW()),NOW())+($2::int*INTERVAL '1 day'),status='active',updated_at=NOW() WHERE id=$1::uuid RETURNING id::text id,status,period_end::text period_end,current_period_end::text current_period_end`,[id,days]);}
+  else if(action==='change_plan'){const tier=String(p.planCode||'');if(!['trial','starter','growth','pro'].includes(tier))throw new Error('رمز الباقة غير صالح.');result=await query(`UPDATE subscriptions s SET plan_id=p.id,plan_tier=p.code,status=CASE WHEN s.status='expired' THEN 'active' ELSE s.status END,updated_at=NOW() FROM plans p WHERE s.id=$1::uuid AND p.code=$2 AND p.is_active=TRUE RETURNING s.id::text id,s.status,s.plan_tier,s.plan_id::text plan_id`,[id,tier]);}
+  else if(action==='cancel'||action==='reactivate')result=await query(`UPDATE subscriptions SET status=$2,updated_at=NOW() WHERE id=$1::uuid RETURNING id::text id,status`,[id,action==='cancel'?'cancelled':'active']);
+  else throw new Error('الإجراء غير مدعوم في نموذج الاشتراك الفعلي.');
+  if(!result[0])throw new Error('الاشتراك غير موجود.');return result[0];
+}
+export async function updatePlatformAgent(id:string,p:{status?:string}) {
+  if(p.status&&!['active','paused','disabled','archived'].includes(p.status))throw new Error('حالة الوكيل غير صالحة.');
+  const [r]=await query(`UPDATE ai_agents SET status=COALESCE($2,status),updated_at=NOW() WHERE id=$1::uuid RETURNING id::text id,name,status,model_provider,temperature`,[id,p.status||null]);
+  if(!r)throw new Error('الوكيل غير موجود.');return r;
+}
+export async function platformEntitlementOverride(p:{userId:string;featureKey:string;overrideState?:'granted'|'revoked';enabled?:boolean;customLimit?:number|null;limit?:number|null;period?:string}) {
+  const [org]=await query<{organization_id:string}>(`SELECT organization_id::text organization_id FROM organization_members WHERE user_id=$1::uuid AND role='owner' ORDER BY created_at LIMIT 1`,[p.userId]);
+  if(!org)throw new Error('لا توجد مؤسسة مملوكة لهذا المستخدم.');
+  const [cap]=await query<{id:string}>(`SELECT id FROM capabilities WHERE id=$1`,[p.featureKey]);
+  if(!cap)throw new Error('الميزة غير موجودة في كتالوج قدرات المنصة.');
+  const enabled=p.enabled??(p.overrideState!=='revoked');
+  const [result]=await query(`INSERT INTO organization_capabilities(organization_id,capability_id,is_enabled)
+    VALUES($1::uuid,$2,$3) ON CONFLICT(organization_id,capability_id) DO UPDATE SET is_enabled=EXCLUDED.is_enabled
+    RETURNING organization_id::text organization_id,capability_id,is_enabled,created_at::text created_at`,
+    [org.organization_id,p.featureKey,enabled]);
+  let quota:Record<string,unknown>|null=null;
+  const limit=p.customLimit??p.limit;
+  if(limit!==undefined&&limit!==null){
+    const period=['daily','monthly','unlimited'].includes(p.period||'')?p.period:'monthly';
+    const [qrow]=await query(`INSERT INTO billing_entitlements(organization_id,feature_key,limit_value,period,enabled,source,updated_at)
+      VALUES($1::uuid,$2,$3,$4,$5,'owner_override',NOW()) ON CONFLICT(organization_id,feature_key)
+      DO UPDATE SET limit_value=EXCLUDED.limit_value,period=EXCLUDED.period,enabled=EXCLUDED.enabled,source='owner_override',updated_at=NOW()
+      RETURNING id::text id,limit_value,period,enabled,source`,[org.organization_id,p.featureKey,limit,period,enabled]);
+    quota=qrow||null;
+  }
+  return {...result,id:`${org.organization_id}:${p.featureKey}`,feature_name:p.featureKey,override_state:enabled?'granted':'revoked',quota};
+}
+
+
+export async function platformConversationDetail(id:string) {
+  const [conversation]=await query(`SELECT c.id::text id,c.organization_id::text organization_id,c.status,c.state,c.priority,c.handoff_reason,
+    c.last_message_at::text last_message_at,ch.channel_type,o.name workspace_name,
+    COALESCE(NULLIF(ci.external_phone,''),NULLIF(ci.external_username,''),NULLIF(ci.external_user_id,''),NULLIF(ct.first_name,''),'عميل') customer_handle
+    FROM conversations c JOIN organizations o ON o.id=c.organization_id LEFT JOIN channels ch ON ch.id=c.channel_id
+    LEFT JOIN contacts ct ON ct.id=c.contact_id LEFT JOIN LATERAL(SELECT external_phone,external_username,external_user_id FROM contact_identities
+      WHERE contact_id=c.contact_id AND channel=ch.channel_type ORDER BY created_at DESC LIMIT 1) ci ON TRUE WHERE c.id=$1::uuid`,[id]);
+  if(!conversation)return null;
+  const messages=await query(`SELECT id::text id,CASE WHEN direction='outbound' THEN 'assistant' ELSE 'customer' END sender_type,
+    direction,message_type,content,created_at::text created_at FROM messages WHERE conversation_id=$1::uuid ORDER BY created_at ASC LIMIT 500`,[id]);
+  return {conversation,messages};
+}
+
+export async function platformQueueConversationIntervention(id:string,content:string,reason:string) {
+  const body=content.trim(),why=reason.trim();
+  if(!body||!why)throw new Error('نص التدخل وسببه الإداري مطلوبان.');
+  const [target]=await query(`SELECT c.id::text id,c.organization_id::text organization_id,c.business_id::text business_id,
+    c.channel_id::text channel_id,ch.channel_type,ch.is_active,COALESCE(ci.external_phone,ci.external_user_id,ci.external_username) recipient
+    FROM conversations c JOIN channels ch ON ch.id=c.channel_id
+    LEFT JOIN LATERAL(SELECT external_phone,external_user_id,external_username FROM contact_identities
+      WHERE contact_id=c.contact_id AND channel=ch.channel_type ORDER BY created_at DESC LIMIT 1) ci ON TRUE WHERE c.id=$1::uuid`,[id]);
+  if(!target)throw new Error('المحادثة غير موجودة.');
+  if(!target.is_active||!target.recipient)throw new Error('القناة متوقفة أو لا يوجد عنوان إرسال موثوق للعميل.');
+  const idempotencyKey='owner-intervention:'+crypto.randomUUID();
+  await query(`INSERT INTO outbox_events(organization_id,business_id,channel_id,event_type,idempotency_key,recipient,payload,status,scheduled_at)
+    VALUES($1::uuid,$2::uuid,$3::uuid,'message.send',$4,$5,$6::jsonb,'pending',NOW())`,
+    [target.organization_id,target.business_id,target.channel_id,idempotencyKey,target.recipient,JSON.stringify({body,conversation_id:id,source:'owner_console_intervention'})]);
+  await query(`INSERT INTO audit_events(organization_id,business_id,actor_type,action,entity_type,entity_id,metadata)
+    VALUES($1::uuid,$2::uuid,'system','owner.conversation_intervention_queued','conversation',$3::uuid,$4::jsonb)`,
+    [target.organization_id,target.business_id,id,JSON.stringify({reason:why,idempotency_key:idempotencyKey,channel_type:target.channel_type})]);
+  return await platformConversationDetail(id);
+}
+
+export async function updatePlatformWorkspaceStatus(organizationId:string,status:string) {
+  if(!['active','suspended','archived'].includes(status))throw new Error('حالة مساحة العمل غير صالحة.');
+  const rows=await query(`UPDATE businesses SET status=$2,updated_at=NOW() WHERE organization_id=$1::uuid
+    RETURNING id::text id,organization_id::text organization_id,name,status`,[organizationId,status]);
+  if(!rows.length)throw new Error('لم يتم العثور على نشاط مرتبط بمساحة العمل.');
+  return {organizationId,status,businesses:rows};
+}
+
+export async function savePlatformPlan(p:Record<string,unknown>,id?:string) {
+  const code=String(p.code||'').trim().toLowerCase(),name=String(p.name||'').trim();
+  if(!code||!name)throw new Error('رمز الباقة واسمها مطلوبان.');
+  if(!['trial','starter','growth','pro'].includes(code))throw new Error('رمز الباقة غير مدعوم في اشتراكات المنصة الحالية.');
+  const yearly=Number(p.priceYearly||0);
+  if(yearly>0)throw new Error('مخطط المنصة الحالي يدعم السعر الشهري فقط؛ لم يتم حفظ سعر سنوي غير مدعوم.');
+  const monthly=Number(p.priceMonthly);
+  if(!Number.isFinite(monthly)||monthly<0)throw new Error('السعر الشهري غير صالح.');
+  if(p.status==='draft')throw new Error('قاعدة الباقات الفعلية لا تدعم حالة المسودة.');
+  const limits:Record<string,number>={};
+  const mappings:Record<string,string>={maxMessages:'ai_messages',maxChannels:'channels',voiceMinutes:'voice_minutes',automationRuns:'automation_runs',campaignSends:'campaign_sends'};
+  for(const [input,key] of Object.entries(mappings)){const value=p[input];if(value!==undefined&&value!==null&&String(value)!==''){const n=Number(value);if(!Number.isFinite(n)||n<0)throw new Error('حدود الباقة يجب أن تكون أرقاماً غير سالبة.');limits[key]=n;}}
+  const description=String(p.description||'');
+  const currency=String(p.currency||'USD').toUpperCase();
+  if(!['USD','YER','SAR'].includes(currency))throw new Error('عملة الباقة غير مدعومة.');
+  const active=p.status!=='archived';
+  if(id){
+    const [row]=await query(`UPDATE plans SET code=$2,name=$3,description=$4,monthly_price=$5,currency=$6,
+      limits=COALESCE(limits,'{}'::jsonb)||$7::jsonb,is_active=$8,updated_at=NOW() WHERE id=$1::uuid
+      RETURNING id::text id,code,name,description,monthly_price::numeric price_monthly,currency,limits,is_active`,
+      [id,code,name,description,monthly,currency,JSON.stringify(limits),active]);
+    if(!row)throw new Error('الباقة غير موجودة.');
+    return row;
+  }
+  const [row]=await query(`INSERT INTO plans(code,name,description,monthly_price,currency,limits,is_active)
+    VALUES($1,$2,$3,$4,$5,$6::jsonb,$7) RETURNING id::text id,code,name,description,monthly_price::numeric price_monthly,currency,limits,is_active`,
+    [code,name,description,monthly,currency,JSON.stringify(limits),active]);
+  return row;
+}
+
+
+export async function updatePlatformWorkspaceAddon(organizationId:string,enabled:boolean,adminId:string) {
+  const [row]=await query(`UPDATE organizations SET personal_assistant_addon_enabled=$2,
+    personal_assistant_addon_updated_at=NOW(),personal_assistant_addon_updated_by=$3::uuid
+    WHERE id=$1::uuid RETURNING id::text id,name,personal_assistant_addon_enabled,personal_assistant_addon_updated_at::text updated_at`,
+    [organizationId,enabled,adminId]);
+  if(!row)throw new Error('مساحة العمل غير موجودة.');
+  return row;
+}
+export async function platformCreateConversation(p:{workspaceId:string;userId:string;channelType:string;customerHandle:string;initialMessage:string}) {
+  const workspaceId=p.workspaceId.trim(),userId=p.userId.trim(),handle=p.customerHandle.trim(),message=p.initialMessage.trim();
+  if(!workspaceId||!userId||handle.length<2||handle.length>255||message.length>10000)throw new Error('بيانات المحادثة غير مكتملة أو تتجاوز الحد المسموح.');
+  const channelType=p.channelType==='webchat'?'website':p.channelType==='voice_vapi'?'phone':p.channelType;
+  if(!['whatsapp','instagram','telegram','sms','website','phone','messenger'].includes(channelType))throw new Error('نوع القناة غير مدعوم.');
+  const [workspace]=await query<{organization_id:string;business_id:string;owner_user_id:string}>(`SELECT o.id::text organization_id,b.id::text business_id,
+    (SELECT user_id::text FROM organization_members WHERE organization_id=o.id AND role='owner' ORDER BY created_at LIMIT 1) owner_user_id
+    FROM organizations o LEFT JOIN businesses b ON b.organization_id=o.id WHERE o.id=$1::uuid`,[workspaceId]);
+  if(!workspace?.organization_id||!workspace.business_id||workspace.owner_user_id!==userId)throw new Error('مساحة العمل أو مالكها غير صحيح.');
+  const [channel]=await query<{id:string;is_active:boolean}>(`SELECT id::text id,is_active FROM channels WHERE organization_id=$1::uuid AND channel_type=$2 ORDER BY created_at DESC LIMIT 1`,[workspaceId,channelType]);
+  if(!channel)throw new Error('لا توجد قناة من هذا النوع في مساحة العمل؛ اربط القناة أولاً من إعدادات المؤسسة.');
+  if(!channel.is_active)throw new Error('القناة متوقفة حالياً.');
+  return sql().begin(async tx=>{
+    const [contact]=await tx.unsafe(`INSERT INTO contacts(organization_id,first_name) VALUES($1::uuid,$2) RETURNING id::text id`,[workspaceId,handle.slice(0,100)]);
+    if(['whatsapp','sms','phone'].includes(channelType))
+      await tx.unsafe(`INSERT INTO contact_identities(contact_id,channel,external_phone) VALUES($1::uuid,$2,$3)`,[contact.id,channelType,handle]);
+    else if(['telegram','website'].includes(channelType))
+      await tx.unsafe(`INSERT INTO contact_identities(contact_id,channel,external_user_id) VALUES($1::uuid,$2,$3)`,[contact.id,channelType,handle]);
+    else await tx.unsafe(`INSERT INTO contact_identities(contact_id,channel,external_username) VALUES($1::uuid,$2,$3)`,[contact.id,channelType,handle]);
+    const [conversation]=await tx.unsafe(`INSERT INTO conversations(organization_id,business_id,contact_id,channel_id,status,state,ai_enabled,last_message_at)
+      VALUES($1::uuid,$2::uuid,$3::uuid,$4::uuid,'active','new',TRUE,NOW())
+      RETURNING id::text id,organization_id::text organization_id,status,state`,[workspaceId,workspace.business_id,contact.id,channel.id]);
+    if(message)await tx.unsafe(`INSERT INTO messages(organization_id,conversation_id,direction,message_type,content)
+      VALUES($1::uuid,$2::uuid,'inbound','text',$3)`,[workspaceId,conversation.id,message]);
+    return {conversationId:conversation.id,conversation};
+  });
+}
+
+
+export async function platformCreateWorkspace(p:{ownerUserId:string;name:string;businessType?:string}) {
+  const name=p.name.trim(),owner=p.ownerUserId.trim();
+  if(!name||!owner)throw new Error('اسم مساحة العمل ومالكها مطلوبان.');
+  const [type]=await query(`SELECT id FROM business_types WHERE id=$1`,[p.businessType||'appointments']);
+  const businessType=type?.id||'appointments';
+  return await sql().begin(async tx=>{
+    const [org]=await tx.unsafe(`INSERT INTO organizations(name) VALUES($1) RETURNING id::text id,name,created_at::text created_at`,[name]);
+    await tx.unsafe(`INSERT INTO organization_members(organization_id,user_id,role) VALUES($1::uuid,$2::uuid,'owner') ON CONFLICT(organization_id,user_id) DO NOTHING`,[org.id,owner]);
+    const slug=(name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,90)||'business')+'-'+crypto.randomUUID().slice(0,8);
+    const [business]=await tx.unsafe(`INSERT INTO businesses(organization_id,name,slug,business_type_id,timezone,status)
+      VALUES($1::uuid,$2,$3,$4,'UTC','active') RETURNING id::text id,name,slug,business_type_id,status`,[org.id,name,slug,businessType]);
+    await tx.unsafe(`INSERT INTO business_profiles(organization_id,business_id,industry,timezone,business_type_id)
+      VALUES($1::uuid,$2::uuid,$3,'UTC',$3) ON CONFLICT(organization_id) DO UPDATE SET business_id=EXCLUDED.business_id,industry=EXCLUDED.industry,business_type_id=EXCLUDED.business_type_id`,
+      [org.id,business.id,businessType]);
+    const [agent]=await tx.unsafe(`INSERT INTO ai_agents(organization_id,business_id,name,slug,model_provider,temperature,status,locale)
+      VALUES($1::uuid,$2::uuid,$3,'frontdesk','anthropic',0.2,'active','ar') RETURNING id::text id`,[org.id,business.id,name+' AI']);
+    await tx.unsafe(`INSERT INTO agent_tool_policies(agent_id,tool_name,is_allowed,requires_confirmation) VALUES
+      ($1::uuid,'get_customer',TRUE,FALSE),($1::uuid,'find_available_slots',TRUE,FALSE),($1::uuid,'create_appointment',TRUE,TRUE),($1::uuid,'request_human_handoff',TRUE,FALSE)
+      ON CONFLICT(agent_id,tool_name) DO NOTHING`,[agent.id]);
+    await tx.unsafe(`INSERT INTO agent_prompt_versions(agent_id,version,system_prompt_addition,status,published_at)
+      VALUES($1::uuid,1,NULL,'published',NOW()) ON CONFLICT(agent_id,version) DO NOTHING`,[agent.id]);
+    await tx.unsafe(`INSERT INTO organization_capabilities(organization_id,capability_id,is_enabled)
+      SELECT $1::uuid,capability_id,TRUE FROM business_type_capabilities WHERE business_type_id=$2 AND is_default=TRUE
+      ON CONFLICT(organization_id,capability_id) DO NOTHING`,[org.id,businessType]);
+    await tx.unsafe(`INSERT INTO billing_entitlements(organization_id,feature_key,limit_value,period,enabled)
+      VALUES($1::uuid,'ai_messages_monthly',10000,'monthly',TRUE),($1::uuid,'phone_minutes_monthly',300,'monthly',TRUE),($1::uuid,'sms_monthly',500,'monthly',TRUE)
+      ON CONFLICT(organization_id,feature_key) DO NOTHING`,[org.id]);
+    return {organization:org,business,agentId:agent.id};
+  });
+}
+
+export async function platformAutomations() {
+  const [workflows,campaigns,followups]=await Promise.all([
+    query(`SELECT w.id::text id,'workflow' automation_type,w.name,w.description,w.status,w.trigger_type,w.created_at::text created_at,
+      o.name workspace_name,COALESCE(u.email,'—') owner_name,(SELECT COUNT(*) FROM workflow_runs r WHERE r.workflow_id=w.id)::int total_runs,
+      (SELECT COUNT(*) FROM workflow_runs r WHERE r.workflow_id=w.id AND r.status='completed')::int success_runs,
+      (SELECT COUNT(*) FROM workflow_runs r WHERE r.workflow_id=w.id AND r.status='failed')::int failed_runs,
+      COALESCE((SELECT AVG(EXTRACT(EPOCH FROM (r.completed_at-r.started_at))*1000) FROM workflow_runs r WHERE r.workflow_id=w.id AND r.completed_at IS NOT NULL),0)::int avg_duration_ms
+      FROM workflows w JOIN organizations o ON o.id=w.organization_id
+      LEFT JOIN LATERAL(SELECT user_id FROM organization_members WHERE organization_id=o.id AND role='owner' ORDER BY created_at LIMIT 1) own ON TRUE
+      LEFT JOIN auth.users u ON u.id=own.user_id ORDER BY w.created_at DESC LIMIT 500`),
+    query(`SELECT c.id::text id,'campaign' automation_type,c.name,c.channel,c.status,c.scheduled_at::text scheduled_at,c.created_at::text created_at,
+      o.name workspace_name,COALESCE(u.email,'—') owner_name,(SELECT COUNT(*) FROM campaign_recipients r WHERE r.campaign_id=c.id)::int total_runs,
+      (SELECT COUNT(*) FROM campaign_recipients r WHERE r.campaign_id=c.id AND r.status='sent')::int success_runs,
+      (SELECT COUNT(*) FROM campaign_recipients r WHERE r.campaign_id=c.id AND r.status='failed')::int failed_runs,0::int avg_duration_ms
+      FROM campaigns c JOIN organizations o ON o.id=c.organization_id
+      LEFT JOIN LATERAL(SELECT user_id FROM organization_members WHERE organization_id=o.id AND role='owner' ORDER BY created_at LIMIT 1) own ON TRUE
+      LEFT JOIN auth.users u ON u.id=own.user_id ORDER BY c.created_at DESC LIMIT 500`),
+    query(`SELECT f.id::text id,'followup' automation_type,f.name,f.trigger_type,f.is_active,f.created_at::text created_at,
+      o.name workspace_name,COALESCE(u.email,'—') owner_name,(SELECT COUNT(*) FROM followup_enrollments e WHERE e.sequence_id=f.id)::int total_runs,
+      (SELECT COUNT(*) FROM followup_enrollments e WHERE e.sequence_id=f.id AND e.status='sent')::int success_runs,0::int failed_runs,0::int avg_duration_ms
+      FROM followup_sequences f JOIN organizations o ON o.id=f.organization_id
+      LEFT JOIN LATERAL(SELECT user_id FROM organization_members WHERE organization_id=o.id AND role='owner' ORDER BY created_at LIMIT 1) own ON TRUE
+      LEFT JOIN auth.users u ON u.id=own.user_id ORDER BY f.created_at DESC LIMIT 500`)
+  ]);
+  const items=[...workflows.map((r:any)=>({...r,id:'workflow:'+r.id,status:r.status==='published'?'active':r.status==='retired'?'disabled_by_owner':'paused'})),
+    ...campaigns.map((r:any)=>({...r,id:'campaign:'+r.id})),
+    ...followups.map((r:any)=>({...r,id:'followup:'+r.id,status:r.is_active?'active':'disabled_by_owner'}))];
+  return {items:items.sort((a:any,b:any)=>String(b.created_at).localeCompare(String(a.created_at)))};
+}
+
+export async function createPlatformAutomation(p:{workspaceId:string;name:string;automationType:string}) {
+  const name=p.name.trim();if(!name||!p.workspaceId)throw new Error('اسم الأتمتة ومساحة العمل مطلوبان.');
+  const [business]=await query(`SELECT id::text id FROM businesses WHERE organization_id=$1::uuid ORDER BY created_at LIMIT 1`,[p.workspaceId]);
+  if(!business)throw new Error('لا يوجد نشاط مرتبط بمساحة العمل.');
+  if(p.automationType==='workflow'){
+    const [row]=await query(`INSERT INTO workflows(organization_id,business_id,name,status,trigger_type,definition)
+      VALUES($1::uuid,$2::uuid,$3,'draft','manual','{"nodes":[],"edges":[]}'::jsonb)
+      RETURNING id::text id,name,status,trigger_type,created_at::text created_at`,[p.workspaceId,business.id,name]);
+    return {...row,id:'workflow:'+row.id,automation_type:'workflow'};
+  }
+  if(p.automationType==='followup'){
+    const [row]=await query(`INSERT INTO followup_sequences(organization_id,name,trigger_type,is_active)
+      VALUES($1::uuid,$2,'new_lead',TRUE) RETURNING id::text id,name,trigger_type,is_active,created_at::text created_at`,[p.workspaceId,name]);
+    return {...row,id:'followup:'+row.id,automation_type:'followup',status:'active'};
+  }
+  throw new Error('هذا النوع يحتاج إعدادات تشغيل ومحتوى غير متوفرة في نموذج الإدارة الحالي؛ لم يتم إنشاء سجل ناقص.');
+}
+
+export async function updatePlatformAutomation(id:string,status:string) {
+  if(!['active','disabled_by_owner'].includes(status))throw new Error('حالة الأتمتة غير صالحة.');
+  const [kind,rawId]=id.split(':');if(!rawId)throw new Error('معرّف الأتمتة غير صالح.');
+  if(kind==='workflow'){
+    const [row]=await query(`UPDATE workflows SET status=$2,published_at=CASE WHEN $2='published' THEN NOW() ELSE published_at END,updated_at=NOW()
+      WHERE id=$1::uuid RETURNING id::text id,name,status`,[rawId,status==='active'?'published':'retired']);
+    if(!row)throw new Error('الأتمتة غير موجودة.');return {...row,id:'workflow:'+row.id};
+  }
+  if(kind==='followup'){
+    const [row]=await query(`UPDATE followup_sequences SET is_active=$2,updated_at=NOW() WHERE id=$1::uuid RETURNING id::text id,name,is_active`,[rawId,status==='active']);
+    if(!row)throw new Error('الأتمتة غير موجودة.');return {...row,id:'followup:'+row.id,status};
+  }
+  if(kind==='campaign'){
+    const [row]=await query(`UPDATE campaigns SET status=$2,updated_at=NOW() WHERE id=$1::uuid RETURNING id::text id,name,status`,[rawId,status==='active'?'running':'paused']);
+    if(!row)throw new Error('الحملة غير موجودة.');return {...row,id:'campaign:'+row.id};
+  }
+  throw new Error('نوع الأتمتة غير مدعوم.');
+}
+
+export async function platformKnowledge() {
+  const [documents,legacy]=await Promise.all([
+    query(`SELECT d.id::text id,d.organization_id::text organization_id,d.file_name title,d.mime_type file_type,d.status,
+      CASE WHEN d.status='completed' THEN 'indexed' ELSE d.status END processing_status,
+      CASE WHEN (SELECT COUNT(*) FROM knowledge_chunks k WHERE k.document_id=d.id)>0 THEN 'indexed' ELSE 'pending' END search_index_status,
+      d.created_at::text created_at,d.updated_at::text updated_at,o.name workspace_name,COALESCE(u.email,'—') owner_name,
+      octet_length(d.original_text)::bigint storage_bytes,(SELECT COUNT(*) FROM knowledge_chunks k WHERE k.document_id=d.id)::int chunk_count
+      FROM knowledge_documents d JOIN organizations o ON o.id=d.organization_id
+      LEFT JOIN auth.users u ON u.id=d.created_by ORDER BY d.created_at DESC LIMIT 1000`),
+    query(`SELECT k.id::text id,k.organization_id::text organization_id,k.title,'text/plain' file_type,
+      CASE WHEN k.is_active THEN 'indexed' ELSE 'archived' END processing_status,
+      CASE WHEN k.is_active THEN 'indexed' ELSE 'archived' END search_index_status,k.created_at::text created_at,k.updated_at::text updated_at,
+      o.name workspace_name,COALESCE(u.email,'—') owner_name,octet_length(k.content)::bigint storage_bytes,1::int chunk_count
+      FROM knowledge_base k JOIN organizations o ON o.id=k.organization_id
+      LEFT JOIN LATERAL(SELECT user_id FROM organization_members WHERE organization_id=o.id AND role='owner' ORDER BY created_at LIMIT 1) own ON TRUE
+      LEFT JOIN auth.users u ON u.id=own.user_id ORDER BY k.created_at DESC LIMIT 1000`)
+  ]);
+  const items=[...documents,...legacy].sort((a:any,b:any)=>String(b.created_at).localeCompare(String(a.created_at)));
+  const summary={total_sources:items.length,total_chunks:items.reduce((n:any,r:any)=>n+Number(r.chunk_count||0),0),
+    total_bytes:items.reduce((n:any,r:any)=>n+Number(r.storage_bytes||0),0),failed_count:items.filter((r:any)=>r.processing_status==='failed').length};
+  return {items,summary};
+}
+
+export async function platformApiIntegrations() {
+  const [apiKeys,webhookEvents]=await Promise.all([
+    query(`SELECT k.id::text id,k.organization_id::text organization_id,o.name workspace_name,k.name,k.key_prefix,k.scopes,
+      k.last_used_at::text last_used_at,k.revoked_at::text revoked_at,k.created_at::text created_at,
+      CASE WHEN k.revoked_at IS NULL THEN 'active' ELSE 'revoked' END status,'غير محدد'::text rate_limit_per_min
+      FROM organization_api_keys k JOIN organizations o ON o.id=k.organization_id ORDER BY k.created_at DESC LIMIT 1000`),
+    query(`SELECT e.id::text id,e.organization_id::text organization_id,e.provider,e.event_type,e.processing_status status,
+      e.error_message,e.received_at::text created_at,e.processed_at::text processed_at,o.name workspace_name
+      FROM webhook_events e LEFT JOIN organizations o ON o.id=e.organization_id ORDER BY e.received_at DESC LIMIT 100`)
+  ]);
+  return {apiKeys,webhooks:[],webhookEvents,dataLimitations:{webhooks:'قاعدة المنصة تسجل أحداث Webhook الواردة، لكنها لا تحتوي حالياً على جدول تعريف Webhooks الصادرة.'}};
+}
+
+export async function createPlatformApiKey(p:{organizationId:string;name:string}) {
+  const name=p.name.trim();if(!name||!p.organizationId)throw new Error('اسم المفتاح ومساحة العمل مطلوبان.');
+  const raw='fdk_'+crypto.randomBytes(24).toString('base64url'),prefix=raw.slice(0,12),hash=sha256Hex(raw);
+  const [row]=await query(`INSERT INTO organization_api_keys(organization_id,name,key_prefix,key_hash,scopes)
+    VALUES($1::uuid,$2,$3,$4,ARRAY['read']::text[]) RETURNING id::text id,key_prefix`,[p.organizationId,name,prefix,hash]);
+  if(!row)throw new Error('تعذر إصدار مفتاح API.');
+  return {id:row.id,oneTimeSecret:raw,prefix:row.key_prefix};
+}
+
+export async function revokePlatformApiKey(id:string) {
+  const [row]=await query(`UPDATE organization_api_keys SET revoked_at=NOW() WHERE id=$1::uuid AND revoked_at IS NULL
+    RETURNING id::text id,revoked_at::text revoked_at`,[id]);
+  if(!row)throw new Error('مفتاح API غير موجود أو مبطل مسبقاً.');
+  return row;
+}
+
 export async function platformMonitoring() {
-  const started=Date.now();
-  await platformPing();
-  const latencyMs=Date.now()-started;
-  const mem=process.memoryUsage();
-  const uptimeSec=Math.floor(process.uptime());
+  const started=Date.now();await platformPing();const latencyMs=Date.now()-started;
+  const mem=process.memoryUsage(),uptimeSec=Math.floor(process.uptime());
   const [counts,ackRows,migrations]=await Promise.all([
     query(`SELECT (SELECT COUNT(*) FROM agent_runs WHERE status='failed' AND created_at>NOW()-INTERVAL '24 hours')::int failed_runs,
       (SELECT COUNT(*) FROM webhook_events WHERE processing_status='failed' AND received_at>NOW()-INTERVAL '24 hours')::int failed_webhooks,
@@ -390,54 +801,43 @@ export async function platformMonitoring() {
     query(`SELECT alert_id FROM platform_alert_acknowledgements`),
     query(`SELECT version::text version,name,applied_at::text applied_at FROM public.schema_migrations WHERE failed_at IS NULL ORDER BY version DESC LIMIT 30`)
   ]);
-  const acknowledged=new Set(ackRows.map((r:any)=>String(r.alert_id)));
-  const failedRuns=count(counts?.[0]?.failed_runs),failedWebhooks=count(counts?.[0]?.failed_webhooks),
-    failedInbound=count(counts?.[0]?.failed_inbound),failedOutbound=count(counts?.[0]?.failed_outbound),
-    gatewayErrors=count(counts?.[0]?.gateway_errors);
-  const definitions=[
+  const c=counts[0]||{},acknowledged=new Set(ackRows.map((r:any)=>String(r.alert_id)));
+  const failedRuns=count(c.failed_runs),failedWebhooks=count(c.failed_webhooks),failedInbound=count(c.failed_inbound),failedOutbound=count(c.failed_outbound),gatewayErrors=count(c.gateway_errors);
+  const defs=[
     {id:'failed-agent-runs',title:'إخفاقات تشغيل الوكلاء',description:failedRuns+' إخفاقاً خلال آخر 24 ساعة',severity:'warning',active:failedRuns>0},
     {id:'failed-webhooks',title:'أحداث Webhook فاشلة',description:failedWebhooks+' حدثاً فاشلاً خلال آخر 24 ساعة',severity:'warning',active:failedWebhooks>0},
     {id:'failed-outbound',title:'رسائل لم تُرسل',description:failedOutbound+' محاولة إرسال فاشلة أو في قائمة العزل',severity:'warning',active:failedOutbound>0},
     {id:'failed-inbound',title:'رسائل واردة في قائمة العزل',description:failedInbound+' مهمة inbound في قائمة العزل خلال آخر 24 ساعة',severity:'warning',active:failedInbound>0},
     {id:'gateway-errors',title:'أخطاء جلسات WhatsApp Web',description:gatewayErrors+' جلسة بها خطأ مسجل',severity:'warning',active:gatewayErrors>0}
   ];
-  const alerts=definitions.filter(a=>a.active).map(a=>({...a,acknowledged:acknowledged.has(a.id)?1:0}));
-  return {
-    runtime:{nodeVersion:process.version,platform:process.platform+' '+process.arch,uptimeSec,
-      memoryMb:Number((mem.rss/1024/1024).toFixed(1)),unresolvedErrors:failedRuns+failedWebhooks+failedInbound+failedOutbound+gatewayErrors,
-      unauthorizedAttempts24h:'غير متاح من مصدر بيانات المنصة الحالي'},
+  return {runtime:{nodeVersion:process.version,platform:process.platform+' '+process.arch,uptimeSec,memoryMb:Number((mem.rss/1024/1024).toFixed(1)),
+      unresolvedErrors:failedRuns+failedWebhooks+failedInbound+failedOutbound+gatewayErrors,unauthorizedAttempts24h:'غير متاح من مصدر بيانات المنصة الحالي'},
     services:[
       {id:'backend_api',name:'خادم KAYAN AI',status:'operational',latencyMs:null,detail:'خدمة التطبيق ولوحة المالك تعملان ضمن خدمة Railway نفسها.'},
       {id:'postgres',name:'قاعدة بيانات PostgreSQL',status:'operational',latencyMs,detail:'تم تنفيذ فحص اتصال فعلي للجداول الأساسية في قاعدة بيانات المنصة.'}
     ],
-    alerts,migrations
-  };
+    alerts:defs.filter(a=>a.active).map(a=>({...a,acknowledged:acknowledged.has(a.id)?1:0})),migrations};
 }
 
 export async function platformLogs(f:{category?:string;severity?:string;resolved?:string}) {
   const [rows,webhookRows,inboundRows,outboxRows,gatewayRows,platformAuditRows,resolutionRows]=await Promise.all([
     query(`SELECT id::text id,'ai' category,'AI' service_name,CASE WHEN status='failed' THEN 'error' ELSE 'warning' END severity,
-      COALESCE(error_code,'agent_run_failed') message,COALESCE(error_code,'') details,status='completed' resolved,
-      created_at::text created_at,'agent_run' source FROM agent_runs WHERE status IN('failed','blocked') ORDER BY created_at DESC LIMIT 200`),
-    query(`SELECT id::text id,'webhook' category,'Webhook' service_name,'error' severity,
-      COALESCE(error_message,'webhook_failed') message,provider||' · '||COALESCE(event_type,'') details,
-      FALSE resolved,received_at::text created_at,'webhook_event' source
+      COALESCE(error_code,'agent_run_failed') message,COALESCE(error_code,'') details,status='completed' resolved,created_at::text created_at,'agent_run' source
+      FROM agent_runs WHERE status IN('failed','blocked') ORDER BY created_at DESC LIMIT 200`),
+    query(`SELECT id::text id,'webhook' category,'Webhook' service_name,'error' severity,COALESCE(error_message,'webhook_failed') message,
+      provider||' · '||COALESCE(event_type,'') details,FALSE resolved,received_at::text created_at,'webhook_event' source
       FROM webhook_events WHERE processing_status='failed' ORDER BY received_at DESC LIMIT 200`),
-    query(`SELECT id::text id,'inbound' category,'Inbound Worker' service_name,'error' severity,
-      COALESCE(last_error,'inbound_dead_letter') message,'attempts='||attempts::text details,
-      FALSE resolved,updated_at::text created_at,'inbound_job' source
+    query(`SELECT id::text id,'inbound' category,'Inbound Worker' service_name,'error' severity,COALESCE(last_error,'inbound_dead_letter') message,
+      'attempts='||attempts::text details,FALSE resolved,updated_at::text created_at,'inbound_job' source
       FROM inbound_jobs WHERE status='dead_letter' OR last_error IS NOT NULL ORDER BY updated_at DESC LIMIT 200`),
-    query(`SELECT id::text id,'outbox' category,'Outbox Worker' service_name,'error' severity,
-      COALESCE(last_error,'outbound_failed') message,event_type||' · '||COALESCE(payload->>'provider','unknown_provider') details,
-      FALSE resolved,updated_at::text created_at,'outbox_event' source
+    query(`SELECT id::text id,'outbox' category,'Outbox Worker' service_name,'error' severity,COALESCE(last_error,'outbound_failed') message,
+      event_type||' · '||COALESCE(payload->>'provider','unknown_provider') details,FALSE resolved,updated_at::text created_at,'outbox_event' source
       FROM outbox_events WHERE status IN('failed','dead_letter') OR last_error IS NOT NULL ORDER BY updated_at DESC LIMIT 200`),
-    query(`SELECT id::text id,'whatsapp_gateway' category,'WhatsApp Gateway' service_name,'error' severity,
-      COALESCE(last_error,'gateway_session_error') message,status||' · channel='||channel_id::text details,
-      FALSE resolved,updated_at::text created_at,'whatsapp_gateway_session' source
+    query(`SELECT id::text id,'whatsapp_gateway' category,'WhatsApp Gateway' service_name,'error' severity,COALESCE(last_error,'gateway_session_error') message,
+      status||' · channel='||channel_id::text details,FALSE resolved,updated_at::text created_at,'whatsapp_gateway_session' source
       FROM whatsapp_gateway_sessions WHERE last_error IS NOT NULL ORDER BY updated_at DESC LIMIT 200`),
-    query(`SELECT id::text id,'admin_audit' category,'Owner Console' service_name,'info' severity,
-      summary message,action||' · '||entity_type||' · '||entity_id details,
-      TRUE resolved,created_at::text created_at,'platform_audit_log' source
+    query(`SELECT id::text id,'admin_audit' category,'Owner Console' service_name,'info' severity,summary message,
+      action||' · '||entity_type||' · '||entity_id details,TRUE resolved,created_at::text created_at,'platform_audit_log' source
       FROM platform_audit_logs ORDER BY created_at DESC LIMIT 200`),
     query(`SELECT source,log_id FROM platform_log_resolutions`)
   ]);
@@ -446,11 +846,121 @@ export async function platformLogs(f:{category?:string;severity?:string;resolved
     const resolved=Boolean(r.resolved)||resolvedKeys.has(String(r.source)+'|'+String(r.id));
     return {...r,resolved,details_sanitized:sanitizeLogText(String(r.details||'')),message:sanitizeLogText(String(r.message||''))};
   });
-  return {items:all.filter((r:any)=>(!f.category||f.category==='all'||r.category===f.category)&&
-    (!f.severity||f.severity==='all'||r.severity===f.severity)&&
-    (!f.resolved||f.resolved==='all'||(f.resolved==='true'?r.resolved:!r.resolved)))
+  return {items:all.filter((r:any)=>(!f.category||f.category==='all'||r.category===f.category)&&(!f.severity||f.severity==='all'||r.severity===f.severity)&&(!f.resolved||f.resolved==='all'||(f.resolved==='true'?r.resolved:!r.resolved)))
     .sort((a:any,b:any)=>String(b.created_at).localeCompare(String(a.created_at)))};
 }
+
+export async function platformSearch(term:string) {
+  const q = term.trim().slice(0,120);
+  if (q.length < 2) return {users:[],workspaces:[],agents:[],conversations:[],subscriptions:[],invoices:[],usageEvents:[],channels:[],systemLogs:[],auditLogs:[]};
+  const like = `%${q}%`;
+  const [users,workspaces,agents,conversations,subscriptions,usageEvents,channels,auditLogs] = await Promise.all([
+    query(`SELECT u.id::text id,${fullName} full_name,u.email FROM auth.users u
+      WHERE u.deleted_at IS NULL AND (u.email ILIKE $1 OR ${fullName} ILIKE $1) ORDER BY u.created_at DESC LIMIT 8`,[like]),
+    query(`SELECT o.id::text id,o.name,COALESCE(b.slug,'') slug FROM organizations o
+      LEFT JOIN businesses b ON b.organization_id=o.id WHERE o.name ILIKE $1 OR b.slug ILIKE $1
+      ORDER BY o.created_at DESC LIMIT 8`,[like]),
+    query(`SELECT a.id::text id,a.name,a.model_provider model_id FROM ai_agents a
+      LEFT JOIN organizations o ON o.id=a.organization_id WHERE a.name ILIKE $1 OR a.model_provider ILIKE $1 OR o.name ILIKE $1
+      ORDER BY a.created_at DESC LIMIT 8`,[like]),
+    query(`SELECT c.id::text id,COALESCE(NULLIF(ci.external_phone,''),NULLIF(ci.external_username,''),NULLIF(ci.external_user_id,''),NULLIF(ct.first_name,''),'عميل') customer_handle,
+      COALESCE(ch.channel_type,'unknown') channel_type FROM conversations c
+      LEFT JOIN contacts ct ON ct.id=c.contact_id LEFT JOIN channels ch ON ch.id=c.channel_id
+      LEFT JOIN LATERAL(SELECT external_phone,external_username,external_user_id FROM contact_identities
+        WHERE contact_id=c.contact_id AND channel=ch.channel_type ORDER BY created_at DESC LIMIT 1) ci ON TRUE
+      JOIN organizations o ON o.id=c.organization_id
+      WHERE o.name ILIKE $1 OR COALESCE(ct.first_name,'') ILIKE $1 OR COALESCE(ci.external_phone,'') ILIKE $1 OR COALESCE(ci.external_username,'') ILIKE $1
+      ORDER BY c.last_message_at DESC LIMIT 8`,[like]),
+    query(`SELECT s.id::text id,${fullName} user_name,COALESCE(p.name,s.plan_tier) plan_name
+      FROM subscriptions s JOIN organizations o ON o.id=s.organization_id
+      LEFT JOIN plans p ON p.id=s.plan_id
+      LEFT JOIN LATERAL(SELECT user_id FROM organization_members WHERE organization_id=o.id AND role='owner' ORDER BY created_at LIMIT 1) own ON TRUE
+      LEFT JOIN auth.users u ON u.id=own.user_id
+      WHERE o.name ILIKE $1 OR s.plan_tier ILIKE $1 OR u.email ILIKE $1 OR ${fullName} ILIKE $1
+      ORDER BY s.created_at DESC LIMIT 8`,[like]),
+    query(`SELECT r.id::text id,COALESCE(r.model,'غير محدد') model_id,
+      (COALESCE(r.input_tokens,0)+COALESCE(r.output_tokens,0))::bigint total_tokens
+      FROM agent_runs r WHERE COALESCE(r.model,'') ILIKE $1 OR COALESCE(r.model_provider,'') ILIKE $1
+      ORDER BY r.created_at DESC LIMIT 8`,[like]),
+    query(`SELECT c.id::text id,COALESCE(NULLIF(c.external_identifier,''),c.channel_type) display_name,c.channel_type
+      FROM channels c JOIN organizations o ON o.id=c.organization_id
+      WHERE c.channel_type ILIKE $1 OR COALESCE(c.external_identifier,'') ILIKE $1 OR o.name ILIKE $1
+      ORDER BY c.created_at DESC LIMIT 8`,[like]),
+    query(`SELECT id::text id,action,summary FROM platform_audit_logs
+      WHERE action ILIKE $1 OR summary ILIKE $1 OR actor_email ILIKE $1 OR entity_id ILIKE $1
+      ORDER BY created_at DESC LIMIT 8`,[like])
+  ]);
+  return {users,workspaces,agents,conversations,subscriptions,invoices:[],usageEvents,channels,systemLogs:[],auditLogs};
+}
+
+export async function platformAuditLogs(f:{search?:string;entityType?:string;page?:number;pageSize?:number}={}) {
+  const page = Math.max(1,Math.floor(f.page||1));
+  const pageSize = Math.min(100,Math.max(10,Math.floor(f.pageSize||25)));
+  const clauses:string[] = [];
+  const args:unknown[] = [];
+  if (f.entityType && f.entityType !== 'all') { args.push(f.entityType); clauses.push(`entity_type=$${args.length}`); }
+  if (f.search?.trim()) {
+    args.push(`%${f.search.trim().slice(0,120)}%`);
+    const n=args.length;
+    clauses.push(`(summary ILIKE $${n} OR action ILIKE $${n} OR actor_email ILIKE $${n} OR entity_id ILIKE $${n})`);
+  }
+  const where=clauses.length?`WHERE ${clauses.join(' AND ')}`:'';
+  const [totalRow] = await query(`SELECT COUNT(*)::int total FROM platform_audit_logs ${where}`,args);
+  args.push(pageSize,(page-1)*pageSize);
+  const items=await query(`SELECT id::text id,actor_id::text actor_id,actor_email,actor_role,action,entity_type,entity_id,summary,
+    before_json,after_json,ip_address::text ip_address,created_at::text created_at
+    FROM platform_audit_logs ${where} ORDER BY created_at DESC LIMIT $${args.length-1} OFFSET $${args.length}`,args);
+  const total=count(totalRow?.total);
+  return {items,pagination:{page,pageSize,total,totalPages:Math.max(1,Math.ceil(total/pageSize))}};
+}
+
+export async function platformSettings() {
+  return {items:await query(`SELECT s.key,CASE WHEN jsonb_typeof(s.value)='object' AND s.value ? 'value' THEN s.value->'value' ELSE s.value END value,
+    COALESCE(s.value->>'category',split_part(s.key,'.',1)) category,
+    COALESCE(s.value->>'description',s.key) description,
+    COALESCE(a.email,'system') updated_by,s.updated_at::text updated_at
+    FROM platform_settings s LEFT JOIN platform_admins a ON a.id=s.updated_by
+    WHERE s.key NOT LIKE 'owner_mfa_pending:%' ORDER BY category,s.key`)};
+}
+
+export async function updatePlatformSetting(key:string,value:unknown,adminId:string) {
+  const cleanKey=key.trim();
+  if (!cleanKey || cleanKey.length>120 || cleanKey.startsWith('owner_mfa_pending:')) throw new Error('مفتاح الإعداد غير صالح.');
+  const encoded=JSON.stringify(value===undefined?null:value);
+  if (encoded.length>10000) throw new Error('قيمة الإعداد أكبر من الحد المسموح.');
+  const [row]=await query(`INSERT INTO platform_settings(key,value,updated_by,updated_at)
+    VALUES($1,$2::jsonb,$3::uuid,NOW())
+    ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value,updated_by=EXCLUDED.updated_by,updated_at=NOW()
+    RETURNING key,value,updated_at::text updated_at`,[cleanKey,encoded,adminId]);
+  return row;
+}
+
+export async function platformSecurity(currentAdmin:{id:string;email:string;role:string;sessionId:string;mfaEnabled:boolean}) {
+  const [sessionsRows,loginAttempts,admins]=await Promise.all([
+    query(`SELECT s.id::text id,a.email,s.ip_address::text ip_address,s.user_agent,s.expires_at::text expires_at,
+      s.revoked_at::text revoked_at,s.created_at::text created_at
+      FROM platform_admin_sessions s JOIN platform_admins a ON a.id=s.admin_id
+      WHERE s.expires_at>NOW() OR s.revoked_at IS NOT NULL ORDER BY s.created_at DESC LIMIT 100`),
+    query(`SELECT id::text id,email,ip_address::text ip_address,user_agent,success,failure_reason,created_at::text created_at
+      FROM platform_admin_login_attempts ORDER BY created_at DESC LIMIT 100`),
+    query(`SELECT id::text id,email,full_name,role,status,(mfa_secret_encrypted IS NOT NULL) mfa_enabled,
+      created_at::text created_at,last_login_at::text last_login_at FROM platform_admins ORDER BY created_at`)
+  ]);
+  return {currentAdmin,sessions:sessionsRows,loginAttempts,admins,encryptionKeyConfigured:Boolean(process.env.CREDENTIAL_ENCRYPTION_KEY?.trim())};
+}
+
+export async function createPlatformAdmin(p:{fullName:string;email:string;role:'super_admin'|'ops_auditor';password:string}) {
+  const fullNameValue=p.fullName.trim(),email=p.email.trim().toLowerCase();
+  if(fullNameValue.length<2||fullNameValue.length>120||!/^\S+@\S+\.\S+$/.test(email)) throw new Error('اسم المدير أو بريده الإلكتروني غير صالح.');
+  if(p.password.length<10) throw new Error('يجب أن تتكون كلمة المرور من 10 أحرف على الأقل.');
+  if(!['super_admin','ops_auditor'].includes(p.role)) throw new Error('الدور الإداري غير صالح.');
+  const perms=p.role==='super_admin'?['users:write','billing:write','ai:write','ops:write','settings:write']:[];
+  const [row]=await query(`INSERT INTO platform_admins(email,full_name,role,permissions,password_hash)
+    VALUES($1,$2,$3,$4::jsonb,$5) RETURNING id::text id,email,full_name,role,status,permissions`,
+    [email,fullNameValue,p.role,JSON.stringify(perms),hashPassword(p.password)]);
+  return row;
+}
+
 
 export async function platformReport(type:string) {
   const reports:Record<string,{title:string;headers:{key:string;label:string}[];sql:string}> = {
@@ -494,21 +1004,19 @@ export async function platformAiProviders() {
 
 export async function platformNotificationsSupport() {
   const [notifications,tickets,activity,adminActivity]=await Promise.all([
-    query(`SELECT n.id::text id,n.title,n.body,n.notification_type type,n.is_read,
-      CASE WHEN n.is_read THEN 'read' ELSE 'sent' END delivery_status,'مؤسسة: '||o.name target_type,1::int recipients_count,
-      n.created_at::text created_at,o.name workspace_name
+    query(`SELECT n.id::text id,n.title,n.body,n.notification_type type,n.is_read,CASE WHEN n.is_read THEN 'read' ELSE 'sent' END delivery_status,
+      'مؤسسة: '||o.name target_type,1::int recipients_count,n.created_at::text created_at,o.name workspace_name
       FROM notifications n JOIN organizations o ON o.id=n.organization_id
       WHERE n.entity_type='platform_announcement' OR n.idempotency_key LIKE 'owner-console:%'
       ORDER BY n.created_at DESC LIMIT 300`),
-    query(`SELECT t.id::text id,t.ticket_number,t.subject,t.description,t.priority,t.status,
-      t.created_at::text created_at,t.updated_at::text updated_at,t.organization_id::text organization_id,o.name workspace_name,
-      a.email opened_by FROM platform_support_tickets t
-      LEFT JOIN organizations o ON o.id=t.organization_id LEFT JOIN platform_admins a ON a.id=t.opened_by_admin_id
+    query(`SELECT t.id::text id,t.ticket_number,t.subject,t.description,t.priority,t.status,t.created_at::text created_at,
+      t.updated_at::text updated_at,t.organization_id::text organization_id,o.name workspace_name,a.email opened_by
+      FROM platform_support_tickets t LEFT JOIN organizations o ON o.id=t.organization_id
+      LEFT JOIN platform_admins a ON a.id=t.opened_by_admin_id
       ORDER BY CASE t.status WHEN 'open' THEN 0 WHEN 'in_progress' THEN 1 ELSE 2 END,t.created_at DESC LIMIT 300`),
     query(`SELECT e.id::text id,e.action event_type,e.entity_type,e.entity_id::text entity_id,e.actor_type actor,
-      COALESCE(e.metadata->>'summary',e.action) summary,e.created_at::text created_at,'audit_events' source,
-      o.name workspace_name FROM audit_events e LEFT JOIN organizations o ON o.id=e.organization_id
-      ORDER BY e.created_at DESC LIMIT 100`),
+      COALESCE(e.metadata->>'summary',e.action) summary,e.created_at::text created_at,'audit_events' source,o.name workspace_name
+      FROM audit_events e LEFT JOIN organizations o ON o.id=e.organization_id ORDER BY e.created_at DESC LIMIT 100`),
     query(`SELECT id::text id,action event_type,entity_type,entity_id,actor_email actor,summary,
       created_at::text created_at,'platform_audit_logs' source,NULL::text workspace_name
       FROM platform_audit_logs ORDER BY created_at DESC LIMIT 100`)
@@ -516,96 +1024,76 @@ export async function platformNotificationsSupport() {
   return {notifications,tickets,activityFeed:[...activity,...adminActivity].sort((a:any,b:any)=>String(b.created_at).localeCompare(String(a.created_at))).slice(0,150)};
 }
 
+
 export async function createPlatformAnnouncement(p:{targetType:string;targetFilter?:string;title:string;body:string;scheduledFor?:string|null;adminId:string}) {
   const title=p.title.trim(),body=p.body.trim(),targetType=p.targetType;
   if(title.length<2||title.length>255||!body||body.length>5000)throw new Error('عنوان الإعلان ومحتواه مطلوبان وبحدود الطول المسموح.');
   if(!['all_users','plan_tier','trial_users','expiring_soon'].includes(targetType))throw new Error('شريحة الاستهداف غير مدعومة.');
   if(p.scheduledFor&&new Date(p.scheduledFor).getTime()>Date.now())throw new Error('جدولة الإرسال غير مفعلة في نظام الإشعارات الحالي؛ اختر الإرسال الفوري.');
-  const filter=p.targetFilter||'';
-  let where='';
-  const args:unknown[]=[];
+  const filter=p.targetFilter||'';let where='';const args:unknown[]=[];
   if(targetType==='plan_tier'){args.push(filter);where='AND s.plan_tier=$1';}
   else if(targetType==='trial_users')where="AND (s.status='trial' OR s.plan_tier='trial')";
   else if(targetType==='expiring_soon')where="AND COALESCE(s.current_period_end,s.period_end)>NOW() AND COALESCE(s.current_period_end,s.period_end)<=NOW()+INTERVAL '7 days'";
-  const orgs=await query<{id:string}>(`SELECT DISTINCT o.id::text id FROM organizations o
-    JOIN organization_members m ON m.organization_id=o.id AND m.role='owner'
-    LEFT JOIN LATERAL(SELECT plan_tier,status,period_end,current_period_end FROM subscriptions
-      WHERE organization_id=o.id ORDER BY created_at DESC LIMIT 1) s ON TRUE
+  const orgs=await query<{id:string}>(`SELECT DISTINCT o.id::text id FROM organizations o JOIN organization_members m ON m.organization_id=o.id AND m.role='owner'
+    LEFT JOIN LATERAL(SELECT plan_tier,status,period_end,current_period_end FROM subscriptions WHERE organization_id=o.id ORDER BY created_at DESC LIMIT 1) s ON TRUE
     WHERE TRUE ${where} ORDER BY id LIMIT 10000`,args);
   if(!orgs.length)throw new Error('لا توجد مؤسسات تطابق شريحة الاستهداف المحددة.');
-  return await sql().begin(async tx=>{
+  return sql().begin(async tx=>{
     const [announcement]=await tx.unsafe(`INSERT INTO platform_announcements(target_type,target_filter,title,body,status,recipients_count,sent_at,created_by_admin_id)
       VALUES($1,$2,$3,$4,'sent',$5,NOW(),$6::uuid) RETURNING id::text id,created_at::text created_at`,
       [targetType,filter||null,title,body,orgs.length,p.adminId]);
-    for(const org of orgs){
-      await tx.unsafe(`INSERT INTO notifications(organization_id,member_id,entity_type,entity_id,notification_type,title,body,idempotency_key)
-        VALUES($1::uuid,NULL,'platform_announcement',$1::uuid,'workflow',$2,$3,$4)
-        ON CONFLICT(organization_id,idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING`,
-        [org.id,title,body,'platform-announcement:'+announcement.id+':'+org.id]);
-    }
+    for(const org of orgs)await tx.unsafe(`INSERT INTO notifications(organization_id,member_id,entity_type,entity_id,notification_type,title,body,idempotency_key)
+      VALUES($1::uuid,NULL,'platform_announcement',$1::uuid,'workflow',$2,$3,$4)
+      ON CONFLICT(organization_id,idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING`,
+      [org.id,title,body,'platform-announcement:'+announcement.id+':'+org.id]);
     return {id:announcement.id,recipientsCount:orgs.length,status:'sent',createdAt:announcement.created_at};
   });
 }
-
 export async function createPlatformSupportTicket(p:{subject:string;description:string;priority:string;adminId:string}) {
   const subject=p.subject.trim(),description=p.description.trim();
   if(subject.length<3||subject.length>200||description.length<5||description.length>10000)throw new Error('موضوع التذكرة وتفاصيلها غير كافيين أو تجاوزا الحد المسموح.');
   if(!['low','medium','high','urgent'].includes(p.priority))throw new Error('أولوية التذكرة غير صالحة.');
-  const ticketNumber='KAY-'+new Date().toISOString().slice(0,10).replace(/-/g,'')+'-'+crypto.randomBytes(3).toString('hex').toUpperCase();
+  const number='KAY-'+new Date().toISOString().slice(0,10).replace(/-/g,'')+'-'+crypto.randomBytes(3).toString('hex').toUpperCase();
   const [row]=await query(`INSERT INTO platform_support_tickets(ticket_number,subject,description,priority,status,opened_by_admin_id)
-    VALUES($1,$2,$3,$4,'open',$5::uuid)
-    RETURNING id::text id,ticket_number,subject,description,priority,status,created_at::text created_at`,
-    [ticketNumber,subject,description,p.priority,p.adminId]);
-  return row;
+    VALUES($1,$2,$3,$4,'open',$5::uuid) RETURNING id::text id,ticket_number,subject,description,priority,status,created_at::text created_at`,
+    [number,subject,description,p.priority,p.adminId]);return row;
 }
-
 export async function updatePlatformSupportTicket(id:string,status:string) {
   if(!['open','in_progress','resolved','closed'].includes(status))throw new Error('حالة التذكرة غير صالحة.');
   const [row]=await query(`UPDATE platform_support_tickets SET status=$2,updated_at=NOW(),
     resolved_at=CASE WHEN $2 IN('resolved','closed') THEN COALESCE(resolved_at,NOW()) ELSE NULL END
     WHERE id=$1::uuid RETURNING id::text id,ticket_number,status,updated_at::text updated_at`,[id,status]);
-  if(!row)throw new Error('التذكرة غير موجودة.');
-  return row;
+  if(!row)throw new Error('التذكرة غير موجودة.');return row;
 }
-
 export async function acknowledgePlatformAlert(id:string,adminId:string) {
   if(!['failed-agent-runs','failed-webhooks','failed-outbound','failed-inbound','gateway-errors'].includes(id))throw new Error('معرّف التنبيه غير معروف.');
   const [row]=await query(`INSERT INTO platform_alert_acknowledgements(alert_id,acknowledged_by,acknowledged_at)
     VALUES($1,$2::uuid,NOW()) ON CONFLICT(alert_id) DO UPDATE SET acknowledged_by=EXCLUDED.acknowledged_by,acknowledged_at=NOW()
-    RETURNING alert_id,acknowledged_at::text acknowledged_at`,[id,adminId]);
-  return row;
+    RETURNING alert_id,acknowledged_at::text acknowledged_at`,[id,adminId]);return row;
 }
-
 export async function resolvePlatformLog(source:string,logId:string,adminId:string) {
-  const allowed=['agent_run','webhook_event','inbound_job','outbox_event','whatsapp_gateway_session'];
-  if(!allowed.includes(source))throw new Error('مصدر السجل لا يدعم إجراء الحل الإداري.');
+  if(!['agent_run','webhook_event','inbound_job','outbox_event','whatsapp_gateway_session'].includes(source))throw new Error('مصدر السجل لا يدعم إجراء الحل الإداري.');
   if(!/^[0-9a-f-]{36}$/i.test(logId))throw new Error('معرّف السجل غير صالح.');
   const [row]=await query(`INSERT INTO platform_log_resolutions(source,log_id,resolved_by,resolved_at)
     VALUES($1,$2,$3::uuid,NOW()) ON CONFLICT(source,log_id) DO UPDATE SET resolved_by=EXCLUDED.resolved_by,resolved_at=NOW()
-    RETURNING source,log_id,resolved_at::text resolved_at`,[source,logId,adminId]);
-  return row;
+    RETURNING source,log_id,resolved_at::text resolved_at`,[source,logId,adminId]);return row;
 }
-
 export async function reviewPlatformWalletPayment(id:string,action:string,note:string,reviewedBy:string) {
   if(!['approve','reject'].includes(action))throw new Error('إجراء مراجعة طلب الدفع غير صالح.');
   if(action==='reject'&&note.trim().length<5)throw new Error('سبب رفض التحويل مطلوب.');
-  const [row]=await query<{result:string}>(`SELECT public.review_manual_wallet_payment($1::uuid,$2::text,$3::text,$4::text) result`,
-    [id,action,reviewedBy,note.trim()||null]);
+  const [row]=await query<{result:string}>(`SELECT public.review_manual_wallet_payment($1::uuid,$2::text,$3::text,$4::text) result`,[id,action,reviewedBy,note.trim()||null]);
   if(!row)throw new Error('لم يرجع النظام نتيجة مراجعة طلب الدفع.');
   if(row.result==='not_found')throw new Error('طلب الدفع غير موجود.');
   if(row.result.startsWith('already_'))throw new Error('تمت مراجعة هذا الطلب مسبقاً.');
   return {id,status:row.result};
 }
-
 export async function platformManualWalletReceipt(id:string) {
-  const [row]=await query<{receipt_image_base64:string;receipt_mime_type:string}>(`SELECT receipt_image_base64,receipt_mime_type
-    FROM manual_wallet_payment_requests WHERE id=$1::uuid LIMIT 1`,[id]);
+  const [row]=await query<{receipt_image_base64:string;receipt_mime_type:string}>(`SELECT receipt_image_base64,receipt_mime_type FROM manual_wallet_payment_requests WHERE id=$1::uuid LIMIT 1`,[id]);
   if(!row)throw new Error('إيصال التحويل غير موجود.');
   const bytes=Buffer.from(String(row.receipt_image_base64),'base64');
   if(bytes.length>2*1024*1024)throw new Error('ملف الإيصال يتجاوز الحد المسموح.');
   return {bytes,mimeType:row.receipt_mime_type};
 }
-
 
 
 
