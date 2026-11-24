@@ -6,6 +6,9 @@ import { resolveChannelExact } from '@/lib/runtime/tenant'
 import { processInboundMessage } from '@/lib/runtime/process-inbound'
 import { deliverOutbound, recordDeliveredOutboundMessage } from '@/lib/runtime/outbound'
 import { telegramUpdateId } from '@/lib/providers/telegram'
+import { fromTelegram } from '@/lib/media/attachment'
+import { handleInboundMedia } from '@/lib/media/pipeline'
+import { downloaderForChannel } from '@/lib/media/channel-downloader'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -90,8 +93,9 @@ export async function POST(
       signature_verified: true,
     }).eq('id', eventRowId)
 
+    const media = message.text ? null : fromTelegram(message as unknown as Record<string, unknown>)
     const text = (message.text ?? message.caption ?? '').trim()
-    if (!text) {
+    if (!text && !media) {
       // Non-text Telegram updates are not falsely recorded as text messages.
       await markWebhookProcessed(db, eventRowId, 'processed')
       eventRowId = null
@@ -100,18 +104,28 @@ export async function POST(
 
     const chatId = String(message.chat.id)
     const displayName = [message.from?.first_name, message.from?.last_name].filter(Boolean).join(' ').trim()
-    const result = await processInboundMessage(db, {
+    const identity = {
       organizationId: exactChannel.organizationId,
       businessId: exactChannel.businessId,
       channelId: exactChannel.id,
-      channelType: 'telegram',
+      channelType: 'telegram' as const,
       provider: 'telegram',
       externalEventId,
       externalUserId: chatId,
       senderUsername: message.from?.username ?? message.chat.username ?? null,
       displayName: displayName || message.chat.title || null,
-      text,
-    })
+    }
+    const outboundChannel = {
+      id: exactChannel.id,
+      organizationId: exactChannel.organizationId,
+      businessId: exactChannel.businessId,
+      channelType: 'telegram',
+      providerAccountId: exactChannel.providerAccountId,
+      externalIdentifier: exactChannel.externalIdentifier,
+    }
+    const result = media
+      ? await handleInboundMedia(db, { ...identity, attachment: media }, { download: downloaderForChannel(db, outboundChannel) })
+      : await processInboundMessage(db, { ...identity, text })
 
     if (result.reply) {
       const delivery = await deliverOutbound(db, {

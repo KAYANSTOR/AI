@@ -17,7 +17,7 @@ import { formatForWhatsApp } from '@/lib/channels/whatsapp-format'
  * Resolve them with the service-role client only after verifying that the supplied
  * channel belongs to the same organization and provider type.
  */
-async function resolveOwnedChannelCredentials(channel: OutboundChannel): Promise<Record<string, string>> {
+export async function resolveOwnedChannelCredentials(channel: OutboundChannel): Promise<Record<string, string>> {
   const admin = createAdminClient()
   const { data, error } = await admin
     .from('channels')

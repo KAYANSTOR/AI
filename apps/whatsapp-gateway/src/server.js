@@ -2,9 +2,10 @@ import http from 'node:http'
 import { createCipheriv, createDecipheriv, randomBytes, timingSafeEqual } from 'node:crypto'
 import postgres from 'postgres'
 import QRCode from 'qrcode'
-import makeWASocket, { Browsers, BufferJSON, DisconnectReason, generateMessageIDV2, initAuthCreds } from 'baileys'
+import makeWASocket, { Browsers, BufferJSON, DisconnectReason, downloadMediaMessage, generateMessageIDV2, initAuthCreds } from 'baileys'
 import { shouldReconnectAfterDisconnect } from './reconnect-policy.js'
 import { classifyUpsertMessage, createSentMessageRegistry } from './message-direction.js'
+import { createMediaMessageCache, extractMediaDescriptor, extractText, requestedMaxBytes } from './media.js'
 
 const PORT = Number(process.env.WHATSAPP_GATEWAY_PORT || 3001)
 const DATABASE_URL = requiredEnv('DATABASE_URL')
@@ -145,13 +146,9 @@ function createKeyStore(channelId) {
     async clear() { await query("DELETE FROM public.whatsapp_gateway_auth_keys WHERE channel_id=$1", [channelId]) },
   }
 }
+const mediaMessages = createMediaMessageCache()
 function messageText(message) {
-  const value = message?.message
-  if (!value) return ''
-  return String(value.conversation || value.extendedTextMessage?.text ||
-    value.imageMessage?.caption || value.videoMessage?.caption ||
-    value.documentMessage?.caption || value.buttonsResponseMessage?.selectedDisplayText ||
-    value.templateButtonReplyMessage?.selectedDisplayText || '').trim()
+  return extractText(message)
 }
 async function postToApp(path, body, logKey, channelId) {
   try {
@@ -175,7 +172,8 @@ async function forwardInbound(session, message, upsertType) {
   })
   if (decision.kind === 'ignore') return
   const text = messageText(message)
-  if (!text) return
+  const media = decision.kind === 'owner_manual' ? null : extractMediaDescriptor(message)
+  if (!text && !media) return
   const remoteJid = message.key.remoteJid
   const messageId = message.key.id
   // remoteJid is always the other party (the customer), both for messages the
@@ -184,6 +182,8 @@ async function forwardInbound(session, message, upsertType) {
   const contactPhone = contactJid.endsWith('@s.whatsapp.net') ? contactJid.split('@')[0].replace(/\D/g, '') : null
   // The owner's "message yourself" chat is not a customer conversation.
   if (contactPhone && contactPhone === String(session.phoneNumber || '').replace(/\D/g, '')) return
+  if (decision.kind === 'owner_manual' && !text) return
+  if (media) mediaMessages.set(session.channelId, message)
   if (decision.kind === 'owner_manual') {
     console.log('whatsapp_qr_owner_message_forwarding', { channelId: session.channelId })
     await postToApp('/api/whatsapp/qr/outbound-sync', {
@@ -202,6 +202,7 @@ async function forwardInbound(session, message, upsertType) {
     channelId: session.channelId,
     externalEventId: 'qr:' + session.channelId + ':' + messageId,
     senderJid: contactJid, senderPhone: contactPhone, displayName: message.pushName || null, text: text.slice(0, 8000),
+    ...(media ? { media } : {}),
   }, 'whatsapp_qr_inbound_forward_failed', session.channelId)
 }
 function messageTimestampIso(message) {
@@ -444,6 +445,46 @@ async function sendText(channelId, input) {
     throw error
   }
 }
+// Streams the bytes of a recently received media message with a hard size cap. The
+// declared fileLength is checked first so an oversized file is never downloaded.
+async function sendMedia(response, channelId, messageId, maxBytes) {
+  const session = sockets.get(channelId)
+  const message = mediaMessages.get(channelId, messageId)
+  if (!session || !message) return sendJson(response, 404, { error: 'media_not_found' })
+  const descriptor = extractMediaDescriptor(message)
+  if (!descriptor) return sendJson(response, 404, { error: 'media_not_found' })
+  if (descriptor.fileLength && descriptor.fileLength > maxBytes) return sendJson(response, 413, { error: 'media_too_large' })
+  let stream
+  try {
+    stream = await downloadMediaMessage(message, 'stream', {}, { reuploadRequest: session.sock.updateMediaMessage })
+  } catch (error) {
+    console.error('whatsapp_qr_media_download_failed', { channelId, reason: error instanceof Error ? error.message : 'download_error' })
+    return sendJson(response, 502, { error: 'media_download_failed' })
+  }
+  const chunks = []
+  let total = 0
+  try {
+    for await (const chunk of stream) {
+      total += chunk.length
+      if (total > maxBytes) {
+        stream.destroy()
+        return sendJson(response, 413, { error: 'media_too_large' })
+      }
+      chunks.push(chunk)
+    }
+  } catch (error) {
+    console.error('whatsapp_qr_media_stream_failed', { channelId, reason: error instanceof Error ? error.message : 'stream_error' })
+    return sendJson(response, 502, { error: 'media_download_failed' })
+  }
+  const body = Buffer.concat(chunks)
+  response.writeHead(200, {
+    'content-type': descriptor.mimeType ? descriptor.mimeType.split(';')[0] : 'application/octet-stream',
+    'content-length': String(body.length),
+    'cache-control': 'no-store',
+    'x-content-type-options': 'nosniff',
+  })
+  response.end(body)
+}
 async function logoutSession(channelId) {
   clearTimeout(reconnectTimers.get(channelId))
   reconnectTimers.delete(channelId)
@@ -490,6 +531,8 @@ async function handleRequest(request, response) {
     const session = await startSession(input)
     return sendJson(response, 200, { session: { status: session.status, phoneNumber: session.phoneNumber, qrDataUrl: session.qrDataUrl, pairingCode: session.pairingCode } })
   }
+  const mediaMatch = /^\/sessions\/([0-9a-f-]{36})\/media\/([A-Za-z0-9_-]{1,128})$/i.exec(url.pathname)
+  if (request.method === 'GET' && mediaMatch) return sendMedia(response, mediaMatch[1], mediaMatch[2], requestedMaxBytes(url.searchParams.get('maxBytes')))
   const match = /^\/sessions\/([0-9a-f-]{36})\/(status|send|logout)$/i.exec(url.pathname)
   if (!match) return sendJson(response, 404, { error: 'not_found' })
   const channelId = match[1], action = match[2]

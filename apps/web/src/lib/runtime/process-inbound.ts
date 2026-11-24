@@ -18,10 +18,77 @@ import {
   EntitlementExceededError,
   recordMeterUsage,
 } from '@/lib/billing/entitlements'
+import {
+  consumeContactFlood,
+  consumeFreeQuota,
+  FREE_QUOTA_REPLY,
+  freeQuotaFingerprints,
+  getAiGuardPolicy,
+  truncateForPlan,
+  type AiGuardPolicy,
+  type QuotaDecision,
+  type QuotaKind,
+} from '@/lib/billing/free-tier'
 
 export type RuntimeChannel = 'sms' | 'whatsapp' | 'instagram' | 'phone' | 'telegram' | 'messenger'
 
 export type InboundMessageType = 'text' | 'image' | 'audio' | 'video' | 'file'
+
+/** Fair-use guards run right before any model call (injectable for tests). */
+export type InboundAiGuards = {
+  policy(db: DbClient, organizationId: string): Promise<AiGuardPolicy>
+  fingerprints(db: DbClient, input: { organizationId: string; channelId: string }): Promise<string[]>
+  consumeQuota(db: DbClient, input: { organizationId: string; fingerprints: string[]; kind: QuotaKind; dailyLimit: number | null; monthlyLimit: number }): Promise<QuotaDecision>
+  consumeFlood(db: DbClient, input: { organizationId: string; contactId: string; limit: number; failClosed: boolean }): Promise<boolean>
+  /** Wait before the model call so a burst of rapid messages gets one reply. */
+  coalesceMs: number
+}
+
+async function organizationOwnerPhone(organizationId: string): Promise<string | null> {
+  try {
+    const { data } = await createAdminClient().from('organization_members').select('user_id')
+      .eq('organization_id', organizationId).eq('role', 'owner').limit(1).maybeSingle()
+    if (!data?.user_id) return null
+    const owner = await findUserById(String(data.user_id))
+    return owner?.phone ?? null
+  } catch {
+    return null
+  }
+}
+
+export function defaultInboundGuards(): InboundAiGuards {
+  const configured = Number(process.env.INBOUND_COALESCE_MS)
+  return {
+    policy: getAiGuardPolicy,
+    fingerprints: async (db, input) => freeQuotaFingerprints(db, { ...input, ownerPhone: await organizationOwnerPhone(input.organizationId) }),
+    consumeQuota: consumeFreeQuota,
+    consumeFlood: consumeContactFlood,
+    coalesceMs: Number.isFinite(configured) && configured >= 0 ? Math.min(configured, 10_000) : process.env.NODE_ENV === 'test' ? 0 : 1500,
+  }
+}
+
+let agentTurnRunner: typeof runAgentTurn = runAgentTurn
+/** Test seam: replaces the model call while keeping every guard before it real. */
+export function setAgentTurnRunner(runner: typeof runAgentTurn | null) {
+  agentTurnRunner = runner ?? runAgentTurn
+}
+
+let guardsFactory: (() => InboundAiGuards) | null = null
+export function setInboundGuardsFactory(factory: (() => InboundAiGuards) | null) {
+  guardsFactory = factory
+}
+export function inboundGuards(): InboundAiGuards {
+  return guardsFactory ? guardsFactory() : defaultInboundGuards()
+}
+
+/** True when a newer inbound message exists in the conversation (it will get the reply). */
+async function newerInboundExists(db: DbClient, organizationId: string, conversationId: string, messageId: string | null) {
+  if (!messageId) return false
+  const { data } = await db.from('messages').select('id').eq('organization_id', organizationId)
+    .eq('conversation_id', conversationId).eq('direction', 'inbound')
+    .order('created_at', { ascending: false }).limit(1).maybeSingle()
+  return Boolean(data?.id) && String(data?.id) !== messageId
+}
 
 type InboundIdentity = {
   organizationId: string
@@ -59,9 +126,9 @@ function skipReply(reason: string, input: { organizationId: string; channelId: s
 }
 
 /** Resolve the contact and conversation, then persist the inbound message for the inbox. */
-async function storeInboundMessage(
+export async function storeInboundMessage(
   db: DbClient,
-  input: InboundIdentity & { messageType: InboundMessageType; content: string }
+  input: InboundIdentity & { messageType: InboundMessageType; content: string; media?: Record<string, unknown> | null }
 ): Promise<{ conversationId: string; contactId: string; messageId: string | null }> {
   const contact = await resolveContactIdentity(db, input.organizationId, {
     channel: input.channelType,
@@ -86,6 +153,7 @@ async function storeInboundMessage(
     content: input.content,
     external_message_id: input.externalEventId,
     sender_type: 'contact',
+    ...(input.media ? { media: input.media } : {}),
   }).select('id').maybeSingle()
   if (stored.error && stored.error.code !== '23505') throw new Error(stored.error.message)
 
@@ -114,11 +182,20 @@ export async function recordInboundMediaMessage(
   return storeInboundMessage(db, input)
 }
 
+export type PrestoredInbound = { conversationId: string; contactId: string; messageId: string | null }
+
 export async function processInboundMessage(
   db: DbClient,
-  input: InboundIdentity & { text: string }
+  input: InboundIdentity & {
+    text: string
+    /** The media pipeline already stored the message (with its media metadata). */
+    prestored?: PrestoredInbound
+    /** The media pipeline already counted this turn against the flood limit and policy. */
+    floodChecked?: boolean
+    policy?: AiGuardPolicy
+  }
 ): Promise<{ reply: string | null; conversationId: string; contactId: string }> {
-  const stored = await storeInboundMessage(db, { ...input, messageType: 'text', content: input.text })
+  const stored = input.prestored ?? await storeInboundMessage(db, { ...input, messageType: 'text', content: input.text })
   const conversationId = stored.conversationId
   const contact = { contactId: stored.contactId }
 
@@ -249,6 +326,47 @@ export async function processInboundMessage(
     return skipReply('template_only_window', input, conversationId, contact.contactId)
   }
 
+  const guards = inboundGuards()
+  const policy = input.policy ?? await guards.policy(db, input.organizationId)
+
+  // Coalescing: a burst of rapid messages is answered once, by the newest message.
+  if (guards.coalesceMs > 0) {
+    await new Promise((resolve) => setTimeout(resolve, guards.coalesceMs))
+    if (await newerInboundExists(db, input.organizationId, conversationId, stored.messageId)) {
+      return skipReply('coalesced_into_newer_message', input, conversationId, contact.contactId)
+    }
+  }
+
+  // Anti-flood / prompt bombing: N AI calls per minute per contact on any channel.
+  if (!input.floodChecked && !await guards.consumeFlood(db, {
+    organizationId: input.organizationId, contactId: contact.contactId,
+    limit: policy.floodPerMinute, failClosed: policy.free,
+  })) {
+    return skipReply('contact_flood_limited', input, conversationId, contact.contactId)
+  }
+
+  if (policy.free) {
+    const decision = await guards.consumeQuota(db, {
+      organizationId: input.organizationId,
+      fingerprints: await guards.fingerprints(db, { organizationId: input.organizationId, channelId: input.channelId }),
+      kind: 'ai',
+      dailyLimit: policy.dailyLimit,
+      monthlyLimit: policy.monthlyLimit,
+    })
+    if (!decision.allowed) {
+      await db.from('audit_events').insert({
+        organization_id: input.organizationId,
+        business_id: input.businessId,
+        actor_type: 'system',
+        action: 'billing.free_quota_exceeded',
+        entity_type: 'conversation',
+        entity_id: conversationId,
+        metadata: { reason: decision.reason, plan: policy.planCode },
+      })
+      return { reply: FREE_QUOTA_REPLY, conversationId, contactId: contact.contactId }
+    }
+  }
+
   try {
     await assertWithinLimit(db, input.organizationId, 'ai_messages', 1)
   } catch (err) {
@@ -263,7 +381,7 @@ export async function processInboundMessage(
         metadata: { meter: err.meter, used: err.used, limit: err.limit },
       })
       return {
-        reply: 'نعتذر، تم استهلاك حصة الردود الذكية لهذه الفترة. سيتابع أحد أعضاء الفريق قريبًا.',
+        reply: FREE_QUOTA_REPLY,
         conversationId,
         contactId: contact.contactId,
       }
@@ -271,16 +389,20 @@ export async function processInboundMessage(
     throw err
   }
 
-  const reply = await runAgentTurn({
+  const reply = await agentTurnRunner({
     db,
     organizationId: input.organizationId,
     businessId: input.businessId,
     conversationId,
     contactId: contact.contactId,
     channel: input.channelType,
-    userText: input.text,
+    // Media turns are already bounded by the pipeline (≤4,000 document chars, short transcripts).
+    userText: input.prestored ? input.text : truncateForPlan(input.text, policy),
     agentId: agent.id,
     serverActionResult,
+    maxOutputTokens: policy.maxOutputTokens,
+    economy: policy.economy,
+    inputCharLimit: policy.free ? policy.maxInputChars : undefined,
   })
   if (!reply) return skipReply('agent_returned_empty_reply', input, conversationId, contact.contactId)
 

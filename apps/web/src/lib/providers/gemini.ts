@@ -1,5 +1,5 @@
 import type { AIProvider, ModelBlock } from './types'
-import { AIProviderError } from './types'
+import { AIProviderError, geminiCandidateModels } from './types'
 
 type GeminiPart = { text?: string; functionCall?: { id?: string; name: string; args?: Record<string, unknown> }; functionResponse?: { id?: string; name?: string; response: unknown } }
 type GeminiContent = { role: 'user' | 'model'; parts: GeminiPart[] }
@@ -45,7 +45,7 @@ export const geminiProvider: AIProvider = {
     }
     const tools = input.tools.length ? [{ functionDeclarations: input.tools.map((tool) => ({ name: tool.name, description: tool.description, parameters: cleanGeminiSchema(tool.input_schema) })) }] : undefined
     const systemInstruction = input.system ? { parts: [{ text: input.system }] } : undefined
-    const candidateModels = Array.from(new Set([configuredModel, 'gemini-3.1-flash-lite-preview']))
+    const candidateModels = geminiCandidateModels(configuredModel, input.economy)
     let lastError = 'All candidate models failed'; let lastStatus: number | null = null; let lastModel = configuredModel; let lastRetryable = true; let quotaFallback = false; let attempts = 0
     for (const model of candidateModels) {
       lastModel = model

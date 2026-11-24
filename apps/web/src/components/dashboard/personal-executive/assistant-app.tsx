@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
-import { Brain, CheckCircle2, ClipboardList, Link2, MessageCircle, OctagonX, Play, Send, ShieldCheck, Smartphone, XCircle } from 'lucide-react'
+import { Brain, CheckCircle2, ClipboardList, Link2, MessageCircle, Mic, OctagonX, Paperclip, Play, Send, ShieldCheck, Smartphone, Square, XCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog } from '@/components/ui/overlay'
 import { TabsList, TabsTrigger } from '@/components/ui/navigation'
@@ -13,6 +13,17 @@ import { TrainerPanel } from '@/components/dashboard/trainer/trainer-panel'
 export type AssistantTab = 'chat' | 'tasks' | 'memory'
 
 type ThreadMessage = { id: string; direction: 'inbound' | 'outbound'; source: 'web' | 'whatsapp' | 'system'; message_type: string; content: string; created_at: string }
+type MediaLimits = { audioMaxSeconds: number; mediaMaxBytes: number; documents: boolean; maxInputChars: number }
+const UPLOAD_ACCEPT = 'image/jpeg,image/png,image/webp,application/pdf,text/plain,text/csv,audio/ogg,audio/mpeg,audio/mp4,audio/webm,audio/wav,audio/aac'
+const RECORDER_TYPES = ['audio/ogg;codecs=opus', 'audio/webm;codecs=opus', 'audio/mp4']
+
+function mediaErrorMessage(status: number, data: { reply?: string | null; error?: string } | null, limits: MediaLimits | null): string {
+  if (data?.reply) return data.reply
+  if (status === 413) return `حجم الملف أكبر من المسموح (${Math.round((limits?.mediaMaxBytes ?? 5242880) / 1048576)} ميجابايت).`
+  if (status === 429) return 'وصلت إلى حد باقتك أو أرسلت رسائل كثيرة خلال دقيقة. انتظر قليلاً.'
+  return 'تعذّر إرسال المرفق. حاول مرة أخرى.'
+}
+
 type LinkStatus = { configured: boolean; linked: boolean; phoneMasked: string | null; killSwitchActive: boolean }
 type AgentTask = { id: string; goal: string; state: string; risk_level: string; last_error: string | null; created_at: string }
 type Approval = { id: string; task_id: string; summary_ar: string; payload_hash: string; expires_at: string }
@@ -238,14 +249,88 @@ function ChatTab() {
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [limits, setLimits] = useState<MediaLimits | null>(null)
+  const [uploading, setUploading] = useState(false)
+  const [recordingSeconds, setRecordingSeconds] = useState<number | null>(null)
   const endRef = useRef<HTMLDivElement>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
+  const recorderRef = useRef<{ recorder: MediaRecorder; timer: ReturnType<typeof setInterval>; stream: MediaStream } | null>(null)
 
   const load = useCallback(async () => {
     try {
-      const result = await getJson<{ messages: ThreadMessage[] }>('/api/assistant/chat')
+      const result = await getJson<{ messages: ThreadMessage[]; limits?: MediaLimits | null }>('/api/assistant/chat')
       setMessages(result.messages)
+      if (result.limits) setLimits(result.limits)
     } catch { setError('تعذّر تحميل المحادثة.') }
   }, [])
+
+  async function uploadMedia(file: File, voice: boolean) {
+    const maxBytes = limits?.mediaMaxBytes ?? 5 * 1024 * 1024
+    if (file.size > maxBytes) { setError(mediaErrorMessage(413, null, limits)); return }
+    setUploading(true)
+    setError(null)
+    const form = new FormData()
+    form.append('file', file)
+    if (voice) form.append('voice', '1')
+    const caption = text.trim()
+    if (caption && !voice) form.append('caption', caption.slice(0, 500))
+    try {
+      const response = await fetch('/api/assistant/chat/media', { method: 'POST', body: form, credentials: 'same-origin' })
+      const data = await response.json().catch(() => null) as { reply?: string | null; error?: string } | null
+      if (!response.ok) setError(mediaErrorMessage(response.status, data, limits))
+      else if (caption && !voice) setText('')
+    } catch {
+      setError('تعذّر إرسال المرفق. تحقق من الاتصال.')
+    } finally {
+      setUploading(false)
+      await load()
+    }
+  }
+
+  function stopRecording() {
+    const active = recorderRef.current
+    if (!active) return
+    clearInterval(active.timer)
+    if (active.recorder.state !== 'inactive') active.recorder.stop()
+  }
+
+  async function toggleRecording() {
+    if (recorderRef.current) { stopRecording(); return }
+    if (typeof MediaRecorder === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
+      setError('متصفحك لا يدعم التسجيل الصوتي. يمكنك رفع ملف صوتي بدلاً من ذلك.')
+      return
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const mimeType = RECORDER_TYPES.find((type) => MediaRecorder.isTypeSupported(type)) ?? ''
+      const recorder = new MediaRecorder(stream, mimeType ? { mimeType, audioBitsPerSecond: 32000 } : { audioBitsPerSecond: 32000 })
+      const chunks: Blob[] = []
+      const maxSeconds = limits?.audioMaxSeconds ?? 30
+      let elapsed = 0
+      recorder.ondataavailable = (event) => { if (event.data.size) chunks.push(event.data) }
+      recorder.onstop = () => {
+        stream.getTracks().forEach((track) => track.stop())
+        recorderRef.current = null
+        setRecordingSeconds(null)
+        const type = (recorder.mimeType || mimeType || 'audio/webm').split(';')[0] ?? 'audio/webm'
+        const extension = type.includes('ogg') ? 'ogg' : type.includes('mp4') ? 'm4a' : 'webm'
+        if (chunks.length && elapsed >= 1) void uploadMedia(new File(chunks, `voice.${extension}`, { type }), true)
+      }
+      const timer = setInterval(() => {
+        elapsed += 1
+        setRecordingSeconds(elapsed)
+        if (elapsed >= maxSeconds) stopRecording()
+      }, 1000)
+      recorderRef.current = { recorder, timer, stream }
+      setRecordingSeconds(0)
+      setError(null)
+      recorder.start()
+    } catch {
+      setError('لم نتمكن من الوصول إلى الميكروفون. اسمح بالإذن ثم حاول مجدداً.')
+    }
+  }
+
+  useEffect(() => () => stopRecording(), [])
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load()
@@ -261,7 +346,7 @@ function ChatTab() {
     setError(null)
     const result = await postJson<{ reply?: string; error?: string }>('/api/assistant/chat', { text: value })
     setSending(false)
-    if (!result.ok) { setError(result.status === 429 ? 'وصلت إلى حد باقتك لهذا الشهر.' : 'تعذّر الإرسال. حاول مرة أخرى.'); return }
+    if (!result.ok) { setError(result.status === 429 ? ((result.data as { reply?: string | null } | null)?.reply || 'وصلت إلى حد باقتك أو أرسلت رسائل كثيرة خلال دقيقة.') : 'تعذّر الإرسال. حاول مرة أخرى.'); return }
     setText('')
     await load()
   }
@@ -292,16 +377,41 @@ function ChatTab() {
           <div ref={endRef} />
         </div>
         {error ? <p role="alert" className="mx-3 mb-2 rounded-xl bg-error-soft p-2 text-xs text-error">{error}</p> : null}
+        {recordingSeconds !== null ? (
+          <p role="status" className="mx-3 mb-2 flex items-center gap-2 rounded-xl bg-primary-light px-3 py-2 text-xs font-semibold text-secondary">
+            <span className="h-2 w-2 animate-pulse rounded-full bg-error" aria-hidden />
+            جارٍ التسجيل {recordingSeconds} / {limits?.audioMaxSeconds ?? 30} ث — اضغط الإيقاف للإرسال
+          </p>
+        ) : null}
         <form onSubmit={send} className="flex items-end gap-2 border-t border-border p-3">
+          <input
+            ref={fileRef}
+            type="file"
+            accept={UPLOAD_ACCEPT}
+            className="sr-only"
+            tabIndex={-1}
+            aria-hidden
+            onChange={(event) => {
+              const file = event.target.files?.[0]
+              event.target.value = ''
+              if (file) void uploadMedia(file, file.type.startsWith('audio/'))
+            }}
+          />
+          <Button type="button" size="icon" variant="ghost" aria-label="إرفاق صورة أو ملف" loading={uploading} disabled={uploading || recordingSeconds !== null} onClick={() => fileRef.current?.click()}>
+            <Paperclip size={18} aria-hidden />
+          </Button>
+          <Button type="button" size="icon" variant={recordingSeconds !== null ? 'primary' : 'ghost'} aria-label={recordingSeconds !== null ? 'إيقاف التسجيل وإرسال' : 'تسجيل رسالة صوتية'} aria-pressed={recordingSeconds !== null} disabled={uploading} onClick={() => void toggleRecording()}>
+            {recordingSeconds !== null ? <Square size={16} aria-hidden /> : <Mic size={18} aria-hidden />}
+          </Button>
           <label htmlFor="pa-composer" className="sr-only">اكتب طلبك</label>
           <textarea
             id="pa-composer"
             value={text}
             onChange={(event) => setText(event.target.value)}
-            maxLength={2000}
+            maxLength={limits?.maxInputChars ?? 2000}
             rows={1}
             placeholder="اكتب طلبك…"
-            className="min-h-11 flex-1 resize-none rounded-xl border border-border bg-surface px-3 py-2.5 text-sm text-text outline-none focus:border-primary-dark focus:ring-2 focus:ring-focus"
+            className="min-h-11 min-w-0 flex-1 resize-none rounded-xl border border-border bg-surface px-3 py-2.5 text-sm text-text outline-none focus:border-primary-dark focus:ring-2 focus:ring-focus"
           />
           <Button type="submit" size="icon" aria-label="إرسال" loading={sending} disabled={!text.trim()}><Send size={18} aria-hidden /></Button>
         </form>

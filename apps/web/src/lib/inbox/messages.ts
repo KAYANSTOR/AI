@@ -10,6 +10,7 @@ export type ThreadMessage = {
   messageType: string
   senderType: string | null
   createdAt: string
+  media: Record<string, unknown> | null
 }
 
 export type ThreadPage = {
@@ -53,7 +54,7 @@ export async function loadConversationMessages(
   const cursor = decodeMessageCursor(input.cursor)
   let query = db
     .from('messages')
-    .select('id, direction, content, message_type, sender_type, created_at')
+    .select('id, direction, content, message_type, sender_type, created_at, media')
     .eq('conversation_id', input.conversationId)
     .eq('organization_id', input.organizationId)
   if (cursor) {
@@ -73,6 +74,7 @@ export async function loadConversationMessages(
     messageType: typeof row.message_type === 'string' ? row.message_type : 'text',
     senderType: typeof row.sender_type === 'string' ? row.sender_type : null,
     createdAt: toIso(row.created_at),
+    media: row.media && typeof row.media === 'object' && !Array.isArray(row.media) ? row.media as Record<string, unknown> : null,
   }))
   const oldest = page[page.length - 1]
   return {

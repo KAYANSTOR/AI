@@ -1,10 +1,27 @@
 'use client'
 
 import { useLayoutEffect, useRef, useState, useTransition } from 'react'
-import { Bot, Loader2 } from 'lucide-react'
+import { Bot, FileText, ImageIcon, Loader2, Mic, Paperclip } from 'lucide-react'
 import { ChatBubble, type ChatBubbleType } from '@/components/ui/chat-bubble'
 import type { ThreadMessage } from '@/lib/inbox/messages'
+import { mediaBadgeFor, type MediaBadge } from '@/lib/inbox/media-badge'
 import { loadOlderMessagesAction } from './actions'
+
+const MEDIA_ICONS = { audio: Mic, image: ImageIcon, document: FileText, other: Paperclip } as const
+
+function MediaBadgeChip({ badge }: { badge: MediaBadge }) {
+  const Icon = MEDIA_ICONS[badge.kind]
+  return (
+    <div className="flex min-w-0 max-w-full flex-col gap-1 overflow-hidden rounded-2xl border border-secondary/15 bg-primary-light/60 px-3 py-2 text-[12px] text-secondary">
+      <span className="flex min-w-0 items-center gap-1.5 font-semibold">
+        <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+        <span className="truncate">{badge.title}</span>
+        {badge.rejected ? <span className="shrink-0 rounded-full bg-surface px-1.5 text-[10px] font-medium text-text-muted">لم يُحلَّل</span> : null}
+      </span>
+      {badge.detail ? <span className="line-clamp-3 break-words leading-5 text-text">{badge.detail}</span> : null}
+    </div>
+  )
+}
 
 function bubbleFor(message: ThreadMessage, customerName: string, aiEnabled: boolean): { type: ChatBubbleType; sender: string } {
   if (message.direction === 'inbound') return { type: 'customer', sender: customerName }
@@ -112,11 +129,16 @@ export function MessageThread({
       ) : (
         messages.map((message) => {
           const bubble = bubbleFor(message, customerName, aiEnabled)
+          const rawBadge = mediaBadgeFor(message.media, message.messageType)
+          // The bubble already shows the stored text (transcript / caption + description / file name).
+          const badge = rawBadge && rawBadge.detail && message.content.trim().startsWith(rawBadge.detail) ? { ...rawBadge, detail: null } : rawBadge
+          const bubbleText = badge?.kind === 'document' && message.content.trim() === badge.title ? 'ملف مرفق' : message.content
           return (
-            <div key={message.id} className={`flex w-full ${message.direction === 'inbound' ? 'justify-start' : 'justify-end'}`}>
+            <div key={message.id} className={`flex w-full flex-col gap-1 ${message.direction === 'inbound' ? 'items-start' : 'items-end'}`}>
+              {badge ? <div className="min-w-0 max-w-[88%] sm:max-w-[76%]"><MediaBadgeChip badge={badge} /></div> : null}
               <ChatBubble
                 type={bubble.type}
-                text={message.content || (message.messageType !== 'text' ? 'مرفق وسائط' : '')}
+                text={bubbleText || (message.messageType !== 'text' ? 'مرفق وسائط' : '')}
                 time={formatter.format(new Date(message.createdAt))}
                 sender={bubble.sender}
               />

@@ -149,7 +149,8 @@ export async function platformPlans() {
       price_monthly:Number(p.monthly_price),price_yearly:p.yearly_price===null?null:Number(p.yearly_price),currency:p.currency,
       billing_cycle:'monthly',trial_days:null,max_users:value('users'),max_agents:value('agents'),max_messages:value('ai_messages'),
       token_quota:null,max_channels:value('channels'),voice_minutes:value('voice_minutes'),automation_runs:value('automation_runs'),
-      campaign_sends:value('campaign_sends'),storage_mb:value('storage_mb'),allowed_models:[],allowed_channels:[],
+      campaign_sends:value('campaign_sends'),storage_mb:value('storage_mb'),
+      ai_messages_daily:value('ai_messages_daily'),media_monthly:value('media_monthly'),media_max_mb:value('media_max_mb'),audio_max_seconds:value('audio_max_seconds'),document_analysis:value('document_analysis'),max_input_chars:value('max_input_chars'),max_output_tokens:value('max_output_tokens'),flood_per_minute:value('flood_per_minute'),allowed_models:[],allowed_channels:[],
       allowed_tools:[],enabled_features:[],blocked_features:[],status:p.is_active?'active':'archived',
       active_subscribers:Number(p.active_subscribers),editable:true};
   })};
@@ -482,7 +483,7 @@ export async function platformUserAction(id:string,action:string,payload:Record<
     if(!Number.isSafeInteger(tokens)||tokens<1||tokens>10000000)throw new Error('قيمة الرصيد يجب أن تكون عدداً صحيحاً بين 1 و10,000,000.');
     if(reason.length<5||reason.length>1000)throw new Error('سبب إضافة الرصيد مطلوب (5 أحرف على الأقل).');
     const orgs=await query<{organization_id:string;plan_limit:number}>(`SELECT DISTINCT o.id::text organization_id,
-      COALESCE(NULLIF(p.limits->>'ai_messages','')::numeric,100)::numeric plan_limit
+      COALESCE(NULLIF(p.limits->>'ai_messages','')::numeric,40)::numeric plan_limit
       FROM organizations o JOIN organization_members m ON m.organization_id=o.id
       LEFT JOIN LATERAL(SELECT plan_id FROM subscriptions WHERE organization_id=o.id ORDER BY created_at DESC LIMIT 1) s ON TRUE
       LEFT JOIN plans p ON p.id=s.plan_id WHERE m.user_id=$1::uuid AND m.role='owner'`,[id]);
@@ -593,7 +594,8 @@ export async function savePlatformPlan(p:Record<string,unknown>,id?:string) {
   if(p.status==='draft')throw new Error('قاعدة الباقات الفعلية لا تدعم حالة المسودة.');
   const limits:Record<string,number>={};
   const mappings:Record<string,string>={maxUsers:'users',maxAgents:'agents',maxMessages:'ai_messages',maxChannels:'channels',
-    voiceMinutes:'voice_minutes',automationRuns:'automation_runs',campaignSends:'campaign_sends',storageMb:'storage_mb'};
+    voiceMinutes:'voice_minutes',automationRuns:'automation_runs',campaignSends:'campaign_sends',storageMb:'storage_mb',
+    aiMessagesDaily:'ai_messages_daily',mediaMonthly:'media_monthly',mediaMaxMb:'media_max_mb',audioMaxSeconds:'audio_max_seconds',documentAnalysis:'document_analysis',maxInputChars:'max_input_chars',maxOutputTokens:'max_output_tokens',floodPerMinute:'flood_per_minute'};
   for(const [input,key] of Object.entries(mappings)){
     const value=p[input];
     if(value!==undefined&&value!==null&&String(value).trim()!==''){
@@ -1361,4 +1363,38 @@ export async function platformAgentSandboxTest(agentId:string,rawMessage:string)
     await query(`UPDATE agent_runs SET status='failed',model=$2,error_code=$3,latency_ms=$4,completed_at=NOW() WHERE id=$1::uuid`,[run.id,e.model||null,code.slice(0,120),latencyMs]);
     throw new Error(e.name==='TimeoutError'?'انتهت مهلة استجابة المزود.':(e.message||'فشل اختبار الوكيل.'));
   }
+}
+
+/** Same formula as apps/web lib/billing/free-tier.ts quotaFingerprint (kayan-free-quota:v1). */
+export function freeQuotaFingerprint(value:string):string|null{
+  const raw=String(value||'').trim().toLowerCase();
+  if(!raw||raw.length>200)return null;
+  const digits=raw.replace(/\D/g,'');
+  const normalized=digits.length>=7&&digits.length<=15&&/^[+\d\s()-]+$/.test(raw)?'phone:'+digits:'id:'+raw;
+  return crypto.createHash('sha256').update('kayan-free-quota:v1:'+normalized).digest('hex');
+}
+
+export async function platformFreeQuotaExemptions(){
+  const rows=await query<{fingerprint:string;reason:string;granted_by:string|null;created_at:string}>(
+    `SELECT fingerprint,reason,granted_by,created_at::text created_at FROM free_tier_fingerprint_exemptions ORDER BY created_at DESC LIMIT 200`);
+  return {items:rows};
+}
+
+export async function addFreeQuotaExemption(value:string,reason:string,grantedBy:string){
+  const fingerprint=/^[0-9a-f]{64}$/.test(String(value||'').trim())?String(value).trim():freeQuotaFingerprint(value);
+  if(!fingerprint)throw new Error('أدخل رقم هاتف أو معرّف قناة أو بصمة SHA-256 صحيحة.');
+  const cleanReason=String(reason||'').trim();
+  if(cleanReason.length<5||cleanReason.length>300)throw new Error('سبب الاستثناء مطلوب (5 أحرف على الأقل).');
+  const [row]=await query<{fingerprint:string;reason:string;created_at:string}>(
+    `INSERT INTO free_tier_fingerprint_exemptions(fingerprint,reason,granted_by) VALUES($1,$2,$3)
+     ON CONFLICT(fingerprint) DO UPDATE SET reason=EXCLUDED.reason,granted_by=EXCLUDED.granted_by
+     RETURNING fingerprint,reason,created_at::text created_at`,[fingerprint,cleanReason,String(grantedBy||'').slice(0,200)]);
+  return row;
+}
+
+export async function removeFreeQuotaExemption(fingerprint:string){
+  if(!/^[0-9a-f]{64}$/.test(fingerprint))throw new Error('بصمة غير صالحة.');
+  const rows=await query<{fingerprint:string}>(`DELETE FROM free_tier_fingerprint_exemptions WHERE fingerprint=$1 RETURNING fingerprint`,[fingerprint]);
+  if(!rows.length)throw new Error('الاستثناء غير موجود.');
+  return {fingerprint,removed:true};
 }

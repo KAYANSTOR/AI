@@ -60,5 +60,21 @@ export interface AIProvider {
     isWhatsApp?: boolean
     /** Hard cap on generated tokens; set per channel by the runtime. */
     maxOutputTokens?: number
+    /** Free plan: only the cheapest fast model is allowed (no expensive fallbacks). */
+    economy?: boolean
   }): Promise<ModelResult>
+}
+
+/** Gemini model used for the free plan; never an expensive Pro/thinking model. */
+export const ECONOMY_GEMINI_MODEL = 'gemini-3.1-flash-lite-preview'
+/** Cheapest fast Groq model used for the free plan fallback. */
+export const ECONOMY_GROQ_MODEL = 'llama-3.1-8b-instant'
+
+export function geminiCandidateModels(configured: string, economy?: boolean): string[] {
+  if (economy) return [ECONOMY_GEMINI_MODEL]
+  return Array.from(new Set([configured, ECONOMY_GEMINI_MODEL]))
+}
+
+export function groqModelFor(configured: string, economy?: boolean): string {
+  return economy ? (process.env.GROQ_ECONOMY_MODEL?.trim() || ECONOMY_GROQ_MODEL) : configured
 }

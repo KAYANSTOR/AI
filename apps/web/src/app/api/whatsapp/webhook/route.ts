@@ -10,6 +10,7 @@ import { handleCentralInbound } from '@/lib/central-bot/router'
 import { normalizeE164, resolveContactIdentity } from '@/lib/channels/contacts'
 import { ensureOpenConversation } from '@/lib/runtime/conversation'
 import { processInboundMessage, recordInboundMediaMessage } from '@/lib/runtime/process-inbound'
+import { fromWhatsAppCloud } from '@/lib/media/attachment'
 import { parseWhatsAppInbound } from '@/lib/channels/whatsapp-inbound'
 import { importWhatsAppCoexistenceHistory, updateWhatsAppHistorySyncProgress } from '@/lib/channels/whatsapp-coexistence-history'
 import { resolveChannelExact } from '@/lib/runtime/tenant'
@@ -400,6 +401,38 @@ export async function POST(req: NextRequest) {
             event_type: 'message.whatsapp_app_echo', signature_verified: true,
           }).eq('id', eventRowId)
           await markWebhookProcessed(db, eventRowId, 'processed')
+          eventRowId = null
+          continue
+        }
+
+        const cloudMedia = inbound.kind === 'media' && !isKapsoWebhook ? fromWhatsAppCloud(msg as Record<string, unknown>) : null
+        if (cloudMedia) {
+          // Unified media pipeline: the always-on worker validates, downloads with the
+          // tenant's own token, analyzes and replies (Meta expects a fast 200 here).
+          const { error: jobError } = await db.from('inbound_jobs').insert({
+            organization_id: channel.organizationId,
+            business_id: channel.businessId,
+            channel_id: channel.id,
+            webhook_event_id: eventRowId,
+            idempotency_key: 'whatsapp:' + externalEventId,
+            payload: {
+              channelId: channel.id,
+              organizationId: channel.organizationId,
+              businessId: channel.businessId,
+              externalEventId,
+              senderJid: from,
+              senderPhone: remotePhone,
+              externalUserId: remotePhone,
+              contactPhone: normalizeE164(remotePhone),
+              displayName: profileName || null,
+              text: cloudMedia.caption ?? '',
+              media: cloudMedia,
+              provider: 'meta',
+              providerAccountId: channel.providerAccountId ?? phoneNumberId,
+              externalIdentifier: channel.externalIdentifier,
+            },
+          })
+          if (jobError && jobError.code !== '23505') throw new Error(jobError.message)
           eventRowId = null
           continue
         }

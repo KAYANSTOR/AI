@@ -4,6 +4,8 @@ import { appendThreadMessage, listThread } from '@/lib/personal-assistant/thread
 import { runPersonalAssistantTurn } from '@/lib/personal-assistant/runtime'
 import { buildEngineDeps, mirrorToWhatsApp } from '@/lib/central-bot/deps'
 import { assertWithinLimit, EntitlementExceededError } from '@/lib/billing/entitlements'
+import { getAiGuardPolicy } from '@/lib/billing/free-tier'
+import { guardAssistantText } from '@/lib/personal-assistant/web-media'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -15,8 +17,14 @@ export async function GET() {
   const access = await requirePersonalAssistantApi()
   if (access instanceof NextResponse) return access
   try {
-    const messages = await listThread(access.db, access.owner)
-    return NextResponse.json({ messages }, { headers: { 'Cache-Control': 'no-store' } })
+    const [messages, policy] = await Promise.all([
+      listThread(access.db, access.owner),
+      getAiGuardPolicy(access.admin, access.owner.organizationId).catch(() => null),
+    ])
+    const limits = policy
+      ? { audioMaxSeconds: policy.audioMaxSeconds, mediaMaxBytes: policy.mediaMaxBytes, documents: policy.documentsAllowed, maxInputChars: policy.maxInputChars }
+      : null
+    return NextResponse.json({ messages, limits }, { headers: { 'Cache-Control': 'no-store' } })
   } catch {
     return NextResponse.json({ error: 'thread_list_failed' }, { status: 500 })
   }
@@ -34,9 +42,16 @@ export async function POST(request: Request) {
     if (error instanceof EntitlementExceededError) return NextResponse.json({ error: 'entitlement_exceeded' }, { status: 429 })
     return NextResponse.json({ error: 'billing_check_failed' }, { status: 503 })
   }
+  let guarded: Awaited<ReturnType<typeof guardAssistantText>>
+  try {
+    guarded = await guardAssistantText(access.admin, access.owner, text, { policy: await getAiGuardPolicy(access.admin, access.owner.organizationId) })
+  } catch {
+    return NextResponse.json({ error: 'billing_check_failed' }, { status: 503 })
+  }
+  if (!guarded.ok) return NextResponse.json({ error: guarded.error, reply: guarded.reply ?? null }, { status: guarded.status })
   try {
     await appendThreadMessage(access.admin, access.owner, { direction: 'inbound', source: 'web', content: text })
-    const turn = await runPersonalAssistantTurn(access.admin, access.owner, text, { engine: buildEngineDeps(access.admin) })
+    const turn = await runPersonalAssistantTurn(access.admin, access.owner, guarded.text, { engine: buildEngineDeps(access.admin) })
     await appendThreadMessage(access.admin, access.owner, { direction: 'outbound', source: 'web', content: turn.reply })
     const mirrored = await mirrorToWhatsApp(access.admin, access.owner, `من الموقع: ${text.slice(0, 300)}\n\n${turn.reply}`)
     return NextResponse.json({ reply: turn.reply, mirrored })

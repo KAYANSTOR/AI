@@ -6,6 +6,9 @@ import { processInboundMessage,recordInboundMediaMessage } from '@/lib/runtime/p
 import { deliverOutbound,recordDeliveredOutboundMessage } from '@/lib/runtime/outbound'
 import { stablePayloadEventId,verifyMetaSignature } from '@/lib/runtime/security'
 import { messengerWebhookVerifyToken } from '@/lib/providers/messenger'
+import { fromMetaMessaging } from '@/lib/media/attachment'
+import { handleInboundMedia } from '@/lib/media/pipeline'
+import { downloaderForChannel } from '@/lib/media/channel-downloader'
 export const runtime='nodejs'
 export const dynamic='force-dynamic'
 type Attachment={type?:string;payload?:{url?:string}}
@@ -39,25 +42,25 @@ export async function POST(req:NextRequest){
     activeEventId=claim.eventRowId
     await db.from('webhook_events').update({organization_id:channel.organizationId,channel_id:channel.id,
      event_type:event.postback?'message.postback':'message.received',signature_verified:true}).eq('id',activeEventId)
-    if(text){
-     const result=await processInboundMessage(db,{organizationId:channel.organizationId,businessId:channel.businessId,
-      channelId:channel.id,channelType:'messenger',provider:'messenger',externalEventId:eventId,
-      externalUserId:sender,displayName:null,text})
-     if(result.reply){
-      const delivery=await deliverOutbound(db,{channel:{id:channel.id,organizationId:channel.organizationId,businessId:channel.businessId,
-       channelType:'messenger',providerAccountId:channel.providerAccountId,externalIdentifier:channel.externalIdentifier},
-       recipient:sender,body:result.reply,idempotencyKey:eventId+':reply',conversationId:result.conversationId})
-      if(delivery==='sent')await recordDeliveredOutboundMessage(db,{organizationId:channel.organizationId,
-       conversationId:result.conversationId,body:result.reply,idempotencyKey:eventId+':reply'})
-     }
-    }else{
-     const attachment=event.message?.attachments?.[0],url=attachment?.payload?.url
-     if(attachment?.type&&url){
-      const kind=attachment.type.toLowerCase(),messageType=kind==='image'?'image':kind==='video'?'video':kind==='audio'?'audio':'file'
-      await recordInboundMediaMessage(db,{organizationId:channel.organizationId,businessId:channel.businessId,
-       channelId:channel.id,channelType:'messenger',provider:'messenger',externalEventId:eventId,
-       externalUserId:sender,displayName:null,messageType,content:url})
-     }
+    const identity={organizationId:channel.organizationId,businessId:channel.businessId,
+     channelId:channel.id,channelType:'messenger' as const,provider:'messenger',externalEventId:eventId,
+     externalUserId:sender,displayName:null}
+    const outboundChannel={id:channel.id,organizationId:channel.organizationId,businessId:channel.businessId,
+     channelType:'messenger',providerAccountId:channel.providerAccountId,externalIdentifier:channel.externalIdentifier}
+    const attachment=event.message?.attachments?.[0]
+    const media=text?null:fromMetaMessaging('messenger',attachment)
+    let result:{reply:string|null;conversationId:string}|null=null
+    if(text)result=await processInboundMessage(db,{...identity,text})
+    else if(media)result=await handleInboundMedia(db,{...identity,attachment:media},{download:downloaderForChannel(db,outboundChannel)})
+    else if(attachment?.type&&attachment.payload?.url){
+     const kind=attachment.type.toLowerCase(),messageType=kind==='video'?'video':'file'
+     await recordInboundMediaMessage(db,{...identity,messageType,content:attachment.payload.url})
+    }
+    if(result?.reply){
+     const delivery=await deliverOutbound(db,{channel:outboundChannel,
+      recipient:sender,body:result.reply,idempotencyKey:eventId+':reply',conversationId:result.conversationId})
+     if(delivery==='sent')await recordDeliveredOutboundMessage(db,{organizationId:channel.organizationId,
+      conversationId:result.conversationId,body:result.reply,idempotencyKey:eventId+':reply'})
     }
     await markWebhookProcessed(db,activeEventId,'processed');activeEventId=null
    }

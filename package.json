@@ -18,7 +18,7 @@
     "start": "node start-with-gateway.mjs",
     "lint": "npm run lint --workspace=apps/web",
     "typecheck": "npm run typecheck --workspace=apps/web",
-    "test": "npm run test --workspace=apps/web",
+    "test": "npm run test --workspace=apps/web && node --test apps/whatsapp-gateway/test/*.test.js",
     "db:migrate": "node packages/db/scripts/migrate.mjs up",
     "db:status": "node packages/db/scripts/migrate.mjs status",
     "db:import": "node packages/db/scripts/import-from-postgres.mjs",

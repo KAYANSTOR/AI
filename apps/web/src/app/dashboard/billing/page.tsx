@@ -68,7 +68,7 @@ export default async function BillingPage() {
       icon: Zap,
       color: 'bg-accent',
       used: snapshot.usage.ai_messages ?? 0,
-      limit: snapshot.limits.ai_messages ?? 100,
+      limit: snapshot.limits.ai_messages ?? 40,
     },
     {
       key: 'channels',

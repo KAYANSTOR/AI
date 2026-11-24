@@ -214,7 +214,9 @@ describe('WhatsApp brevity guard', () => {
   test('the runtime injects the rule and the cap into every provider call', async () => {
     const runtime = readFileSync(new URL('../src/lib/runtime/agent-runtime.ts', import.meta.url), 'utf8')
     expect(runtime).toContain('system: applyChannelFormatRules(args.systemPrompt, args.channel)')
-    expect(runtime).toContain('maxOutputTokens: maxOutputTokensForChannel(args.channel)')
+    // Channel cap always applies; the free-plan cap (3C) can only lower it.
+    expect(runtime).toContain('Math.min(args.maxOutputTokens, maxOutputTokensForChannel(args.channel))')
+    expect(runtime).toContain(': maxOutputTokensForChannel(args.channel)')
   })
 
   test('an article-style reply is trimmed to a few short lines unless details were requested', () => {

@@ -5,6 +5,9 @@ import { processInboundMessage } from '@/lib/runtime/process-inbound'
 import { resolveChannelExact } from '@/lib/runtime/tenant'
 import { publicWebhookError, stablePayloadEventId, verifyMetaSignature } from '@/lib/runtime/security'
 import { deliverOutbound, recordDeliveredOutboundMessage } from '@/lib/runtime/outbound'
+import { fromMetaMessaging } from '@/lib/media/attachment'
+import { handleInboundMedia } from '@/lib/media/pipeline'
+import { downloaderForChannel } from '@/lib/media/channel-downloader'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -36,7 +39,9 @@ export async function POST(req: NextRequest) {
         const message = event.message as Record<string, unknown> | undefined
         const senderId = String(sender?.id ?? '').trim()
         const text = String(message?.text ?? '').trim()
-        if (!senderId || !text) continue
+        const attachments = message?.attachments as Array<{ type?: string; payload?: { url?: string } }> | undefined
+        const media = text || message?.is_echo ? null : fromMetaMessaging('instagram', attachments?.[0])
+        if (!senderId || (!text && !media)) continue
 
         const externalEventId = String(event.message_id ?? event.id ?? '').trim() || stablePayloadEventId('instagram', event)
         const acquired = await acquireWebhookEvent(db, 'instagram', externalEventId, event)
@@ -61,17 +66,24 @@ export async function POST(req: NextRequest) {
           signature_verified: true,
         }).eq('id', eventRowId)
 
-        const result = await processInboundMessage(db, {
+        const identity = {
           organizationId: channel.organizationId,
           businessId: channel.businessId,
           channelId: channel.id,
-          channelType: 'instagram',
+          channelType: 'instagram' as const,
           provider: 'meta',
           externalEventId,
           externalUserId: senderId,
           senderUsername: String(sender?.username ?? ''),
-          text,
-        })
+        }
+        const result = media
+          ? await handleInboundMedia(db, { ...identity, attachment: media }, {
+              download: downloaderForChannel(db, {
+                id: channel.id, organizationId: channel.organizationId, businessId: channel.businessId,
+                channelType: 'instagram', providerAccountId: channel.providerAccountId ?? accountId, externalIdentifier: channel.externalIdentifier,
+              }),
+            })
+          : await processInboundMessage(db, { ...identity, text })
 
         if (result.reply) {
           const delivery = await deliverOutbound(db, {

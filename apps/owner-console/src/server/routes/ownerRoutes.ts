@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from 'express';
 import { claimFirstRunOwner, confirmOwnerMfa, getAuthStatus, getClientIp, loginOwner, requireOwnerAuth, requirePermission, setupOwnerMfa, writeAuditLog, revokeOwnerSession, setSessionCookie, clearSessionCookie } from '../security/auth';
-import { platformStatus, platformUsers, platformUserDetail, platformWorkspaces, platformPlans, platformSubscriptions, platformAgents, platformAgentDetail, platformCreateAgent, platformAiUsage, platformChannels, platformConversations, platformEntitlements, platformBillingLedger, platformOverview, updatePlatformUser, platformUserAction, subscriptionAction, updatePlatformAgent, platformEntitlementOverride, platformConversationDetail, platformQueueConversationIntervention, updatePlatformWorkspaceStatus, platformCreateWorkspace, savePlatformPlan, platformAutomations, createPlatformAutomation, updatePlatformAutomation, platformKnowledge, platformApiIntegrations, createPlatformApiKey, revokePlatformApiKey, platformMonitoring, platformLogs, platformReport, platformAiProviders, platformNotificationsSupport, rotatePlatformChannelSecret, testPlatformChannel, platformSearch, platformAuditLogs, platformSettings, updatePlatformSetting, platformSecurity, createPlatformAdmin, updatePlatformWorkspaceAddon, platformCreateConversation, createPlatformAnnouncement, createPlatformSupportTicket, updatePlatformSupportTicket, acknowledgePlatformAlert, resolvePlatformLog, reviewPlatformWalletPayment, platformManualWalletReceipt, platformBillingCatalog, savePlatformWallet, savePlatformPrice, reviewPlatformPayment, platformPaymentReceipt, platformAgentSandboxTest } from '../services/platformDataService';
+import { platformStatus, platformUsers, platformUserDetail, platformWorkspaces, platformPlans, platformSubscriptions, platformAgents, platformAgentDetail, platformCreateAgent, platformAiUsage, platformChannels, platformConversations, platformEntitlements, platformBillingLedger, platformOverview, updatePlatformUser, platformUserAction, subscriptionAction, updatePlatformAgent, platformEntitlementOverride, platformConversationDetail, platformQueueConversationIntervention, updatePlatformWorkspaceStatus, platformCreateWorkspace, savePlatformPlan, platformAutomations, createPlatformAutomation, updatePlatformAutomation, platformKnowledge, platformApiIntegrations, createPlatformApiKey, revokePlatformApiKey, platformMonitoring, platformLogs, platformReport, platformAiProviders, platformNotificationsSupport, rotatePlatformChannelSecret, testPlatformChannel, platformSearch, platformAuditLogs, platformSettings, updatePlatformSetting, platformSecurity, createPlatformAdmin, updatePlatformWorkspaceAddon, platformCreateConversation, createPlatformAnnouncement, createPlatformSupportTicket, updatePlatformSupportTicket, acknowledgePlatformAlert, resolvePlatformLog, reviewPlatformWalletPayment, platformManualWalletReceipt, platformBillingCatalog, savePlatformWallet, savePlatformPrice, reviewPlatformPayment, platformPaymentReceipt, platformAgentSandboxTest, platformFreeQuotaExemptions, addFreeQuotaExemption, removeFreeQuotaExemption } from '../services/platformDataService';
 export const ownerRouter = Router();
 function handleError(res:Response,err:unknown,status=400){res.status(status).json({error:'request_failed',message:err instanceof Error?err.message:'حدث خطأ غير متوقع في الخادم.'})}
 ownerRouter.get('/auth/status', async (_req,res)=>{try{res.json(await getAuthStatus())}catch(e){handleError(res,e,503)}});
@@ -298,6 +298,19 @@ platformDataRouter.post('/plans', requirePermission('billing:write'), async (req
 });
 platformDataRouter.put('/plans/:id', requirePermission('billing:write'), async (req,res)=>{
   try {const result=await savePlatformPlan(req.body||{},String(req.params.id));writeAuditLog({actor:req.ownerAdmin!,action:'plan.updated',entityType:'plan',entityId:String(req.params.id),summary:'تحديث باقة في كتالوج PostgreSQL.',after:result,ipAddress:getClientIp(req)});res.json(result);}
+  catch(err){handleError(res,err);}
+});
+platformDataRouter.get('/billing/free-quota-exemptions', requirePermission('billing:write'), async (_req,res)=>{try{res.json(await platformFreeQuotaExemptions());}catch(err){handleError(res,err,503);}});
+platformDataRouter.post('/billing/free-quota-exemptions', requirePermission('billing:write'), async (req,res)=>{
+  try {const result=await addFreeQuotaExemption(String(req.body?.value||''),String(req.body?.reason||''),req.ownerAdmin!.email);
+    await writeAuditLog({actor:req.ownerAdmin!,action:'billing.free_quota_exemption_granted',entityType:'free_quota_fingerprint',entityId:String(result?.fingerprint||''),summary:'استثناء بصمة من حصة الباقة المجانية.',after:result,ipAddress:getClientIp(req)});
+    res.status(201).json(result);}
+  catch(err){handleError(res,err);}
+});
+platformDataRouter.delete('/billing/free-quota-exemptions/:fingerprint', requirePermission('billing:write'), async (req,res)=>{
+  try {const result=await removeFreeQuotaExemption(String(req.params.fingerprint));
+    await writeAuditLog({actor:req.ownerAdmin!,action:'billing.free_quota_exemption_revoked',entityType:'free_quota_fingerprint',entityId:String(req.params.fingerprint),summary:'إلغاء استثناء بصمة الحصة المجانية.',after:result,ipAddress:getClientIp(req)});
+    res.json(result);}
   catch(err){handleError(res,err);}
 });
 platformDataRouter.get('/billing', async (_req, res) => { try { res.json(await platformBillingLedger()); } catch (err) { handleError(res, err, 503); } });

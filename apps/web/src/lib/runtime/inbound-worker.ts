@@ -1,26 +1,11 @@
 import { randomUUID } from 'node:crypto'
 import { createAdminClient } from '@/lib/db/admin'
 import { markWebhookProcessed } from '@/lib/channels/idempotency'
-import { processInboundMessage } from '@/lib/runtime/process-inbound'
+import { runInboundJobTurn, type InboundPayload } from '@/lib/runtime/inbound-job'
 import { deliverOutbound, recordDeliveredOutboundMessage } from '@/lib/runtime/outbound'
 import { drainOutbox } from '@/lib/channels/outbox-drain'
 import { catchUpStillNeeded, runOwnerPresenceCatchUp } from '@/lib/runtime/owner-presence'
 
-type InboundPayload = {
-  channelId: string
-  organizationId: string
-  businessId: string
-  externalEventId: string
-  senderJid: string
-  senderPhone?: string | null
-  displayName?: string | null
-  text: string
-  providerAccountId?: string | null
-  externalIdentifier?: string | null
-  /** Queued by the owner-presence sweep after the owner's pause expired. */
-  catchUp?: boolean
-  conversationId?: string
-}
 type InboundJob = {
   id: string
   webhook_event_id: string | null
@@ -93,18 +78,7 @@ async function processJob(db: ReturnType<typeof createAdminClient>, job: Inbound
     console.log('inbound_job_catch_up_skipped', { jobId: job.id, conversationId: input.conversationId })
     return
   }
-  const result = await processInboundMessage(db, {
-    organizationId: input.organizationId,
-    businessId: input.businessId,
-    channelId: input.channelId,
-    channelType: 'whatsapp',
-    provider: 'whatsapp',
-    externalEventId: input.externalEventId,
-    externalUserId: input.senderPhone || input.senderJid,
-    senderPhone: input.senderPhone || null,
-    displayName: input.displayName || null,
-    text: input.text,
-  })
+  const result = await runInboundJobTurn(db, input)
   if (result.reply) {
     const delivery = await deliverOutbound(db, {
       channel: {

@@ -1,5 +1,5 @@
 import type { AIProvider, ModelBlock, ModelMessage } from './types'
-import { AIProviderError as ProviderError } from './types'
+import { AIProviderError as ProviderError, groqModelFor } from './types'
 type GroqMessage = { role: 'system' | 'user' | 'assistant' | 'tool'; content: string | null; tool_calls?: Array<{ id: string; type: 'function'; function: { name: string; arguments: string } }>; tool_call_id?: string; name?: string }
 type GroqResponse = { model?: string; choices?: Array<{ message?: { content?: string | null; tool_calls?: Array<{ id?: string; function?: { name?: string; arguments?: string } }> } }>; usage?: { prompt_tokens?: number; completion_tokens?: number }; error?: { message?: string } }
 const DEFAULT_MODEL = 'openai/gpt-oss-120b'
@@ -31,7 +31,7 @@ function buildRequestBody(input: Parameters<AIProvider['call']>[0], model: strin
 }
 export const groqProvider: AIProvider = {
   async call(input) {
-    const apiKey = process.env.GROQ_API_KEY?.trim(); const model = process.env.GROQ_MODEL?.trim() || DEFAULT_MODEL
+    const apiKey = process.env.GROQ_API_KEY?.trim(); const model = groqModelFor(process.env.GROQ_MODEL?.trim() || DEFAULT_MODEL, input.economy)
     if (!apiKey) throw new ProviderError('GROQ_API_KEY is required', { provider: 'groq', status: null, retryable: false, model })
     const request = async (withTools: boolean) => {
       const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {

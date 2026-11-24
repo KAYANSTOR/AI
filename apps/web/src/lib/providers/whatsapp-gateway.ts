@@ -6,7 +6,7 @@ export type WhatsAppGatewaySession = {
   connectedAt?: string | null
   lastError?: string | null
 }
-function configuration() {
+export function gatewayConfiguration() {
   // The gateway runs in the same Railway container (start-with-gateway.mjs) and
   // listens on loopback, so the internal URL is a safe default when unset.
   const baseUrl = (process.env.WHATSAPP_GATEWAY_URL?.trim() || 'http://127.0.0.1:' + (process.env.WHATSAPP_GATEWAY_PORT?.trim() || '3001')).replace(/\/+$/, '')
@@ -19,7 +19,7 @@ export async function callWhatsAppGateway<T>(
   path: string,
   body?: Record<string, unknown>
 ): Promise<T> {
-  const { baseUrl, token } = configuration()
+  const { baseUrl, token } = gatewayConfiguration()
   const response = await fetch(baseUrl + path, {
     method,
     headers: { authorization: 'Bearer ' + token, ...(body ? { 'content-type': 'application/json' } : {}) },

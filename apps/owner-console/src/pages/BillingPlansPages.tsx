@@ -35,6 +35,14 @@ interface PlanRow {
   automation_runs: number | null;
   campaign_sends: number | null;
   storage_mb: number | null;
+  ai_messages_daily?: number | null;
+  media_monthly?: number | null;
+  media_max_mb?: number | null;
+  audio_max_seconds?: number | null;
+  document_analysis?: number | null;
+  max_input_chars?: number | null;
+  max_output_tokens?: number | null;
+  flood_per_minute?: number | null;
   allowed_models: string[];
   allowed_channels: string[];
   enabled_features: string[];
@@ -72,6 +80,14 @@ export function PlansSubscriptionsPage({
     tokenQuota: '5000000',
     maxChannels: '5',
     storageMb: '2048',
+    aiMessagesDaily: '',
+    mediaMonthly: '',
+    mediaMaxMb: '',
+    audioMaxSeconds: '',
+    documentAnalysis: '',
+    maxInputChars: '',
+    maxOutputTokens: '',
+    floodPerMinute: '',
     status: 'active' as 'active' | 'archived' | 'draft',
   });
 
@@ -113,6 +129,14 @@ export function PlansSubscriptionsPage({
       tokenQuota: '10000000',
       maxChannels: '6',
       storageMb: '4096',
+      aiMessagesDaily: '',
+      mediaMonthly: '',
+      mediaMaxMb: '',
+      audioMaxSeconds: '',
+      documentAnalysis: '',
+      maxInputChars: '',
+      maxOutputTokens: '',
+      floodPerMinute: '',
       status: 'active',
     });
     setEditPlanOpen(true);
@@ -135,6 +159,14 @@ export function PlansSubscriptionsPage({
       tokenQuota: p.token_quota == null ? '' : String(p.token_quota),
       maxChannels: p.max_channels == null ? '' : String(p.max_channels),
       storageMb: p.storage_mb == null ? '' : String(p.storage_mb),
+      aiMessagesDaily: p.ai_messages_daily == null ? '' : String(p.ai_messages_daily),
+      mediaMonthly: p.media_monthly == null ? '' : String(p.media_monthly),
+      mediaMaxMb: p.media_max_mb == null ? '' : String(p.media_max_mb),
+      audioMaxSeconds: p.audio_max_seconds == null ? '' : String(p.audio_max_seconds),
+      documentAnalysis: p.document_analysis == null ? '' : String(p.document_analysis),
+      maxInputChars: p.max_input_chars == null ? '' : String(p.max_input_chars),
+      maxOutputTokens: p.max_output_tokens == null ? '' : String(p.max_output_tokens),
+      floodPerMinute: p.flood_per_minute == null ? '' : String(p.flood_per_minute),
       status: (p.status as 'active' | 'archived' | 'draft') || 'active',
     });
     setEditPlanOpen(true);
@@ -161,6 +193,14 @@ export function PlansSubscriptionsPage({
           tokenQuota: Number(form.tokenQuota),
           maxChannels: Number(form.maxChannels),
           storageMb: Number(form.storageMb),
+          aiMessagesDaily: form.aiMessagesDaily,
+          mediaMonthly: form.mediaMonthly,
+          mediaMaxMb: form.mediaMaxMb,
+          audioMaxSeconds: form.audioMaxSeconds,
+          documentAnalysis: form.documentAnalysis,
+          maxInputChars: form.maxInputChars,
+          maxOutputTokens: form.maxOutputTokens,
+          floodPerMinute: form.floodPerMinute,
           status: form.status,
         },
       });
@@ -405,6 +445,7 @@ export function PlansSubscriptionsPage({
       )}
 
       <BillingOperationsPanel onNotify={onNotify} />
+      <FreeQuotaExemptionsPanel onNotify={onNotify} />
 
       <ModalDialog
         open={editPlanOpen}
@@ -519,6 +560,99 @@ export function PlansSubscriptionsPage({
               />
             </div>
           </div>
+          <fieldset className="rounded-lg border border-[var(--k-line)] p-3">
+            <legend className="px-1 text-xs font-semibold">حدود الوسائط والحماية من الإغراق</legend>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium mb-1">الحد اليومي للردود الذكية</label>
+              <input
+                type="number"
+                min={0}
+                placeholder="بدون حد"
+                value={form.aiMessagesDaily}
+                onChange={(e) => setForm({ ...form, aiMessagesDaily: e.target.value })}
+                className={`${inputClass} font-mono`}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium mb-1">وسائط شهرياً (صور/صوت)</label>
+              <input
+                type="number"
+                min={0}
+                placeholder="بدون حد"
+                value={form.mediaMonthly}
+                onChange={(e) => setForm({ ...form, mediaMonthly: e.target.value })}
+                className={`${inputClass} font-mono`}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium mb-1">أقصى حجم للوسائط (MB)</label>
+              <input
+                type="number"
+                min={0}
+                placeholder="بدون حد"
+                value={form.mediaMaxMb}
+                onChange={(e) => setForm({ ...form, mediaMaxMb: e.target.value })}
+                className={`${inputClass} font-mono`}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium mb-1">أقصى مدة صوت (ثانية)</label>
+              <input
+                type="number"
+                min={0}
+                placeholder="بدون حد"
+                value={form.audioMaxSeconds}
+                onChange={(e) => setForm({ ...form, audioMaxSeconds: e.target.value })}
+                className={`${inputClass} font-mono`}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium mb-1">تحليل المستندات (1 مفعل / 0 معطل)</label>
+              <input
+                type="number"
+                min={0}
+                placeholder="بدون حد"
+                value={form.documentAnalysis}
+                onChange={(e) => setForm({ ...form, documentAnalysis: e.target.value })}
+                className={`${inputClass} font-mono`}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium mb-1">أقصى طول للمدخل (حرف)</label>
+              <input
+                type="number"
+                min={0}
+                placeholder="بدون حد"
+                value={form.maxInputChars}
+                onChange={(e) => setForm({ ...form, maxInputChars: e.target.value })}
+                className={`${inputClass} font-mono`}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium mb-1">أقصى Tokens للرد</label>
+              <input
+                type="number"
+                min={0}
+                placeholder="بدون حد"
+                value={form.maxOutputTokens}
+                onChange={(e) => setForm({ ...form, maxOutputTokens: e.target.value })}
+                className={`${inputClass} font-mono`}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium mb-1">حد الرسائل لكل جهة اتصال/دقيقة</label>
+              <input
+                type="number"
+                min={0}
+                placeholder="بدون حد"
+                value={form.floodPerMinute}
+                onChange={(e) => setForm({ ...form, floodPerMinute: e.target.value })}
+                className={`${inputClass} font-mono`}
+              />
+            </div>
+            </div>
+          </fieldset>
           <div>
             <label className="block text-xs font-medium mb-1">وصف الباقة</label>
             <textarea
@@ -818,5 +952,57 @@ function BillingOperationsPanel({ onNotify }: { onNotify: (type: 'success' | 'er
       <form onSubmit={savePrice} className="space-y-2 rounded-lg border border-[var(--k-line)] p-4"><h3 className="font-semibold">سعر باقة</h3><div className="grid grid-cols-2 gap-2"><select value={price.planCode} onChange={(e) => setPrice({ ...price, planCode: e.target.value })} className={inputClass}><option value="starter">Starter</option><option value="growth">Pro</option><option value="pro">Business</option></select><select value={price.billingCycle} onChange={(e) => setPrice({ ...price, billingCycle: e.target.value })} className={inputClass}><option value="monthly">شهري</option><option value="yearly">سنوي</option></select></div><div className="grid grid-cols-3 gap-2"><input required placeholder="العملة" maxLength={3} value={price.currency} onChange={(e) => setPrice({ ...price, currency: e.target.value.toUpperCase() })} className={`${inputClass} font-mono`} /><input required type="number" min="0" step="0.0001" placeholder="المبلغ" value={price.amount} onChange={(e) => setPrice({ ...price, amount: e.target.value })} className={`${inputClass} font-mono`} /><input type="number" min="0" step="0.000001" placeholder="سعر الصرف" value={price.exchangeRateToUsd} onChange={(e) => setPrice({ ...price, exchangeRateToUsd: e.target.value })} className={`${inputClass} font-mono`} /></div><button className={primaryBtnClass}>حفظ السعر</button></form>
     </div>
     <div><h3 className="mb-2 font-semibold">طلبات الدفع المعلقة ({data?.requests.filter((item) => item.status === 'pending').length ?? 0})</h3>{data?.requests.filter((item) => item.status === 'pending').map((item) => <div key={String(item.id)} className="mb-2 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[var(--k-line)] p-3 text-xs"><div><strong>{String(item.organization_name || 'مؤسسة')}</strong> · {String(item.plan_code)} · {String(item.amount_yer)} ر.ي · مرجع {String(item.transfer_reference)}</div><div className="flex gap-2"><a href={`/api/owner/billing/payment-requests/${encodeURIComponent(String(item.id))}/receipt`} target="_blank" rel="noreferrer" className={secondaryBtnClass}>معاينة الإيصال</a><button onClick={() => review(String(item.id), 'approve')} className={primaryBtnClass}>اعتماد</button><button onClick={() => review(String(item.id), 'reject')} className={secondaryBtnClass}>رفض</button></div></div>)}</div>
+  </div>;
+}
+
+interface FreeQuotaExemption { fingerprint: string; reason: string; granted_by: string | null; created_at: string }
+
+function FreeQuotaExemptionsPanel({ onNotify }: { onNotify: (type: 'success' | 'error' | 'info', text: string) => void }) {
+  const [items, setItems] = React.useState<FreeQuotaExemption[]>([]);
+  const [value, setValue] = React.useState('');
+  const [reason, setReason] = React.useState('');
+  const load = React.useCallback(() => {
+    apiFetch<{ items: FreeQuotaExemption[] }>('/api/owner/billing/free-quota-exemptions')
+      .then((r) => setItems(r.items))
+      .catch((err) => onNotify('error', err instanceof Error ? err.message : 'تعذر تحميل الاستثناءات.'));
+  }, [onNotify]);
+  React.useEffect(() => { load(); }, [load]);
+  async function add(e: React.FormEvent) {
+    e.preventDefault();
+    try {
+      await apiFetch('/api/owner/billing/free-quota-exemptions', { method: 'POST', body: { value, reason } });
+      onNotify('success', 'تم استثناء البصمة من حصة الباقة المجانية.');
+      setValue(''); setReason(''); load();
+    } catch (err) { onNotify('error', err instanceof Error ? err.message : 'تعذر حفظ الاستثناء.'); }
+  }
+  async function remove(fingerprint: string) {
+    try {
+      await apiFetch(`/api/owner/billing/free-quota-exemptions/${encodeURIComponent(fingerprint)}`, { method: 'DELETE' });
+      onNotify('success', 'تم إلغاء الاستثناء.'); load();
+    } catch (err) { onNotify('error', err instanceof Error ? err.message : 'تعذر إلغاء الاستثناء.'); }
+  }
+  return <div className="mt-6 space-y-3 rounded-xl border border-[var(--k-line)] bg-[var(--k-surface)] p-5">
+    <div>
+      <h2 className="text-base font-bold">استثناءات حصة الباقة المجانية</h2>
+      <p className="mt-1 text-xs text-[var(--k-ink-muted)]">الحصة المجانية مرتبطة ببصمة SHA-256 لرقم الهاتف/واتساب أو معرّف القناة، ولا تُعاد عند حذف الحساب وإعادة التسجيل. أدخل الرقم أو المعرّف لاستثنائه.</p>
+    </div>
+    <form onSubmit={add} className="grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
+      <input required dir="ltr" placeholder="+967700000000 أو org:<uuid>" value={value} onChange={(e) => setValue(e.target.value)} className={`${inputClass} font-mono`} />
+      <input required minLength={5} maxLength={300} placeholder="سبب الاستثناء" value={reason} onChange={(e) => setReason(e.target.value)} className={inputClass} />
+      <button className={primaryBtnClass}>استثناء</button>
+    </form>
+    {items.length === 0 ? <p className="text-xs text-[var(--k-ink-muted)]">لا توجد استثناءات.</p> : (
+      <ul className="divide-y divide-[var(--k-line)] text-sm">
+        {items.map((item) => (
+          <li key={item.fingerprint} className="flex flex-wrap items-center justify-between gap-2 py-2">
+            <div className="min-w-0">
+              <p className="truncate font-mono text-xs" dir="ltr">{item.fingerprint.slice(0, 16)}…</p>
+              <p className="text-xs text-[var(--k-ink-muted)]">{item.reason} · {formatDateTime(item.created_at)}</p>
+            </div>
+            <button type="button" className={dangerBtnClass} onClick={() => remove(item.fingerprint)}>إلغاء</button>
+          </li>
+        ))}
+      </ul>
+    )}
   </div>;
 }

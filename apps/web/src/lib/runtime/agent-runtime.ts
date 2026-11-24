@@ -33,6 +33,10 @@ type AgentLoopArgs = {
   toolSet: Array<{ name: string; description: string; input_schema: Record<string, unknown> }>
   serverActionResult?: unknown
   simulation: boolean
+  /** Plan cap on generated tokens (free plan: 180); null = channel default. */
+  maxOutputTokens?: number | null
+  /** Free plan: cheapest fast model only. */
+  economy?: boolean
   onGovernanceEscalation?: (decision: GovernanceDecision) => Promise<void>
 }
 
@@ -148,7 +152,10 @@ async function runAgentLoop(args: AgentLoopArgs): Promise<AgentLoopResult> {
       messages,
       tools: args.toolSet,
       isWhatsApp: isFastTextChannel(args.channel),
-      maxOutputTokens: maxOutputTokensForChannel(args.channel),
+      maxOutputTokens: args.maxOutputTokens
+        ? Math.min(args.maxOutputTokens, maxOutputTokensForChannel(args.channel))
+        : maxOutputTokensForChannel(args.channel),
+      economy: args.economy,
     }, activeProvider)
     activeProvider = generated.provider
     const result = generated.result
@@ -240,6 +247,10 @@ export async function runAgentTurn(args: {
   userText: string
   agentId?: string | null
   serverActionResult?: unknown
+  maxOutputTokens?: number | null
+  economy?: boolean
+  /** Plan cap on customer input characters passed to the model (history included). */
+  inputCharLimit?: number
 }) {
   const [{ data: history, error: historyError }, prompt, toolSet] = await Promise.all([
     args.db
@@ -259,9 +270,13 @@ export async function runAgentTurn(args: {
     .filter((row) => Boolean(row.content))
     .map((row) => ({
       role: row.direction === 'inbound' ? 'user' : 'assistant',
-      content: String(row.content),
+      content: row.direction === 'inbound' && args.inputCharLimit
+        ? String(row.content).slice(0, args.inputCharLimit)
+        : String(row.content),
     }))
+  // The latest customer turn is the processed text (truncated / media analysis), not the raw row.
   if (messages.at(-1)?.role !== 'user') messages.push({ role: 'user', content: args.userText })
+  else if (args.userText) messages[messages.length - 1] = { role: 'user', content: args.userText }
   if (args.serverActionResult !== undefined) {
     messages.push({
       role: 'user',

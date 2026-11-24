@@ -9,6 +9,7 @@ import { getCurrentUser } from './current-user'
 import { AUTH_MESSAGES } from './messages'
 import { burnPasswordCheck, MIN_PASSWORD_LENGTH, verifyPassword } from './password'
 import { isRateLimited } from './rate-limit'
+import { checkSignupGuards } from './signup-guard'
 import { completePasswordReset, isPasswordRecoveryConfigured, sendPasswordReset } from './password-recovery'
 import { SESSION_COOKIE, sessionCookieOptions, signSession } from './session'
 import { createUser, findUserByEmail, findUserByPhone, findUserById, normalizeEmail, normalizePhone, recordSignIn, setPassword } from './users'
@@ -108,6 +109,10 @@ export async function signUpAction(input: z.input<typeof signUpSchema>): Promise
 
   const email = parsed.data.email ? normalizeEmail(parsed.data.email) : null
   const phone = parsed.data.phone ? normalizePhone(parsed.data.phone) : null
+  const guard = await checkSignupGuards({ email, ip })
+  if (!guard.ok) {
+    return { ok: false, error: guard.reason === 'disposable_email' ? AUTH_MESSAGES.disposableEmail : AUTH_MESSAGES.tooManyAttempts }
+  }
   const businessTypeId = BUSINESS_TYPES.some((type) => type.id === parsed.data.businessTypeId)
     ? parsed.data.businessTypeId
     : BUSINESS_TYPES[0]?.id

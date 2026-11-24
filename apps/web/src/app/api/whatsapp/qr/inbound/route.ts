@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/db/admin'
 import { secretEquals } from '@/lib/credentials/service'
 import { acquireWebhookEvent, markWebhookProcessed } from '@/lib/channels/idempotency'
+import { fromBaileysDescriptor } from '@/lib/media/attachment'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -12,6 +13,8 @@ type GatewayInbound = {
   senderPhone?: string | null
   displayName?: string | null
   text?: string
+  /** Media descriptor (no bytes): kind, mimeType, fileLength, seconds, ptt, fileName, caption, messageId. */
+  media?: Record<string, unknown> | null
 }
 export async function POST(req: NextRequest) {
   let eventRowId: string | null = null
@@ -28,9 +31,12 @@ export async function POST(req: NextRequest) {
     const externalEventId = String(input.externalEventId ?? '')
     const senderJid = String(input.senderJid ?? '').trim()
     const text = String(input.text ?? '').trim()
+    const media = /^[0-9a-f-]{36}$/i.test(channelId) && input.media && typeof input.media === 'object'
+      ? fromBaileysDescriptor(channelId, input.media)
+      : null
     if (!/^[0-9a-f-]{36}$/i.test(channelId) ||
         !/^qr:[0-9a-f-]{36}:.{1,160}$/i.test(externalEventId) ||
-        !senderJid || !text || text.length > 8000) {
+        !senderJid || (!text && !media) || text.length > 8000 || (input.media && !media)) {
       return NextResponse.json({ error: 'invalid_inbound_payload' }, { status: 400 })
     }
     db = createAdminClient()
@@ -45,7 +51,7 @@ export async function POST(req: NextRequest) {
     eventRowId = claimed.eventRowId
     await db.from('webhook_events').update({
       organization_id: channel.organization_id, channel_id: channel.id,
-      event_type: 'message.received', signature_verified: true,
+      event_type: media ? 'message.media_received' : 'message.received', signature_verified: true,
     }).eq('id', eventRowId)
     const { error: jobError } = await db.from('inbound_jobs').insert({
       organization_id: channel.organization_id,
@@ -62,6 +68,8 @@ export async function POST(req: NextRequest) {
         senderPhone: input.senderPhone || null,
         displayName: input.displayName || null,
         text,
+        media,
+        provider: 'whatsapp_qr',
         providerAccountId: channel.provider_account_id,
         externalIdentifier: channel.external_identifier,
       },

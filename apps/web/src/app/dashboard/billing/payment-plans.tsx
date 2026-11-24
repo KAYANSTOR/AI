@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { Check, LoaderCircle, Wallet } from 'lucide-react'
-import { type BillingCycle, type PlanCode, type PlanLimits } from '@/lib/billing/plan-catalog'
+import { mediaLimitLines, type BillingCycle, type PlanCode, type PlanLimits } from '@/lib/billing/plan-catalog'
 import type { EsaalatWallet } from '@/lib/billing/esaalat'
 import { startEsaalatCheckoutAction, submitManualWalletPaymentAction } from './actions'
 
@@ -190,6 +190,9 @@ export function PaymentPlans({
                 <li className="flex gap-2"><Check size={16} className="mt-0.5 shrink-0 text-success" />{plan.limits.channels} قنوات نشطة</li>
                 <li className="flex gap-2"><Check size={16} className="mt-0.5 shrink-0 text-success" />{plan.limits.automation_runs.toLocaleString('en-US')} تشغيل أتمتة</li>
                 <li className="flex gap-2"><Check size={16} className="mt-0.5 shrink-0 text-success" />{plan.limits.campaign_sends.toLocaleString('en-US')} إرسال حملة</li>
+                {mediaLimitLines(plan.limits).map((line) => (
+                  <li key={line} className="flex gap-2"><Check size={16} className="mt-0.5 shrink-0 text-success" />{line}</li>
+                ))}
               </ul>
               <button
                 type="button"
