@@ -102,6 +102,7 @@ export function OwnerShell({
   const [searchOpen, setSearchOpen] = React.useState(false);
   const [searchResults, setSearchResults] = React.useState<SearchResults | null>(null);
   const [searching, setSearching] = React.useState(false);
+  const [unacknowledgedAlerts, setUnacknowledgedAlerts] = React.useState(0);
   const searchBoxRef = React.useRef<HTMLDivElement | null>(null);
 
   React.useEffect(() => {
@@ -119,6 +120,14 @@ export function OwnerShell({
     }, 200);
     return () => clearTimeout(timer);
   }, [searchQuery]);
+
+  React.useEffect(() => {
+    let active=true;
+    apiFetch<{alerts:Array<{acknowledged?:number|boolean}>}>('/api/owner/monitoring')
+      .then((data)=>{if(active)setUnacknowledgedAlerts((data.alerts||[]).filter(a=>!a.acknowledged).length);})
+      .catch(()=>{if(active)setUnacknowledgedAlerts(0);});
+    return ()=>{active=false;};
+  },[activeRoute]);
 
   React.useEffect(() => {
     function handleOutside(e: MouseEvent) {
@@ -175,7 +184,7 @@ export function OwnerShell({
           type="button"
           onClick={() => setMobileMenuOpen(false)}
           aria-label="إغلاق القائمة الجانبية"
-          className="lg:hidden p-2 rounded-lg text-[var(--k-ink-muted)] hover:bg-[var(--k-surface-subtle)]"
+          className="lg:hidden inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg text-[var(--k-ink-muted)] hover:bg-[var(--k-surface-subtle)]"
         >
           <X className="w-4 h-4" />
         </button>
@@ -456,16 +465,21 @@ export function OwnerShell({
             <button
               type="button"
               onClick={() => onNavigate('system_monitoring')}
-              aria-label="مراقبة النظام والتنبيهات"
-              className="min-h-[38px] min-w-[38px] inline-flex items-center justify-center rounded-lg border border-[var(--k-line)] text-[var(--k-ink-secondary)] hover:bg-[var(--k-surface-subtle)]"
+              aria-label={unacknowledgedAlerts>0?`مراقبة النظام، ${unacknowledgedAlerts} تنبيهات غير مقرؤة`:'مراقبة النظام والتنبيهات'}
+              className="relative inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg border border-[var(--k-line)] text-[var(--k-ink-secondary)] hover:bg-[var(--k-surface-subtle)]"
             >
               <Bell className="w-4 h-4" />
+              {unacknowledgedAlerts>0&&(
+                <span aria-hidden="true" className="absolute -end-1 -top-1 inline-flex min-w-5 h-5 items-center justify-center rounded-full bg-[var(--k-danger)] px-1 text-[10px] font-bold text-white">
+                  {unacknowledgedAlerts>99?'99+':unacknowledgedAlerts}
+                </span>
+              )}
             </button>
             <button
               type="button"
               onClick={onToggleTheme}
               aria-label={darkMode ? 'تفعيل الوضع الفاتح' : 'تفعيل الوضع الداكن'}
-              className="min-h-[38px] min-w-[38px] inline-flex items-center justify-center rounded-lg border border-[var(--k-line)] text-[var(--k-ink-secondary)] hover:bg-[var(--k-surface-subtle)]"
+              className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-lg border border-[var(--k-line)] text-[var(--k-ink-secondary)] hover:bg-[var(--k-surface-subtle)]"
             >
               {darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
             </button>
