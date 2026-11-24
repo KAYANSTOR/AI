@@ -547,396 +547,253 @@ export function InvoicesPaymentsPage({
 }: {
   onNotify: (type: 'success' | 'error' | 'info', text: string) => void;
 }) {
-  const [data, setData] = React.useState<{
-    invoices: Array<Record<string, unknown>>;
-    expenses: Array<Record<string, unknown>>;
-    paymentIntents?: Array<Record<string, unknown>>;
-    dataLimitations?: { invoices?: string; expenses?: string; refunds?: string };
-    gateways: Array<{ code: string; name: string; configured: boolean; webhookConfigured: boolean; supportsRefund: boolean }>;
-    summary: {
-      collectedRevenueUsd: number;
-      unpaidInvoicesUsd: number;
-      refundedUsd: number;
-      estimatedMrrUsd: number;
-      recordedExpensesUsd: number;
-      verifiedPayments?: number;
-      pendingPayments?: number;
-      wrongAmountPayments?: number;
+  const [data,setData]=React.useState<{
+    invoices:Array<Record<string,unknown>>;
+    expenses:Array<Record<string,unknown>>;
+    paymentIntents:Array<Record<string,unknown>>;
+    manualWalletRequests:Array<Record<string,unknown>>;
+    wallets:Array<Record<string,unknown>>;
+    ledgerEntries:Array<Record<string,unknown>>;
+    dataLimitations?:{invoices?:string;expenses?:string;refunds?:string};
+    gateways:Array<{code:string;name:string;configured:boolean;webhookConfigured:boolean;supportsRefund:boolean}>;
+    summary:{
+      collectedRevenueUsd:number;unpaidInvoicesUsd:number;refundedUsd:number;estimatedMrrUsd:number;
+      recordedExpensesUsd:number;verifiedPayments?:number;pendingPayments?:number;wrongAmountPayments?:number;
+      manualPendingPayments?:number;manualApprovedPayments?:number;closedPaymentIntents?:number;
     };
-  } | null>(null);
-  const [users, setUsers] = React.useState<Array<{ id: string; full_name: string }>>([]);
-  const [loading, setLoading] = React.useState(true);
-  const [invoiceModal, setInvoiceModal] = React.useState(false);
-  const [expenseModal, setExpenseModal] = React.useState(false);
-  const [refundTarget, setRefundTarget] = React.useState<string | null>(null);
+  }|null>(null);
+  const [loading,setLoading]=React.useState(true);
+  const [reviewTarget,setReviewTarget]=React.useState<{id:string;action:'approve'|'reject'}|null>(null);
+  const [reviewNote,setReviewNote]=React.useState('');
+  const [reviewBusy,setReviewBusy]=React.useState(false);
 
-  const [invUserId, setInvUserId] = React.useState('');
-  const [invPlanCode, setInvPlanCode] = React.useState('growth');
-  const [invAmount, setInvAmount] = React.useState('29');
-  const [invStatus, setInvStatus] = React.useState<'paid' | 'unpaid' | 'failed'>('paid');
-  const [invGateway, setInvGateway] = React.useState<'manual' | 'stripe' | 'esaalat'>('manual');
-  const [invRef, setInvRef] = React.useState('');
-
-  const [expCategory, setExpCategory] = React.useState('استضافة وخوادم');
-  const [expVendor, setExpVendor] = React.useState('Railway / Cloud');
-  const [expAmount, setExpAmount] = React.useState('25');
-  const [expDesc, setExpDesc] = React.useState('');
-
-  const load = React.useCallback(() => {
+  const load=React.useCallback(()=>{
     setLoading(true);
-    Promise.all([
-      apiFetch<NonNullable<typeof data>>('/api/owner/billing'),
-      apiFetch<{ items: Array<{ id: string; full_name: string }> }>('/api/owner/users?pageSize=100'),
-    ])
-      .then(([b, u]) => {
-        setData(b);
-        setUsers(u.items);
-        if (!invUserId && u.items[0]) setInvUserId(u.items[0].id);
-      })
-      .catch((err) => onNotify('error', err instanceof Error ? err.message : 'تعذر تحميل سجل الفوترة.'))
-      .finally(() => setLoading(false));
-  }, [invUserId, onNotify]);
+    apiFetch<NonNullable<typeof data>>('/api/owner/billing')
+      .then(setData)
+      .catch(err=>onNotify('error',err instanceof Error?err.message:'تعذر تحميل سجل الفوترة الحقيقي.'))
+      .finally(()=>setLoading(false));
+  },[onNotify]);
 
-  React.useEffect(() => {
-    load();
-  }, [load]);
+  React.useEffect(()=>{load();},[load]);
 
-  async function submitInvoice(e: React.FormEvent) {
+  async function submitReview(e:React.FormEvent) {
     e.preventDefault();
-    try {
-      await apiFetch('/api/owner/invoices', {
-        method: 'POST',
-        body: {
-          userId: invUserId,
-          planCode: invPlanCode,
-          amount: Number(invAmount),
-          status: invStatus,
-          gateway: invGateway,
-          providerTransactionId: invRef,
-        },
-      });
-      onNotify('success', 'تم تسجيل الفاتورة وتحديث المؤشرات المالية.');
-      setInvoiceModal(false);
-      setInvRef('');
-      load();
-    } catch (err) {
-      onNotify('error', err instanceof Error ? err.message : 'تعذر تسجيل الفاتورة.');
+    if(!reviewTarget)return;
+    if(reviewTarget.action==='reject'&&reviewNote.trim().length<5){
+      onNotify('error','سبب رفض التحويل مطلوب (5 أحرف على الأقل).');
+      return;
     }
+    setReviewBusy(true);
+    try{
+      const result=await apiFetch<{id:string;status:string}>(`/api/owner/billing/manual-wallet-requests/${encodeURIComponent(reviewTarget.id)}/review`,{
+        method:'POST',body:{action:reviewTarget.action,note:reviewNote}
+      });
+      onNotify('success',result.status==='approved'?'تم اعتماد التحويل وتفعيل الاشتراك وتسجيل القيد المالي.':'تم رفض طلب الدفع وإشعار المؤسسة.');
+      setReviewTarget(null);
+      setReviewNote('');
+      load();
+    }catch(err){
+      onNotify('error',err instanceof Error?err.message:'تعذرت مراجعة طلب الدفع.');
+    }finally{setReviewBusy(false);}
   }
 
-  async function submitExpense(e: React.FormEvent) {
-    e.preventDefault();
-    try {
-      await apiFetch('/api/owner/expenses', {
-        method: 'POST',
-        body: { category: expCategory, vendor: expVendor, amount: Number(expAmount), description: expDesc },
-      });
-      onNotify('success', 'تم تسجيل المصروف التشغيلي في السجل المالي.');
-      setExpenseModal(false);
-      setExpDesc('');
-      load();
-    } catch (err) {
-      onNotify('error', err instanceof Error ? err.message : 'تعذر تسجيل المصروف.');
-    }
-  }
+  const statusLabel=(value:unknown)=>{
+    const v=String(value??'');
+    if(v==='approved'||v==='verified'||v==='paid')return 'معتمد';
+    if(v==='rejected'||v==='failed'||v==='expired'||v==='cancelled')return 'مرفوض / متوقف';
+    if(v==='pending'||v==='wrong_amount')return v==='wrong_amount'?'مبلغ غير مطابق':'قيد المراجعة';
+    return v||'غير محدد';
+  };
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title="الفواتير والمدفوعات والمصروفات التشغيلية"
-        subtitle="متابعة طلبات الدفع المؤكدة والمعلقة من قاعدة المنصة. الفواتير والمصروفات المنفصلة غير متاحة في مخطط البيانات الحالي."
+        title="الفوترة والمحافظ ودفتر القيود"
+        subtitle="إدارة طلبات التحويل الفعلية للمحافظ اليمنية، إيصالاتها، واعتماد الاشتراكات مع سجل مالي من PostgreSQL. لا تُنشأ فواتير أو مصروفات وهمية."
+        action={<button type="button" onClick={load} disabled={loading} className={secondaryBtnClass}>تحديث البيانات</button>}
       />
-
-      {loading || !data ? (
-        <TableSkeleton rows={5} />
-      ) : (
+      {loading||!data?(
+        <TableSkeleton rows={6}/>
+      ):(
         <>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-            <MetricTile
-              label="المبالغ المؤكدة"
-              value={formatCurrency(data.summary.collectedRevenueUsd)}
-              subtext={`طلبات دفع مؤكدة: ${data.summary.verifiedPayments ?? 0}`}
-              tone="sage"
-            />
-            <MetricTile
-              label="طلبات الدفع المعلقة"
-              value={formatCurrency(data.summary.unpaidInvoicesUsd)}
-              subtext={`معلقة: ${data.summary.pendingPayments ?? 0} · مبلغ غير مطابق: ${data.summary.wrongAmountPayments ?? 0}`}
-              tone={data.summary.unpaidInvoicesUsd > 0 ? 'warning' : 'default'}
-            />
-            <MetricTile
-              label="MRR للاشتراكات الشهرية"
-              value={formatCurrency(data.summary.estimatedMrrUsd)}
-              subtext="الاشتراكات الشهرية النشطة فقط"
-            />
-            <MetricTile
-              label="الاستردادات"
-              value="غير متاح"
-              subtext="لا يوجد تدفق استرداد مسجل في قاعدة المنصة"
-            />
-            <MetricTile
-              label="المصروفات التشغيلية"
-              value="غير متاح"
-              subtext="لا يوجد دفتر مصروفات في قاعدة المنصة"
-            />
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+            <MetricTile label="الإيرادات المحصلة" value={formatCurrency(Number(data.summary?.collectedRevenueUsd??0))} subtext={`طلبات موثقة: ${Number(data.summary?.verifiedPayments??0)+Number(data.summary?.manualApprovedPayments??0)}`} tone="sage"/>
+            <MetricTile label="طلبات الدفع المعلقة" value={formatCurrency(Number(data.summary?.unpaidInvoicesUsd??0))} subtext={`محافظ: ${Number(data.summary?.manualPendingPayments??0)} · بوابات: ${Number(data.summary?.pendingPayments??0)}`} tone={Number(data.summary?.unpaidInvoicesUsd??0)>0?'warning':'default'}/>
+            <MetricTile label="MRR شهري" value={formatCurrency(Number(data.summary?.estimatedMrrUsd??0))} subtext="الاشتراكات الشهرية النشطة"/>
+            <MetricTile label="دفتر القيود" value={formatNumber(data.ledgerEntries?.length??0)} subtext="التحويلات المعتمدة"/>
+            <MetricTile label="المصروفات" value="غير متاح" subtext="لا يوجد جدول مصروفات في قاعدة المنصة"/>
           </div>
 
-          {/* Payment Gateways Status */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {data.gateways.map((gw) => (
-              <div
-                key={gw.code}
-                className="p-4 rounded-xl border border-[var(--k-line)] bg-[var(--k-surface)] flex items-center justify-between gap-3"
-              >
-                <div>
-                  <div className="text-sm font-bold text-[var(--k-ink)]">{gw.name}</div>
-                  <div className="text-xs text-[var(--k-ink-muted)] mt-0.5">
-                    Webhook: {gw.webhookConfigured ? 'مهيأ' : 'غير مهيأ'} · الاسترداد البرمجي:{' '}
-                    {gw.supportsRefund ? 'مدعوم' : 'تسجيل يدوي'}
-                  </div>
-                </div>
-                <StatusText
-                  status={gw.configured ? 'ok' : 'warn'}
-                  label={gw.configured ? 'مربوط ومهيأ' : 'غير مربوط بالبيئة'}
-                />
-              </div>
-            ))}
-          </div>
-
-          {data.dataLimitations && (
-            <div role="note" className="rounded-xl border border-[var(--k-line)] bg-[var(--k-surface-subtle)] px-4 py-3 text-xs leading-6 text-[var(--k-ink-secondary)]">
-              <strong className="text-[var(--k-ink)]">حدود السجل المالي:</strong>
-              {' '}{data.dataLimitations.invoices} {' '}{data.dataLimitations.expenses} {' '}{data.dataLimitations.refunds}
+          <section className="space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-sm font-bold text-[var(--k-ink)]">طلبات تحويل المحافظ اليمنية ({data.manualWalletRequests?.length??0})</h2>
+              <span className="text-xs text-[var(--k-ink-muted)]">الاعتماد يحدّث الاشتراك والقيود المالية عبر معاملة PostgreSQL ذرّية</span>
             </div>
-          )}
-
-          <div className="space-y-3">
-            <h2 className="text-sm font-bold text-[var(--k-ink)]">طلبات الدفع الفعلية ({data.paymentIntents?.length ?? 0})</h2>
-            {!data.paymentIntents?.length ? (
-              <EmptyState title="لا توجد طلبات دفع مسجلة" description="ستظهر هنا طلبات المحافظ اليمنية المسجلة والتحقق منها في قاعدة المنصة." />
-            ) : (
+            {!data.manualWalletRequests?.length?(
+              <EmptyState title="لا توجد طلبات تحويل للمراجعة" description="ستظهر هنا طلبات الدفع المرسلة من المؤسسات مع المحفظة والمبلغ والإيصال."/>
+            ):(
               <div className="rounded-xl border border-[var(--k-line)] bg-[var(--k-surface)] overflow-x-auto">
                 <table className="w-full text-xs">
-                  <thead><tr className="border-b border-[var(--k-line)] bg-[var(--k-surface-subtle)] text-[var(--k-ink-muted)]">
-                    <th className="px-4 py-3 text-start">رقم الطلب</th><th className="px-4 py-3 text-start">المالك / المؤسسة</th>
-                    <th className="px-4 py-3 text-start">الباقة</th><th className="px-4 py-3 text-start">المبلغ</th>
-                    <th className="px-4 py-3 text-start">مرجع الدفع</th><th className="px-4 py-3 text-start">الحالة</th><th className="px-4 py-3 text-start">التاريخ</th>
+                  <thead><tr className="bg-[var(--k-surface-subtle)] text-[var(--k-ink-muted)]">
+                    <th className="px-3 py-3 text-start">المستخدم / المؤسسة</th>
+                    <th className="px-3 py-3 text-start">المحفظة والتحويل</th>
+                    <th className="px-3 py-3 text-start">الباقة</th>
+                    <th className="px-3 py-3 text-start">المبلغ</th>
+                    <th className="px-3 py-3 text-start">الحالة</th>
+                    <th className="px-3 py-3 text-start">الإيصال</th>
+                    <th className="px-3 py-3 text-end">الإجراء</th>
                   </tr></thead>
                   <tbody className="divide-y divide-[var(--k-line)]">
-                    {data.paymentIntents.map((p) => (
-                      <tr key={String(p.id)} className="hover:bg-[var(--k-surface-subtle)]/60">
-                        <td className="px-4 py-3 font-mono">{String(p.external_order_id || p.id)}</td>
-                        <td className="px-4 py-3"><div>{String(p.user_name || '—')}</div><div className="text-[10px] text-[var(--k-ink-muted)]">{String(p.workspace_name || '')}</div></td>
-                        <td className="px-4 py-3">{String(p.plan_name || p.plan_code || '—')}</td>
-                        <td className="px-4 py-3 font-mono"><div>{formatCurrency(Number(p.amount_usd), 'USD')}</div><div className="text-[10px] text-[var(--k-ink-muted)]">{formatNumber(Number(p.amount_yer))} ر.ي</div></td>
-                        <td className="px-4 py-3 font-mono">{String(p.payment_reference || p.provider_payment_id || '—')}</td>
-                        <td className="px-4 py-3"><StatusText status={p.status === 'verified' ? 'ok' : p.status === 'failed' || p.status === 'expired' || p.status === 'cancelled' ? 'error' : 'warn'} label={String(p.status)} /></td>
-                        <td className="px-4 py-3 text-[var(--k-ink-muted)]">{formatDateTime(String(p.created_at))}</td>
+                    {data.manualWalletRequests.map(r=>(
+                      <tr key={String(r.id)} className="align-top hover:bg-[var(--k-surface-subtle)]/60">
+                        <td className="px-3 py-3 min-w-40">
+                          <div className="font-semibold">{String(r.user_name??'—')}</div>
+                          <div className="text-[11px] text-[var(--k-ink-muted)]">{String(r.user_email??r.workspace_name??'—')}</div>
+                          <div className="text-[11px] text-[var(--k-ink-muted)]">{String(r.workspace_name??'')}</div>
+                        </td>
+                        <td className="px-3 py-3 min-w-36">
+                          <div className="font-semibold">{String(r.wallet_name??r.provider_code??'—')}</div>
+                          <div className="font-mono text-[11px] text-[var(--k-ink-muted)]" dir="ltr">{String(r.transfer_reference??'—')}</div>
+                          <div className="text-[11px] text-[var(--k-ink-muted)]">{String(r.sender_name??'—')}</div>
+                        </td>
+                        <td className="px-3 py-3">{String(r.plan_name??r.plan_code??'—')}<div className="text-[11px] text-[var(--k-ink-muted)]">{String(r.billing_cycle??'')}</div></td>
+                        <td className="px-3 py-3 font-mono whitespace-nowrap">
+                          <div>{formatNumber(Number(r.amount_yer??0))} ر.ي</div>
+                          <div className="text-[11px] text-[var(--k-ink-muted)]">{formatCurrency(Number(r.amount_usd??0),'USD')}</div>
+                        </td>
+                        <td className="px-3 py-3">
+                          <StatusText status={r.status==='approved'?'ok':r.status==='rejected'?'error':'warn'} label={statusLabel(r.status)}/>
+                          {r.review_note? <div className="mt-1 max-w-40 break-words text-[11px] text-[var(--k-ink-muted)]">{String(r.review_note)}</div>:null}
+                        </td>
+                        <td className="px-3 py-3">
+                          {r.has_receipt?(
+                            <a className="inline-flex min-h-[44px] items-center text-[var(--k-info)] underline" href={`/api/owner/billing/manual-wallet-requests/${encodeURIComponent(String(r.id))}/receipt`} target="_blank" rel="noreferrer">فتح الإيصال</a>
+                          ):'—'}
+                        </td>
+                        <td className="px-3 py-3 text-end">
+                          {r.status==='pending'?(
+                            <div className="flex flex-wrap justify-end gap-1.5">
+                              <button type="button" onClick={()=>{setReviewTarget({id:String(r.id),action:'approve'});setReviewNote('');}} className={primaryBtnClass}>اعتماد</button>
+                              <button type="button" onClick={()=>{setReviewTarget({id:String(r.id),action:'reject'});setReviewNote('');}} className={dangerBtnClass}>رفض</button>
+                            </div>
+                          ):<span className="text-[11px] text-[var(--k-ink-muted)]">{String(r.reviewed_by??'')}</span>}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
             )}
-          </div>
+          </section>
 
-          {/* Invoices Table */}
-          <div className="space-y-3">
-            <h2 className="text-sm font-bold text-[var(--k-ink)]">سجل الفواتير ({data.invoices.length})</h2>
-            {data.invoices.length === 0 ? (
-              <EmptyState
-                title="لا يوجد دفتر فواتير منفصل"
-                description="طلبات الدفع الفعلية معروضة أعلاه؛ لا ننشئ فواتير محلية غير مرتبطة بقاعدة المنصة."
-              />
-            ) : (
+          <section className="space-y-3">
+            <h2 className="text-sm font-bold text-[var(--k-ink)]">المحافظ المعرفة ({data.wallets?.length??0})</h2>
+            {!data.wallets?.length?(
+              <EmptyState title="لا توجد محافظ معرفة" description="تُدار حسابات المحافظ من لوحة الإدارة المركزية؛ هذه القائمة للقراءة والتحقق فقط."/>
+            ):(
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                {data.wallets.map(w=>(
+                  <div key={String(w.id)} className="rounded-xl border border-[var(--k-line)] bg-[var(--k-surface)] p-4 space-y-1">
+                    <div className="flex justify-between gap-2"><strong className="text-sm">{String(w.display_name??'—')}</strong><StatusText status={w.is_active?'ok':'muted'} label={w.is_active?'نشطة':'متوقفة'}/></div>
+                    <div className="text-xs text-[var(--k-ink-muted)]">{String(w.account_name??'—')}</div>
+                    <div className="font-mono text-sm" dir="ltr">{String(w.account_number??'—')}</div>
+                    <div className="text-[11px] text-[var(--k-ink-muted)]">{String(w.provider_code??'')}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+
+          <section className="space-y-3">
+            <h2 className="text-sm font-bold text-[var(--k-ink)]">دفتر القيود المالية ({data.ledgerEntries?.length??0})</h2>
+            {!data.ledgerEntries?.length?(
+              <EmptyState title="لا توجد قيود مالية معتمدة" description="يُضاف القيد تلقائياً عند اعتماد طلب تحويل محفظة."/>
+            ):(
               <div className="rounded-xl border border-[var(--k-line)] bg-[var(--k-surface)] overflow-x-auto">
                 <table className="w-full text-xs">
-                  <thead>
-                    <tr className="border-b border-[var(--k-line)] bg-[var(--k-surface-subtle)] text-[var(--k-ink-muted)]">
-                      <th className="px-4 py-3 text-start font-semibold">رقم الفاتورة</th>
-                      <th className="px-4 py-3 text-start font-semibold">المستخدم</th>
-                      <th className="px-4 py-3 text-start font-semibold">الباقة</th>
-                      <th className="px-4 py-3 text-start font-semibold">المبلغ</th>
-                      <th className="px-4 py-3 text-start font-semibold">البوابة / المعاملة</th>
-                      <th className="px-4 py-3 text-start font-semibold">الحالة</th>
-                      <th className="px-4 py-3 text-start font-semibold">التاريخ</th>
-                      <th className="px-4 py-3 text-end font-semibold">إجراء</th>
-                    </tr>
-                  </thead>
+                  <thead><tr className="bg-[var(--k-surface-subtle)] text-[var(--k-ink-muted)]">
+                    <th className="px-3 py-3 text-start">التاريخ</th><th className="px-3 py-3 text-start">المؤسسة</th>
+                    <th className="px-3 py-3 text-start">المحفظة</th><th className="px-3 py-3 text-start">المرجع</th>
+                    <th className="px-3 py-3 text-start">المبلغ (YER)</th><th className="px-3 py-3 text-start">المبلغ (USD)</th>
+                  </tr></thead>
                   <tbody className="divide-y divide-[var(--k-line)]">
-                    {data.invoices.map((inv) => (
-                      <tr key={String(inv.id)} className="hover:bg-[var(--k-surface-subtle)]/60">
-                        <td className="px-4 py-3 font-mono font-semibold">{String(inv.invoice_number)}</td>
-                        <td className="px-4 py-3">{String(inv.user_name)}</td>
-                        <td className="px-4 py-3">{String(inv.plan_name || '—')}</td>
-                        <td className="px-4 py-3 font-mono tabular-nums font-semibold">
-                          {formatCurrency(Number(inv.amount), String(inv.currency))}
-                        </td>
-                        <td className="px-4 py-3 font-mono text-[var(--k-ink-muted)]">
-                          {String(inv.gateway)} {inv.provider_transaction_id ? `· ${String(inv.provider_transaction_id)}` : ''}
-                        </td>
-                        <td className="px-4 py-3">
-                          <StatusText
-                            status={
-                              inv.status === 'paid' ? 'ok' : inv.status === 'refunded' ? 'info' : 'warn'
-                            }
-                            label={
-                              inv.status === 'paid'
-                                ? 'مدفوعة (محصّلة)'
-                                : inv.status === 'refunded'
-                                  ? 'مستردة'
-                                  : inv.status === 'failed'
-                                    ? 'فاشلة'
-                                    : 'غير مدفوعة'
-                            }
-                          />
-                        </td>
-                        <td className="px-4 py-3 text-[var(--k-ink-muted)]">
-                          {formatDateTime(String(inv.paid_at || inv.created_at))}
-                        </td>
-                        <td className="px-4 py-3 text-end">
-                          {inv.status === 'paid' && (
-                            <button
-                              type="button"
-                              onClick={() => setRefundTarget(String(inv.id))}
-                              className={secondaryBtnClass}
-                            >
-                              تسجيل استرداد
-                            </button>
-                          )}
-                        </td>
+                    {data.ledgerEntries.map(l=>(
+                      <tr key={String(l.id)}>
+                        <td className="px-3 py-3 whitespace-nowrap">{formatDateTime(String(l.recorded_at??''))}</td>
+                        <td className="px-3 py-3">{String(l.workspace_name??'—')}</td>
+                        <td className="px-3 py-3">{String(l.provider_code??'—')}</td>
+                        <td className="px-3 py-3 font-mono">{String(l.transfer_reference??'—')}</td>
+                        <td className="px-3 py-3 font-mono">{formatNumber(Number(l.amount_yer??0))}</td>
+                        <td className="px-3 py-3 font-mono">{formatCurrency(Number(l.amount_usd??0),'USD')}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
             )}
+          </section>
+
+          <section className="space-y-3">
+            <h2 className="text-sm font-bold text-[var(--k-ink)]">طلبات الدفع من البوابات ({data.paymentIntents?.length??0})</h2>
+            {!data.paymentIntents?.length?(
+              <EmptyState title="لا توجد طلبات بوابات دفع" description="سجلات الدفع الرقمية والتحقق منها تظهر هنا من قاعدة المنصة."/>
+            ):(
+              <div className="rounded-xl border border-[var(--k-line)] bg-[var(--k-surface)] overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead><tr className="bg-[var(--k-surface-subtle)] text-[var(--k-ink-muted)]">
+                    <th className="px-3 py-3 text-start">رقم الطلب</th><th className="px-3 py-3 text-start">المستخدم / المؤسسة</th>
+                    <th className="px-3 py-3 text-start">الباقة</th><th className="px-3 py-3 text-start">المبلغ</th>
+                    <th className="px-3 py-3 text-start">المرجع</th><th className="px-3 py-3 text-start">الحالة</th><th className="px-3 py-3 text-start">التاريخ</th>
+                  </tr></thead>
+                  <tbody className="divide-y divide-[var(--k-line)]">
+                    {data.paymentIntents.map(p=>(
+                      <tr key={String(p.id)}>
+                        <td className="px-3 py-3 font-mono">{String(p.external_order_id??p.id)}</td>
+                        <td className="px-3 py-3">{String(p.user_name??'—')}<div className="text-[11px] text-[var(--k-ink-muted)]">{String(p.workspace_name??'')}</div></td>
+                        <td className="px-3 py-3">{String(p.plan_name??p.plan_code??'—')}</td>
+                        <td className="px-3 py-3 font-mono">{formatCurrency(Number(p.amount_usd??0),'USD')}<div className="text-[11px] text-[var(--k-ink-muted)]">{formatNumber(Number(p.amount_yer??0))} ر.ي</div></td>
+                        <td className="px-3 py-3 font-mono">{String(p.payment_reference??p.provider_payment_id??'—')}</td>
+                        <td className="px-3 py-3"><StatusText status={p.status==='verified'?'ok':p.status==='failed'?'error':'warn'} label={statusLabel(p.status)}/></td>
+                        <td className="px-3 py-3 whitespace-nowrap">{formatDateTime(String(p.created_at??''))}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+
+          <div role="note" className="rounded-xl border border-[var(--k-line)] bg-[var(--k-surface-subtle)] px-4 py-3 text-xs leading-6 text-[var(--k-ink-secondary)]">
+            <strong className="text-[var(--k-ink)]">حدود المخطط المالي:</strong>
+            {' '}{data.dataLimitations?.invoices??'لا يوجد دفتر فواتير منفصل.'} {' '}
+            {data.dataLimitations?.expenses??'لا يوجد دفتر مصروفات تشغيلية.'} {' '}
+            {data.dataLimitations?.refunds??'لا يدعم التدفق الحالي الاسترداد البرمجي.'}
           </div>
         </>
       )}
 
-      <ModalDialog open={invoiceModal} title="إصدار / تسجيل فاتورة" onClose={() => setInvoiceModal(false)}>
-        <form onSubmit={submitInvoice} className="space-y-4">
+      <ModalDialog open={Boolean(reviewTarget)} title={reviewTarget?.action==='approve'?'اعتماد تحويل المحفظة':'رفض طلب تحويل المحفظة'} onClose={()=>!reviewBusy&&setReviewTarget(null)}>
+        <form onSubmit={submitReview} className="space-y-4">
+          <p className="text-sm text-[var(--k-ink-secondary)]">
+            {reviewTarget?.action==='approve'
+              ?'سيؤدي الاعتماد إلى تفعيل الاشتراك وتسجيل القيد المالي وإشعار المؤسسة.'
+              :'سيُرفض الطلب مع حفظ السبب وإشعار المؤسسة.'}
+          </p>
           <div>
-            <label className="block text-xs font-medium mb-1">المستخدم *</label>
-            <select required value={invUserId} onChange={(e) => setInvUserId(e.target.value)} className={inputClass}>
-              {users.length === 0 ? (
-                <option value="">أنشئ مستخدماً أولاً</option>
-              ) : (
-                users.map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.full_name}
-                  </option>
-                ))
-              )}
-            </select>
+            <label className="mb-1 block text-xs font-medium">ملاحظة المراجعة {reviewTarget?.action==='reject'?'(مطلوبة)':'(اختيارية)'}</label>
+            <textarea value={reviewNote} onChange={e=>setReviewNote(e.target.value)} rows={3} className={inputClass}
+              placeholder="اكتب ملاحظة المراجعة أو سبب الرفض..."/>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium mb-1">الباقة</label>
-              <select value={invPlanCode} onChange={(e) => setInvPlanCode(e.target.value)} className={inputClass}>
-                <option value="starter">البداية ($9)</option>
-                <option value="growth">الاحترافية ($29)</option>
-                <option value="pro">الأعمال ($59)</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-medium mb-1">المبلغ (USD) *</label>
-              <input
-                type="number"
-                min={0}
-                step="0.01"
-                required
-                value={invAmount}
-                onChange={(e) => setInvAmount(e.target.value)}
-                className={`${inputClass} font-mono`}
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium mb-1">حالة الدفع</label>
-              <select
-                value={invStatus}
-                onChange={(e) => setInvStatus(e.target.value as 'paid' | 'unpaid' | 'failed')}
-                className={inputClass}
-              >
-                <option value="paid">مدفوعة (إيراد محصل)</option>
-                <option value="unpaid">غير مدفوعة</option>
-                <option value="failed">فشل الدفع</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-medium mb-1">البوابة</label>
-              <select
-                value={invGateway}
-                onChange={(e) => setInvGateway(e.target.value as 'manual' | 'stripe' | 'esaalat')}
-                className={inputClass}
-              >
-                <option value="manual">يدوي / تحويل</option>
-                <option value="stripe">Stripe</option>
-                <option value="esaalat">إيصالات / المحافظ اليمنية</option>
-              </select>
-            </div>
-          </div>
-          <div>
-            <label className="block text-xs font-medium mb-1">رقم المعاملة لدى المزود (اختياري)</label>
-            <input dir="ltr" value={invRef} onChange={(e) => setInvRef(e.target.value)} className={`${inputClass} font-mono text-left`} />
-          </div>
-          <div className="flex justify-end gap-2">
-            <button type="button" onClick={() => setInvoiceModal(false)} className={secondaryBtnClass}>إلغاء</button>
-            <button type="submit" disabled={!invUserId} className={primaryBtnClass}>حفظ الفاتورة</button>
+          <div className="sticky bottom-0 flex justify-end gap-2 border-t border-[var(--k-line)] bg-[var(--k-surface)] pt-3">
+            <button type="button" disabled={reviewBusy} onClick={()=>setReviewTarget(null)} className={secondaryBtnClass}>إلغاء</button>
+            <button type="submit" disabled={reviewBusy||(reviewTarget?.action==='reject'&&reviewNote.trim().length<5)}
+              className={reviewTarget?.action==='approve'?primaryBtnClass:dangerBtnClass}>
+              {reviewBusy?'جارٍ التنفيذ...':reviewTarget?.action==='approve'?'اعتماد وتفعيل الاشتراك':'تأكيد الرفض'}
+            </button>
           </div>
         </form>
       </ModalDialog>
-
-      <ModalDialog open={expenseModal} title="تسجيل مصروف تشغيلي" onClose={() => setExpenseModal(false)}>
-        <form onSubmit={submitExpense} className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium mb-1">الفئة *</label>
-              <input required value={expCategory} onChange={(e) => setExpCategory(e.target.value)} className={inputClass} />
-            </div>
-            <div>
-              <label className="block text-xs font-medium mb-1">المورد *</label>
-              <input required value={expVendor} onChange={(e) => setExpVendor(e.target.value)} className={inputClass} />
-            </div>
-          </div>
-          <div>
-            <label className="block text-xs font-medium mb-1">المبلغ (USD) *</label>
-            <input type="number" min={0} step="0.01" required value={expAmount} onChange={(e) => setExpAmount(e.target.value)} className={`${inputClass} font-mono`} />
-          </div>
-          <div>
-            <label className="block text-xs font-medium mb-1">الوصف</label>
-            <input value={expDesc} onChange={(e) => setExpDesc(e.target.value)} className={inputClass} />
-          </div>
-          <div className="flex justify-end gap-2">
-            <button type="button" onClick={() => setExpenseModal(false)} className={secondaryBtnClass}>إلغاء</button>
-            <button type="submit" className={primaryBtnClass}>تسجيل المصروف</button>
-          </div>
-        </form>
-      </ModalDialog>
-
-      <ConfirmActionModal
-        open={Boolean(refundTarget)}
-        title="تأكيد تسجيل استرداد مالي"
-        description="سيتم تغيير حالة الفاتورة إلى مستردة واستبعادها من الإيرادات المحصلة."
-        requireReason
-        danger
-        onCancel={() => setRefundTarget(null)}
-        onConfirm={async (reason) => {
-          if (!refundTarget) return;
-          try {
-            await apiFetch(`/api/owner/invoices/${encodeURIComponent(refundTarget)}/refund`, {
-              method: 'POST',
-              body: { reason },
-            });
-            onNotify('success', 'تم تسجيل الاسترداد وتحديث السجل المالي.');
-            setRefundTarget(null);
-            load();
-          } catch (err) {
-            onNotify('error', err instanceof Error ? err.message : 'تعذر تسجيل الاسترداد.');
-          }
-        }}
-      />
     </div>
   );
 }
