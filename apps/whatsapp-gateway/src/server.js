@@ -2,8 +2,9 @@ import http from 'node:http'
 import { createCipheriv, createDecipheriv, randomBytes, timingSafeEqual } from 'node:crypto'
 import postgres from 'postgres'
 import QRCode from 'qrcode'
-import makeWASocket, { Browsers, BufferJSON, DisconnectReason, initAuthCreds } from 'baileys'
+import makeWASocket, { Browsers, BufferJSON, DisconnectReason, generateMessageIDV2, initAuthCreds } from 'baileys'
 import { shouldReconnectAfterDisconnect } from './reconnect-policy.js'
+import { classifyUpsertMessage, createSentMessageRegistry } from './message-direction.js'
 
 const PORT = Number(process.env.WHATSAPP_GATEWAY_PORT || 3001)
 const DATABASE_URL = requiredEnv('DATABASE_URL')
@@ -18,6 +19,10 @@ const sql = postgres(DATABASE_URL, {
 })
 const sockets = new Map()
 const reconnectTimers = new Map()
+// Provider message IDs produced by this gateway. WhatsApp echoes every message
+// the linked device sends back as a fromMe upsert; those echoes must never be
+// treated as a manual owner reply (duplicate rows) or as customer input (loops).
+const botSentMessages = createSentMessageRegistry()
 
 function requiredEnv(name) {
   const value = process.env[name]?.trim()
@@ -148,33 +153,61 @@ function messageText(message) {
     value.documentMessage?.caption || value.buttonsResponseMessage?.selectedDisplayText ||
     value.templateButtonReplyMessage?.selectedDisplayText || '').trim()
 }
-async function forwardInbound(session, message) {
-  const remoteJid = message?.key?.remoteJid
-  const messageId = message?.key?.id
-  if (!remoteJid || !messageId || message.key.fromMe) return
-  if (remoteJid === 'status@broadcast' || remoteJid.endsWith('@g.us')) return
-  const text = messageText(message)
-  if (!text) return
-  const senderJid = message.key.remoteJidAlt || remoteJid
-  const senderPhone = senderJid.endsWith('@s.whatsapp.net') ? senderJid.split('@')[0].replace(/\D/g, '') : null
+async function postToApp(path, body, logKey, channelId) {
   try {
-    const response = await fetch(APP_INTERNAL_URL + '/api/whatsapp/qr/inbound', {
+    const response = await fetch(APP_INTERNAL_URL + path, {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: 'Bearer ' + GATEWAY_TOKEN },
-      body: JSON.stringify({
-        channelId: session.channelId,
-        externalEventId: 'qr:' + session.channelId + ':' + messageId,
-        senderJid, senderPhone, displayName: message.pushName || null, text: text.slice(0, 8000),
-      }),
+      body: JSON.stringify(body),
       signal: AbortSignal.timeout(15_000),
     })
     if (!response.ok) {
       const reason = await response.text().catch(() => '')
-      console.error('whatsapp_qr_inbound_forward_failed', { channelId: session.channelId, status: response.status, reason: reason.slice(0, 120) })
+      console.error(logKey, { channelId, status: response.status, reason: reason.slice(0, 120) })
     }
   } catch (error) {
-    console.error('whatsapp_qr_inbound_forward_failed', { channelId: session.channelId, reason: error instanceof Error ? error.message : 'network_error' })
+    console.error(logKey, { channelId, reason: error instanceof Error ? error.message : 'network_error' })
   }
+}
+async function forwardInbound(session, message, upsertType) {
+  const decision = classifyUpsertMessage(message, upsertType, {
+    isBotSent: id => botSentMessages.has(session.channelId, id),
+  })
+  if (decision.kind === 'ignore') return
+  const text = messageText(message)
+  if (!text) return
+  const remoteJid = message.key.remoteJid
+  const messageId = message.key.id
+  // remoteJid is always the other party (the customer), both for messages the
+  // customer sent and for messages the owner typed on the phone.
+  const contactJid = message.key.remoteJidAlt || remoteJid
+  const contactPhone = contactJid.endsWith('@s.whatsapp.net') ? contactJid.split('@')[0].replace(/\D/g, '') : null
+  // The owner's "message yourself" chat is not a customer conversation.
+  if (contactPhone && contactPhone === String(session.phoneNumber || '').replace(/\D/g, '')) return
+  if (decision.kind === 'owner_manual') {
+    console.log('whatsapp_qr_owner_message_forwarding', { channelId: session.channelId })
+    await postToApp('/api/whatsapp/qr/outbound-sync', {
+      channelId: session.channelId,
+      externalEventId: 'qr:' + session.channelId + ':' + messageId,
+      providerMessageId: messageId,
+      direction: 'outbound',
+      senderType: 'human_whatsapp',
+      contactJid, contactPhone,
+      text: text.slice(0, 8000),
+      sentAt: messageTimestampIso(message),
+    }, 'whatsapp_qr_outbound_sync_failed', session.channelId)
+    return
+  }
+  await postToApp('/api/whatsapp/qr/inbound', {
+    channelId: session.channelId,
+    externalEventId: 'qr:' + session.channelId + ':' + messageId,
+    senderJid: contactJid, senderPhone: contactPhone, displayName: message.pushName || null, text: text.slice(0, 8000),
+  }, 'whatsapp_qr_inbound_forward_failed', session.channelId)
+}
+function messageTimestampIso(message) {
+  const raw = message?.messageTimestamp
+  const seconds = typeof raw === 'number' ? raw : Number(raw?.low ?? raw ?? 0)
+  return seconds > 0 ? new Date(seconds * 1000).toISOString() : new Date().toISOString()
 }
 async function startSocket(channelId, options = {}) {
   const existingSocket = sockets.get(channelId)
@@ -340,8 +373,8 @@ async function startSocket(channelId, options = {}) {
     }
   })
   sock.ev.on('messages.upsert', async event => {
-    if (event.type !== 'notify') return
-    for (const message of event.messages || []) await forwardInbound(session, message)
+    if (event.type !== 'notify' && event.type !== 'append') return
+    for (const message of event.messages || []) await forwardInbound(session, message, event.type)
   })
 
   return session
@@ -397,8 +430,19 @@ async function sendText(channelId, input) {
   const jid = recipient.includes('@') ? recipient : (digits.length >= 7 && digits.length <= 15 ? digits + '@s.whatsapp.net' : '')
   const text = String(input.text || '').trim()
   if (!jid || !text || text.length > 8000) throw Object.assign(new Error('invalid_outbound_message'), { status: 400 })
-  const result = await session.sock.sendMessage(jid, { text })
-  return { messageId: result?.key?.id || null }
+  // Register the provider ID before sending: Baileys emits the fromMe echo
+  // from inside sendMessage(), before the promise resolves.
+  const messageId = generateMessageIDV2(session.sock.user?.id)
+  botSentMessages.add(channelId, messageId)
+  try {
+    const result = await session.sock.sendMessage(jid, { text }, { messageId })
+    const sentId = result?.key?.id || messageId
+    if (sentId !== messageId) botSentMessages.add(channelId, sentId)
+    return { messageId: sentId }
+  } catch (error) {
+    botSentMessages.delete(channelId, messageId)
+    throw error
+  }
 }
 async function logoutSession(channelId) {
   clearTimeout(reconnectTimers.get(channelId))

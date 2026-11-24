@@ -63,7 +63,7 @@ export function OrderForm({ contacts, defaultValues }: { contacts: Contact[], de
       setError(result.error || 'حدث خطأ غير متوقع.')
       setLoading(false)
     } else {
-      router.push(`/dashboard/orders/${result.orderId}`)
+      router.replace(`/dashboard/orders/${result.orderId}`)
     }
   }
 

@@ -1,6 +1,8 @@
 'use client'
 
-import { useMemo, useState, useTransition } from 'react'
+import { useCallback, useMemo, useState, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
+import { useHistoryDismiss } from '@/hooks/use-history-dismiss'
 import { CheckCircle2, CircleAlert, Link2, Loader2, MessageSquare, Phone, Power, RefreshCw, ArrowRight, Bot, MessageCircle } from 'lucide-react'
 import {
   saveChannelAction,
@@ -59,12 +61,16 @@ export function ChannelsConsole({
   cards: ChannelCard[]
   canManage: boolean
 }) {
+  const router = useRouter()
   const [openKey, setOpenKey] = useState<string | null>(null)
   const [busyKey, setBusyKey] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const openCard = useMemo(() => cards.find((card) => card.key === openKey) ?? null, [cards, openKey])
+  const closeDialog = useCallback(() => setOpenKey(null), [])
+  // Back closes the channel settings view instead of leaving the page.
+  useHistoryDismiss(Boolean(openCard), closeDialog)
 
-  if (openCard) return <ChannelDialog card={openCard} canManage={canManage} onClose={() => setOpenKey(null)} />
+  if (openCard) return <ChannelDialog card={openCard} canManage={canManage} onClose={closeDialog} />
 
   return (
     <div className="space-y-6">
@@ -137,7 +143,7 @@ export function ChannelsConsole({
             const result = await setChannelActiveAction({ channelType: card.type, active: !card.isActive, connectionMode: card.connectionMode })
             setNotice(result.ok ? (result.message ?? 'تم تحديث حالة القناة.') : (result.error ?? 'تعذّر تحديث القناة.'))
             setBusyKey(null)
-            if (result.ok) window.location.reload()
+            if (result.ok) router.refresh()
           }
 
           return (
@@ -210,6 +216,7 @@ function ChannelDialog({
   canManage: boolean
   onClose: () => void
 }) {
+  const router = useRouter()
   const spec = getChannelSpec(card.type)
   const [identifier, setIdentifier] = useState(card.identifier ?? card.publicNumber ?? '')
   const [publicNumber, setPublicNumber] = useState(card.publicNumber ?? '')
@@ -239,7 +246,7 @@ function ChannelDialog({
         ok: result.ok,
         text: result.ok ? result.message ?? 'تم حفظ الربط.' : result.error ?? 'تعذّر إكمال الربط.',
       })
-      if (result.ok) window.location.reload()
+      if (result.ok) router.refresh()
     })
   }
 
@@ -257,7 +264,7 @@ function ChannelDialog({
         ok: result.ok,
         text: result.ok ? result.message ?? 'تم حذف إعدادات القناة.' : result.error ?? 'تعذّر حذف إعدادات القناة.',
       })
-      if (result.ok) window.location.reload()
+      if (result.ok) router.refresh()
     })
   }
 
@@ -294,7 +301,7 @@ function ChannelDialog({
         ok: result.ok,
         text: result.ok ? result.message ?? 'تم التحديث.' : result.error ?? 'تعذّر التحديث.',
       })
-      if (result.ok) window.location.reload()
+      if (result.ok) router.refresh()
     })
   }
 
@@ -313,7 +320,7 @@ function ChannelDialog({
       })
       if (result.ok) {
         setRegistrationPin('')
-        window.location.reload()
+        router.refresh()
       }
     })
   }
@@ -372,7 +379,7 @@ function ChannelDialog({
                 disabled={!canManage}
                 onSuccess={(message) => {
                   setNotice({ ok: true, text: message })
-                  window.location.reload()
+                  router.refresh()
                 }}
                 onError={(message) => setNotice({ ok: false, text: message })}
               />
@@ -462,7 +469,7 @@ function ChannelDialog({
                     setNotice(null)
                     const result=await completeMessengerConnectionAction({pageId:selectedMessengerPage})
                     setNotice({ok:result.ok,text:result.ok?result.message??'تم ربط الصفحة.':result.error??'تعذّر ربط الصفحة.'})
-                    if(result.ok)window.location.reload()
+                    if(result.ok)router.refresh()
                   })} disabled={busy||!canManage||!selectedMessengerPage}
                     className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#0866FF] px-4 text-sm font-bold text-white hover:opacity-90 disabled:opacity-50">
                     {busy?<Loader2 size={18} className="animate-spin"/>:<Link2 size={17}/>} تأكيد ربط الصفحة

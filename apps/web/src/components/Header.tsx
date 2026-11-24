@@ -1,18 +1,19 @@
 'use client'
 
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import {
-  Activity, BarChart3, BookOpen, Bot, Brain, CalendarDays, Contact, CreditCard,
-  FileText, LifeBuoy, Megaphone, MessageSquareText, RadioTower, RefreshCw,
-  Search, Settings, Users, Workflow,
+  Activity, ArrowRight, BarChart3, BookOpen, Bot, Brain, CalendarDays, Contact, CreditCard,
+  FileText, LifeBuoy, Megaphone, MessageSquareText, RadioTower,
+  Search, Settings, Users, Workflow, X,
 } from 'lucide-react'
 import { BrandMark, BRAND_NAME, BRAND_TAGLINE } from '@/components/site/brand'
 import { GlobalSearch } from '@/components/dashboard/global-search'
 import { NotificationsBell } from '@/components/dashboard/notifications-bell'
 import { getLocalDateLabel } from '@/lib/i18n/current-date'
 import { getVertical } from '@/lib/verticals/registry'
+import { useHistoryDismiss } from '@/hooks/use-history-dismiss'
 
 const PAGE_META = [
   { prefix: '/dashboard/contacts', title: 'جهات الاتصال', subtitle: 'إدارة بيانات العملاء ووسائل التواصل', icon: Contact },
@@ -38,6 +39,17 @@ const PAGE_META = [
   { prefix: '/dashboard/tasks', title: 'المهام والمتابعات', subtitle: 'الأعمال التي تحتاج إلى إجراء', icon: LifeBuoy },
 ]
 
+function parentPath(pathname: string) {
+  const parts = pathname.split('/').filter(Boolean)
+  return parts.length > 2 ? '/' + parts.slice(0, -1).join('/') : '/dashboard'
+}
+
+/**
+ * Mobile-first RTL top bar (KAYAN identity: ink #1F2A1F, sand #D9C7A3,
+ * bronze #B08D57). Every action is a 44px target: back, search,
+ * notifications and account. Settings stays reachable from the home header
+ * and the account page, keeping inner headers uncluttered.
+ */
 export function Header({
   organizationName,
   businessTypeId,
@@ -50,6 +62,8 @@ export function Header({
   const pathname = usePathname()
   const router = useRouter()
   const [searchOpen, setSearchOpen] = useState(false)
+  const closeSearch = useCallback(() => setSearchOpen(false), [])
+  const { dismissForNavigation } = useHistoryDismiss(searchOpen, closeSearch)
   const isHome = pathname === '/dashboard'
   const vertical = getVertical(businessTypeId)
   const meta = PAGE_META
@@ -66,62 +80,85 @@ export function Header({
     ? { ...meta, title: verticalTitle ?? meta.title }
     : { title: 'مساحة العمل', subtitle: 'إدارة نشاطك من مكان واحد', icon: Activity }
   const PageIcon = page.icon
-
+  const initial = organizationName.trim().slice(0, 1) || 'ك'
   const today = getLocalDateLabel(timezone)
+
+  function goBack() {
+    // Stay inside the app: use history only when the previous entry is ours.
+    const sameOrigin = typeof document !== 'undefined' && document.referrer.startsWith(window.location.origin)
+    if (sameOrigin && window.history.length > 1) router.back()
+    else router.push(parentPath(pathname))
+  }
+
+  const searchToggle = (
+    <button
+      type="button"
+      onClick={() => setSearchOpen((value) => !value)}
+      aria-label={searchOpen ? 'إغلاق البحث' : 'بحث'}
+      aria-expanded={searchOpen}
+      className="kayan-header-action"
+    >
+      {searchOpen ? <X size={18} aria-hidden="true" /> : <Search size={18} aria-hidden="true" />}
+    </button>
+  )
+  const accountLink = (
+    <Link href="/dashboard/account" aria-label="الحساب" className="kayan-header-action kayan-header-avatar">
+      <span className="text-sm font-bold">{initial}</span>
+    </Link>
+  )
+  const searchPanel = searchOpen ? (
+    <div className="kayan-header-search">
+      <GlobalSearch autoFocus onNavigate={dismissForNavigation} />
+    </div>
+  ) : null
 
   if (isHome) {
     return (
-      <header className="dashboard-home-header">
-        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
-          <div className="min-w-0 text-start">
-            <p className="text-[11px] font-medium text-primary-dark/70">مساحة العمل</p>
-            <h1 className="mt-1 truncate text-sm font-extrabold text-primary-dark">{organizationName}</h1>
-            <p className="mt-1 text-[11px] text-primary-dark/70">{today || 'مرحباً بك'}</p>
+      <header className="dashboard-home-header kayan-header">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-surface shadow-sm">
+              <BrandMark className="h-9 w-9 rounded-xl" />
+            </span>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-extrabold">{organizationName || BRAND_NAME}</p>
+              <p className="mt-0.5 truncate text-[11px] opacity-75">{today || BRAND_TAGLINE}</p>
+            </div>
           </div>
-          <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-primary-dark/10 bg-surface shadow-sm">
-            <BrandMark className="h-11 w-11 rounded-xl" />
-          </div>
-          <div className="min-w-0 text-end">
-            <p className="text-sm font-extrabold tracking-tight text-primary-dark">{BRAND_NAME}</p>
-            <p className="mt-1 text-[10px] leading-5 text-primary-dark/70">{BRAND_TAGLINE}</p>
+          <div className="flex shrink-0 items-center gap-1.5">
+            {searchToggle}
+            <NotificationsBell />
+            <Link href="/dashboard/settings" aria-label="الإعدادات" className="kayan-header-action">
+              <Settings size={18} aria-hidden="true" />
+            </Link>
+            {accountLink}
           </div>
         </div>
-        <div className="mt-4 flex items-center justify-center gap-3">
-          <Link href="/dashboard/settings" aria-label="الإعدادات" className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-primary-dark/15 bg-surface/90 text-primary-dark shadow-sm">
-            <Settings size={18} aria-hidden="true" />
-          </Link>
-          <NotificationsBell />
-          <Link href="/dashboard/account" aria-label="الحساب" className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-primary-dark/15 bg-surface/90 text-primary-dark shadow-sm">
-            <span className="text-sm font-bold">{organizationName.trim().slice(0, 1) || 'ك'}</span>
-          </Link>
-        </div>
+        {searchPanel}
       </header>
     )
   }
 
   return (
-    <header className="dashboard-inner-header">
-      <div className="flex min-w-0 items-center gap-3">
-        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-primary-light text-primary-dark">
-          <PageIcon size={21} aria-hidden="true" />
+    <header className="dashboard-inner-header kayan-header">
+      <div className="flex w-full items-center gap-2">
+        <button type="button" onClick={goBack} aria-label="رجوع" className="kayan-header-action">
+          <ArrowRight size={19} aria-hidden="true" />
+        </button>
+        <span className="hidden h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[var(--kayan-sand)] text-[var(--kayan-ink)] min-[380px]:flex">
+          <PageIcon size={20} aria-hidden="true" />
         </span>
-        <div className="min-w-0">
-          <h1 className="truncate text-base font-extrabold text-text">{page.title}</h1>
-          <p className="mt-0.5 line-clamp-1 text-[11px] text-text-muted">{page.subtitle}</p>
+        <div className="min-w-0 flex-1">
+          <h1 className="truncate text-base font-extrabold">{page.title}</h1>
+          <p className="mt-0.5 truncate text-[11px] opacity-75">{page.subtitle}</p>
+        </div>
+        <div className="flex shrink-0 items-center gap-1">
+          {searchToggle}
+          <NotificationsBell />
+          {accountLink}
         </div>
       </div>
-      <div className="flex shrink-0 items-center gap-1.5">
-        <button type="button" onClick={() => router.refresh()} aria-label="تحديث الصفحة" className="dashboard-icon-button">
-          <RefreshCw size={17} aria-hidden="true" />
-        </button>
-        <button type="button" onClick={() => setSearchOpen((value) => !value)} aria-label={searchOpen ? 'إغلاق البحث' : 'بحث'} aria-expanded={searchOpen} className="dashboard-icon-button">
-          <Search size={18} aria-hidden="true" />
-        </button>
-        <Link href="/dashboard/settings" aria-label="الإعدادات" className="dashboard-icon-button">
-          <Settings size={18} aria-hidden="true" />
-        </Link>
-      </div>
-      {searchOpen ? <div className="mt-3 w-full"><GlobalSearch autoFocus onNavigate={() => setSearchOpen(false)} /></div> : null}
+      {searchPanel}
     </header>
   )
 }

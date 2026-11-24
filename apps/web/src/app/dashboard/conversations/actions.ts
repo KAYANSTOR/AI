@@ -11,6 +11,7 @@ import { normalizeChannelNumber } from '@/lib/channels/management'
 import { resolveContactIdentity } from '@/lib/channels/contacts'
 import { ensureOpenConversation } from '@/lib/runtime/conversation'
 import { deliverOutbound, deliverWhatsAppTemplate, recordDeliveredOutboundMessage } from '@/lib/runtime/outbound'
+import { loadConversationMessages, type ThreadPage } from '@/lib/inbox/messages'
 
 export type InboxResult = { ok: boolean; error?: string; message?: string }
 
@@ -436,6 +437,7 @@ export async function sendHumanReplyAction(
       idempotencyKey,
       conversationId,
       queueOnFailure: true,
+      senderType: 'human_dashboard',
     })
 
     if (delivery === 'sent') {
@@ -444,6 +446,7 @@ export async function sendHumanReplyAction(
         conversationId,
         body: text,
         idempotencyKey,
+        senderType: 'human_dashboard',
       })
     }
 
@@ -626,5 +629,20 @@ export async function startWhatsAppConversationAction(
       error: actionErrorMessage(error, 'تعذّر بدء المحادثة. تحقق من القالب وبيانات قناة Meta ثم حاول مجدداً.'),
       conversationId,
     }
+  }
+}
+
+/** "Load older" for the conversation thread (keyset pagination, newest first). */
+export async function loadOlderMessagesAction(
+  conversationId: string,
+  cursor: string
+): Promise<{ ok: true; page: ThreadPage } | { ok: false; error: string }> {
+  try {
+    const ctx = await requireCapability('inbox')
+    await loadConversation(ctx, conversationId)
+    const page = await loadConversationMessages(ctx.db, { organizationId: ctx.organizationId, conversationId, cursor })
+    return { ok: true, page }
+  } catch (error) {
+    return { ok: false, error: actionErrorMessage(error, 'تعذّر تحميل الرسائل الأقدم.') }
   }
 }

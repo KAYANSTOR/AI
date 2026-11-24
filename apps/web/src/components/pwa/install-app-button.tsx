@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useSyncExternalStore } from 'react'
+import { useHistoryDismiss } from '@/hooks/use-history-dismiss'
 import { Download, X } from 'lucide-react'
 import { ar } from '@/lib/i18n/ar'
 
@@ -63,6 +64,7 @@ export function InstallAppButton({ compact = false }: { compact?: boolean }) {
   )
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null)
   const [helpOpen, setHelpOpen] = useState(false)
+  useHistoryDismiss(helpOpen, () => setHelpOpen(false))
   const iosSafari = mounted && isIosSafari()
 
   useEffect(() => {

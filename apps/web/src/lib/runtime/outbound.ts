@@ -102,6 +102,13 @@ export async function deliverOutbound(
     idempotencyKey: string
     conversationId?: string | null
     queueOnFailure?: boolean
+    /**
+     * Long-running workers (not HTTP request handlers) may deliver the claimed
+     * intent immediately. Failures stay in the outbox with retry/backoff.
+     */
+    deliverInline?: boolean
+    /** Recorded on the inbox message once the outbox drain delivers it. */
+    senderType?: 'ai' | 'human_dashboard' | 'system'
   }
 ): Promise<'sent' | 'queued' | 'blocked'> {
   const queueOnFailure = input.queueOnFailure !== false
@@ -113,16 +120,18 @@ export async function deliverOutbound(
         eventType: 'message.send',
         idempotencyKey: input.idempotencyKey,
         recipient: input.recipient,
-        payload: { body: input.body, conversation_id: input.conversationId ?? null },
+        payload: { body: input.body, conversation_id: input.conversationId ?? null, ...(input.senderType ? { sender_type: input.senderType } : {}) },
+        reserveOnly: !input.deliverInline,
       })
     : null
 
   if (claim?.status === 'sent') return 'sent'
   if (claim?.status === 'blocked') return 'blocked'
   if (claim?.status === 'queued') return 'queued'
-  // HTTP/webhook paths only create the durable intent. The outbox worker is the
-  // only path allowed to call an external WhatsApp provider.
-  if (queueOnFailure) return 'queued'
+  // HTTP/webhook paths only create the durable intent; the outbox drain sends it.
+  // The inbound worker is itself a background process, so it sends the claimed
+  // intent right away instead of waiting for the external scheduler.
+  if (queueOnFailure && !input.deliverInline) return 'queued'
 
   let credentials: Record<string, string>
   try {
@@ -249,6 +258,7 @@ export async function recordDeliveredOutboundMessage(
     state?: string
     externalMessageId?: string | null
     messageType?: 'text' | 'image' | 'audio' | 'video' | 'file'
+    senderType?: 'ai' | 'human_dashboard' | 'human_whatsapp' | 'system'
   }
 ) {
   const { error } = await db.from('messages').insert({
@@ -258,6 +268,7 @@ export async function recordDeliveredOutboundMessage(
     message_type: input.messageType ?? 'text',
     content: input.body,
     external_message_id: input.externalMessageId || input.idempotencyKey,
+    ...(input.senderType ? { sender_type: input.senderType } : {}),
   })
   if (error && error.code !== '23505') throw new Error('outbound_message_record_failed')
 

@@ -505,11 +505,13 @@ export function OverviewPage({ onNavigate }: { onNavigate: (route: OwnerRouteId)
                       </td>
                       <td className="py-2.5">
                         <StatusText
-                          status={item.configured ? 'ok' : 'warn'}
+                          status={item.status === 'operational' ? 'ok' : 'warn'}
                           label={
-                            item.configured
-                              ? 'مهيأ على الخادم'
-                              : 'غير مربوط'
+                            item.status === 'operational'
+                              ? 'يعمل'
+                              : item.status === 'degraded'
+                                ? 'متدهور'
+                                : 'غير مربوط'
                           }
                         />
                       </td>

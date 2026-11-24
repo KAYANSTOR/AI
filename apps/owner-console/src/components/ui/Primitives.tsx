@@ -8,6 +8,7 @@ import {
   XCircle,
   ArrowUpLeft,
 } from 'lucide-react';
+import { useFocusTrap } from '../../hooks/useFocusTrap';
 
 export function KayanLogoMark({ className = 'w-8 h-8' }: { className?: string }) {
   return (
@@ -205,17 +206,13 @@ export function ModalDialog({
   open:boolean;title:string;subtitle?:string;onClose:()=>void;children:React.ReactNode;maxWidth?:string;
 }) {
   const titleId=React.useId();
-  React.useEffect(()=>{
-    if(!open)return;
-    const handleKey=(e:KeyboardEvent)=>{if(e.key==='Escape')onClose();};
-    window.addEventListener('keydown',handleKey);
-    return ()=>window.removeEventListener('keydown',handleKey);
-  },[open,onClose]);
+  // Focus trap + Escape + focus restore to the opener on close.
+  const panelRef=useFocusTrap<HTMLDivElement>(open,onClose);
   if(!open)return null;
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/55 p-3 sm:p-4 overflow-y-auto"
       role="dialog" aria-modal="true" aria-labelledby={titleId} onClick={onClose}>
-      <div className={`flex max-h-[calc(100dvh-1.5rem)] w-full ${maxWidth} flex-col overflow-hidden rounded-xl border border-[var(--k-line)] bg-[var(--k-surface)] shadow-2xl sm:max-h-[calc(100dvh-2rem)]`}
+      <div ref={panelRef} tabIndex={-1} className={`flex max-h-[calc(100dvh-1.5rem)] w-full ${maxWidth} flex-col overflow-hidden rounded-xl border border-[var(--k-line)] bg-[var(--k-surface)] shadow-2xl sm:max-h-[calc(100dvh-2rem)]`}
         onClick={(e)=>e.stopPropagation()}>
         <div className="sticky top-0 z-10 flex shrink-0 items-start justify-between gap-4 border-b border-[var(--k-line)] bg-[var(--k-surface)] px-4 py-4 sm:px-5">
           <div className="min-w-0">

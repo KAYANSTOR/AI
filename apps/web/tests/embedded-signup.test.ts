@@ -151,8 +151,11 @@ describe('WhatsApp Embedded Signup OAuth callback state', () => {
     try {
       const result = await createEmbeddedSignupOAuthState(ORG, nonces.persist)
       const [encoded, signature] = result.state.split('.')
-      const changed = signature.endsWith('a') ? 'b' : 'a'
-      const tampered = encoded + '.' + signature.slice(0, -1) + changed
+      // The final base64url character of an HMAC-SHA256 signature carries
+      // padding bits, so flipping it may not change any decoded byte. Change
+      // the first character instead, whose six bits all belong to byte 0.
+      const changed = signature.startsWith('A') ? 'B' : 'A'
+      const tampered = encoded + '.' + changed + signature.slice(1)
       expect(await verifyEmbeddedSignupOAuthState(tampered, ORG, nonces.consume)).toBeNull()
 
       Date.now = () => realNow() + 31 * 60 * 1000

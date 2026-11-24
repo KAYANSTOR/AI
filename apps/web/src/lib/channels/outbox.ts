@@ -82,16 +82,19 @@ async function reserveOutboundEventAtomically(
     idempotencyKey: string
     recipient: string
     payload: Record<string, unknown>
+    reserveOnly?: boolean
   }
 ): Promise<OutboundClaimResult | null> {
+  const { reserveOnly: _reserveOnly, ...rpcArgs } = args
+  void _reserveOnly
   const { data, error } = await db.rpc('reserve_outbound_event', {
-    p_organization_id: args.organizationId,
-    p_business_id: args.businessId,
-    p_channel_id: args.channelId,
-    p_event_type: args.eventType,
-    p_idempotency_key: args.idempotencyKey,
-    p_recipient: args.recipient,
-    p_payload: args.payload,
+    p_organization_id: rpcArgs.organizationId,
+    p_business_id: rpcArgs.businessId,
+    p_channel_id: rpcArgs.channelId,
+    p_event_type: rpcArgs.eventType,
+    p_idempotency_key: rpcArgs.idempotencyKey,
+    p_recipient: rpcArgs.recipient,
+    p_payload: rpcArgs.payload,
   })
   if (error) {
     // The in-memory test double intentionally has no default RPC handlers.
@@ -104,7 +107,24 @@ async function reserveOutboundEventAtomically(
   if (status === 'sent') return { status: 'sent' }
   if (status === 'dead_letter' || status === 'cancelled') return { status: 'blocked' }
   if (status === 'processing') return { status: 'queued' }
-  return { status: 'claimed', eventId: String(row.event_id), attempts: Number(row.attempts ?? 1) }
+  if (status !== 'pending' && status !== 'failed') return { status: 'blocked' }
+  // A freshly reserved row is returned as 'pending' and is not locked yet. Lock
+  // it explicitly so exactly one sender owns it and the sent/failed state
+  // transitions (which require status='processing') succeed.
+  if (args.reserveOnly) return { status: 'queued' }
+  const scheduledAt = row.scheduled_at ? new Date(String(row.scheduled_at)).getTime() : 0
+  if (Number.isFinite(scheduledAt) && scheduledAt > Date.now()) return { status: 'queued' }
+  const attempts = Number(row.attempts ?? 0) + 1
+  const { data: locked, error: lockError } = await db
+    .from('outbox_events')
+    .update({ status: 'processing', attempts, locked_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .eq('id', String(row.event_id))
+    .eq('status', status)
+    .select('id')
+    .maybeSingle()
+  if (lockError) throw new Error(lockError.message)
+  if (!locked?.id) return { status: 'queued' }
+  return { status: 'claimed', eventId: String(row.event_id), attempts }
 }
 
 /**
@@ -122,13 +142,16 @@ export async function claimOutboundEvent(
     idempotencyKey: string
     recipient: string
     payload: Record<string, unknown>
+    /** Persist the intent without locking it (the outbox drain will send it). */
+    reserveOnly?: boolean
   },
   now?: Date
 ): Promise<OutboundClaimResult> {
   const atomicResult = await reserveOutboundEventAtomically(db, args)
   if (atomicResult) return atomicResult
 
-  await enqueueOutbound({ db, ...args })
+  const { reserveOnly, ...enqueueArgs } = args
+  await enqueueOutbound({ db, ...enqueueArgs })
   const claimNow = now ?? new Date()
 
   const { data: event, error } = await db
@@ -145,6 +168,7 @@ export async function claimOutboundEvent(
   if (status === 'dead_letter' || status === 'cancelled') return { status: 'blocked' }
   if (status === 'processing') return { status: 'queued' }
   if (status !== 'pending' && status !== 'failed') return { status: 'blocked' }
+  if (reserveOnly) return { status: 'queued' }
 
   const attempts = Number(event.attempts ?? 0)
   if (attempts >= OUTBOX_MAX_ATTEMPTS) {

@@ -185,7 +185,7 @@ export function FastPath({
             initialReply={data.initialReply}
             initialTestMessage={data.initialTestMessage}
             canManage={data.canManage}
-            onActivated={() => router.push('/dashboard')}
+            onActivated={() => router.replace('/dashboard')}
           />
         )}
       </div>

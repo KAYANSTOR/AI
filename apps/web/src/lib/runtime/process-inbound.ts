@@ -49,6 +49,13 @@ async function resolvePersonalAssistantOwner(input: InboundIdentity) {
   return { userId: String(owner.id) }
 }
 
+function skipReply(reason: string, input: { organizationId: string; channelId: string }, conversationId: string, contactId: string) {
+  // Every silent "no reply" branch is logged so an unanswered message can be
+  // traced to its exact cause in the Railway runtime logs.
+  console.info('inbound_reply_skipped', { reason, organizationId: input.organizationId, channelId: input.channelId, conversationId })
+  return { reply: null, conversationId, contactId }
+}
+
 /** Resolve the contact and conversation, then persist the inbound message for the inbox. */
 async function storeInboundMessage(
   db: DbClient,
@@ -76,6 +83,7 @@ async function storeInboundMessage(
     message_type: input.messageType,
     content: input.content,
     external_message_id: input.externalEventId,
+    sender_type: 'contact',
   }).select('id').maybeSingle()
   if (stored.error && stored.error.code !== '23505') throw new Error(stored.error.message)
 
@@ -136,7 +144,7 @@ export async function processInboundMessage(
 
   const conversation = await getConversationRef(db, conversationId, input.organizationId)
   if (!conversation || !conversation.aiEnabled || conversation.status === 'handed_off') {
-    return { reply: null, conversationId, contactId: contact.contactId }
+    return skipReply(!conversation ? 'conversation_not_found' : !conversation.aiEnabled ? 'ai_disabled_for_conversation' : 'handed_off_to_human', input, conversationId, contact.contactId)
   }
 
   if (isOptOutMessage(input.text)) {
@@ -160,7 +168,7 @@ export async function processInboundMessage(
 
   const consent = await getConsentStatus(db, contact.contactId, input.channelType)
   if (consent === 'opted_out') {
-    return { reply: null, conversationId, contactId: contact.contactId }
+    return skipReply('contact_opted_out', input, conversationId, contact.contactId)
   }
 
   let serverActionResult: unknown
@@ -204,7 +212,7 @@ export async function processInboundMessage(
   }
 
   const agent = await resolveBusinessAgent(db, input.businessId)
-  if (!agent) return { reply: null, conversationId, contactId: contact.contactId }
+  if (!agent) return skipReply('no_active_agent_or_business_not_live', input, conversationId, contact.contactId)
 
   const eligibility = checkEligibility({
     channel: input.channelType,
@@ -212,9 +220,9 @@ export async function processInboundMessage(
     // The opted_out case is returned above, so this branch only sees allowed/unknown consent.
     optedOut: false,
   })
-  if (!eligibility.allowed) return { reply: null, conversationId, contactId: contact.contactId }
+  if (!eligibility.allowed) return skipReply('channel_eligibility_blocked', input, conversationId, contact.contactId)
   if (eligibility.mode === 'template_only' && input.channelType !== 'sms') {
-    return { reply: null, conversationId, contactId: contact.contactId }
+    return skipReply('template_only_window', input, conversationId, contact.contactId)
   }
 
   try {
@@ -250,7 +258,7 @@ export async function processInboundMessage(
     agentId: agent.id,
     serverActionResult,
   })
-  if (!reply) return { reply: null, conversationId, contactId: contact.contactId }
+  if (!reply) return skipReply('agent_returned_empty_reply', input, conversationId, contact.contactId)
 
   try {
     await recordMeterUsage(db, input.organizationId, 'ai_messages', 1)

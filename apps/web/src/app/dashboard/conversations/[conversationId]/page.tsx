@@ -1,11 +1,13 @@
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
-import { ArrowRight, Bot, Phone, Sparkles } from 'lucide-react'
+import { ArrowRight, Phone, Sparkles } from 'lucide-react'
 import { requireCapability, CapabilityDisabledError } from '@/lib/capabilities/guard'
 import { InboxControls } from '../inbox-controls'
 import { formatDateTime } from '@/lib/i18n/format'
 import { channelLabel } from '@/lib/i18n/labels'
-import { ChatBubble, type ChatBubbleType } from '@/components/ui/chat-bubble'
+import { ChatBubble } from '@/components/ui/chat-bubble'
+import { loadConversationMessages } from '@/lib/inbox/messages'
+import { MessageThread } from '../message-thread'
 import { ReplyComposer } from '../reply-composer'
 import { markAsReadAction } from '../actions'
 
@@ -33,14 +35,8 @@ export default async function ConversationThreadPage({
 
   if (!conversation) notFound()
 
-  const [{ data: messages }, { data: notes }] = await Promise.all([
-    ctx.db
-      .from('messages')
-      .select('id, direction, content, message_type, created_at')
-      .eq('conversation_id', conversationId)
-      .eq('organization_id', ctx.organizationId)
-      .order('created_at', { ascending: true })
-      .limit(200),
+  const [thread, { data: notes }] = await Promise.all([
+    loadConversationMessages(ctx.db, { organizationId: ctx.organizationId, conversationId }),
     ctx.db
       .from('conversation_notes')
       .select('id, body, created_at')
@@ -102,44 +98,15 @@ export default async function ConversationThreadPage({
       </header>
 
       <div className="conversation-messages min-h-0 flex-1 space-y-4 overflow-y-auto px-3 py-4 sm:px-6">
-        <div className="flex justify-center">
-          <span className="rounded-full border border-border/70 bg-surface/80 px-3 py-1 text-[11px] text-text-muted">
-            بدأت المحادثة عبر {channel ? channelLabel(channel.channel_type) : 'واتساب'}
-          </span>
-        </div>
-
-        {!messages?.length ? (
-          <div className="flex h-full min-h-40 flex-col items-center justify-center gap-2 text-center text-sm text-text-muted">
-            <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-surface text-text-muted">
-              <Bot className="h-6 w-6" />
-            </span>
-            لا توجد رسائل سابقة في هذه المحادثة
-          </div>
-        ) : (
-          messages.map((message) => {
-            const isInbound = message.direction === 'inbound'
-            const bubbleType: ChatBubbleType = isInbound
-              ? 'customer'
-              : conversation.ai_enabled
-                ? 'ai'
-                : 'human'
-            const sender = isInbound ? customerName : conversation.ai_enabled ? 'المساعد الذكي' : 'فريق العمل'
-            const timeFormatted = message.created_at
-              ? formatDateTime(message.created_at as string, ctx.timezone)
-              : ''
-
-            return (
-              <div key={message.id} className={`flex w-full ${isInbound ? 'justify-start' : 'justify-end'}`}>
-                <ChatBubble
-                  type={bubbleType}
-                  text={message.content ?? ''}
-                  time={timeFormatted}
-                  sender={sender}
-                />
-              </div>
-            )
-          })
-        )}
+        <MessageThread
+          key={conversationId}
+          conversationId={conversationId}
+          initialMessages={thread.messages}
+          initialCursor={thread.olderCursor}
+          customerName={customerName}
+          aiEnabled={Boolean(conversation.ai_enabled)}
+          timezone={ctx.timezone}
+        />
 
         {notes?.map((note) => (
           <div key={note.id} className="flex w-full justify-end">

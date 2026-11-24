@@ -54,7 +54,7 @@ export function QuoteForm({ contacts }: { contacts: Contact[] }) {
       setError(result.error || 'حدث خطأ غير متوقع.')
       setLoading(false)
     } else {
-      router.push(`/dashboard/quotes/${result.quoteId}`)
+      router.replace(`/dashboard/quotes/${result.quoteId}`)
     }
   }
 

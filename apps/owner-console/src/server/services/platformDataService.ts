@@ -416,19 +416,20 @@ export async function platformOverview(period:string,startDate?:string,endDate?:
   ]);
   const x=c[0]||{},v=(k:string)=>count(x[k]);
   const aiCostAvailable=v('ai_cost_records')>0;
+  const [signals,integrations]=await Promise.all([platformOperationalSignals(),platformIntegrationStatus()]);
   const metrics={totalUsers:v('total_users'),activeUsers:v('active_users'),newUsersInPeriod:v('new_users'),suspendedUsers:v('suspended_users'),trialAccounts:v('trial_subscriptions'),
     activeSubscriptions:v('active_subscriptions'),expiredSubscriptions:v('expired_subscriptions'),cancelledSubscriptions:v('cancelled_subscriptions'),pastDueSubscriptions:v('past_due_subscriptions'),trialSubscriptions:v('trial_subscriptions'),
     totalWorkspaces:v('total_workspaces'),totalAgents:v('total_agents'),activeAgents:v('active_agents'),failingAgents:v('failing_agents'),totalConversations:v('total_conversations'),totalMessages:v('total_messages'),
     totalAiRequests:v('ai_requests'),successfulAgentRuns:v('success_runs'),failedAgentRuns:v('failed_runs'),totalTokens:v('total_tokens'),aiProviderCostsUsd:aiCostAvailable?v('ai_cost'):0,collectedRevenueUsd:v('collected_revenue'),unpaidInvoicesUsd:v('pending_payments'),recordedExpensesUsd:0,totalOperatingCostsUsd:0,netMarginUsd:0,netMarginPercent:null,
-    connectedChannels:v('connected_channels'),disconnectedChannels:v('disconnected_channels'),currentSystemErrors:0};
+    connectedChannels:v('connected_channels'),disconnectedChannels:v('disconnected_channels'),currentSystemErrors:signals.systemErrors,unauthorizedAttempts24h:signals.unauthorizedAttempts24h};
   return {window:{startIso:from,endIso:to,days:Math.max(1,Math.ceil((end.getTime()-start.getTime())/86400000))},
-    database:{engine:'PostgreSQL',mode:'بيانات المنصة الحقيقية؛ جلسات المالك وسجل تدقيقه منفصلان',externalPostgresConfigured:true,pathLabel:'Railway Postgres'},integrations:[],metrics,
+    database:{engine:'PostgreSQL',mode:'بيانات المنصة الحقيقية؛ جلسات المالك وسجل تدقيقه منفصلان',externalPostgresConfigured:true,pathLabel:'Railway Postgres'},integrations,metrics,
     comparisons:{newUsersDeltaPct:null,subscriptionsDeltaPct:null,revenueDeltaPct:null,aiRequestsDeltaPct:null,aiCostDeltaPct:null},
     charts:{timeSeries:series.map((r:any)=>({date:r.date,users:count(r.users),subscriptions:count(r.subscriptions),revenueUsd:count(r.revenue_usd),tokens:count(r.tokens),aiCostUsd:count(r.ai_cost_usd),conversations:count(r.conversations),messages:count(r.messages),successRuns:count(r.success_runs),failedRuns:count(r.failed_runs)})),
       channelUsage:channels.map((r:any)=>({channel:r.channel,total:count(r.total),connected:count(r.connected),messages:count(r.messages)})),
       planDistribution:plans.map((r:any)=>({code:r.code,name:r.name,subscribers:count(r.subscribers)})),modelUsage:models.map((r:any)=>({modelId:r.model_id,displayName:r.display_name,requests:count(r.requests),tokens:count(r.tokens),costUsd:r.cost_usd==null?null:count(r.cost_usd)}))},
-    attentionItems:{pastDueSubscriptions:v('past_due_subscriptions'),failingAgents:v('failing_agents'),disconnectedChannels:v('disconnected_channels'),unresolvedErrors:0,unacknowledgedAlerts:0,openTickets:0},
-    dataLimitations:{revenue:'الإيراد المحصل محسوب من طلبات الدفع المؤكدة؛ لا يوجد دفتر فواتير منفصل.',expenses:'لا يوجد دفتر مصروفات تشغيلي في المخطط الحالي.',aiCost:aiCostAvailable?undefined:'سجل الرموز لا يحتوي تكلفة موثقة حتى الآن.',systemErrors:'لا يوجد سجل أخطاء تشغيلي موحد في مخطط PostgreSQL الحالي.'}};
+    attentionItems:{pastDueSubscriptions:v('past_due_subscriptions'),failingAgents:v('failing_agents'),disconnectedChannels:v('disconnected_channels'),unresolvedErrors:signals.systemErrors,unacknowledgedAlerts:signals.unacknowledgedAlerts,openTickets:signals.openTickets},
+    dataLimitations:{revenue:'الإيراد المحصل محسوب من طلبات الدفع المؤكدة؛ لا يوجد دفتر فواتير منفصل.',expenses:'لا يوجد دفتر مصروفات تشغيلي في المخطط الحالي.',aiCost:aiCostAvailable?undefined:'سجل الرموز لا يحتوي تكلفة موثقة حتى الآن.'}};
 }
 
 export async function updatePlatformUser(id:string,p:{fullName?:string;email?:string;phone?:string|null;adminNotes?:string}) {
@@ -845,7 +846,7 @@ export async function platformMonitoring() {
     {id:'gateway-errors',title:'أخطاء جلسات WhatsApp Web',description:gatewayErrors+' جلسة بها خطأ مسجل',severity:'warning',active:gatewayErrors>0}
   ];
   return {runtime:{nodeVersion:process.version,platform:process.platform+' '+process.arch,uptimeSec,memoryMb:Number((mem.rss/1024/1024).toFixed(1)),
-      unresolvedErrors:failedRuns+failedWebhooks+failedInbound+failedOutbound+gatewayErrors,unauthorizedAttempts24h:'غير متاح من مصدر بيانات المنصة الحالي'},
+      unresolvedErrors:failedRuns+failedWebhooks+failedInbound+failedOutbound+gatewayErrors,unauthorizedAttempts24h:(await platformOperationalSignals()).unauthorizedAttempts24h},
     services:[
       {id:'backend_api',name:'خادم KAYAN AI',status:'operational',latencyMs:null,detail:'خدمة التطبيق ولوحة المالك تعملان ضمن خدمة Railway نفسها.'},
       {id:'postgres',name:'قاعدة بيانات PostgreSQL',status:'operational',latencyMs,detail:'تم تنفيذ فحص اتصال فعلي للجداول الأساسية في قاعدة بيانات المنصة.'}
@@ -1240,4 +1241,124 @@ export async function reviewPlatformPayment(id:string, action:string, reviewedBy
 export async function platformPaymentReceipt(id:string) {
   const rows=await query<{receipt_image_base64:string;receipt_mime_type:string}>(`SELECT receipt_image_base64,receipt_mime_type FROM manual_wallet_payment_requests WHERE id=$1::uuid LIMIT 1`,[id]);
   return rows[0]||null;
+}
+
+// ─── Real operational signals (replace hard-coded zeros) ────────────────────
+
+/** Errors, alerts, tickets and unauthorized logins read from PostgreSQL. */
+export async function platformOperationalSignals() {
+  const [rows,ackRows]=await Promise.all([
+    query(`SELECT (SELECT COUNT(*) FROM agent_runs WHERE status='failed' AND created_at>NOW()-INTERVAL '24 hours')::int failed_runs,
+      (SELECT COUNT(*) FROM webhook_events WHERE processing_status='failed' AND received_at>NOW()-INTERVAL '24 hours')::int failed_webhooks,
+      (SELECT COUNT(*) FROM inbound_jobs WHERE status='dead_letter' AND updated_at>NOW()-INTERVAL '24 hours')::int failed_inbound,
+      (SELECT COUNT(*) FROM outbox_events WHERE status IN('failed','dead_letter') AND updated_at>NOW()-INTERVAL '24 hours')::int failed_outbound,
+      (SELECT COUNT(*) FROM whatsapp_gateway_sessions WHERE status<>'connected' AND last_error IS NOT NULL)::int gateway_errors,
+      (SELECT COUNT(*) FROM platform_support_tickets WHERE status IN('open','in_progress'))::int open_tickets,
+      (SELECT COUNT(*) FROM platform_admin_login_attempts WHERE success=false AND created_at>NOW()-INTERVAL '24 hours')::int unauthorized_attempts`),
+    query(`SELECT alert_id FROM platform_alert_acknowledgements`)
+  ]);
+  const c=rows[0]||{};
+  const failedRuns=count(c.failed_runs),failedWebhooks=count(c.failed_webhooks),failedInbound=count(c.failed_inbound),failedOutbound=count(c.failed_outbound),gatewayErrors=count(c.gateway_errors);
+  const acknowledged=new Set(ackRows.map((r:any)=>String(r.alert_id)));
+  const activeAlertIds=[
+    failedRuns>0&&'failed-agent-runs',failedWebhooks>0&&'failed-webhooks',failedOutbound>0&&'failed-outbound',
+    failedInbound>0&&'failed-inbound',gatewayErrors>0&&'gateway-errors'
+  ].filter(Boolean) as string[];
+  return {failedRuns,failedWebhooks,failedInbound,failedOutbound,gatewayErrors,
+    systemErrors:failedRuns+failedWebhooks+failedInbound+failedOutbound+gatewayErrors,
+    unacknowledgedAlerts:activeAlertIds.filter((id)=>!acknowledged.has(id)).length,
+    openTickets:count(c.open_tickets),unauthorizedAttempts24h:count(c.unauthorized_attempts)};
+}
+
+type IntegrationStatus={id:string;name:string;category:string;envVar:string;configured:boolean;status:'operational'|'degraded'|'not_configured';note:string};
+
+/** Real integration status: env configuration + live probe / recent DB activity. */
+export async function platformIntegrationStatus():Promise<IntegrationStatus[]> {
+  const env=(name:string)=>Boolean(process.env[name]?.trim());
+  const gatewayUrl=(process.env.WHATSAPP_GATEWAY_URL?.trim()||'http://127.0.0.1:'+(process.env.WHATSAPP_GATEWAY_PORT?.trim()||'3001')).replace(/\/+$/,'');
+  const [gatewayProbe,providerRows,metaRows]=await Promise.all([
+    fetch(gatewayUrl+'/health',{signal:AbortSignal.timeout(3000)}).then(async(r)=>({ok:r.ok,body:await r.json().catch(()=>null) as {activeSessions?:number}|null})).catch(()=>({ok:false,body:null})),
+    query(`SELECT lower(model_provider) provider,COUNT(*) FILTER(WHERE status='completed')::int ok,COUNT(*) FILTER(WHERE status='failed')::int failed,MAX(created_at)::text last_at
+      FROM agent_runs WHERE created_at>NOW()-INTERVAL '24 hours' GROUP BY lower(model_provider)`),
+    query(`SELECT COUNT(*) FILTER(WHERE is_active AND verification_status='verified')::int verified,COUNT(*)::int total
+      FROM channels WHERE channel_type IN('whatsapp','messenger','instagram') AND COALESCE(connection_mode,'')<>'qr_unofficial'`)
+  ]);
+  const provider=(needle:string)=>{
+    const matches=(providerRows as any[]).filter((r)=>String(r.provider).includes(needle));
+    return {ok:matches.reduce((n,r)=>n+count(r.ok),0),failed:matches.reduce((n,r)=>n+count(r.failed),0)};
+  };
+  const aiStatus=(id:string,name:string,envVar:string,needle:string):IntegrationStatus=>{
+    const configured=env(envVar),p=provider(needle);
+    const status=!configured?'not_configured':p.failed>0&&p.ok===0?'degraded':'operational';
+    return {id,name,category:'ai',envVar,configured,status,
+      note:!configured?'المفتاح غير مضبوط على الخادم.':`آخر 24 ساعة: ${p.ok} ناجحة / ${p.failed} فاشلة.`};
+  };
+  const meta=metaRows[0]||{};
+  const metaConfigured=env('META_APP_ID')&&(env('META_APP_SECRET')||env('WHATSAPP_APP_SECRET'));
+  return [
+    {id:'whatsapp_gateway',name:'WhatsApp Gateway (QR)',category:'channel',envVar:'WHATSAPP_GATEWAY_TOKEN',configured:env('WHATSAPP_GATEWAY_TOKEN'),
+      status:gatewayProbe.ok?'operational':env('WHATSAPP_GATEWAY_TOKEN')?'degraded':'not_configured',
+      note:gatewayProbe.ok?`الخدمة تستجيب؛ الجلسات النشطة: ${count(gatewayProbe.body?.activeSessions)}.`:'فحص /health للبوابة فشل أو لا يستجيب.'},
+    {id:'meta',name:'Meta (WhatsApp Cloud / Messenger)',category:'channel',envVar:'META_APP_ID / META_APP_SECRET',configured:metaConfigured,
+      status:!metaConfigured?'not_configured':count(meta.verified)>0?'operational':'degraded',
+      note:`القنوات الرسمية الموثقة: ${count(meta.verified)} من ${count(meta.total)}.`},
+    aiStatus('gemini','Google Gemini','GEMINI_API_KEY','gemini'),
+    aiStatus('groq','Groq','GROQ_API_KEY','groq'),
+  ];
+}
+
+// ─── Agent sandbox test (real provider call, recorded in agent_runs) ────────
+
+async function callSandboxModel(provider:'gemini'|'groq',system:string,message:string,temperature:number) {
+  if(provider==='groq'){
+    const model=process.env.GROQ_MODEL?.trim()||'llama-3.3-70b-versatile';
+    const response=await fetch('https://api.groq.com/openai/v1/chat/completions',{method:'POST',signal:AbortSignal.timeout(20000),
+      headers:{'Content-Type':'application/json',Authorization:'Bearer '+process.env.GROQ_API_KEY},
+      body:JSON.stringify({model,temperature,max_tokens:512,messages:[{role:'system',content:system},{role:'user',content:message}]})});
+    const payload=await response.json().catch(()=>null) as any;
+    if(!response.ok)throw Object.assign(new Error('رفض مزود Groq الطلب (HTTP '+response.status+').'),{code:'provider_http_'+response.status,model});
+    return {model,reply:String(payload?.choices?.[0]?.message?.content||'').trim(),inputTokens:payload?.usage?.prompt_tokens??null,outputTokens:payload?.usage?.completion_tokens??null};
+  }
+  const model=process.env.GEMINI_MODEL?.trim()||'gemini-3.1-flash-lite-preview';
+  const response=await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+encodeURIComponent(model)+':generateContent',{method:'POST',signal:AbortSignal.timeout(20000),
+    headers:{'Content-Type':'application/json','x-goog-api-key':String(process.env.GEMINI_API_KEY)},
+    body:JSON.stringify({systemInstruction:{parts:[{text:system}]},contents:[{role:'user',parts:[{text:message}]}],generationConfig:{temperature,maxOutputTokens:512}})});
+  const payload=await response.json().catch(()=>null) as any;
+  if(!response.ok)throw Object.assign(new Error('رفض مزود Gemini الطلب (HTTP '+response.status+').'),{code:'provider_http_'+response.status,model});
+  const reply=(payload?.candidates?.[0]?.content?.parts||[]).map((p:any)=>String(p?.text||'')).join('').trim();
+  return {model,reply,inputTokens:payload?.usageMetadata?.promptTokenCount??null,outputTokens:payload?.usageMetadata?.candidatesTokenCount??null};
+}
+
+export async function platformAgentSandboxTest(agentId:string,rawMessage:string) {
+  const message=String(rawMessage||'').trim().slice(0,2000);
+  if(!message)throw new Error('اكتب رسالة الاختبار أولاً.');
+  const [agent]=await query(`SELECT a.id::text id,a.organization_id::text organization_id,a.business_id::text business_id,a.name,a.model_provider,a.status,
+      COALESCE(a.temperature,0.4)::float temperature,o.name organization_name,
+      (SELECT system_prompt_addition FROM agent_prompt_versions p WHERE p.agent_id=a.id AND p.status='published' LIMIT 1) prompt
+    FROM ai_agents a JOIN organizations o ON o.id=a.organization_id WHERE a.id=$1::uuid`,[agentId]);
+  if(!agent)return null;
+  const wanted=String(agent.model_provider||'').toLowerCase().includes('groq')?'groq':'gemini';
+  const provider:('gemini'|'groq')|null=(wanted==='groq'?process.env.GROQ_API_KEY:process.env.GEMINI_API_KEY)?.trim()?wanted
+    :(process.env.GEMINI_API_KEY?.trim()?'gemini':process.env.GROQ_API_KEY?.trim()?'groq':null);
+  if(!provider)return {executedLive:false,message:'لا يوجد مفتاح مزود ذكاء اصطناعي (GEMINI_API_KEY أو GROQ_API_KEY) مهيأ على الخادم.'};
+  const system=[`أنت ${agent.name}، مساعد ذكي لنشاط «${agent.organization_name}». هذا اختبار معزول من لوحة المالك؛ لا تنفذ أي إجراء خارجي.`,
+    agent.prompt?String(agent.prompt):''].filter(Boolean).join('\n\n');
+  const temperature=Math.min(1,Math.max(0,Number(agent.temperature)||0.4));
+  const started=Date.now();
+  const [run]=await query(`INSERT INTO agent_runs(organization_id,business_id,agent_id,channel,model_provider,status,trace_id)
+    VALUES($1::uuid,$2::uuid,$3::uuid,'owner_sandbox',$4,'running',$5) RETURNING id::text id`,
+    [agent.organization_id,agent.business_id,agent.id,provider,'owner-sandbox-'+crypto.randomUUID()]);
+  try{
+    const result=await callSandboxModel(provider,system,message,temperature);
+    const latencyMs=Date.now()-started;
+    await query(`UPDATE agent_runs SET status='completed',model=$2,input_tokens=$3,output_tokens=$4,latency_ms=$5,completed_at=NOW() WHERE id=$1::uuid`,
+      [run.id,result.model,result.inputTokens,result.outputTokens,latencyMs]);
+    return {executedLive:true,runId:run.id,provider,model:result.model,reply:result.reply||'(لم يُرجع النموذج نصاً)',latencyMs,
+      inputTokens:result.inputTokens,outputTokens:result.outputTokens};
+  }catch(err){
+    const latencyMs=Date.now()-started,e=err as {code?:string;model?:string;message?:string;name?:string};
+    const code=e.name==='TimeoutError'?'provider_timeout':(e.code||'provider_error');
+    await query(`UPDATE agent_runs SET status='failed',model=$2,error_code=$3,latency_ms=$4,completed_at=NOW() WHERE id=$1::uuid`,[run.id,e.model||null,code.slice(0,120),latencyMs]);
+    throw new Error(e.name==='TimeoutError'?'انتهت مهلة استجابة المزود.':(e.message||'فشل اختبار الوكيل.'));
+  }
 }

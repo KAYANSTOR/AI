@@ -7,7 +7,9 @@ export type WhatsAppGatewaySession = {
   lastError?: string | null
 }
 function configuration() {
-  const baseUrl = process.env.WHATSAPP_GATEWAY_URL?.trim().replace(/\/+$/, '')
+  // The gateway runs in the same Railway container (start-with-gateway.mjs) and
+  // listens on loopback, so the internal URL is a safe default when unset.
+  const baseUrl = (process.env.WHATSAPP_GATEWAY_URL?.trim() || 'http://127.0.0.1:' + (process.env.WHATSAPP_GATEWAY_PORT?.trim() || '3001')).replace(/\/+$/, '')
   const token = process.env.WHATSAPP_GATEWAY_TOKEN?.trim()
   if (!baseUrl || !token) throw new Error('خدمة ربط واتساب QR غير مهيأة على Railway بعد.')
   return { baseUrl, token }

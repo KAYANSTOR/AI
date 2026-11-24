@@ -10,6 +10,7 @@ import { Chip } from '@/components/ui/chip'
 import { SectionHeader } from '@/components/ui/section-header'
 import { ConversationItem, type ConversationChannel } from '@/components/ui/conversation-item'
 import { MobileEmptyState } from '@/components/ui/empty-state'
+import { INBOX_PAGE_SIZE, inboxSearchFilter, parseInboxPage } from '@/lib/inbox/search'
 
 const STATUS_FILTERS = [
   { id: 'all', label: 'الكل', status: null as string | null },
@@ -22,7 +23,7 @@ const STATUS_FILTERS = [
 export default async function ConversationsPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ view?: string; q?: string; unread?: string; saved?: string }>
+  searchParams?: Promise<{ view?: string; q?: string; unread?: string; saved?: string; page?: string }>
 }) {
   let ctx
   try {
@@ -70,21 +71,41 @@ export default async function ConversationsPage({
   const effectiveQ = savedFilter?.q ?? q
   const effectiveUnread = savedFilter?.unreadOnly ?? unreadOnly
 
-  let query = ctx.db
-    .from('conversations')
-    .select(
-      'id, status, ai_enabled, state, last_message_at, unread_count, contacts(full_name, phone), channels(channel_type)'
-    )
-    .eq('organization_id', ctx.organizationId)
-    .order('last_message_at', { ascending: false })
-    .limit(100)
+  const page = parseInboxPage(params.page)
+  // Search runs in PostgreSQL over all conversations, not over the latest page.
+  const searchFilter = effectiveQ ? await inboxSearchFilter(ctx.db, ctx.organizationId, effectiveQ) : ''
 
-  if (effectiveStatus) query = query.eq('status', effectiveStatus)
-  if (effectiveUnread) query = query.gt('unread_count', 0)
+  let conversations: Array<{
+    id: string
+    status: string | null
+    ai_enabled: boolean | null
+    state: string | null
+    last_message_at: string | null
+    unread_count: number | null
+    contacts: unknown
+    channels: unknown
+  }> = []
+  let hasNextPage = false
+  if (searchFilter !== null) {
+    let query = ctx.db
+      .from('conversations')
+      .select(
+        'id, status, ai_enabled, state, last_message_at, unread_count, contacts(full_name, phone), channels(channel_type)'
+      )
+      .eq('organization_id', ctx.organizationId)
+    if (effectiveStatus) query = query.eq('status', effectiveStatus)
+    if (effectiveUnread) query = query.gt('unread_count', 0)
+    if (searchFilter) query = query.or(searchFilter)
+    const { data } = await query
+      .order('last_message_at', { ascending: false, nullsFirst: false })
+      .order('id', { ascending: false })
+      .range((page - 1) * INBOX_PAGE_SIZE, page * INBOX_PAGE_SIZE)
+    const rows = (data ?? []) as typeof conversations
+    hasNextPage = rows.length > INBOX_PAGE_SIZE
+    conversations = rows.slice(0, INBOX_PAGE_SIZE)
+  }
 
-  const { data: conversations } = await query
-
-  const conversationIds = (conversations ?? []).map((conversation) => conversation.id)
+  const conversationIds = conversations.map((conversation) => conversation.id)
   const latestMessageByConversation = new Map<string, string>()
 
   if (conversationIds.length > 0) {
@@ -94,7 +115,7 @@ export default async function ConversationsPage({
       .eq('organization_id', ctx.organizationId)
       .in('conversation_id', conversationIds)
       .order('created_at', { ascending: false })
-      .limit(3000)
+      .limit(1000)
 
     for (const message of recentMessages ?? []) {
       const conversationId = String(message.conversation_id)
@@ -104,22 +125,14 @@ export default async function ConversationsPage({
     }
   }
 
-  const filtered = !effectiveQ
-    ? conversations
-    : (conversations ?? []).filter((c) => {
-        const contact = c.contacts as unknown as {
-          full_name: string | null
-          phone: string | null
-        } | null
-        const hay = `${contact?.full_name ?? ''} ${contact?.phone ?? ''}`.toLowerCase()
-        return hay.includes(effectiveQ.toLowerCase())
-      })
+  const filtered = conversations
 
   const buildHref = (opts: {
     view?: string
     q?: string
     unread?: boolean
     saved?: string
+    page?: number
   }) => {
     const sp = new URLSearchParams()
     if (opts.saved) sp.set('saved', opts.saved)
@@ -128,6 +141,7 @@ export default async function ConversationsPage({
       if (opts.q) sp.set('q', opts.q)
       if (opts.unread) sp.set('unread', '1')
     }
+    if (opts.page && opts.page > 1) sp.set('page', String(opts.page))
     const s = sp.toString()
     return s ? `/dashboard/conversations?${s}` : '/dashboard/conversations'
   }
@@ -207,8 +221,8 @@ export default async function ConversationsPage({
       {/* Conversations List */}
       {!filtered || filtered.length === 0 ? (
         <MobileEmptyState
-          title="لا توجد محادثات بعد"
-          description="ابدأ بإضافة رقم وإرسال قالب WhatsApp معتمد، أو انتظر أول رسالة من عملائك عبر القناة المتصلة."
+          title={effectiveQ ? 'لا توجد نتائج مطابقة' : 'لا توجد محادثات بعد'}
+          description={effectiveQ ? 'جرّب اسماً أو رقماً أو كلمة أخرى من نص الرسائل.' : 'ابدأ بإضافة رقم وإرسال قالب WhatsApp معتمد، أو انتظر أول رسالة من عملائك عبر القناة المتصلة.'}
           actionLabel="ربط قناة واتساب"
           onAction={undefined}
           action={
@@ -303,6 +317,28 @@ export default async function ConversationsPage({
           )}
         </div>
       )}
+
+      {page > 1 || hasNextPage ? (
+        <nav aria-label="صفحات المحادثات" className="flex items-center justify-between gap-3 pb-2">
+          {page > 1 ? (
+            <Link
+              href={buildHref({ view, q: effectiveQ || undefined, unread: effectiveUnread, saved: params.saved, page: page - 1 })}
+              className="inline-flex min-h-11 items-center rounded-xl border border-border bg-surface px-4 text-sm font-semibold text-text"
+            >
+              الأحدث
+            </Link>
+          ) : <span />}
+          <span className="text-xs text-text-muted">صفحة {page}</span>
+          {hasNextPage ? (
+            <Link
+              href={buildHref({ view, q: effectiveQ || undefined, unread: effectiveUnread, saved: params.saved, page: page + 1 })}
+              className="inline-flex min-h-11 items-center rounded-xl border border-border bg-surface px-4 text-sm font-semibold text-text"
+            >
+              الأقدم
+            </Link>
+          ) : <span />}
+        </nav>
+      ) : null}
     </div>
   )
 }

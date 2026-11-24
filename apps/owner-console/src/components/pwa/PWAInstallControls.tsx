@@ -2,6 +2,7 @@ import React from 'react';
 import { Download, Share, Smartphone, WifiOff, X } from 'lucide-react';
 import { usePWAInstall } from '../../hooks/usePWAInstall';
 import { useOnlineStatus } from '../../hooks/useOnlineStatus';
+import { useFocusTrap } from '../../hooks/useFocusTrap';
 
 export function PWAInstallButton({
   variant = 'header',
@@ -12,6 +13,7 @@ export function PWAInstallButton({
 }) {
   const { isInstallable, isInstalled, isIOS, install } = usePWAInstall();
   const [guideOpen, setGuideOpen] = React.useState(false);
+  const guideRef = useFocusTrap<HTMLDivElement>(guideOpen);
 
   React.useEffect(() => {
     if (!guideOpen) return;
@@ -64,6 +66,8 @@ export function PWAInstallButton({
           onClick={() => setGuideOpen(false)}
         >
           <div
+            ref={guideRef}
+            tabIndex={-1}
             className="w-full max-w-md rounded-xl border border-[var(--k-line-strong)] bg-[var(--k-surface)] p-5 shadow-2xl space-y-4"
             onClick={(e) => e.stopPropagation()}
           >

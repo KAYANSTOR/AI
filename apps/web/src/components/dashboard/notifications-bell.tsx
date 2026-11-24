@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useHistoryDismiss } from '@/hooks/use-history-dismiss'
 import { useRouter } from 'next/navigation'
 import { Bell, CheckCheck, Loader2, X } from 'lucide-react'
 import type { NotificationRow } from '@/lib/notifications'
@@ -25,6 +26,7 @@ function linkFor(notification: NotificationRow): string | null {
 export function NotificationsBell() {
   const router = useRouter()
   const [open, setOpen] = useState(false)
+  const { dismissForNavigation } = useHistoryDismiss(open, () => setOpen(false))
   const [loading, setLoading] = useState(false)
   const [failed, setFailed] = useState(false)
   const [items, setItems] = useState<NotificationRow[]>([])
@@ -103,9 +105,13 @@ export function NotificationsBell() {
         if (!response.ok) void load()
       }).catch(() => void load())
     }
-    setOpen(false)
     const href = linkFor(notification)
-    if (href) router.push(href)
+    if (href) {
+      dismissForNavigation()
+      router.push(href)
+    } else {
+      setOpen(false)
+    }
   }
 
   return (

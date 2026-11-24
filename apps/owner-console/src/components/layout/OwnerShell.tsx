@@ -38,6 +38,7 @@ import {
 import { apiFetch } from '../../lib/api';
 import { KayanLogoMark } from '../ui/Primitives';
 import { PWAInstallButton } from '../pwa/PWAInstallControls';
+import { useFocusTrap } from '../../hooks/useFocusTrap';
 
 const ROUTE_ICONS: Record<OwnerRouteId, React.ComponentType<{ className?: string }>> = {
   overview: LayoutDashboard,
@@ -98,6 +99,10 @@ export function OwnerShell({
 }) {
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
   const [quickActionsOpen, setQuickActionsOpen] = React.useState(false);
+  const closeMobileMenu = React.useCallback(() => setMobileMenuOpen(false), []);
+  const closeQuickActions = React.useCallback(() => setQuickActionsOpen(false), []);
+  const mobileDrawerRef = useFocusTrap<HTMLElement>(mobileMenuOpen, closeMobileMenu);
+  const quickSheetRef = useFocusTrap<HTMLDivElement>(quickActionsOpen, closeQuickActions);
   const [searchQuery, setSearchQuery] = React.useState('');
   const [searchOpen, setSearchOpen] = React.useState(false);
   const [searchResults, setSearchResults] = React.useState<SearchResults | null>(null);
@@ -294,7 +299,7 @@ export function OwnerShell({
             onClick={() => setMobileMenuOpen(false)}
             aria-hidden="true"
           />
-          <aside className="relative z-10 w-72 max-w-[85vw] h-full bg-[var(--k-sidebar-bg)] border-e border-[var(--k-line)] shadow-2xl">
+          <aside ref={mobileDrawerRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="القائمة الجانبية" className="relative z-10 w-72 max-w-[85vw] h-full bg-[var(--k-sidebar-bg)] border-e border-[var(--k-line)] shadow-2xl">
             {sidebarContent}
           </aside>
         </div>
@@ -311,7 +316,7 @@ export function OwnerShell({
               onClick={() => setMobileMenuOpen(true)}
               aria-label="فتح القائمة الجانبية"
               aria-expanded={mobileMenuOpen}
-              className="lg:hidden min-h-[40px] min-w-[40px] inline-flex items-center justify-center rounded-lg border border-[var(--k-line)] text-[var(--k-ink)]"
+              className="lg:hidden h-11 w-11 min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-lg border border-[var(--k-line)] text-[var(--k-ink)]"
             >
               <Menu className="w-4 h-4" />
             </button>
@@ -562,6 +567,8 @@ export function OwnerShell({
           onClick={() => setQuickActionsOpen(false)}
         >
           <div
+            ref={quickSheetRef}
+            tabIndex={-1}
             className="w-full rounded-t-2xl border-t border-[var(--k-line-strong)] bg-[var(--k-surface)] p-5 pb-safe shadow-2xl space-y-4"
             onClick={(e) => e.stopPropagation()}
           >

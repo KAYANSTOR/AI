@@ -1,5 +1,6 @@
 'use client'
-import { useEffect, useState, useTransition } from 'react'
+import { useEffect, useRef, useState, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
 import { AlertTriangle, CheckCircle2, Link2, Loader2, QrCode, Trash2, Pencil, Smartphone } from 'lucide-react'
 import { startWhatsAppQrSessionAction, getWhatsAppQrSessionStatusAction, disconnectWhatsAppQrSessionAction, resetWhatsAppQrChannelAction } from './actions'
 
@@ -12,6 +13,7 @@ type SessionStatus = {
   lastError?: string | null
 }
 export function WhatsAppQrConnector({ disabled, connectionMode, publicNumber }: { disabled: boolean; connectionMode: string | null; publicNumber: string | null }) {
+  const router = useRouter()
   const [phoneNumber, setPhoneNumber] = useState(publicNumber ?? '')
   const [method, setMethod] = useState<'qr' | 'pairing_code'>('pairing_code')
   const [session, setSession] = useState<SessionStatus | null>(null)
@@ -42,11 +44,17 @@ export function WhatsAppQrConnector({ disabled, connectionMode, publicNumber }: 
     const timer = window.setInterval(() => { void refreshStatus() }, 1800)
     return () => window.clearInterval(timer)
   }, [waiting])
+  // Refresh server data only on the transition waiting -> connected. The old
+  // code did a full page reload whenever the status was "connected", so opening
+  // an already-linked card reloaded, remounted, loaded "connected" again and
+  // looped — and every reload dropped the open card back to the channels list.
+  const wasWaiting = useRef(false)
   useEffect(() => {
-    if (!linked) return
-    const timer = window.setTimeout(() => window.location.reload(), 1200)
-    return () => window.clearTimeout(timer)
-  }, [linked])
+    if (waiting) { wasWaiting.current = true; return }
+    if (!linked || !wasWaiting.current) return
+    wasWaiting.current = false
+    router.refresh()
+  }, [waiting, linked, router])
 
   function start() {
     if (disabled) return
@@ -72,7 +80,7 @@ export function WhatsAppQrConnector({ disabled, connectionMode, publicNumber }: 
       if (!result.ok) { setNotice(result.error ?? 'تعذّر فصل الجلسة.'); return }
       setSession({ status: 'disconnected' })
       setNotice('تم فصل الجلسة. يمكنك الآن تعديل الرقم ثم إعادة الربط.')
-      window.location.reload()
+      router.refresh()
     })
   }
   function resetSettings() {
@@ -84,7 +92,7 @@ export function WhatsAppQrConnector({ disabled, connectionMode, publicNumber }: 
       setPhoneNumber('')
       setSession({ status: 'not_configured' })
       setNotice(result.message ?? 'تم مسح إعدادات القناة.')
-      window.location.reload()
+      router.refresh()
     })
   }
 

@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { useHistoryDismiss } from '@/hooks/use-history-dismiss'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
@@ -34,6 +35,7 @@ export function MobileTabBar({ businessTypeId }: { businessTypeId: string | null
   const [open, setOpen] = useState(false)
   const triggerRef = useRef<HTMLButtonElement>(null)
   const sheetRef = useRef<HTMLDivElement>(null)
+  const { dismissForNavigation } = useHistoryDismiss(open, () => setOpen(false))
   const isActive = (href: string) => href === '/dashboard'
     ? pathname === href
     : pathname === href || pathname.startsWith(href + '/')
@@ -52,7 +54,7 @@ export function MobileTabBar({ businessTypeId }: { businessTypeId: string | null
       .filter((item) => item.getClientRects().length > 0)
     focusable()[0]?.focus()
     function onKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') { setOpen(false); return }
+      if (event.key === 'Escape') { setOpen(false); requestAnimationFrame(() => triggerRef.current?.focus()); return }
       if (event.key !== 'Tab') return
       const items = focusable()
       const first = items[0]
@@ -104,7 +106,7 @@ export function MobileTabBar({ businessTypeId }: { businessTypeId: string | null
             </div>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
               {verticalActions.map(({ href, label, description, icon: Icon }) => (
-                <Link key={href} href={href} onClick={() => setOpen(false)} className="dashboard-quick-action">
+                <Link key={href} href={href} onClick={dismissForNavigation} className="dashboard-quick-action">
                   <span className="dashboard-quick-action-icon"><Icon size={21} aria-hidden="true" /></span>
                   <span className="text-sm font-bold text-text">{label}</span>
                   <span className="text-[11px] leading-5 text-text-muted">{description}</span>

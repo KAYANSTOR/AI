@@ -1,6 +1,8 @@
 'use client'
 
-import { useState, useTransition, type FormEvent } from 'react'
+import { useCallback, useRef, useState, useTransition, type FormEvent } from 'react'
+import { useHistoryDismiss } from '@/hooks/use-history-dismiss'
+import { useModalFocus } from '@/hooks/use-modal-focus'
 import { useRouter } from 'next/navigation'
 import { Loader2, MessageSquarePlus, Send, X } from 'lucide-react'
 import { startWhatsAppConversationAction } from './actions'
@@ -8,6 +10,10 @@ import { startWhatsAppConversationAction } from './actions'
 export function NewWhatsAppConversation() {
   const router = useRouter()
   const [open, setOpen] = useState(false)
+  const dialogRef = useRef<HTMLElement>(null)
+  const closeDialog = useCallback(() => setOpen(false), [])
+  const { dismissForNavigation } = useHistoryDismiss(open, closeDialog)
+  useModalFocus(open, dialogRef, closeDialog)
   const [phone, setPhone] = useState('')
   const [displayName, setDisplayName] = useState('')
   const [templateName, setTemplateName] = useState('hello_world')
@@ -38,9 +44,8 @@ export function NewWhatsAppConversation() {
         })
 
         if (result.ok && result.conversationId) {
-          setOpen(false)
+          dismissForNavigation()
           router.push('/dashboard/conversations/' + result.conversationId)
-          router.refresh()
           return
         }
 
@@ -64,10 +69,13 @@ export function NewWhatsAppConversation() {
 
       {open ? (
         <div
-          className="fixed inset-0 z-[100] flex items-end justify-center bg-black/50 p-2 sm:items-center sm:p-4"
+          className="fixed inset-0 z-[100] flex items-end justify-center bg-black/50 p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] sm:items-center sm:p-4"
           role="presentation"
+          onMouseDown={(event) => { if (event.target === event.currentTarget) closeDialog() }}
         >
           <section
+            ref={dialogRef}
+            tabIndex={-1}
             role="dialog"
             aria-modal="true"
             aria-labelledby="new-whatsapp-conversation-title"
@@ -197,6 +205,7 @@ export function NewWhatsAppConversation() {
                 </p>
               ) : null}
 
+              <div className="sticky bottom-0 -mx-5 border-t border-border bg-surface px-5 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3">
               <button
                 type="submit"
                 disabled={pending || !phone.trim() || !consentConfirmed}
@@ -214,6 +223,7 @@ export function NewWhatsAppConversation() {
                   </>
                 )}
               </button>
+              </div>
             </form>
           </section>
         </div>

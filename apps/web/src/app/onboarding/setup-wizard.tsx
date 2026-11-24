@@ -53,7 +53,7 @@ export function SetupWizard({ step, data }: { step: 1 | 2 | 3 | 4; data: SetupDa
           setError(progress.error ?? 'تعذّر حفظ تقدم الإعداد.')
           return
         }
-        router.push('/dashboard')
+        router.replace('/dashboard')
         router.refresh()
         return
       }
@@ -70,7 +70,7 @@ export function SetupWizard({ step, data }: { step: 1 | 2 | 3 | 4; data: SetupDa
           setError(progress.error ?? 'تعذّر حفظ تقدم الإعداد.')
           return
         }
-        router.push('/dashboard')
+        router.replace('/dashboard')
         router.refresh()
       }
     })

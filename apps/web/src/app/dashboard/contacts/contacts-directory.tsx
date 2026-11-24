@@ -1,6 +1,8 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
+import { useHistoryDismiss } from '@/hooks/use-history-dismiss'
+import { useModalFocus } from '@/hooks/use-modal-focus'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
@@ -182,9 +184,13 @@ function DistributionRow({ label, count, total }: { label: string; count: number
 }
 
 function Dialog({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+  const ref = useRef<HTMLElement>(null)
+  // Mounted only while open: Back closes it, focus is trapped and restored.
+  useHistoryDismiss(true, onClose)
+  useModalFocus(true, ref, onClose)
   return (
     <div className="fixed inset-0 z-[70] flex items-end justify-center bg-primary-dark/50 p-0 sm:items-center sm:p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}>
-      <section role="dialog" aria-modal="true" aria-label={title} className="max-h-[90dvh] w-full max-w-[480px] overflow-y-auto rounded-t-3xl border border-border bg-surface p-5 shadow-2xl sm:rounded-3xl">
+      <section ref={ref} tabIndex={-1} role="dialog" aria-modal="true" aria-label={title} className="max-h-[90dvh] pb-[max(1.25rem,env(safe-area-inset-bottom))] w-full max-w-[480px] overflow-y-auto rounded-t-3xl border border-border bg-surface p-5 shadow-2xl sm:rounded-3xl">
         <div className="dashboard-sheet-handle mb-4" aria-hidden="true" />
         <div className="mb-4 flex items-center justify-between gap-3">
           <h2 className="text-lg font-extrabold text-text">{title}</h2>

@@ -28,7 +28,8 @@ import {
   FileText,
   ListTodo,
 } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { useHistoryDismiss } from '@/hooks/use-history-dismiss'
 import { BrandMark } from '@/components/site/brand'
 import { ar } from '@/lib/i18n/ar'
 import { roleLabel } from '@/lib/i18n/labels'
@@ -111,7 +112,10 @@ export function Sidebar({
 }) {
   const pathname = usePathname()
   const [open, setOpen] = useState(false)
-  const close = () => setOpen(false)
+  const close = useCallback(() => setOpen(false), [])
+  const { dismissForNavigation } = useHistoryDismiss(open, close)
+  // Links inside the mobile drawer: close without racing the router push.
+  const closeForNavigation = () => (open ? dismissForNavigation() : undefined)
   const drawerRef = useRef<HTMLElement>(null)
   const enabled = new Set(enabledCapabilities)
 
@@ -172,7 +176,7 @@ export function Sidebar({
         <Link
           href="/dashboard"
           prefetch={true}
-          onClick={close}
+          onClick={closeForNavigation}
           className="group flex items-center gap-2.5 text-lg font-extrabold tracking-tight text-text transition-opacity hover:opacity-90"
         >
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-xs transition-transform group-hover:scale-105">
@@ -183,7 +187,7 @@ export function Sidebar({
         <button
           type="button"
           onClick={close}
-          className="inline-flex h-10 w-10 items-center justify-center rounded-xl text-text/80 hover:bg-text/10 hover:text-text transition-colors lg:hidden"
+          className="inline-flex h-11 w-11 items-center justify-center rounded-xl text-text/80 hover:bg-text/10 hover:text-text transition-colors lg:hidden"
           aria-label={ar.header.closeMenu}
         >
           <X size={20} aria-hidden="true" />
@@ -204,7 +208,7 @@ export function Sidebar({
               </p>
               <nav aria-label={section.title} className="flex flex-col gap-0.5">
                 {visibleItems.map((item) => (
-                  <NavLink key={item.href} item={item} pathname={pathname} onClick={close} />
+                  <NavLink key={item.href} item={item} pathname={pathname} onClick={closeForNavigation} />
                 ))}
               </nav>
             </div>
@@ -215,7 +219,7 @@ export function Sidebar({
       <div className="shrink-0 border-t border-text/10 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
         <Link
           href="/dashboard/account"
-          onClick={close}
+          onClick={closeForNavigation}
           className="flex items-center gap-3 rounded-xl bg-text/5 p-2.5 transition-colors hover:bg-text/10"
         >
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary-light/20 text-secondary font-bold text-sm">
