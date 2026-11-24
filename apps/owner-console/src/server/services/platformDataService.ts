@@ -1,5 +1,7 @@
 import postgres from 'postgres';
 import crypto from 'node:crypto';
+import { freeQuotaFingerprint, validatePlatformSettingValue, walletSortOrder } from './billingContracts';
+export { freeQuotaFingerprint } from './billingContracts';
 import { sha256Hex, encryptSecret, decryptSecret, hashPassword, sanitizeLogText } from '../security/crypto';
 
 type Pool = ReturnType<typeof postgres>;
@@ -350,7 +352,7 @@ export async function platformBillingLedger() {
       JOIN manual_yemen_wallets w ON w.id=r.wallet_id LEFT JOIN plans p ON p.id=r.plan_id
       LEFT JOIN LATERAL(SELECT user_id FROM organization_members WHERE organization_id=o.id AND role='owner' ORDER BY created_at LIMIT 1) own ON TRUE
       LEFT JOIN auth.users u ON u.id=own.user_id ORDER BY r.created_at DESC LIMIT 1000`),
-    query(`SELECT id::text id,provider_code,display_name,account_name,account_number,instructions,is_active FROM manual_yemen_wallets ORDER BY sort_order, display_name`),
+    query(`SELECT id::text id,provider_code,display_name,account_name,account_number,instructions,is_active,sort_order FROM manual_yemen_wallets ORDER BY sort_order, display_name`),
     query(`SELECT l.id::text id,l.organization_id::text organization_id,l.payment_request_id::text payment_request_id,
       l.amount_yer::bigint amount_yer,l.amount_usd::numeric amount_usd,l.currency,l.provider_code,l.sender_name,
       l.transfer_reference,l.recorded_by,l.recorded_at::text recorded_at,o.name workspace_name
@@ -440,7 +442,7 @@ export async function updatePlatformUser(id:string,p:{fullName?:string;email?:st
   const metadata:Record<string,string>={};
   if(p.fullName!==undefined)metadata.full_name=p.fullName.trim();
   if(p.adminNotes!==undefined)metadata.admin_notes=String(p.adminNotes||'').slice(0,4000);
-  if(Object.keys(metadata).length){args.push(JSON.stringify(metadata));set.push(`raw_user_meta_data=COALESCE(raw_user_meta_data,'{}'::jsonb)||$${args.length}::jsonb`);}
+  if(Object.keys(metadata).length){args.push(JSON.stringify(metadata));set.push(`raw_user_meta_data=COALESCE(raw_user_meta_data,'{}'::jsonb)||$${args.length}::text::jsonb`);}
   if(!set.length)throw new Error('لا توجد تغييرات لحفظها.');args.push(id);
   const [r]=await query(`UPDATE auth.users SET ${set.join(',')},updated_at=NOW() WHERE id=$${args.length}::uuid AND deleted_at IS NULL RETURNING id::text id,email,phone`,args);
   if(!r)throw new Error('المستخدم غير موجود.');return r;
@@ -566,10 +568,10 @@ export async function platformQueueConversationIntervention(id:string,content:st
   if(!target.is_active||!target.recipient)throw new Error('القناة متوقفة أو لا يوجد عنوان إرسال موثوق للعميل.');
   const idempotencyKey='owner-intervention:'+crypto.randomUUID();
   await query(`INSERT INTO outbox_events(organization_id,business_id,channel_id,event_type,idempotency_key,recipient,payload,status,scheduled_at)
-    VALUES($1::uuid,$2::uuid,$3::uuid,'message.send',$4,$5,$6::jsonb,'pending',NOW())`,
+    VALUES($1::uuid,$2::uuid,$3::uuid,'message.send',$4,$5,$6::text::jsonb,'pending',NOW())`,
     [target.organization_id,target.business_id,target.channel_id,idempotencyKey,target.recipient,JSON.stringify({body,conversation_id:id,source:'owner_console_intervention'})]);
   await query(`INSERT INTO audit_events(organization_id,business_id,actor_type,action,entity_type,entity_id,metadata)
-    VALUES($1::uuid,$2::uuid,'system','owner.conversation_intervention_queued','conversation',$3::uuid,$4::jsonb)`,
+    VALUES($1::uuid,$2::uuid,'system','owner.conversation_intervention_queued','conversation',$3::uuid,$4::text::jsonb)`,
     [target.organization_id,target.business_id,id,JSON.stringify({reason:why,idempotency_key:idempotencyKey,channel_type:target.channel_type})]);
   return await platformConversationDetail(id);
 }
@@ -612,14 +614,14 @@ export async function savePlatformPlan(p:Record<string,unknown>,id?:string) {
     let row:Record<string,unknown>|undefined;
     if(id){
       const [updated]=await tx.unsafe(`UPDATE plans SET code=$2,name=$3,description=$4,monthly_price=$5,currency=$6,
-        limits=COALESCE(limits,'{}'::jsonb)||$7::jsonb,is_active=$8,updated_at=NOW()
+        limits=COALESCE(limits,'{}'::jsonb)||$7::text::jsonb,is_active=$8,updated_at=NOW()
         WHERE id=$1::uuid RETURNING id::text id,code,name,description,monthly_price::numeric price_monthly,currency,limits,is_active`,
         [id,code,name,description,monthly,currency,JSON.stringify(limits),active]);
       row=updated;
       if(!row)throw new Error('الباقة غير موجودة.');
     } else {
       const [created]=await tx.unsafe(`INSERT INTO plans(code,name,description,monthly_price,currency,limits,is_active)
-        VALUES($1,$2,$3,$4,$5,$6::jsonb,$7)
+        VALUES($1,$2,$3,$4,$5,$6::text::jsonb,$7)
         RETURNING id::text id,code,name,description,monthly_price::numeric price_monthly,currency,limits,is_active`,
         [code,name,description,monthly,currency,JSON.stringify(limits),active]);
       row=created;
@@ -829,14 +831,15 @@ export async function revokePlatformApiKey(id:string) {
 export async function platformMonitoring() {
   const started=Date.now();await platformPing();const latencyMs=Date.now()-started;
   const mem=process.memoryUsage(),uptimeSec=Math.floor(process.uptime());
-  const [counts,ackRows,migrations]=await Promise.all([
+  const [counts,ackRows,migrations,agentStats]=await Promise.all([
     query(`SELECT (SELECT COUNT(*) FROM agent_runs WHERE status='failed' AND created_at>NOW()-INTERVAL '24 hours')::int failed_runs,
       (SELECT COUNT(*) FROM webhook_events WHERE processing_status='failed' AND received_at>NOW()-INTERVAL '24 hours')::int failed_webhooks,
       (SELECT COUNT(*) FROM inbound_jobs WHERE status='dead_letter' AND updated_at>NOW()-INTERVAL '24 hours')::int failed_inbound,
       (SELECT COUNT(*) FROM outbox_events WHERE status IN('failed','dead_letter') AND updated_at>NOW()-INTERVAL '24 hours')::int failed_outbound,
       (SELECT COUNT(*) FROM whatsapp_gateway_sessions WHERE status<>'connected' AND last_error IS NOT NULL)::int gateway_errors`),
     query(`SELECT alert_id FROM platform_alert_acknowledgements`),
-    query(`SELECT version::text version,name,applied_at::text applied_at FROM public.schema_migrations WHERE failed_at IS NULL ORDER BY version DESC LIMIT 30`)
+    query(`SELECT version::text version,name,applied_at::text applied_at FROM public.schema_migrations WHERE failed_at IS NULL ORDER BY version DESC LIMIT 30`),
+    platformPersonalAgentStats()
   ]);
   const c=counts[0]||{},acknowledged=new Set(ackRows.map((r:any)=>String(r.alert_id)));
   const failedRuns=count(c.failed_runs),failedWebhooks=count(c.failed_webhooks),failedInbound=count(c.failed_inbound),failedOutbound=count(c.failed_outbound),gatewayErrors=count(c.gateway_errors);
@@ -853,7 +856,40 @@ export async function platformMonitoring() {
       {id:'backend_api',name:'خادم KAYAN AI',status:'operational',latencyMs:null,detail:'خدمة التطبيق ولوحة المالك تعملان ضمن خدمة Railway نفسها.'},
       {id:'postgres',name:'قاعدة بيانات PostgreSQL',status:'operational',latencyMs,detail:'تم تنفيذ فحص اتصال فعلي للجداول الأساسية في قاعدة بيانات المنصة.'}
     ],
-    alerts:defs.filter(a=>a.active).map(a=>({...a,acknowledged:acknowledged.has(a.id)?1:0})),migrations};
+    alerts:defs.filter(a=>a.active).map(a=>({...a,acknowledged:acknowledged.has(a.id)?1:0})),migrations,agentStats};
+}
+
+/**
+ * Personal executive agent (0080) and WhatsApp trainer (0081) activity, read live from
+ * agent_tasks, agent_approvals and whatsapp_training_submissions (last 30 days).
+ */
+export async function platformPersonalAgentStats() {
+  const [row]=await query(`SELECT
+      (SELECT COUNT(*) FROM agent_tasks WHERE created_at>NOW()-INTERVAL '30 days')::int tasks_total,
+      (SELECT COUNT(*) FROM agent_tasks WHERE state IN('pending','planning','running','verifying'))::int tasks_active,
+      (SELECT COUNT(*) FROM agent_tasks WHERE state='awaiting_approval')::int tasks_awaiting_approval,
+      (SELECT COUNT(*) FROM agent_tasks WHERE state='done' AND created_at>NOW()-INTERVAL '30 days')::int tasks_done,
+      (SELECT COUNT(*) FROM agent_tasks WHERE state='failed' AND created_at>NOW()-INTERVAL '30 days')::int tasks_failed,
+      (SELECT COALESCE(SUM(cost_usd),0) FROM agent_tasks WHERE created_at>NOW()-INTERVAL '30 days')::float8 tasks_cost_usd,
+      (SELECT COUNT(*) FROM agent_approvals WHERE status='pending' AND expires_at>NOW())::int approvals_pending,
+      (SELECT COUNT(*) FROM agent_approvals WHERE status='approved' AND created_at>NOW()-INTERVAL '30 days')::int approvals_approved,
+      (SELECT COUNT(*) FROM agent_approvals WHERE status='rejected' AND created_at>NOW()-INTERVAL '30 days')::int approvals_rejected,
+      (SELECT COUNT(*) FROM agent_approvals WHERE (status='expired' OR (status='pending' AND expires_at<=NOW())) AND created_at>NOW()-INTERVAL '30 days')::int approvals_expired,
+      (SELECT COUNT(*) FROM whatsapp_training_submissions WHERE created_at>NOW()-INTERVAL '30 days')::int training_total,
+      (SELECT COUNT(*) FROM whatsapp_training_submissions WHERE status='pending')::int training_pending,
+      (SELECT COUNT(*) FROM whatsapp_training_submissions WHERE status='indexed' AND created_at>NOW()-INTERVAL '30 days')::int training_indexed,
+      (SELECT COUNT(*) FROM whatsapp_training_submissions WHERE status='failed' AND created_at>NOW()-INTERVAL '30 days')::int training_failed,
+      (SELECT COUNT(*) FROM whatsapp_training_submissions WHERE flagged AND created_at>NOW()-INTERVAL '30 days')::int training_flagged,
+      (SELECT COUNT(DISTINCT org_id) FROM agent_tasks WHERE created_at>NOW()-INTERVAL '30 days')::int active_orgs`);
+  const r=(row||{}) as Record<string,unknown>;
+  const n=(k:string)=>count(r[k]);
+  return {
+    windowDays:30,
+    tasks:{total:n('tasks_total'),active:n('tasks_active'),awaitingApproval:n('tasks_awaiting_approval'),done:n('tasks_done'),failed:n('tasks_failed'),
+      costUsd:Number(Number(r.tasks_cost_usd||0).toFixed(4)),activeOrganizations:n('active_orgs')},
+    approvals:{pending:n('approvals_pending'),approved:n('approvals_approved'),rejected:n('approvals_rejected'),expired:n('approvals_expired')},
+    training:{total:n('training_total'),pending:n('training_pending'),indexed:n('training_indexed'),failed:n('training_failed'),flagged:n('training_flagged')},
+  };
 }
 
 export async function platformLogs(f:{category?:string;severity?:string;resolved?:string}) {
@@ -963,10 +999,10 @@ export async function platformSettings() {
 export async function updatePlatformSetting(key:string,value:unknown,adminId:string) {
   const cleanKey=key.trim();
   if (!cleanKey || cleanKey.length>120 || cleanKey.startsWith('owner_mfa_pending:')) throw new Error('مفتاح الإعداد غير صالح.');
-  const encoded=JSON.stringify(value===undefined?null:value);
+  const encoded=JSON.stringify(validatePlatformSettingValue(cleanKey,value===undefined?null:value));
   if (encoded.length>10000) throw new Error('قيمة الإعداد أكبر من الحد المسموح.');
   const [row]=await query(`INSERT INTO platform_settings(key,value,updated_by,updated_at)
-    VALUES($1,$2::jsonb,$3::uuid,NOW())
+    VALUES($1,$2::text::jsonb,$3::uuid,NOW())
     ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value,updated_by=EXCLUDED.updated_by,updated_at=NOW()
     RETURNING key,value,updated_at::text updated_at`,[cleanKey,encoded,adminId]);
   return row;
@@ -993,7 +1029,7 @@ export async function createPlatformAdmin(p:{fullName:string;email:string;role:'
   if(!['super_admin','ops_auditor'].includes(p.role)) throw new Error('الدور الإداري غير صالح.');
   const perms=p.role==='super_admin'?['users:write','billing:write','ai:write','ops:write','settings:write']:[];
   const [row]=await query(`INSERT INTO platform_admins(email,full_name,role,permissions,password_hash)
-    VALUES($1,$2,$3,$4::jsonb,$5) RETURNING id::text id,email,full_name,role,status,permissions`,
+    VALUES($1,$2,$3,$4::text::jsonb,$5) RETURNING id::text id,email,full_name,role,status,permissions`,
     [email,fullNameValue,p.role,JSON.stringify(perms),hashPassword(p.password)]);
   return row;
 }
@@ -1213,7 +1249,7 @@ export async function testPlatformChannel(channelId:string) {
 export async function platformBillingCatalog() {
   const [prices, wallets, providers, requests, rateRows] = await Promise.all([
     query(`SELECT pp.id::text id, p.code plan_code, p.name plan_name, pp.billing_cycle, pp.currency, pp.amount::numeric amount, pp.exchange_rate_to_usd::numeric exchange_rate_to_usd, pp.is_active FROM plan_prices pp JOIN plans p ON p.id=pp.plan_id WHERE pp.is_active=true ORDER BY p.code, pp.billing_cycle, pp.currency`),
-    query(`SELECT id::text id,provider_code,display_name,account_name,account_number,instructions,is_active,created_at::text created_at,updated_at::text updated_at FROM manual_yemen_wallets ORDER BY sort_order, display_name`),
+    query(`SELECT id::text id,provider_code,display_name,account_name,account_number,instructions,is_active,sort_order,created_at::text created_at,updated_at::text updated_at FROM manual_yemen_wallets ORDER BY sort_order, display_name`),
     query(`SELECT id::text id,code,display_name,provider_type,configuration,is_active FROM billing_payment_providers ORDER BY display_name`),
     query(`SELECT r.id::text id,r.organization_id::text organization_id,r.plan_code,r.billing_cycle,r.wallet_id::text wallet_id,r.amount_usd::numeric amount_usd,r.amount_yer,r.exchange_rate,r.sender_name,r.transfer_reference,r.receipt_mime_type,r.status,r.review_note,r.reviewed_by,r.reviewed_at::text reviewed_at,r.created_at::text created_at,w.display_name wallet_name,w.account_number,o.name organization_name FROM manual_wallet_payment_requests r JOIN manual_yemen_wallets w ON w.id=r.wallet_id JOIN organizations o ON o.id=r.organization_id ORDER BY r.created_at DESC LIMIT 100`),
     query(`SELECT CASE WHEN jsonb_typeof(value)='object' THEN value->>'value' ELSE value#>>'{}' END rate FROM platform_settings WHERE key='billing.yer_per_usd' LIMIT 1`),
@@ -1225,9 +1261,9 @@ export async function platformBillingCatalog() {
 export async function savePlatformWallet(input: Record<string, unknown>) {
   const provider=String(input.provider_code||'').trim(), displayName=String(input.display_name||'').trim(), accountName=String(input.account_name||'').trim(), accountNumber=String(input.account_number||'').trim();
   if(!['jawali','jeeb','onecash','cacbank','kuraimi','other'].includes(provider)||displayName.length<2||accountName.length<2||accountNumber.length<3) throw new Error('بيانات المحفظة غير صالحة.');
-  const id=String(input.id||'').trim(), values=[provider,displayName,accountName,accountNumber,String(input.instructions||''),input.is_active!==false];
-  if(id){ const rows=await query(`UPDATE manual_yemen_wallets SET provider_code=$2,display_name=$3,account_name=$4,account_number=$5,instructions=$6,is_active=$7,updated_at=NOW() WHERE id=$1::uuid RETURNING id::text id,provider_code,display_name,account_name,account_number,instructions,is_active`,[id,...values]); if(!rows[0]) throw new Error('المحفظة غير موجودة.'); return rows[0]; }
-  const rows=await query(`INSERT INTO manual_yemen_wallets(provider_code,display_name,account_name,account_number,instructions,is_active,updated_at) VALUES($1,$2,$3,$4,$5,$6,NOW()) RETURNING id::text id,provider_code,display_name,account_name,account_number,instructions,is_active`,values); return rows[0];
+  const id=String(input.id||'').trim(), values=[provider,displayName,accountName,accountNumber,String(input.instructions||'').slice(0,1000),input.is_active!==false,walletSortOrder(input.sort_order)];
+  if(id){ const rows=await query(`UPDATE manual_yemen_wallets SET provider_code=$2,display_name=$3,account_name=$4,account_number=$5,instructions=$6,is_active=$7,sort_order=COALESCE($8::int,sort_order),updated_at=NOW() WHERE id=$1::uuid RETURNING id::text id,provider_code,display_name,account_name,account_number,instructions,is_active,sort_order`,[id,...values]); if(!rows[0]) throw new Error('المحفظة غير موجودة.'); return rows[0]; }
+  const rows=await query(`INSERT INTO manual_yemen_wallets(provider_code,display_name,account_name,account_number,instructions,is_active,sort_order,updated_at) VALUES($1,$2,$3,$4,$5,$6,COALESCE($7::int,100),NOW()) RETURNING id::text id,provider_code,display_name,account_name,account_number,instructions,is_active,sort_order`,values); return rows[0];
 }
 export async function savePlatformPrice(input: Record<string, unknown>) {
   const planCode=String(input.planCode||'').trim(), cycle=String(input.billingCycle||''), currency=String(input.currency||'').toUpperCase(), amount=Number(input.amount), rate=input.exchangeRateToUsd==null?null:Number(input.exchangeRateToUsd);
@@ -1236,10 +1272,9 @@ export async function savePlatformPrice(input: Record<string, unknown>) {
   if(!rows[0]) throw new Error('الباقة غير موجودة.'); return rows[0];
 }
 
+/** Same validation and result mapping as reviewPlatformWalletPayment (both UI paths). */
 export async function reviewPlatformPayment(id:string, action:string, reviewedBy:string, note:string) {
-  if(!['approve','reject'].includes(action)) throw new Error('إجراء المراجعة غير صالح.');
-  const rows=await query(`SELECT public.review_manual_wallet_payment($1::uuid,$2,$3,$4) result`,[id,action,reviewedBy,note||null]);
-  return { status: rows[0]?.result };
+  return reviewPlatformWalletPayment(id, action, note, reviewedBy);
 }
 
 export async function platformPaymentReceipt(id:string) {
@@ -1365,15 +1400,6 @@ export async function platformAgentSandboxTest(agentId:string,rawMessage:string)
     await query(`UPDATE agent_runs SET status='failed',model=$2,error_code=$3,latency_ms=$4,completed_at=NOW() WHERE id=$1::uuid`,[run.id,e.model||null,code.slice(0,120),latencyMs]);
     throw new Error(e.name==='TimeoutError'?'انتهت مهلة استجابة المزود.':(e.message||'فشل اختبار الوكيل.'));
   }
-}
-
-/** Same formula as apps/web lib/billing/free-tier.ts quotaFingerprint (kayan-free-quota:v1). */
-export function freeQuotaFingerprint(value:string):string|null{
-  const raw=String(value||'').trim().toLowerCase();
-  if(!raw||raw.length>200)return null;
-  const digits=raw.replace(/\D/g,'');
-  const normalized=digits.length>=7&&digits.length<=15&&/^[+\d\s()-]+$/.test(raw)?'phone:'+digits:'id:'+raw;
-  return crypto.createHash('sha256').update('kayan-free-quota:v1:'+normalized).digest('hex');
 }
 
 export async function platformFreeQuotaExemptions(){

@@ -8,6 +8,7 @@ import {
   inputClass,
   ModalDialog,
   PageHeader,
+  ComingSoonBadge,
   primaryBtnClass,
   secondaryBtnClass,
   StatusText,
@@ -164,10 +165,10 @@ export function UsersPage({
         title="إدارة المستخدمين والعملاء"
         subtitle="سجل كامل لجميع مستخدمي منصة Kayan AI مع اشتراكاتهم، استهلاك الذكاء الاصطناعي، وحالات التفعيل والدفع."
         action={
-          <button type="button" disabled title="إنشاء حساب Auth يتطلب ربط دعوات Auth Admin؛ لم يتم إنشاء حسابات تجريبية من لوحة المالك." className={primaryBtnClass}>
+          <button type="button" disabled title="إنشاء حساب Auth يتطلب ربط دعوات Auth Admin؛ لم يتم إنشاء حسابات تجريبية من لوحة المالك." aria-disabled="true" className={`${primaryBtnClass} cursor-not-allowed opacity-70`}>
             <Plus className="w-4 h-4" />
-            <span>إنشاء مستخدم (يتطلب دعوة Auth)</span>
-          </button>
+            <span>إنشاء مستخدم</span><ComingSoonBadge />
+</button>
         }
       />
 
@@ -227,10 +228,10 @@ export function UsersPage({
           title="لا يوجد مستخدمون مسجلون حالياً"
           description="تظهر هنا جميع حسابات العملاء الحقيقية من قاعدة البيانات. يمكنك إنشاء أول مستخدم ومساحة عمل مباشرة عبر المسار الرسمي للنظام."
           action={
-            <button type="button" disabled title="اربط خدمة دعوات Auth Admin لإنشاء حساب دخول حقيقي." className={primaryBtnClass}>
+            <button type="button" disabled title="اربط خدمة دعوات Auth Admin لإنشاء حساب دخول حقيقي." aria-disabled="true" className={`${primaryBtnClass} cursor-not-allowed opacity-70`}>
               <Plus className="w-4 h-4" />
-              <span>إنشاء أول مستخدم (غير متاح)</span>
-            </button>
+              <span>إنشاء أول مستخدم</span><ComingSoonBadge />
+</button>
           }
         />
       ) : (

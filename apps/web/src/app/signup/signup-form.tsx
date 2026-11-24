@@ -12,10 +12,11 @@ import { SectorPicker } from '@/components/ui/sector-picker'
 import { PhoneField } from '@/components/auth/phone-field'
 import { DEFAULT_COUNTRY, toE164 } from '@/lib/phone/arab-countries'
 import { AuthProviderNotice } from '@/components/auth/provider-notice'
+import { OAuthButtons } from '@/components/auth/oauth-buttons'
 
 const MIN_PASSWORD_LENGTH = 8
 
-export function SignupForm({ authConfigured }: { authConfigured: boolean }) {
+export function SignupForm({ authConfigured, oauthError = null, oauthProvider = null }: { authConfigured: boolean; oauthError?: string | null; oauthProvider?: string | null }) {
   const router = useRouter()
   const [companyName, setCompanyName] = useState('')
   const [businessType, setBusinessType] = useState<string>(DEFAULT_BUSINESS_TYPE)
@@ -59,6 +60,7 @@ export function SignupForm({ authConfigured }: { authConfigured: boolean }) {
 
   return (
     <form className="space-y-5" method="post" onSubmit={onSubmit}>
+      <OAuthButtons mode="signup" error={oauthError} provider={oauthProvider} />
       <FormError message={error} />
 
       <TextField

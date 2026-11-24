@@ -7,9 +7,10 @@ import { ArrowLeft, Loader2, Lock, Mail, ShieldCheck } from 'lucide-react'
 import { signInAction } from '@/lib/auth/actions'
 import { NETWORK_ERROR_MESSAGE } from '@/lib/auth/messages'
 import { AuthProviderNotice } from '@/components/auth/provider-notice'
+import { OAuthButtons } from '@/components/auth/oauth-buttons'
 import { FormError, TextField, submitClass, secondaryButtonClass } from '@/components/auth/field'
 
-export function LoginForm({ returnTo, authConfigured, passwordReset }: { returnTo: string; authConfigured: boolean; passwordReset: boolean }) {
+export function LoginForm({ returnTo, authConfigured, passwordReset, oauthError = null, oauthProvider = null }: { returnTo: string; authConfigured: boolean; passwordReset: boolean; oauthError?: string | null; oauthProvider?: string | null }) {
   const router = useRouter()
   const [identifier, setIdentifier] = useState('')
   const [password, setPassword] = useState('')
@@ -38,6 +39,7 @@ export function LoginForm({ returnTo, authConfigured, passwordReset }: { returnT
 
   return (
     <form className="space-y-4" method="post" onSubmit={onSubmit} noValidate={false}>
+      <OAuthButtons mode="login" returnTo={returnTo} error={oauthError} provider={oauthProvider} />
       <FormError message={error} />
       {passwordReset ? <p role="status" className="rounded-xl border border-success/30 bg-success/[0.07] px-4 py-3 text-sm leading-6 text-success">تم تحديث كلمة المرور بنجاح. سجّل الدخول بكلمة المرور الجديدة.</p> : null}
 

@@ -35,6 +35,8 @@ declare module 'bun:test' {
     toBeInstanceOf(expected: abstract new (...args: never[]) => unknown): void
     toHaveLength(expected: number): void
     toThrow(expected?: unknown): void
+    toMatch(expected: string | RegExp): void
+    toMatchObject(expected: Record<string, unknown>): void
     /** For `expect(promise).rejects.toThrow(...)`. */
     rejects: Matchers<unknown>
     /** For `expect(promise).resolves.toBe(...)`. */

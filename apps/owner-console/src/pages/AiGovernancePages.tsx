@@ -7,6 +7,7 @@ import {
   MetricTile,
   ModalDialog,
   PageHeader,
+  ComingSoonBadge,
   primaryBtnClass,
   secondaryBtnClass,
   StatusText,
@@ -630,9 +631,9 @@ export function AiModelsPage({
                       <StatusText status="info" label="مرصود في التشغيل" />
                     </td>
                     <td className="px-4 py-3 text-end">
-                      <button type="button" disabled title="لا يوجد جدول سياسات نماذج مركزي قابل للتعديل في مخطط PostgreSQL الحالي." className={secondaryBtnClass}>
-                        التحكم غير متاح في المصدر الحالي
-                      </button>
+                      <button type="button" disabled title="لا يوجد جدول سياسات نماذج مركزي قابل للتعديل في مخطط PostgreSQL الحالي." aria-disabled="true" className={`${secondaryBtnClass} cursor-not-allowed opacity-70`}>
+                        تعديل السماح<ComingSoonBadge />
+</button>
                     </td>
                   </tr>
                 ))}
@@ -725,10 +726,10 @@ export function AiUsagePage({
         title="سجل استهلاك الذكاء الاصطناعي والتكاليف"
         subtitle="سجل موثوق ومقاوم للتكرار (Idempotent Usage Ledger) يوثق Tokens والتكلفة الفعلية مقابل التقديرية مع مصدر وإصدار التسعير."
         action={
-          <button type="button" disabled title="أحداث الاستهلاك تُسجل بواسطة مسارات تشغيل الوكلاء؛ الإدخال اليدوي غير مدعوم." className={primaryBtnClass}>
+          <button type="button" disabled title="أحداث الاستهلاك تُسجل بواسطة مسارات تشغيل الوكلاء؛ الإدخال اليدوي غير مدعوم." aria-disabled="true" className={`${primaryBtnClass} cursor-not-allowed opacity-70`}>
             <Coins className="w-4 h-4" />
-            <span>التسجيل اليدوي غير متاح</span>
-          </button>
+            <span>تسجيل حدث يدوي</span><ComingSoonBadge />
+</button>
         }
       />
 
@@ -769,9 +770,9 @@ export function AiUsagePage({
               title="لا توجد أحداث استهلاك مسجلة حتى الآن"
               description="تُضاف الأحداث تلقائياً عند اختبار الوكلاء أو تنفيذ طلبات الذكاء الاصطناعي، ويمكنك تسجيل حدث اختباري للتحقق من التسعير ومنع التكرار."
               action={
-                <button type="button" disabled title="يسجل النظام الأحداث من تشغيل الوكلاء الفعلي." className={primaryBtnClass}>
-                  يُسجل تلقائياً من التشغيل
-                </button>
+                <button type="button" disabled title="يسجل النظام الأحداث من تشغيل الوكلاء الفعلي." aria-disabled="true" className={`${primaryBtnClass} cursor-not-allowed opacity-70`}>
+                  تسجيل حدث يدوي<ComingSoonBadge />
+</button>
               }
             />
           ) : (

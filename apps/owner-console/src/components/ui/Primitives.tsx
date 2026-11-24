@@ -325,3 +325,12 @@ export const dangerBtnClass =
 
 export const inputClass =
   'w-full px-3 py-2 text-base sm:text-sm rounded-lg border border-[var(--k-line-strong)] bg-[var(--k-surface)] text-[var(--k-ink)] placeholder:text-[var(--k-ink-muted)] focus:outline-none focus:border-[var(--k-brand-forest)]';
+
+/** Marks a feature whose backend is not integrated yet (the API answers 501). */
+export function ComingSoonBadge() {
+  return (
+    <span data-coming-soon className="inline-flex shrink-0 items-center rounded-full bg-[#F2D600] px-2 py-0.5 text-[10px] font-bold leading-4 text-[#1F3B22]">
+      قريباً
+    </span>
+  );
+}

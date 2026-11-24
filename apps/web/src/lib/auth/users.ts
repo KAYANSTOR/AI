@@ -14,6 +14,7 @@ export type AuthUser = {
   encryptedPassword: string | null
   sessionVersion: number
   bannedUntil: string | null
+  emailVerifiedAt: string | null
   userMetadata: Record<string, unknown>
 }
 
@@ -24,6 +25,7 @@ type UserRow = {
   encrypted_password: string | null
   session_version: number
   banned_until: string | null
+  email_verified_at: string | null
   raw_user_meta_data: Record<string, unknown> | null
 }
 
@@ -36,11 +38,12 @@ function mapUser(row: UserRow | undefined): AuthUser | null {
     encryptedPassword: row.encrypted_password,
     sessionVersion: row.session_version ?? 0,
     bannedUntil: row.banned_until,
+    emailVerifiedAt: row.email_verified_at ?? null,
     userMetadata: row.raw_user_meta_data ?? {},
   }
 }
 
-const USER_COLUMNS = 'id, email, phone, encrypted_password, session_version, banned_until::text as banned_until, raw_user_meta_data'
+const USER_COLUMNS = 'id, email, phone, encrypted_password, session_version, banned_until::text as banned_until, email_verified_at::text as email_verified_at, raw_user_meta_data'
 
 export function normalizeEmail(email: string): string {
   return email.trim().toLowerCase()
@@ -128,4 +131,58 @@ export async function setPassword(id: string, password: string): Promise<number>
     [id, hash]
   )
   return rows[0]?.session_version ?? 0
+}
+
+/** Marks the account e-mail as proven (verification link, reset link or OAuth provider). */
+export async function markEmailVerified(id: string): Promise<void> {
+  await getSql().unsafe(
+    `update auth.users set email_verified_at = coalesce(email_verified_at, now()), updated_at = now() where id = $1::uuid`,
+    [id]
+  )
+}
+
+/** Removes the password and ends every session (used before linking an unproven account). */
+export async function revokePasswordAndSessions(id: string): Promise<void> {
+  await getSql().unsafe(
+    `update auth.users set encrypted_password = null, session_version = session_version + 1, updated_at = now() where id = $1::uuid`,
+    [id]
+  )
+}
+
+export async function findOAuthIdentityUserId(provider: string, subject: string): Promise<string | null> {
+  const rows = await getSql().unsafe<{ user_id: string }[]>(
+    `update public.user_oauth_identities set last_used_at = now()
+      where provider = $1 and provider_user_id = $2
+      returning user_id::text as user_id`,
+    [provider, subject]
+  )
+  return rows[0]?.user_id ?? null
+}
+
+export async function linkOAuthIdentity(userId: string, provider: string, subject: string, email: string | null): Promise<void> {
+  await getSql().unsafe(
+    `insert into public.user_oauth_identities (user_id, provider, provider_user_id, email, last_used_at)
+     values ($1::uuid, $2, $3, $4, now())
+     on conflict (provider, provider_user_id) do nothing`,
+    [userId, provider, subject, email]
+  )
+}
+
+/** Password-less, already-verified account; the DB trigger provisions the workspace. */
+export async function createOAuthUser(input: {
+  email: string
+  metadata: Record<string, unknown>
+  termsVersion: string
+  privacyPolicyVersion: string
+}): Promise<AuthUser> {
+  const rows = await getSql().unsafe<UserRow[]>(
+    `insert into auth.users (
+       email, encrypted_password, email_confirmed_at, email_verified_at, raw_user_meta_data,
+       terms_accepted_at, terms_version, privacy_policy_version
+     )
+     values ($1, null, now(), now(), $2::text::jsonb, now(), $3, $4)
+     returning ${USER_COLUMNS}`,
+    [normalizeEmail(input.email), JSON.stringify(input.metadata), input.termsVersion, input.privacyPolicyVersion]
+  )
+  return mapUser(rows[0])!
 }

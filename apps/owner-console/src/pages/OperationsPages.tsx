@@ -8,6 +8,7 @@ import {
   MetricTile,
   ModalDialog,
   PageHeader,
+  ComingSoonBadge,
   primaryBtnClass,
   secondaryBtnClass,
   StatusText,
@@ -413,9 +414,9 @@ export function ChannelsPage({
         title="قنوات الاتصال والتكاملات"
         subtitle="عرض قنوات المنصة الحقيقية، حالة بيانات اعتمادها، اختبار الاتصال بمزود الخدمة، وتدوير السر بتشفير متوافق مع خادم KAYAN AI. إنشاء القناة يتم من إعدادات مساحة العمل حتى لا تُنشأ قناة ناقصة."
         action={
-          <button type="button" disabled title="إنشاء القنوات يتطلب معرّفات المزود وحقول اعتماد كاملة؛ استخدم إعدادات القنوات داخل مساحة العمل" onClick={() => onNotify('info', 'أضف القناة من إعدادات مساحة العمل حتى تُحفظ كل معرّفات المزود والاعتمادات المطلوبة.')} className={primaryBtnClass}>
+          <button type="button" disabled aria-disabled="true" title="إنشاء القنوات يتطلب معرّفات المزود وحقول اعتماد كاملة؛ استخدم إعدادات القنوات داخل مساحة العمل" className={`${primaryBtnClass} cursor-not-allowed opacity-70`}>
             <Plus className="w-4 h-4" />
-            <span>إضافة قناة من مساحة العمل</span>
+            <span>إضافة قناة</span><ComingSoonBadge />
           </button>
         }
       />
@@ -750,10 +751,10 @@ export function KnowledgePage({
         title="مراقبة قاعدة المعرفة والملفات"
         subtitle="بيانات المصادر والفهرسة المسجلة فعلياً في PostgreSQL. لا تُنشأ سجلات ملفات وهمية؛ رفع الملفات وفهرستها يتم من مساحة العمل."
         action={
-          <button type="button" disabled title="لا يدعم المخطط إدخال مصدر بمعايير الحجم والمقاطع فقط؛ يلزم رفع الملف وفهرسته فعلياً." className={primaryBtnClass}>
+          <button type="button" disabled title="لا يدعم المخطط إدخال مصدر بمعايير الحجم والمقاطع فقط؛ يلزم رفع الملف وفهرسته فعلياً." aria-disabled="true" className={`${primaryBtnClass} cursor-not-allowed opacity-70`}>
             <Plus className="w-4 h-4" />
-            <span>رفع مصدر معرفة (غير متاح هنا)</span>
-          </button>
+            <span>رفع مصدر معرفة</span><ComingSoonBadge />
+</button>
         }
       />
 
@@ -924,8 +925,8 @@ export function ApiIntegrationsPage({
         subtitle="إصدار وإبطال مفاتيح التكامل (تُخزن قيمها مجزأة SHA-256 فقط) وإدارة Webhooks مع حماية SSRF وتشفير الأسرار."
         action={
           <div className="flex gap-2">
-            <button type="button" disabled title="تعريف Webhooks الصادرة غير مدعوم في مخطط قاعدة المنصة الحالي" onClick={() => onNotify('info', 'تعريف Webhooks الصادرة غير متاح بعد في قاعدة المنصة.')} className={secondaryBtnClass}>
-              إضافة Webhook (غير متاح)
+            <button type="button" disabled aria-disabled="true" title="تعريف Webhooks الصادرة غير مدعوم في مخطط قاعدة المنصة الحالي" className={`${secondaryBtnClass} cursor-not-allowed opacity-70`}>
+              إضافة Webhook<ComingSoonBadge />
             </button>
             <button type="button" onClick={() => { setOneTimeKey(null); setKeyModal(true); }} className={primaryBtnClass}>
               <Key className="w-4 h-4" />

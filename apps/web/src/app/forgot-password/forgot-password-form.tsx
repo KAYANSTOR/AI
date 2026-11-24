@@ -9,7 +9,7 @@ import { FormError, TextField, submitClass } from '@/components/auth/field'
 export function ForgotPasswordForm({ enabled }: { enabled: boolean }) {
   const [email, setEmail] = useState('')
   const [error, setError] = useState<string | null>(null)
-  const [sent, setSent] = useState(false)
+  const [sent, setSent] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
 
   function onSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -21,7 +21,7 @@ export function ForgotPasswordForm({ enabled }: { enabled: boolean }) {
         setError(result.error)
         return
       }
-      setSent(true)
+      setSent(result.message)
     })
   }
 
@@ -30,7 +30,7 @@ export function ForgotPasswordForm({ enabled }: { enabled: boolean }) {
       {sent ? (
         <div role="status" className="rounded-xl border border-success/30 bg-success/[0.07] p-4 text-sm leading-7 text-text">
           <MailCheck className="mb-2 text-success" size={22} aria-hidden="true" />
-          إذا كان البريد مرتبطاً بحساب، فستصلك رسالة تحتوي على رابط إعادة التعيين. تحقق من صندوق الوارد والرسائل غير المرغوب فيها.
+          {sent}
         </div>
       ) : (
         <form onSubmit={onSubmit} className="space-y-4">

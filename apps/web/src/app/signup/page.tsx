@@ -10,15 +10,22 @@ export const metadata: Metadata = {
     'أنشئ حساب شركتك في KAYAN AI، اختر نوع نشاطها، وابدأ إعداد الخدمات والقنوات وتفعيل الوكيل الذكي.',
 }
 
-export default function SignupPage() {
+export default async function SignupPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
+  const params = await searchParams
   const authConfigured = isAuthConfigured()
+  const oauthError = typeof params.oauthError === 'string' ? params.oauthError : null
+  const oauthProvider = typeof params.provider === 'string' ? params.provider : null
 
   return (
     <AuthShell
       title="إنشاء حساب للشركة"
       subtitle="أنشئ مساحة شركتك في دقيقة. نجهّز لك الوحدات المناسبة لنوع نشاطك، ويمكنك تعديلها لاحقًا."
     >
-      <SignupForm authConfigured={authConfigured} />
+      <SignupForm authConfigured={authConfigured} oauthError={oauthError} oauthProvider={oauthProvider} />
     </AuthShell>
   )
 }

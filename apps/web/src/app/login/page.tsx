@@ -29,6 +29,8 @@ export default async function LoginPage({
   const returnTo = sanitizeReturnTo(params.returnTo)
   const passwordReset = params.passwordReset === '1'
   const authConfigured = isAuthConfigured()
+  const oauthError = typeof params.oauthError === 'string' ? params.oauthError : null
+  const oauthProvider = typeof params.provider === 'string' ? params.provider : null
 
   return (
     <AuthShell
@@ -36,7 +38,7 @@ export default async function LoginPage({
       subtitle="أهلًا بعودتك. ادخل إلى لوحة شركتك لمتابعة المحادثات والعملاء والمواعيد."
       hideFooterNotice
     >
-      <LoginForm returnTo={returnTo} authConfigured={authConfigured} passwordReset={passwordReset} />
+      <LoginForm returnTo={returnTo} authConfigured={authConfigured} passwordReset={passwordReset} oauthError={oauthError} oauthProvider={oauthProvider} />
     </AuthShell>
   )
 }

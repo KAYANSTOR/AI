@@ -27,6 +27,12 @@ export function SystemMonitoringPage({
     services: Array<{ id: string; name: string; status: string; latencyMs: number | null; detail: string }>;
     alerts: Array<Record<string, unknown>>;
     migrations: Array<{ version: string; applied_at: string }>;
+    agentStats?: {
+      windowDays: number;
+      tasks: { total: number; active: number; awaitingApproval: number; done: number; failed: number; costUsd: number; activeOrganizations: number };
+      approvals: { pending: number; approved: number; rejected: number; expired: number };
+      training: { total: number; pending: number; indexed: number; failed: number; flagged: number };
+    };
   } | null>(null);
   const [loading, setLoading] = React.useState(true);
 
@@ -65,6 +71,28 @@ export function SystemMonitoringPage({
             <MetricTile label="أخطاء غير محلولة" value={String(data.runtime.unresolvedErrors)} tone={Number(data.runtime.unresolvedErrors) > 0 ? 'danger' : 'success'} />
             <MetricTile label="محاولات دخول مرفوضة (24س)" value={String(data.runtime.unauthorizedAttempts24h)} tone={Number(data.runtime.unauthorizedAttempts24h) > 0 ? 'warning' : 'default'} />
           </div>
+
+          {data.agentStats ? (
+            <section aria-labelledby="agent-stats-title" className="p-5 rounded-xl border border-[var(--k-line)] bg-[var(--k-surface)] space-y-4">
+              <div>
+                <h2 id="agent-stats-title" className="text-sm font-bold">المساعد التنفيذي وبوت التدريب</h2>
+                <p className="mt-0.5 text-xs text-[var(--k-ink-muted)]">بيانات حية من agent_tasks وagent_approvals وwhatsapp_training_submissions (آخر {data.agentStats.windowDays} يوماً).</p>
+              </div>
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                <MetricTile label="مهام الوكيل" value={String(data.agentStats.tasks.total)} />
+                <MetricTile label="مهام قيد التنفيذ" value={String(data.agentStats.tasks.active)} />
+                <MetricTile label="بانتظار الموافقة" value={String(data.agentStats.tasks.awaitingApproval)} tone={data.agentStats.tasks.awaitingApproval > 0 ? 'warning' : 'default'} />
+                <MetricTile label="مهام فاشلة" value={String(data.agentStats.tasks.failed)} tone={data.agentStats.tasks.failed > 0 ? 'danger' : 'success'} />
+                <MetricTile label="موافقات معلقة" value={String(data.agentStats.approvals.pending)} />
+                <MetricTile label="موافقات مقبولة / مرفوضة" value={`${data.agentStats.approvals.approved} / ${data.agentStats.approvals.rejected}`} />
+                <MetricTile label="تدريب مُفهرس" value={`${data.agentStats.training.indexed} / ${data.agentStats.training.total}`} />
+                <MetricTile label="تدريب معلّق / مُبلّغ عنه" value={`${data.agentStats.training.pending} / ${data.agentStats.training.flagged}`} tone={data.agentStats.training.flagged > 0 ? 'warning' : 'default'} />
+              </div>
+              <p className="text-xs text-[var(--k-ink-muted)]">
+                تكلفة مهام الوكيل: <span className="font-mono tabular-nums">${data.agentStats.tasks.costUsd.toFixed(4)}</span> · مؤسسات نشطة: {data.agentStats.tasks.activeOrganizations} · موافقات منتهية: {data.agentStats.approvals.expired} · تدريب فاشل: {data.agentStats.training.failed}
+              </p>
+            </section>
+          ) : null}
 
           <section className="rounded-xl border border-[var(--k-line)] bg-[var(--k-surface)] overflow-x-auto">
             <table className="w-full text-xs">
@@ -113,9 +141,13 @@ export function SystemMonitoringPage({
                         <button
                           type="button"
                           onClick={async () => {
-                            await apiFetch(`/api/owner/alerts/${encodeURIComponent(String(al.id))}/ack`, { method: 'POST' });
-                            onNotify('success', 'تم تأكيد متابعة التنبيه.');
-                            load();
+                            try {
+                              await apiFetch(`/api/owner/alerts/${encodeURIComponent(String(al.id))}/ack`, { method: 'POST' });
+                              onNotify('success', 'تم تأكيد متابعة التنبيه.');
+                              load();
+                            } catch (err) {
+                              onNotify('error', err instanceof Error ? err.message : 'تعذر إقرار التنبيه.');
+                            }
                           }}
                           className={secondaryBtnClass}
                         >

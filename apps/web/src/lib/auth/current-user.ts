@@ -3,7 +3,7 @@ import { cache } from 'react'
 import { SESSION_COOKIE, verifySession } from './session'
 import { findUserById } from './users'
 
-export type CurrentUser = { id: string; email: string | null; phone: string | null; userMetadata: Record<string, unknown> }
+export type CurrentUser = { id: string; email: string | null; phone: string | null; emailVerifiedAt: string | null; userMetadata: Record<string, unknown> }
 
 /**
  * The signed-in user for this request, or null.
@@ -19,5 +19,5 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
   if (!user || user.sessionVersion !== claims.sv) return null
   if (user.bannedUntil && new Date(user.bannedUntil).getTime() > Date.now()) return null
 
-  return { id: user.id, email: user.email, phone: user.phone, userMetadata: user.userMetadata }
+  return { id: user.id, email: user.email, phone: user.phone, emailVerifiedAt: user.emailVerifiedAt, userMetadata: user.userMetadata }
 })

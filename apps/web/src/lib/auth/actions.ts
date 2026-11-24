@@ -1,6 +1,7 @@
 'use server'
 
 import { cookies, headers } from 'next/headers'
+import { after } from 'next/server'
 import { redirect } from 'next/navigation'
 import { z } from 'zod'
 import { BUSINESS_TYPES } from '@/lib/capabilities/business-types'
@@ -11,6 +12,11 @@ import { burnPasswordCheck, MIN_PASSWORD_LENGTH, verifyPassword } from './passwo
 import { isRateLimited } from './rate-limit'
 import { checkSignupGuards } from './signup-guard'
 import { completePasswordReset, isPasswordRecoveryConfigured, sendPasswordReset } from './password-recovery'
+import { PASSWORD_RESET_GENERIC_MESSAGE } from './password-recovery-flow'
+import { consumeVerificationResend, sendVerificationEmail, verifyEmailToken } from './email-verification'
+import { hashIdentifier } from './security-log'
+import { PRIVACY_POLICY_VERSION, TERMS_VERSION } from './terms'
+import { getSql } from '@/lib/db/pool'
 import { SESSION_COOKIE, sessionCookieOptions, signSession } from './session'
 import { createUser, findUserByEmail, findUserByPhone, findUserById, normalizeEmail, normalizePhone, recordSignIn, setPassword } from './users'
 
@@ -126,10 +132,14 @@ export async function signUpAction(input: z.input<typeof signUpSchema>): Promise
       password: parsed.data.password,
       metadata: { organization_name: parsed.data.companyName, business_type_id: businessTypeId },
       termsAcceptedAt: new Date(),
-      termsVersion: '2026-11-22',
-      privacyPolicyVersion: '2026-11-11',
+      termsVersion: TERMS_VERSION,
+      privacyPolicyVersion: PRIVACY_POLICY_VERSION,
     })
     await startSession(user)
+    if (user.email) {
+      const target = { id: user.id, email: user.email }
+      after(() => sendVerificationEmail(target).catch((error) => console.error('verification_email_failed', String((error as Error)?.message ?? '').slice(0, 120))))
+    }
     return { ok: true, redirectTo: '/onboarding' }
   } catch (error) {
     if ((error as { code?: string })?.code === '23505') return { ok: false, error: AUTH_MESSAGES.emailTaken }
@@ -141,9 +151,24 @@ export async function signUpAction(input: z.input<typeof signUpSchema>): Promise
 
 const passwordResetRequestSchema = z.object({ email: z.string().trim().email().max(254) })
 
+async function consumeDbLimit(scope: string, subject: string, limit: number, windowSeconds: number): Promise<boolean> {
+  try {
+    const rows = await getSql().unsafe<{ allowed: boolean }[]>(
+      'select allowed from public.consume_ai_rate_limit($1, $2, $3, $4)', [scope, subject, limit, windowSeconds])
+    return Boolean(rows[0]?.allowed)
+  } catch (error) {
+    console.error('auth_rate_limit_failed', { scope, reason: String((error as Error)?.message ?? '').slice(0, 120) })
+    return false
+  }
+}
+
+/**
+ * Same response for known and unknown addresses. The per-e-mail limit is silent (the
+ * generic message is still returned) so it cannot be used to probe accounts.
+ */
 export async function requestPasswordResetAction(
   input: z.input<typeof passwordResetRequestSchema>
-): Promise<{ ok: true } | { ok: false; error: string }> {
+): Promise<{ ok: true; message: string } | { ok: false; error: string }> {
   if (!isAuthConfigured() || !isPasswordRecoveryConfigured()) {
     return { ok: false, error: 'خدمة استعادة كلمة المرور غير مهيأة بعد. يرجى التواصل مع الدعم.' }
   }
@@ -151,17 +176,13 @@ export async function requestPasswordResetAction(
   if (!parsed.success) return { ok: false, error: AUTH_MESSAGES.invalidEmail }
   const ip = await clientIp()
   const email = normalizeEmail(parsed.data.email)
-  if (isRateLimited(`password-reset:ip:${ip}`, 10, FIFTEEN_MINUTES) ||
-      isRateLimited(`password-reset:email:${email}`, 3, FIFTEEN_MINUTES)) {
+  if (!(await consumeDbLimit('password_reset_ip', hashIdentifier('ip', ip) ?? 'unknown', 10, 900))) {
     return { ok: false, error: AUTH_MESSAGES.tooManyAttempts }
   }
-  try {
-    await sendPasswordReset(email)
-    return { ok: true }
-  } catch (error) {
-    console.error('Password reset request failed', error)
-    return { ok: false, error: AUTH_MESSAGES.generic }
+  if (await consumeDbLimit('password_reset_email', hashIdentifier('email', email) ?? 'unknown', 3, 900)) {
+    after(() => sendPasswordReset(email, ip).then(() => undefined))
   }
+  return { ok: true, message: PASSWORD_RESET_GENERIC_MESSAGE }
 }
 
 const completePasswordResetSchema = z.object({
@@ -175,7 +196,7 @@ export async function completePasswordResetAction(
   const parsed = completePasswordResetSchema.safeParse(input)
   if (!parsed.success) return { ok: false, error: AUTH_MESSAGES.weakPassword }
   try {
-    const completed = await completePasswordReset(parsed.data.token, parsed.data.password)
+    const completed = await completePasswordReset(parsed.data.token, parsed.data.password, await clientIp())
     if (!completed) return { ok: false, error: 'الرابط غير صالح أو انتهت صلاحيته. اطلب رابطاً جديداً.' }
     const store = await cookies()
     store.delete(SESSION_COOKIE)
@@ -213,4 +234,37 @@ export async function changePasswordAction(
   const sessionVersion = await setPassword(user.id, parsed.data.newPassword)
   await startSession({ id: user.id, email: user.email, sessionVersion })
   return { ok: true }
+}
+
+/** Dashboard banner: resend the verification link (DB-backed limit, 3 per hour). */
+export async function resendVerificationEmailAction(): Promise<{ ok: true; message: string } | { ok: false; error: string }> {
+  const current = await getCurrentUser()
+  if (!current) return { ok: false, error: AUTH_MESSAGES.generic }
+  const user = await findUserById(current.id)
+  if (!user?.email) return { ok: false, error: 'لا يوجد بريد إلكتروني مرتبط بهذا الحساب.' }
+  if (user.emailVerifiedAt) return { ok: true, message: 'بريدك مؤكد بالفعل.' }
+  try {
+    if (!(await consumeVerificationResend(user.id))) {
+      return { ok: false, error: 'أرسلنا عدة روابط مؤخراً. انتظر قليلاً ثم حاول مرة أخرى.' }
+    }
+    const sent = await sendVerificationEmail({ id: user.id, email: user.email })
+    if (!sent) return { ok: false, error: 'خدمة البريد غير مهيأة حالياً. حاول لاحقاً أو تواصل مع الدعم.' }
+    return { ok: true, message: `أرسلنا رابط تأكيد جديداً إلى ${user.email}. الرابط صالح 24 ساعة.` }
+  } catch (error) {
+    console.error('verification_resend_failed', String((error as Error)?.message ?? '').slice(0, 120))
+    return { ok: false, error: AUTH_MESSAGES.generic }
+  }
+}
+
+const verifyEmailSchema = z.object({ token: z.string().min(20).max(200) })
+
+export async function verifyEmailAction(input: z.input<typeof verifyEmailSchema>): Promise<{ ok: boolean }> {
+  const parsed = verifyEmailSchema.safeParse(input)
+  if (!parsed.success) return { ok: false }
+  try {
+    return { ok: await verifyEmailToken(parsed.data.token) }
+  } catch (error) {
+    console.error('email_verification_failed', String((error as Error)?.message ?? '').slice(0, 120))
+    return { ok: false }
+  }
 }
