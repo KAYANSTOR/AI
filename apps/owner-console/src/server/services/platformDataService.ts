@@ -1205,3 +1205,39 @@ export async function testPlatformChannel(channelId:string) {
     return {ok:false,diagnostic:message};
   }
 }
+
+
+export async function platformBillingCatalog() {
+  const [prices, wallets, providers, requests] = await Promise.all([
+    query(`SELECT pp.id::text id, p.code plan_code, p.name plan_name, pp.billing_cycle, pp.currency, pp.amount::numeric amount, pp.exchange_rate_to_usd::numeric exchange_rate_to_usd, pp.is_active FROM plan_prices pp JOIN plans p ON p.id=pp.plan_id WHERE pp.is_active=true ORDER BY p.code, pp.billing_cycle, pp.currency`),
+    query(`SELECT id::text id,provider_code,display_name,account_name,account_number,instructions,is_active,created_at::text created_at,updated_at::text updated_at FROM manual_yemen_wallets ORDER BY display_name`),
+    query(`SELECT id::text id,code,display_name,provider_type,configuration,is_active FROM billing_payment_providers ORDER BY display_name`),
+    query(`SELECT r.id::text id,r.organization_id::text organization_id,r.plan_code,r.billing_cycle,r.wallet_id::text wallet_id,r.amount_usd::numeric amount_usd,r.amount_yer,r.exchange_rate,r.sender_name,r.transfer_reference,r.receipt_mime_type,r.status,r.review_note,r.reviewed_by,r.reviewed_at::text reviewed_at,r.created_at::text created_at,w.display_name wallet_name,w.account_number,o.name organization_name FROM manual_wallet_payment_requests r JOIN manual_yemen_wallets w ON w.id=r.wallet_id JOIN organizations o ON o.id=r.organization_id ORDER BY r.created_at DESC LIMIT 100`),
+  ]);
+  return { prices, wallets, providers, requests };
+}
+
+export async function savePlatformWallet(input: Record<string, unknown>) {
+  const provider=String(input.provider_code||'').trim(), displayName=String(input.display_name||'').trim(), accountName=String(input.account_name||'').trim(), accountNumber=String(input.account_number||'').trim();
+  if(!['jawali','jeeb','onecash','kuraimi','other'].includes(provider)||displayName.length<2||accountName.length<2||accountNumber.length<3) throw new Error('بيانات المحفظة غير صالحة.');
+  const id=String(input.id||'').trim(), values=[provider,displayName,accountName,accountNumber,String(input.instructions||''),input.is_active!==false];
+  if(id){ const rows=await query(`UPDATE manual_yemen_wallets SET provider_code=$2,display_name=$3,account_name=$4,account_number=$5,instructions=$6,is_active=$7,updated_at=NOW() WHERE id=$1::uuid RETURNING id::text id,provider_code,display_name,account_name,account_number,instructions,is_active`,[id,...values]); if(!rows[0]) throw new Error('المحفظة غير موجودة.'); return rows[0]; }
+  const rows=await query(`INSERT INTO manual_yemen_wallets(provider_code,display_name,account_name,account_number,instructions,is_active,updated_at) VALUES($1,$2,$3,$4,$5,$6,NOW()) RETURNING id::text id,provider_code,display_name,account_name,account_number,instructions,is_active`,values); return rows[0];
+}
+export async function savePlatformPrice(input: Record<string, unknown>) {
+  const planCode=String(input.planCode||'').trim(), cycle=String(input.billingCycle||''), currency=String(input.currency||'').toUpperCase(), amount=Number(input.amount), rate=input.exchangeRateToUsd==null?null:Number(input.exchangeRateToUsd);
+  if(!['starter','growth','pro'].includes(planCode)||!['monthly','yearly'].includes(cycle)||!/^[A-Z]{3}$/.test(currency)||!Number.isFinite(amount)||amount<0) throw new Error('بيانات السعر غير صالحة.');
+  const rows=await query(`INSERT INTO plan_prices(plan_id,billing_cycle,currency,amount,exchange_rate_to_usd,is_active,updated_at) SELECT id,$2,$3,$4,$5,true,NOW() FROM plans WHERE code=$1 ON CONFLICT(plan_id,billing_cycle,currency) DO UPDATE SET amount=EXCLUDED.amount,exchange_rate_to_usd=EXCLUDED.exchange_rate_to_usd,is_active=true,updated_at=NOW() RETURNING id::text id`,[planCode,cycle,currency,amount,rate]);
+  if(!rows[0]) throw new Error('الباقة غير موجودة.'); return rows[0];
+}
+
+export async function reviewPlatformPayment(id:string, action:string, reviewedBy:string, note:string) {
+  if(!['approve','reject'].includes(action)) throw new Error('إجراء المراجعة غير صالح.');
+  const rows=await query(`SELECT public.review_manual_wallet_payment($1::uuid,$2,$3,$4) result`,[id,action,reviewedBy,note||null]);
+  return { status: rows[0]?.result };
+}
+
+export async function platformPaymentReceipt(id:string) {
+  const rows=await query<{receipt_image_base64:string;receipt_mime_type:string}>(`SELECT receipt_image_base64,receipt_mime_type FROM manual_wallet_payment_requests WHERE id=$1::uuid LIMIT 1`,[id]);
+  return rows[0]||null;
+}

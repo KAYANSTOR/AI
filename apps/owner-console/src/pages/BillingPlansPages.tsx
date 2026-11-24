@@ -404,6 +404,8 @@ export function PlansSubscriptionsPage({
         </div>
       )}
 
+      <BillingOperationsPanel onNotify={onNotify} />
+
       <ModalDialog
         open={editPlanOpen}
         title={editingPlanId ? 'تعديل تفاصيل الباقة' : 'إنشاء باقة جديدة'}
@@ -797,4 +799,24 @@ export function InvoicesPaymentsPage({
       </ModalDialog>
     </div>
   );
+}
+
+
+function BillingOperationsPanel({ onNotify }: { onNotify: (type: 'success' | 'error' | 'info', text: string) => void }) {
+  const [data, setData] = React.useState<{ prices: Array<Record<string, unknown>>; wallets: Array<Record<string, unknown>>; requests: Array<Record<string, unknown>> } | null>(null);
+  const [wallet, setWallet] = React.useState({ id: '', provider_code: 'jawali', display_name: '', account_name: '', account_number: '', instructions: '', is_active: true });
+  const [price, setPrice] = React.useState({ planCode: 'starter', billingCycle: 'monthly', currency: 'YER', amount: '', exchangeRateToUsd: '' });
+  const load = React.useCallback(() => { apiFetch<typeof data>('/api/owner/billing/catalog').then(setData).catch((err) => onNotify('error', err instanceof Error ? err.message : 'تعذر تحميل إعدادات الدفع.')); }, [onNotify]);
+  React.useEffect(() => { load(); }, [load]);
+  async function saveWallet(e: React.FormEvent) { e.preventDefault(); try { await apiFetch('/api/owner/billing/wallets', { method: 'POST', body: wallet }); onNotify('success', 'تم حفظ المحفظة اليمنية.'); setWallet({ ...wallet, id: '', display_name: '', account_name: '', account_number: '', instructions: '' }); load(); } catch (err) { onNotify('error', err instanceof Error ? err.message : 'تعذر حفظ المحفظة.'); } }
+  async function savePrice(e: React.FormEvent) { e.preventDefault(); try { await apiFetch('/api/owner/billing/prices', { method: 'POST', body: { ...price, amount: Number(price.amount), exchangeRateToUsd: price.exchangeRateToUsd ? Number(price.exchangeRateToUsd) : null } }); onNotify('success', 'تم حفظ سعر الباقة.'); setPrice({ ...price, amount: '' }); load(); } catch (err) { onNotify('error', err instanceof Error ? err.message : 'تعذر حفظ السعر.'); } }
+  async function review(id: string, action: 'approve' | 'reject') { try { await apiFetch(`/api/owner/billing/payment-requests/${encodeURIComponent(id)}/review`, { method: 'POST', body: { action, note: action === 'reject' ? 'لم تتم مطابقة التحويل.' : '' } }); onNotify('success', action === 'approve' ? 'تم اعتماد الدفعة وتفعيل الاشتراك.' : 'تم رفض طلب الدفع.'); load(); } catch (err) { onNotify('error', err instanceof Error ? err.message : 'تعذرت مراجعة الطلب.'); } }
+  return <div className="mt-6 space-y-4 rounded-xl border border-[var(--k-line)] bg-[var(--k-surface)] p-5">
+    <div><h2 className="text-base font-bold">إعدادات الدفع والعملات</h2><p className="mt-1 text-xs text-[var(--k-ink-muted)]">أضف محافظ يمنية وعدّل أسعار USD وYER والعملات العربية، ثم راجع الإيصالات المعلقة.</p></div>
+    <div className="grid gap-4 lg:grid-cols-2">
+      <form onSubmit={saveWallet} className="space-y-2 rounded-lg border border-[var(--k-line)] p-4"><h3 className="font-semibold">محفظة يمنية</h3><div className="grid grid-cols-2 gap-2"><select value={wallet.provider_code} onChange={(e) => setWallet({ ...wallet, provider_code: e.target.value })} className={inputClass}><option value="jawali">جوالي</option><option value="jeeb">جيب</option><option value="onecash">ون كاش</option><option value="kuraimi">الكريمي</option><option value="other">أخرى</option></select><input required placeholder="اسم المحفظة" value={wallet.display_name} onChange={(e) => setWallet({ ...wallet, display_name: e.target.value })} className={inputClass} /></div><div className="grid grid-cols-2 gap-2"><input required placeholder="اسم المستفيد" value={wallet.account_name} onChange={(e) => setWallet({ ...wallet, account_name: e.target.value })} className={inputClass} /><input required placeholder="رقم الحساب" value={wallet.account_number} onChange={(e) => setWallet({ ...wallet, account_number: e.target.value })} className={inputClass} /></div><input placeholder="تعليمات التحويل" value={wallet.instructions} onChange={(e) => setWallet({ ...wallet, instructions: e.target.value })} className={inputClass} /><button className={primaryBtnClass}>حفظ المحفظة</button></form>
+      <form onSubmit={savePrice} className="space-y-2 rounded-lg border border-[var(--k-line)] p-4"><h3 className="font-semibold">سعر باقة</h3><div className="grid grid-cols-2 gap-2"><select value={price.planCode} onChange={(e) => setPrice({ ...price, planCode: e.target.value })} className={inputClass}><option value="starter">Starter</option><option value="growth">Pro</option><option value="pro">Business</option></select><select value={price.billingCycle} onChange={(e) => setPrice({ ...price, billingCycle: e.target.value })} className={inputClass}><option value="monthly">شهري</option><option value="yearly">سنوي</option></select></div><div className="grid grid-cols-3 gap-2"><input required placeholder="العملة" maxLength={3} value={price.currency} onChange={(e) => setPrice({ ...price, currency: e.target.value.toUpperCase() })} className={`${inputClass} font-mono`} /><input required type="number" min="0" step="0.0001" placeholder="المبلغ" value={price.amount} onChange={(e) => setPrice({ ...price, amount: e.target.value })} className={`${inputClass} font-mono`} /><input type="number" min="0" step="0.000001" placeholder="سعر الصرف" value={price.exchangeRateToUsd} onChange={(e) => setPrice({ ...price, exchangeRateToUsd: e.target.value })} className={`${inputClass} font-mono`} /></div><button className={primaryBtnClass}>حفظ السعر</button></form>
+    </div>
+    <div><h3 className="mb-2 font-semibold">طلبات الدفع المعلقة ({data?.requests.filter((item) => item.status === 'pending').length ?? 0})</h3>{data?.requests.filter((item) => item.status === 'pending').map((item) => <div key={String(item.id)} className="mb-2 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[var(--k-line)] p-3 text-xs"><div><strong>{String(item.organization_name || 'مؤسسة')}</strong> · {String(item.plan_code)} · {String(item.amount_yer)} ر.ي · مرجع {String(item.transfer_reference)}</div><div className="flex gap-2"><a href={`/api/owner/billing/payment-requests/${encodeURIComponent(String(item.id))}/receipt`} target="_blank" rel="noreferrer" className={secondaryBtnClass}>معاينة الإيصال</a><button onClick={() => review(String(item.id), 'approve')} className={primaryBtnClass}>اعتماد</button><button onClick={() => review(String(item.id), 'reject')} className={secondaryBtnClass}>رفض</button></div></div>)}</div>
+  </div>;
 }

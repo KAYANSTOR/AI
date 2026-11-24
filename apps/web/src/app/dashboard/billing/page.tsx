@@ -17,16 +17,29 @@ export default async function BillingPage() {
   const db = await createClient()
 
   const snapshot = await loadBillingSnapshot(db, context.organizationId)
-  const canManage = context.role === 'owner' || context.role === 'admin'
-  const { data: planRows } = await db.from('plans').select('code,name,monthly_price,limits,is_active')
+  const { data: planRows } = await db.from('plans').select('id,code,name,monthly_price,limits,is_active')
     .in('code', ['starter', 'growth', 'pro'])
+  const { data: priceRows } = await db.from('plan_prices')
+    .select('plan_id,billing_cycle,currency,amount,exchange_rate_to_usd,is_active')
+    .eq('is_active', true)
+  const { data: providerRows } = await db.from('billing_payment_providers')
+    .select('code,display_name,provider_type,is_active')
+    .eq('is_active', true)
   const planOffers = PLAN_CATALOG.filter((plan) => plan.code !== 'trial').flatMap((fallback) => {
     const row = (planRows ?? []).find((item) => item.code === fallback.code)
     if (!row || row.is_active !== true) return []
     const limits = (row.limits ?? {}) as Partial<typeof fallback.limits>
     const monthlyPrice = Number(row.monthly_price)
     if (!Number.isFinite(monthlyPrice) || monthlyPrice <= 0) return []
-    return [{ ...fallback, name: String(row.name || fallback.name), monthlyPrice, annualPrice: monthlyPrice * 10, limits: { ...fallback.limits, ...limits } }]
+    const prices = (priceRows ?? []).filter((item) => item.plan_id === row.id)
+      .reduce<Record<string, { monthly?: number; yearly?: number; rate?: number }>>((acc, item) => {
+        const current = acc[String(item.currency)] ?? {}
+        current[item.billing_cycle === 'yearly' ? 'yearly' : 'monthly'] = Number(item.amount)
+        current.rate = Number(item.exchange_rate_to_usd) || current.rate
+        acc[String(item.currency)] = current
+        return acc
+      }, { USD: { monthly: monthlyPrice, yearly: monthlyPrice * 10 } })
+    return [{ ...fallback, name: String(row.name || fallback.name), monthlyPrice, annualPrice: monthlyPrice * 10, prices, limits: { ...fallback.limits, ...limits } }]
   })
   const currentPlan = planOffers.find((plan) => plan.code === snapshot.planCode) ?? PLAN_CATALOG.find((plan) => plan.code === snapshot.planCode)
   const walletCheckoutConfigured = isEsaalatPaymentConfigured()
@@ -161,7 +174,7 @@ export default async function BillingPage() {
         </div>
       </div>
 
-      <PaymentPlans wallets={wallets} configured={walletCheckoutConfigured} canManage={canManage} manualWallets={manualWallets} yerPerUsd={yerPerUsd} planOffers={planOffers} />
+      <PaymentPlans wallets={wallets} configured={walletCheckoutConfigured} manualWallets={manualWallets} yerPerUsd={yerPerUsd} planOffers={planOffers} internationalProviders={(providerRows ?? []).filter((provider) => provider.provider_type !== 'manual_wallet')} />
     </div>
   )
 }

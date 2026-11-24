@@ -7,24 +7,26 @@ import type { EsaalatWallet } from '@/lib/billing/esaalat'
 import { startEsaalatCheckoutAction, submitManualWalletPaymentAction } from './actions'
 
 type ManualWallet = { id: string; provider_code: string; display_name: string; account_name: string; account_number: string; instructions: string | null }
-type PlanOffer = { code: PlanCode; name: string; monthlyPrice: number; annualPrice: number; featured: boolean; limits: PlanLimits }
+type PlanOffer = { code: PlanCode; name: string; monthlyPrice: number; annualPrice: number; featured: boolean; limits: PlanLimits; prices: Record<string, { monthly?: number; yearly?: number; rate?: number }> }
+type PaymentProvider = { code: string; display_name: string; provider_type: string; is_active: boolean }
 
 export function PaymentPlans({
   wallets,
   configured,
-  canManage,
   manualWallets,
   yerPerUsd,
   planOffers,
+  internationalProviders,
 }: {
   wallets: EsaalatWallet[]
   configured: boolean
-  canManage: boolean
   manualWallets: ManualWallet[]
   yerPerUsd: number
   planOffers: PlanOffer[]
+  internationalProviders: PaymentProvider[]
 }) {
   const [cycle, setCycle] = useState<BillingCycle>('monthly')
+  const [currency, setCurrency] = useState('USD')
   const [walletId, setWalletId] = useState(wallets[0]?.id ?? '')
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
@@ -39,8 +41,23 @@ export function PaymentPlans({
   const paidPlans = planOffers
   const walletAvailable = configured && wallets.length > 0
 
+  const currencies = Array.from(new Set(['USD', 'YER', ...planOffers.flatMap((plan) => Object.keys(plan.prices))]))
+  function getPrice(plan: PlanOffer) {
+    const selected = plan.prices[currency] ?? plan.prices.USD
+    const amount = selected?.[cycle]
+    if (typeof amount === 'number' && Number.isFinite(amount)) return { amount, currency }
+    const usd = plan.prices.USD?.[cycle] ?? (cycle === 'yearly' ? plan.annualPrice : plan.monthlyPrice)
+    return { amount: currency === 'YER' && yerPerUsd > 0 ? Math.round(usd * yerPerUsd) : usd, currency: currency === 'YER' && yerPerUsd > 0 ? 'YER' : 'USD' }
+  }
+
   async function choosePlan(planCode: PlanCode) {
-    if (!walletAvailable || pending) return
+    if (pending) return
+    if (!walletAvailable) {
+      setManualPlanCode(planCode)
+      setManualError(null)
+      setManualResult(null)
+      return
+    }
     setError(null)
     startTransition(async () => {
       const result = await startEsaalatCheckoutAction({
@@ -91,8 +108,12 @@ export function PaymentPlans({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-lg font-bold text-text">اختر خطتك</h2>
-          <p className="mt-1 text-sm text-text-muted">الأسعار بالدولار، ويُحصّل المبلغ بالريال اليمني وفق سعر الصرف المعتمد لحساب التاجر.</p>
+          <p className="mt-1 text-sm text-text-muted">اختر العملة ودورة الفوترة، ثم تابع إلى طريقة الدفع المناسبة.</p>
         </div>
+        <div className="flex flex-wrap gap-2">
+        <select value={currency} onChange={(event) => setCurrency(event.target.value)} className="min-h-10 rounded-xl border border-border bg-background px-3 text-sm font-semibold text-text" aria-label="العملة">
+          {currencies.map((item) => <option key={item} value={item}>{item === 'USD' ? '$ USD' : item === 'YER' ? 'ر.ي YER' : item}</option>)}
+        </select>
         <div className="inline-flex rounded-xl border border-border bg-background p-1" aria-label="دورة الفوترة">
           <button
             type="button"
@@ -110,6 +131,7 @@ export function PaymentPlans({
           >
             سنوي · شهران مجاناً
           </button>
+        </div>
         </div>
       </div>
 
@@ -136,12 +158,7 @@ export function PaymentPlans({
             <span>تظهر المحافظ النشطة التي يراقبها تطبيق إيصالات فقط.</span>
           </div>
         </div>
-      ) : (
-        <div className="rounded-xl border border-warning/30 bg-warning/10 p-4 text-sm text-text">
-          <p className="font-semibold">الدفع بالمحافظ لم يُفعّل بعد.</p>
-          <p className="mt-1 text-text-muted">يلزم إضافة مفاتيح حساب التاجر، مفتاح Webhook، سعر الصرف، وتفعيل محفظة مراقبة على هاتف التاجر.</p>
-        </div>
-      )}
+      ) : null}
 
       {!wallets.length && configured ? (
         <p className="rounded-lg bg-background px-3 py-2 text-sm text-text-muted">
@@ -151,7 +168,7 @@ export function PaymentPlans({
 
       <div className="grid gap-4 md:grid-cols-3">
         {paidPlans.map((plan) => {
-          const price = cycle === 'yearly' ? plan.annualPrice : plan.monthlyPrice
+          const price = getPrice(plan)
           return (
             <article
               key={plan.code}
@@ -162,7 +179,7 @@ export function PaymentPlans({
                 {plan.featured ? <span className="rounded-full bg-accent px-2 py-1 text-[11px] font-bold text-accent-foreground">الأكثر اختياراً</span> : null}
               </div>
               <p className="mt-3 text-3xl font-extrabold tracking-tight text-text">
-                ${price}
+                {price.amount.toLocaleString('en-US')} {price.currency === 'USD' ? '$ USD' : price.currency === 'YER' ? 'ر.ي YER' : price.currency}
                 <span className="ms-1 text-xs font-medium text-text-muted">{cycle === 'yearly' ? '/ سنة' : '/ شهر'}</span>
               </p>
               {cycle === 'yearly' ? (
@@ -177,14 +194,14 @@ export function PaymentPlans({
               <button
                 type="button"
                 onClick={() => choosePlan(plan.code)}
-                disabled={!canManage || !walletAvailable || !walletId || pending}
+                disabled={pending}
                 className="mt-5 inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-bold text-primary-foreground transition hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {pending ? <LoaderCircle size={16} className="animate-spin" /> : null}
-                {canManage ? 'المتابعة للدفع' : 'متاح لمالك الحساب'}
+                المتابعة للدفع
               </button>
               {manualWallets.length > 0 ? (
-                <button type="button" onClick={() => { setManualPlanCode(plan.code); setManualError(null); setManualResult(null) }} disabled={!canManage || pending} className="mt-2 min-h-10 w-full rounded-xl border border-border px-3 text-xs font-semibold text-text-muted disabled:opacity-50">
+                <button type="button" onClick={() => { setManualPlanCode(plan.code); setManualError(null); setManualResult(null) }} disabled={pending} className="mt-2 min-h-10 w-full rounded-xl border border-border px-3 text-xs font-semibold text-text-muted disabled:opacity-50">
                   أرسلت تحويلًا لمحفظة يمنية؟ أرفق الإيصال
                 </button>
               ) : null}
@@ -220,12 +237,16 @@ export function PaymentPlans({
             <input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => setReceiptFile(event.target.files?.[0] ?? null)} className="mt-1.5 block w-full text-sm text-text" />
           </label>
           {manualError ? <p role="alert" className="text-sm text-error">{manualError}</p> : null}
-          <div className="flex gap-2"><button type="button" onClick={submitManualTransfer} disabled={!canManage || !manualWalletId || !senderName.trim() || !transferReference.trim() || !receiptFile || pending} className="min-h-11 rounded-xl bg-primary px-4 text-sm font-bold text-primary-foreground disabled:opacity-50">{pending ? 'جارٍ الإرسال…' : 'إرسال للمراجعة'}</button><button type="button" onClick={() => setManualPlanCode(null)} className="min-h-11 rounded-xl border border-border px-4 text-sm">إلغاء</button></div>
+          <div className="flex gap-2"><button type="button" onClick={submitManualTransfer} disabled={!manualWalletId || !senderName.trim() || !transferReference.trim() || !receiptFile || pending} className="min-h-11 rounded-xl bg-primary px-4 text-sm font-bold text-primary-foreground disabled:opacity-50">{pending ? 'جارٍ الإرسال…' : 'إرسال للمراجعة'}</button><button type="button" onClick={() => setManualPlanCode(null)} className="min-h-11 rounded-xl border border-border px-4 text-sm">إلغاء</button></div>
         </div>
       ) : null}
 
       {error ? <p role="alert" className="text-sm font-medium text-error">{error}</p> : null}
       {manualResult ? <p role="status" className="rounded-xl border border-success/30 bg-success/10 p-3 text-sm text-text">{manualResult}</p> : null}
+      <div className="rounded-xl border border-border bg-background p-4 text-sm text-text">
+        <p className="font-semibold">الدفع الدولي والعربي</p>
+        <p className="mt-1 text-text-muted">{internationalProviders.length ? 'ستظهر بوابة الدفع المفعّلة هنا عند جاهزيتها.' : 'بوابة البطاقات غير مفعّلة حالياً. تواصل معنا لطلب تفعيل دولي أو اختر التحويل اليدوي.'}</p>
+      </div>
       <p className="text-xs leading-6 text-text-muted">
         يتم تفعيل الاشتراك تلقائياً بعد تأكيد التحويل ومطابقة المحفظة والمرجع والمبلغ. لا تعتمد المنصة على صورة التحويل وحدها.
       </p>
