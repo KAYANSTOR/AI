@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from 'express';
 import { claimFirstRunOwner, confirmOwnerMfa, getAuthStatus, getClientIp, loginOwner, requireOwnerAuth, requirePermission, setupOwnerMfa, writeAuditLog, revokeOwnerSession, setSessionCookie, clearSessionCookie } from '../security/auth';
-import { platformStatus, platformUsers, platformUserDetail, platformWorkspaces, platformPlans, platformSubscriptions, platformAgents, platformAgentDetail, platformCreateAgent, platformAiUsage, platformChannels, platformConversations, platformEntitlements, platformBillingLedger, platformOverview, updatePlatformUser, platformUserAction, subscriptionAction, updatePlatformAgent, platformEntitlementOverride, platformConversationDetail, platformQueueConversationIntervention, updatePlatformWorkspaceStatus, platformCreateWorkspace, savePlatformPlan, platformAutomations, createPlatformAutomation, updatePlatformAutomation, platformKnowledge, platformApiIntegrations, createPlatformApiKey, revokePlatformApiKey, platformMonitoring, platformLogs, platformReport, platformAiProviders, platformNotificationsSupport, rotatePlatformChannelSecret, testPlatformChannel, platformSearch, platformAuditLogs, platformSettings, updatePlatformSetting, platformSecurity, createPlatformAdmin } from '../services/platformDataService';
+import { platformStatus, platformUsers, platformUserDetail, platformWorkspaces, platformPlans, platformSubscriptions, platformAgents, platformAgentDetail, platformCreateAgent, platformAiUsage, platformChannels, platformConversations, platformEntitlements, platformBillingLedger, platformOverview, updatePlatformUser, platformUserAction, subscriptionAction, updatePlatformAgent, platformEntitlementOverride, platformConversationDetail, platformQueueConversationIntervention, updatePlatformWorkspaceStatus, platformCreateWorkspace, savePlatformPlan, platformAutomations, createPlatformAutomation, updatePlatformAutomation, platformKnowledge, platformApiIntegrations, createPlatformApiKey, revokePlatformApiKey, platformMonitoring, platformLogs, platformReport, platformAiProviders, platformNotificationsSupport, rotatePlatformChannelSecret, testPlatformChannel, platformSearch, platformAuditLogs, platformSettings, updatePlatformSetting, platformSecurity, createPlatformAdmin, updatePlatformWorkspaceAddon, platformCreateConversation, createPlatformAnnouncement, createPlatformSupportTicket, updatePlatformSupportTicket, acknowledgePlatformAlert, resolvePlatformLog, reviewPlatformWalletPayment, platformManualWalletReceipt } from '../services/platformDataService';
 export const ownerRouter = Router();
 function handleError(res:Response,err:unknown,status=400){res.status(status).json({error:'request_failed',message:err instanceof Error?err.message:'حدث خطأ غير متوقع في الخادم.'})}
 ownerRouter.get('/auth/status', async (_req,res)=>{try{res.json(await getAuthStatus())}catch(e){handleError(res,e,503)}});
@@ -32,8 +32,19 @@ platformDataRouter.patch('/users/:id', requirePermission('users:write'), async (
   catch (err) { handleError(res, err); }
 });
 platformDataRouter.post('/users/:id/actions', requirePermission('users:write'), async (req, res) => {
-  try { const action=String(req.body?.action||''); const result=await platformUserAction(String(req.params.id),action); writeAuditLog({actor:req.ownerAdmin!,action:action==='suspend'?'user.suspended':'user.reactivated',entityType:'user',entityId:String(req.params.id),summary:String(req.body?.reason||'تغيير حالة الحساب من لوحة المالك.'),after:result,ipAddress:getClientIp(req)}); res.json(result); }
-  catch (err) { handleError(res, err); }
+  try {
+    const id=String(req.params.id),action=String(req.body?.action||''),before=await platformUserDetail(id);
+    const result=await platformUserAction(id,action,req.body||{});
+    const actions:Record<string,string>={suspend:'user.suspended',reactivate:'user.reactivated',delete:'user.deleted',reset_settings:'user.sessions_reset',
+      change_plan:'user.plan_changed',extend_subscription:'user.subscription_extended',cancel_subscription:'user.subscription_cancelled',
+      send_notification:'user.notification_sent',add_credit:'user.ai_credit_added'};
+    await writeAuditLog({actor:req.ownerAdmin!,action:actions[action]||'user.action_executed',entityType:'user',entityId:id,
+      summary:String(req.body?.reason||'تنفيذ إجراء إداري على المستخدم من لوحة المالك.'),before:before?.user,after:result,ipAddress:getClientIp(req)});
+    const detail=await platformUserDetail(id);
+    if(detail){res.json(detail);return;}
+    if(!before){res.status(404).json({error:'not_found',message:'المستخدم غير موجود.'});return;}
+    res.json({...before,user:{...before.user,account_status:'deleted',deleted_at:(result as any).deleted_at}});
+  } catch(err){handleError(res,err);}
 });
 platformDataRouter.get('/workspaces', async (req, res) => {
   try { res.json(await platformWorkspaces(req.query.search?String(req.query.search):undefined)); } catch (err) { handleError(res, err, 503); }
@@ -64,6 +75,16 @@ platformDataRouter.get('/channels', async (_req, res) => {
 });
 platformDataRouter.get('/conversations', async (req, res) => {
   try { res.json(await platformConversations({search:req.query.search?String(req.query.search):undefined,status:req.query.status?String(req.query.status):undefined,channelType:req.query.channelType?String(req.query.channelType):undefined,agentId:req.query.agentId?String(req.query.agentId):undefined,userId:req.query.userId?String(req.query.userId):undefined})); } catch (err) { handleError(res, err, 503); }
+});
+
+platformDataRouter.post('/conversations', requirePermission('ops:write'), async (req,res)=>{
+  try {
+    const result=await platformCreateConversation({workspaceId:String(req.body?.workspaceId||''),userId:String(req.body?.userId||''),
+      channelType:String(req.body?.channelType||''),customerHandle:String(req.body?.customerHandle||''),initialMessage:String(req.body?.initialMessage||'')});
+    await writeAuditLog({actor:req.ownerAdmin!,action:'conversation.registered',entityType:'conversation',entityId:String(result.conversationId),
+      summary:'تسجيل محادثة يدوياً في PostgreSQL دون إرسال رسالة خارجية.',after:result,ipAddress:getClientIp(req)});
+    res.status(201).json(result);
+  } catch(err){handleError(res,err);}
 });
 
 platformDataRouter.get('/conversations/:id', async (req, res) => {
@@ -103,6 +124,50 @@ platformDataRouter.get('/logs', async (req,res)=>{
   catch(err){handleError(res,err,503);}
 });
 platformDataRouter.get('/notifications-support', async (_req,res)=>{try{res.json(await platformNotificationsSupport());}catch(err){handleError(res,err,503);}});
+
+platformDataRouter.post('/notifications', requirePermission('ops:write'), async (req,res)=>{
+  try {
+    const result=await createPlatformAnnouncement({targetType:String(req.body?.targetType||'all_users'),targetFilter:req.body?.targetFilter?String(req.body.targetFilter):undefined,
+      title:String(req.body?.title||''),body:String(req.body?.body||''),scheduledFor:req.body?.scheduledFor?String(req.body.scheduledFor):null,adminId:req.ownerAdmin!.id});
+    await writeAuditLog({actor:req.ownerAdmin!,action:'platform.announcement_sent',entityType:'announcement',entityId:String(result.id),
+      summary:'إرسال إعلان داخل التطبيق إلى '+result.recipientsCount+' مؤسسة.',after:result,ipAddress:getClientIp(req)});
+    res.status(201).json(result);
+  } catch(err){handleError(res,err);}
+});
+platformDataRouter.post('/tickets', requirePermission('ops:write'), async (req,res)=>{
+  try {
+    const result=await createPlatformSupportTicket({subject:String(req.body?.subject||''),description:String(req.body?.description||''),
+      priority:String(req.body?.priority||'medium'),adminId:req.ownerAdmin!.id});
+    await writeAuditLog({actor:req.ownerAdmin!,action:'support.ticket_created',entityType:'support_ticket',entityId:String(result.id),
+      summary:'فتح تذكرة دعم فني داخل لوحة المالك.',after:result,ipAddress:getClientIp(req)});
+    res.status(201).json(result);
+  } catch(err){handleError(res,err);}
+});
+platformDataRouter.patch('/tickets/:id/status', requirePermission('ops:write'), async (req,res)=>{
+  try {
+    const result=await updatePlatformSupportTicket(String(req.params.id),String(req.body?.status||''));
+    await writeAuditLog({actor:req.ownerAdmin!,action:'support.ticket_status_updated',entityType:'support_ticket',entityId:String(req.params.id),
+      summary:'تحديث حالة تذكرة الدعم الفني.',after:result,ipAddress:getClientIp(req)});
+    res.json(result);
+  } catch(err){handleError(res,err);}
+});
+platformDataRouter.post('/alerts/:id/ack', requirePermission('ops:write'), async (req,res)=>{
+  try {
+    const result=await acknowledgePlatformAlert(String(req.params.id),req.ownerAdmin!.id);
+    await writeAuditLog({actor:req.ownerAdmin!,action:'monitoring.alert_acknowledged',entityType:'alert',entityId:String(req.params.id),
+      summary:'إقرار متابعة تنبيه تشغيلي.',after:result,ipAddress:getClientIp(req)});
+    res.json(result);
+  } catch(err){handleError(res,err);}
+});
+platformDataRouter.post('/logs/:id/resolve', requirePermission('ops:write'), async (req,res)=>{
+  try {
+    const result=await resolvePlatformLog(String(req.body?.source||''),String(req.params.id),req.ownerAdmin!.id);
+    await writeAuditLog({actor:req.ownerAdmin!,action:'monitoring.log_resolved',entityType:'log',entityId:String(req.params.id),
+      summary:'تعليم سجل خطأ بأنه تمت مراجعته وحلّه إدارياً.',after:result,ipAddress:getClientIp(req)});
+    res.json(result);
+  } catch(err){handleError(res,err);}
+});
+
 platformDataRouter.get('/reports/:type', async (req,res)=>{
   try {
     const report=await platformReport(String(req.params.type));
@@ -198,6 +263,16 @@ platformDataRouter.patch('/workspaces/:id/status', requirePermission('users:writ
   try {const result=await updatePlatformWorkspaceStatus(String(req.params.id),String(req.body?.status||''));writeAuditLog({actor:req.ownerAdmin!,action:'workspace.status_updated',entityType:'workspace',entityId:String(req.params.id),summary:'تحديث حالة نشاط مساحة العمل.',after:result,ipAddress:getClientIp(req)});res.json(result);}
   catch(err){handleError(res,err);}
 });
+
+platformDataRouter.patch('/workspaces/:id/personal-assistant-addon', requirePermission('users:write'), async (req,res)=>{
+  try {
+    if(typeof req.body?.enabled!=='boolean'){res.status(400).json({error:'enabled_boolean_required'});return;}
+    const result=await updatePlatformWorkspaceAddon(String(req.params.id),req.body.enabled,req.ownerAdmin!.id);
+    await writeAuditLog({actor:req.ownerAdmin!,action:'workspace.personal_assistant_addon_updated',entityType:'workspace',
+      entityId:String(req.params.id),summary:'تحديث إضافة المساعد الشخصي للمؤسسة.',after:result,ipAddress:getClientIp(req)});
+    res.json({item:result});
+  } catch(err){handleError(res,err);}
+});
 platformDataRouter.post('/agents', requirePermission('ai:write'), async (req,res)=>{
   try {
     const result=await platformCreateAgent({workspaceId:String(req.body?.workspaceId||''),userId:req.body?.userId?String(req.body.userId):undefined,name:String(req.body?.name||''),systemPrompt:req.body?.systemPrompt?String(req.body.systemPrompt):undefined,dailyRequestLimit:req.body?.dailyRequestLimit===undefined?undefined:Number(req.body.dailyRequestLimit)});
@@ -221,6 +296,25 @@ platformDataRouter.put('/plans/:id', requirePermission('billing:write'), async (
   catch(err){handleError(res,err);}
 });
 platformDataRouter.get('/billing', async (_req, res) => { try { res.json(await platformBillingLedger()); } catch (err) { handleError(res, err, 503); } });
+
+platformDataRouter.post('/billing/manual-wallet-requests/:id/review', requirePermission('billing:write'), async (req,res)=>{
+  try {
+    const result=await reviewPlatformWalletPayment(String(req.params.id),String(req.body?.action||''),String(req.body?.note||''),req.ownerAdmin!.email);
+    await writeAuditLog({actor:req.ownerAdmin!,action:result.status==='approved'?'billing.manual_wallet_payment_approved':'billing.manual_wallet_payment_rejected',
+      entityType:'manual_wallet_payment_request',entityId:String(req.params.id),summary:'مراجعة طلب دفع محفظة يدوياً.',after:result,ipAddress:getClientIp(req)});
+    res.json(result);
+  } catch(err){handleError(res,err);}
+});
+platformDataRouter.get('/billing/manual-wallet-requests/:id/receipt', async (req,res)=>{
+  try {
+    const receipt=await platformManualWalletReceipt(String(req.params.id));
+    res.setHeader('Content-Type',receipt.mimeType);
+    res.setHeader('Content-Length',String(receipt.bytes.length));
+    res.setHeader('Cache-Control','private, no-store');
+    res.setHeader('X-Content-Type-Options','nosniff');
+    res.send(receipt.bytes);
+  } catch(err){handleError(res,err,404);}
+});
 platformDataRouter.post('/invoices', unavailablePlatformData);
 platformDataRouter.post('/invoices/:id/refund', unavailablePlatformData);
 platformDataRouter.post('/expenses', unavailablePlatformData);
