@@ -748,11 +748,11 @@ export function KnowledgePage({
     <div className="space-y-6">
       <PageHeader
         title="مراقبة قاعدة المعرفة والملفات"
-        subtitle="متابعة حجم التخزين، عدد المقاطع المفهرسة (Chunks)، وأخطاء المعالجة مع حماية خصوصية محتوى ملفات العملاء."
+        subtitle="بيانات المصادر والفهرسة المسجلة فعلياً في PostgreSQL. لا تُنشأ سجلات ملفات وهمية؛ رفع الملفات وفهرستها يتم من مساحة العمل."
         action={
-          <button type="button" onClick={() => setAddOpen(true)} className={primaryBtnClass}>
+          <button type="button" disabled title="لا يدعم المخطط إدخال مصدر بمعايير الحجم والمقاطع فقط؛ يلزم رفع الملف وفهرسته فعلياً." className={primaryBtnClass}>
             <Plus className="w-4 h-4" />
-            <span>تسجيل مصدر معرفة</span>
+            <span>رفع مصدر معرفة (غير متاح هنا)</span>
           </button>
         }
       />

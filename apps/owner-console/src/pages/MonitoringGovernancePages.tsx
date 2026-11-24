@@ -180,23 +180,21 @@ export function ErrorsLogsPage({
     <div className="space-y-6">
       <PageHeader
         title="مركز الأخطاء وسجلات النظام"
-        subtitle="رصد أخطاء الخادم، API، قواعد البيانات، مزودي الذكاء الاصطناعي، ومحاولات الوصول غير المصرح بها مع تنقيح تلقائي للأسرار والرموز."
+        subtitle="عرض أخطاء التشغيل الفعلية من سجلات الذكاء الاصطناعي والرسائل الواردة والصادرة وWhatsApp وWebhooks وسجل تدقيق المالك، مع تنقيح الأسرار."
       />
 
       <div className="flex flex-wrap gap-3 p-4 rounded-xl border border-[var(--k-line)] bg-[var(--k-surface)]">
         <select value={category} onChange={(e) => setCategory(e.target.value)} className="px-3 py-2 text-xs rounded-lg border border-[var(--k-line-strong)] bg-[var(--k-surface)]">
           <option value="all">كل التصنيفات</option>
-          <option value="security_unauthorized">محاولات وصول غير مصرح بها</option>
-          <option value="server">أخطاء الخادم</option>
-          <option value="api">أخطاء API</option>
-          <option value="ai_provider">أخطاء مزودي AI</option>
-          <option value="agent">أخطاء الوكلاء</option>
-          <option value="automation">فشل الأتمتة</option>
-          <option value="messaging">فشل إرسال الرسائل</option>
+          <option value="ai">أخطاء الذكاء الاصطناعي</option>
+          <option value="webhook">Webhooks</option>
+          <option value="inbound">الرسائل الواردة</option>
+          <option value="outbox">الرسائل الصادرة</option>
+          <option value="whatsapp_gateway">جلسات WhatsApp</option>
+          <option value="admin_audit">سجل تدقيق المالك</option>
         </select>
         <select value={severity} onChange={(e) => setSeverity(e.target.value)} className="px-3 py-2 text-xs rounded-lg border border-[var(--k-line-strong)] bg-[var(--k-surface)]">
           <option value="all">كل مستويات الخطورة</option>
-          <option value="critical">حرج (Critical)</option>
           <option value="error">خطأ (Error)</option>
           <option value="warning">تحذير (Warning)</option>
           <option value="info">معلوماتي</option>
@@ -253,7 +251,9 @@ export function ErrorsLogsPage({
                       <button
                         type="button"
                         onClick={async () => {
-                          await apiFetch(`/api/owner/logs/${encodeURIComponent(String(l.id))}/resolve`, { method: 'POST' });
+                          await apiFetch(`/api/owner/logs/${encodeURIComponent(String(l.id))}/resolve`, {
+                            method: 'POST', body: { source: String(l.source) },
+                          });
                           onNotify('success', 'تم تحديد الخطأ كمحلول.');
                           load();
                         }}

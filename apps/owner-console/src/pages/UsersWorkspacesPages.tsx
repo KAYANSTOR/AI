@@ -164,9 +164,9 @@ export function UsersPage({
         title="إدارة المستخدمين والعملاء"
         subtitle="سجل كامل لجميع مستخدمي منصة Kayan AI مع اشتراكاتهم، استهلاك الذكاء الاصطناعي، وحالات التفعيل والدفع."
         action={
-          <button type="button" onClick={() => setCreateOpen(true)} className={primaryBtnClass}>
+          <button type="button" disabled title="إنشاء حساب Auth يتطلب ربط دعوات Auth Admin؛ لم يتم إنشاء حسابات تجريبية من لوحة المالك." className={primaryBtnClass}>
             <Plus className="w-4 h-4" />
-            <span>إنشاء مستخدم جديد</span>
+            <span>إنشاء مستخدم (يتطلب دعوة Auth)</span>
           </button>
         }
       />
@@ -227,9 +227,9 @@ export function UsersPage({
           title="لا يوجد مستخدمون مسجلون حالياً"
           description="تظهر هنا جميع حسابات العملاء الحقيقية من قاعدة البيانات. يمكنك إنشاء أول مستخدم ومساحة عمل مباشرة عبر المسار الرسمي للنظام."
           action={
-            <button type="button" onClick={() => setCreateOpen(true)} className={primaryBtnClass}>
+            <button type="button" disabled title="اربط خدمة دعوات Auth Admin لإنشاء حساب دخول حقيقي." className={primaryBtnClass}>
               <Plus className="w-4 h-4" />
-              <span>إنشاء أول مستخدم</span>
+              <span>إنشاء أول مستخدم (غير متاح)</span>
             </button>
           }
         />
@@ -1120,6 +1120,7 @@ export function WorkspacesPage({
   const [ownerUserId, setOwnerUserId] = React.useState('');
   const [name, setName] = React.useState('');
   const [businessType, setBusinessType] = React.useState('ecommerce');
+  const [addonBusyId, setAddonBusyId] = React.useState<string | null>(null);
 
   const load = React.useCallback(() => {
     setLoading(true);
@@ -1172,6 +1173,17 @@ export function WorkspacesPage({
     }
   }
 
+  async function togglePersonalAssistant(id:string,enabled:boolean) {
+    setAddonBusyId(id);
+    try {
+      await apiFetch(`/api/owner/workspaces/${encodeURIComponent(id)}/personal-assistant-addon`,{method:'PATCH',body:{enabled:!enabled}});
+      onNotify('success',!enabled?'تم تفعيل إضافة المساعد الشخصي للمؤسسة.':'تم إيقاف إضافة المساعد الشخصي للمؤسسة.');
+      load();
+    } catch(err) {
+      onNotify('error',err instanceof Error?err.message:'تعذر تحديث إضافة المساعد الشخصي.');
+    } finally { setAddonBusyId(null); }
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -1218,6 +1230,7 @@ export function WorkspacesPage({
                 <th className="px-4 py-3 text-start font-semibold">الوكلاء / القنوات</th>
                 <th className="px-4 py-3 text-start font-semibold">استهلاك AI</th>
                 <th className="px-4 py-3 text-start font-semibold">الحالة</th>
+                <th className="px-4 py-3 text-start font-semibold">المساعد الشخصي</th>
                 <th className="px-4 py-3 text-end font-semibold">الإجراء</th>
               </tr>
             </thead>
@@ -1226,13 +1239,14 @@ export function WorkspacesPage({
                 <tr key={String(w.id)} className="hover:bg-[var(--k-surface-subtle)]/60">
                   <td className="px-4 py-3">
                     <div className="font-semibold text-[var(--k-ink)]">{String(w.name)}</div>
-                    <div className="text-[11px] font-mono text-[var(--k-ink-muted)]">{String(w.slug)}</div>
+                    <div className="text-[11px] font-mono text-[var(--k-ink-muted)]">{String(w.slug ?? w.business_name ?? "—")}</div>
                   </td>
                   <td className="px-4 py-3">
                     <button
                       type="button"
-                      onClick={() => onSelectUser(String(w.owner_user_id))}
-                      className="hover:underline text-start"
+                      disabled={!w.owner_user_id}
+                      onClick={() => w.owner_user_id && onSelectUser(String(w.owner_user_id))}
+                      className="text-start hover:underline disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       <div className="font-medium">{String(w.owner_name)}</div>
                       <div className="text-[11px] font-mono text-[var(--k-ink-muted)]">{String(w.owner_email)}</div>
@@ -1243,7 +1257,7 @@ export function WorkspacesPage({
                     {String(w.agents_count)} / {String(w.channels_count)}
                   </td>
                   <td className="px-4 py-3 font-mono tabular-nums">
-                    {formatNumber(Number(w.tokens_used))} tok · {formatCurrency(Number(w.ai_cost_usd))}
+                    {formatNumber(Number(w.tokens_used ?? 0))} tok · {w.ai_cost_usd==null?'—':formatCurrency(Number(w.ai_cost_usd))}
                   </td>
                   <td className="px-4 py-3">
                     <StatusText
@@ -1252,13 +1266,22 @@ export function WorkspacesPage({
                     />
                   </td>
                   <td className="px-4 py-3 text-end">
-                    <button
-                      type="button"
-                      onClick={() => toggleStatus(String(w.id), String(w.status))}
-                      className={secondaryBtnClass}
-                    >
-                      {w.status === 'active' ? 'تعليق' : 'تفعيل'}
-                    </button>
+                    <StatusText
+                      status={w.personal_assistant_addon_enabled ? 'ok' : 'muted'}
+                      label={w.personal_assistant_addon_enabled ? 'مفعل' : 'غير مفعل'}
+                    />
+                  </td>
+                  <td className="px-4 py-3 text-end">
+                    <div className="flex flex-wrap justify-end gap-1.5">
+                      <button type="button" disabled={addonBusyId===String(w.id)}
+                        onClick={() => togglePersonalAssistant(String(w.id),Boolean(w.personal_assistant_addon_enabled))}
+                        className={secondaryBtnClass}>
+                        {addonBusyId===String(w.id)?'جارٍ الحفظ...':w.personal_assistant_addon_enabled?'إيقاف المساعد':'تفعيل المساعد'}
+                      </button>
+                      <button type="button" onClick={() => toggleStatus(String(w.id), String(w.status))} className={secondaryBtnClass}>
+                        {w.status === 'active' ? 'تعليق' : 'تفعيل'}
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}

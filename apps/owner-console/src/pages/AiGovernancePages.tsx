@@ -627,14 +627,11 @@ export function AiModelsPage({
                       {String(m.agents_using)} وكيل · {formatNumber(Number(m.requests_count))} طلب
                     </td>
                     <td className="px-4 py-3">
-                      <StatusText
-                        status={Number(m.is_allowed) === 1 ? 'ok' : 'error'}
-                        label={Number(m.is_allowed) === 1 ? 'مسموح' : 'محظور'}
-                      />
+                      <StatusText status="info" label="مرصود في التشغيل" />
                     </td>
                     <td className="px-4 py-3 text-end">
-                      <button type="button" onClick={() => toggleModelAllowed(m)} className={secondaryBtnClass}>
-                        {Number(m.is_allowed) === 1 ? 'تعطيل النموذج' : 'السماح بالنموذج'}
+                      <button type="button" disabled title="لا يوجد جدول سياسات نماذج مركزي قابل للتعديل في مخطط PostgreSQL الحالي." className={secondaryBtnClass}>
+                        التحكم غير متاح في المصدر الحالي
                       </button>
                     </td>
                   </tr>
@@ -728,9 +725,9 @@ export function AiUsagePage({
         title="سجل استهلاك الذكاء الاصطناعي والتكاليف"
         subtitle="سجل موثوق ومقاوم للتكرار (Idempotent Usage Ledger) يوثق Tokens والتكلفة الفعلية مقابل التقديرية مع مصدر وإصدار التسعير."
         action={
-          <button type="button" onClick={() => setRecordModal(true)} className={primaryBtnClass}>
+          <button type="button" disabled title="أحداث الاستهلاك تُسجل بواسطة مسارات تشغيل الوكلاء؛ الإدخال اليدوي غير مدعوم." className={primaryBtnClass}>
             <Coins className="w-4 h-4" />
-            <span>تسجيل حدث استهلاك (Idempotent)</span>
+            <span>التسجيل اليدوي غير متاح</span>
           </button>
         }
       />
@@ -772,8 +769,8 @@ export function AiUsagePage({
               title="لا توجد أحداث استهلاك مسجلة حتى الآن"
               description="تُضاف الأحداث تلقائياً عند اختبار الوكلاء أو تنفيذ طلبات الذكاء الاصطناعي، ويمكنك تسجيل حدث اختباري للتحقق من التسعير ومنع التكرار."
               action={
-                <button type="button" onClick={() => setRecordModal(true)} className={primaryBtnClass}>
-                  تسجيل حدث استهلاك
+                <button type="button" disabled title="يسجل النظام الأحداث من تشغيل الوكلاء الفعلي." className={primaryBtnClass}>
+                  يُسجل تلقائياً من التشغيل
                 </button>
               }
             />
