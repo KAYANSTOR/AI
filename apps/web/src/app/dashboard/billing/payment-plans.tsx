@@ -211,7 +211,7 @@ export function PaymentPlans({
       </div>
 
       {manualPlanCode ? (
-        <div className="space-y-4 rounded-xl border border-secondary/30 bg-background p-4">
+        <div className="sticky bottom-0 z-50 space-y-4 rounded-xl border border-secondary/30 bg-background p-4 pb-24 shadow-raised">
           <div>
             <h3 className="font-bold text-text">إرسال إثبات تحويل يدوي</h3>
             <p className="mt-1 text-xs leading-5 text-text-muted">لن يتفعّل الاشتراك إلا بعد مراجعة المرجع والمبلغ والإيصال في لوحة Kayan AI Admin.</p>
