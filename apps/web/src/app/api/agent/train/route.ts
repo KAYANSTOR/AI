@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { createClient } from '@/lib/db/server'
 import { getDashboardContext } from '@/lib/dashboard/context'
+import { enforceAiGuard, recordAiGuardUsage } from '@/lib/ai/usage-guard'
 import { calculateAgentReadiness } from '@/lib/ai/readiness'
 import {
   saveValidatedKnowledge,
@@ -155,6 +156,12 @@ export async function POST(req: Request) {
   if (agentError || !agent) {
     return NextResponse.json({ error: 'agent_not_found' }, { status: 404 })
   }
+
+  // F3: plan quota + DB-backed hourly rate limits before any model call.
+  const guardContext = { organizationId: context.organizationId, userId: context.userId, route: 'agent_train' as const }
+  const guard = await enforceAiGuard(guardContext)
+  if (guard.response) return guard.response
+  if (guard.deps) await recordAiGuardUsage(guard.deps, guardContext)
 
   // Load current readiness and existing knowledge to ground the training assistant
   const [readiness, { data: business }, { data: profile }, { data: services }, { data: hours }] =

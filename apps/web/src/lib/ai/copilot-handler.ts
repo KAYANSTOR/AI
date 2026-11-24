@@ -1,0 +1,146 @@
+import { createGoogle } from '@ai-sdk/google'
+import { convertToModelMessages, streamText, tool, type UIMessage } from 'ai'
+import { z } from 'zod'
+import { NextResponse } from 'next/server'
+import { createClient } from '@/lib/db/server'
+import { isAuthConfigured } from '@/lib/auth/config'
+import { enforceAiGuard, recordAiGuardUsage } from '@/lib/ai/usage-guard'
+
+const MODEL = process.env.GEMINI_MODEL || 'gemini-3.8-flash'
+
+/**
+ * The internal business copilot.
+ *
+ * Configuration and authorisation are decided before anything privileged is built, so a
+ * request that cannot be authorised gets its own status code instead of the generic 500 the
+ * catch-all would otherwise produce.
+ */
+export type CopilotDeps = {
+  isAuthConfigured: () => boolean
+  createClient: () => Promise<Awaited<ReturnType<typeof createClient>>>
+  createGoogle: typeof createGoogle
+}
+
+const defaultDeps: CopilotDeps = { isAuthConfigured, createClient, createGoogle }
+
+export async function handleCopilotRequest(req: Request, overrides: Partial<CopilotDeps> = {}) {
+  const deps = { ...defaultDeps, ...overrides }
+  if (!deps.isAuthConfigured()) {
+    return NextResponse.json({ error: 'service_not_configured' }, { status: 503 })
+  }
+
+  let db: Awaited<ReturnType<typeof createClient>>
+  try {
+    db = await deps.createClient()
+  } catch {
+    return NextResponse.json({ error: 'service_not_configured' }, { status: 503 })
+  }
+
+  const {
+    data: { user },
+  } = await db.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+
+  const { data: member, error: memberError } = await db
+    .from('organization_members')
+    .select('organization_id')
+    .eq('user_id', user.id)
+    .order('created_at', { ascending: true })
+    .limit(1)
+    .maybeSingle()
+
+  if (memberError) {
+    console.error('Copilot membership lookup failed:', memberError.message)
+    return NextResponse.json({ error: 'membership_lookup_failed' }, { status: 500 })
+  }
+  if (!member) return NextResponse.json({ error: 'no_organization' }, { status: 403 })
+
+  // Provider configuration is reported only to an authorised caller: an anonymous request
+  // must be told it is unauthorized, not which secrets the deployment is missing.
+  const apiKey = process.env.GEMINI_API_KEY
+  if (!apiKey) {
+    return NextResponse.json(
+      { error: 'ai_provider_not_configured', required_env: ['GEMINI_API_KEY'] },
+      { status: 503 }
+    )
+  }
+
+  const organizationId = member.organization_id as string
+
+  let messages: UIMessage[]
+  try {
+    const body = (await req.json()) as { messages?: unknown }
+    if (!Array.isArray(body?.messages)) {
+      return NextResponse.json({ error: 'invalid_request_body' }, { status: 400 })
+    }
+    messages = body.messages as UIMessage[]
+  } catch {
+    return NextResponse.json({ error: 'invalid_request_body' }, { status: 400 })
+  }
+
+  if (!messages.length) {
+    return NextResponse.json({ error: 'messages_required' }, { status: 400 })
+  }
+
+  // F3: plan quota + DB-backed hourly rate limits before any model call.
+  const guardContext = { organizationId, userId: user.id, route: 'copilot' as const }
+  const guard = await enforceAiGuard(guardContext)
+  if (guard.response) return guard.response
+  const guardDeps = guard.deps
+
+  try {
+    const google = deps.createGoogle({ apiKey })
+    const result = streamText({
+      model: google(MODEL),
+      system: `You are KAYAN AI's internal Business Agent (Copilot).
+You help the business owner or staff manage their operations.
+You can answer questions about their data using tools.
+Be professional, concise, and helpful. Always answer in Arabic.`,
+      messages: await convertToModelMessages(messages),
+      maxOutputTokens: 1024,
+      onFinish: async ({ totalUsage }) => {
+        if (guardDeps) await recordAiGuardUsage(guardDeps, guardContext, totalUsage?.totalTokens ?? 0)
+      },
+      tools: {
+        getBusinessMetrics: tool({
+          description:
+            'Get high level business metrics (conversations, leads, orders, revenue) for the current organization.',
+          inputSchema: z.object({}),
+          execute: async () => {
+            const [
+              { count: conversations },
+              { count: leads },
+              { data: orders },
+            ] = await Promise.all([
+              db
+                .from('conversations')
+                .select('*', { count: 'exact', head: true })
+                .eq('organization_id', organizationId),
+              db
+                .from('leads')
+                .select('*', { count: 'exact', head: true })
+                .eq('organization_id', organizationId),
+              db
+                .from('orders')
+                .select('total_amount')
+                .eq('organization_id', organizationId)
+                .eq('status', 'completed'),
+            ])
+            const revenue = orders?.reduce((acc, o) => acc + (Number(o.total_amount) || 0), 0) || 0
+            return {
+              total_conversations: conversations || 0,
+              total_leads: leads || 0,
+              completed_orders: orders?.length || 0,
+              total_revenue_sar: revenue,
+            }
+          },
+        }),
+      },
+    })
+
+    return result.toUIMessageStreamResponse()
+  } catch (error) {
+    console.error('Copilot API error:', error instanceof Error ? error.message : error)
+    return NextResponse.json({ error: 'ai_request_failed' }, { status: 502 })
+  }
+}

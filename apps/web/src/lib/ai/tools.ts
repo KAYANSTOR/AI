@@ -294,8 +294,8 @@ async function writeToolAudit(ctx:ToolContext,name:string,capability:string|null
 async function toolHandoff(ctx:ToolContext,args:Record<string,unknown>){
   if(!ctx.conversationId) throw new Error('conversation_id is required for handoff')
   const reason=String(args.reason ?? 'customer_requested').trim() || 'customer_requested'
-  const {error}=await ctx.db.from('conversations').update({status:'handed_off',state:'human_handoff',ai_enabled:false,ai_paused_at:new Date().toISOString(),handoff_reason:reason}).eq('id',ctx.conversationId)
-  if(error) throw new Error(error.message)
+  const {triggerHumanHandoff}=await import('@/lib/ai/handoff-alert')
+  await triggerHumanHandoff(ctx.db,{organizationId:ctx.organizationId,businessId:ctx.businessId,conversationId:ctx.conversationId,contactId:ctx.contactId ?? null,reason,source:'agent_tool',lastMessage:typeof args.summary==='string' ? args.summary : reason})
   const {error:auditError}=await ctx.db.from('audit_events').insert({
     organization_id:ctx.organizationId,business_id:ctx.businessId,actor_type:'agent',actor_id:ctx.agentId ?? null,
     action:'conversation.handoff_requested',entity_type:'conversation',entity_id:ctx.conversationId,metadata:{reason},

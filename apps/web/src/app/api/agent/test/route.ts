@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { createClient } from '@/lib/db/server'
 import { getDashboardContext } from '@/lib/dashboard/context'
 import { runAgentPreviewTurn } from '@/lib/runtime/agent-runtime'
+import { enforceAiGuard, recordAiGuardUsage } from '@/lib/ai/usage-guard'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -55,6 +56,11 @@ export async function POST(req: Request) {
   }
   if (!agent) return NextResponse.json({ error: 'agent_not_available' }, { status: 404 })
 
+  // F3: plan quota + DB-backed hourly rate limits before any model call.
+  const guardContext = { organizationId: context.organizationId, userId: context.userId, route: 'agent_test' as const }
+  const guard = await enforceAiGuard(guardContext)
+  if (guard.response) return guard.response
+
   try {
     const result = await runAgentPreviewTurn({
       db,
@@ -66,6 +72,8 @@ export async function POST(req: Request) {
         content: message.content,
       })),
     })
+
+    if (guard.deps) await recordAiGuardUsage(guard.deps, guardContext)
 
     return NextResponse.json({
       reply: result.reply,

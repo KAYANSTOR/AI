@@ -9,6 +9,7 @@ import { knowledgeContentHash } from '@/lib/knowledge/layer'
 import { embedKnowledgeText, KNOWLEDGE_EMBEDDING_MODEL } from '@/lib/knowledge/embeddings'
 import { extractDocxText } from '@/lib/knowledge/document-parser'
 import { extractPdfText } from '@/lib/knowledge/pdf-extractor'
+import { guardAiAction } from '@/lib/ai/usage-guard'
 import { actionErrorMessage, dbActionError } from '@/lib/i18n/action-error'
 
 export type KnowledgeResult = { ok: boolean; error?: string; message?: string }
@@ -246,6 +247,8 @@ export async function uploadKnowledgeDocumentAction(formData: FormData): Promise
       if (fileBytes.subarray(0, 5).toString('ascii') !== '%PDF-') {
         return { ok: false, error: 'محتوى الملف لا يطابق صيغة PDF.' }
       }
+      const blocked = await guardAiAction({ organizationId: ctx.organizationId, userId: ctx.userId, route: 'knowledge' })
+      if (blocked) return { ok: false, error: blocked }
       originalText = await extractPdfText(fileBytes)
     } else if (extension === 'docx') {
       if (fileBytes.length < 4 || fileBytes.readUInt32LE(0) !== 0x04034b50) {

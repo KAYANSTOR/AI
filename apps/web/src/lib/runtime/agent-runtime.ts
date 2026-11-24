@@ -1,10 +1,16 @@
 import type { DbClient } from '@/lib/db/client'
 import { buildBusinessSystemPrompt } from '@/lib/ai/prompt'
+import { triggerHumanHandoff } from '@/lib/ai/handoff-alert'
+import {
+  applyChannelFormatRules,
+  enforceWhatsAppBrevity,
+  isFastTextChannel,
+  maxOutputTokensForChannel,
+} from '@/lib/ai/channel-format'
 import { executeTool, getToolDefinitionsForAgent } from '@/lib/ai/tools'
 import { evaluateReplyGovernance, staffHandoffNotice, type GovernanceDecision } from '@/lib/ai/governance'
 import { getToolPolicy } from '@/lib/ai/registry'
 import { callProvider, AIProviderError, type AIProviderName, type ModelMessage } from '@/lib/providers'
-import { createNotification } from '@/lib/notifications'
 
 export type AgentToolTrace = {
   name: string
@@ -138,10 +144,11 @@ async function runAgentLoop(args: AgentLoopArgs): Promise<AgentLoopResult> {
 
   for (let round = 0; round < 5; round += 1) {
     const generated = await callProvider({
-      system: args.systemPrompt,
+      system: applyChannelFormatRules(args.systemPrompt, args.channel),
       messages,
       tools: args.toolSet,
-      isWhatsApp: args.channel === 'whatsapp',
+      isWhatsApp: isFastTextChannel(args.channel),
+      maxOutputTokens: maxOutputTokensForChannel(args.channel),
     }, activeProvider)
     activeProvider = generated.provider
     const result = generated.result
@@ -168,6 +175,7 @@ async function runAgentLoop(args: AgentLoopArgs): Promise<AgentLoopResult> {
     if (!toolBlocks.length) {
       let reply = textParts.join('\n').trim()
       if (!reply) throw new Error('Model returned an empty response')
+      if (isFastTextChannel(args.channel)) reply = enforceWhatsAppBrevity(reply, args.userText)
 
       const decision = evaluateReplyGovernance({
         userText: args.userText,
@@ -317,27 +325,14 @@ export async function runAgentTurn(args: {
       toolSet,
       simulation: false,
       onGovernanceEscalation: async (decision) => {
-        await args.db
-          .from('conversations')
-          .update({
-            status: 'handed_off',
-            ai_enabled: false,
-            state: 'human_handoff',
-            handoff_reason: decision.reasons.join(','),
-            ai_paused_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', args.conversationId)
-          .eq('organization_id', args.organizationId)
-
-        await createNotification(args.db, {
+        await triggerHumanHandoff(args.db, {
           organizationId: args.organizationId,
-          entityType: 'conversation',
-          entityId: args.conversationId,
-          notificationType: 'high_priority',
-          title: 'تصعيد من حوكمة الوكيل',
-          body: `أسباب: ${decision.reasons.join(', ')} (ثقة ${decision.confidence.toFixed(2)})`,
-          idempotencyKey: `gov-escalate:${args.conversationId}:${runId}`,
+          businessId: args.businessId,
+          conversationId: args.conversationId,
+          contactId: args.contactId,
+          reason: decision.reasons.join(',') || 'governance_escalation',
+          lastMessage: args.userText,
+          source: 'governance',
         })
 
         await args.db.from('audit_events').insert({

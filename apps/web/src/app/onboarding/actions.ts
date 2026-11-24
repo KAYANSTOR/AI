@@ -24,6 +24,7 @@ import {
   parseAgentSetupDraft,
   type SetupDraftResult,
 } from '@/lib/ai/setup-draft'
+import { guardAiAction } from '@/lib/ai/usage-guard'
 
 export type OnboardingResult = { ok: boolean; error?: string; message?: string }
 
@@ -63,7 +64,10 @@ async function runActivationChecks(
     : { data: null, error: null }
   if (agentError) throw agentError
 
-  const reply = await tryAgentReply({
+  const blocked = process.env.GEMINI_API_KEY
+    ? await guardAiAction({ organizationId: org.organizationId, userId: org.userId, route: 'reply_test' })
+    : null
+  const reply: ReplyTestResult = blocked ? { status: 'failed', message: blocked } : await tryAgentReply({
     db,
     organizationId: org.organizationId,
     agentId: (agent?.id as string | undefined) ?? null,
@@ -327,6 +331,10 @@ export async function generateAgentSetupAction(input: {
     }
     if (description.length > 1400) {
       return { ok: false, error: 'الوصف طويل جدًا. اختصره في بضع جمل.' }
+    }
+    if (process.env.GEMINI_API_KEY) {
+      const blocked = await guardAiAction({ organizationId: org.organizationId, userId: org.userId, route: 'setup_draft' })
+      if (blocked) return { ok: false, error: blocked }
     }
     const result = await generateAgentSetupDraft({
       description,

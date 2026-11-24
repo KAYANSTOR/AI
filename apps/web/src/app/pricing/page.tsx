@@ -6,7 +6,8 @@ import { FinalCta } from '@/components/site/final-cta'
 import { SiteFooter } from '@/components/site/site-footer'
 import { Section } from '@/components/site/section'
 import { CreditCard } from 'lucide-react'
-import { PLAN_CATALOG } from '@/lib/billing/plan-catalog'
+import { resolvePlanPrice, type PublicPricing } from '@/lib/billing/public-pricing'
+import { loadPublicPricing } from '@/lib/billing/public-pricing.server'
 
 export const metadata: Metadata = {
   title: 'خطط الأسعار والاشتراكات | KAYAN AI',
@@ -14,20 +15,26 @@ export const metadata: Metadata = {
   description: 'أربع خطط واضحة من المجاني إلى الأعمال، مع الدفع بالريال اليمني عبر المحافظ الإلكترونية المتاحة.',
 }
 
-const pricingStructuredData = {
+// Prices come from PostgreSQL (owner console); refreshed at most once a minute.
+export const revalidate = 60
+
+const pricingStructuredData = (pricing: PublicPricing) => ({
   '@context': 'https://schema.org',
   '@graph': [
     {
       '@type': 'Product',
       name: 'KAYAN AI Plans',
       description: 'خطط اشتراك منصة KAYAN AI لاستقبال العملاء وإدارة المحادثات والأتمتة.',
-      offers: PLAN_CATALOG.map((plan) => ({
-        '@type': 'Offer',
-        name: plan.nameEn,
-        price: String(plan.monthlyPrice),
-        priceCurrency: 'USD',
-        billingDuration: 'P1M',
-      })),
+      offers: pricing.plans.flatMap((plan) => {
+        const price = resolvePlanPrice(plan, pricing.defaultCurrency, 'monthly')
+        return price === null ? [] : [{
+          '@type': 'Offer',
+          name: plan.nameEn,
+          price: String(price),
+          priceCurrency: pricing.defaultCurrency,
+          billingDuration: 'P1M',
+        }]
+      }),
     },
     {
       '@type': 'FAQPage',
@@ -38,9 +45,10 @@ const pricingStructuredData = {
       })),
     },
   ],
-}
+})
 
-export default function PricingPage() {
+export default async function PricingPage() {
+  const pricing = await loadPublicPricing()
   return (
     <>
       <SiteHeader />
@@ -61,7 +69,7 @@ export default function PricingPage() {
           </div>
         </Section>
 
-        <Pricing />
+        <Pricing pricing={pricing} />
         <Faq />
         <FinalCta />
       </main>
@@ -70,7 +78,7 @@ export default function PricingPage() {
 
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(pricingStructuredData) }}
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(pricingStructuredData(pricing)) }}
       />
     </>
   )

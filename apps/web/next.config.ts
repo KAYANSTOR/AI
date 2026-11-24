@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { securityHeaders } from "./security-headers";
 
 const nextConfig: NextConfig = {
   // Prevent stale browser bundles from invoking Server Actions from an older
@@ -12,6 +13,10 @@ const nextConfig: NextConfig = {
   compress: true,
   poweredByHeader: false,
   reactStrictMode: true,
+  // F4: HSTS, framing, MIME sniffing, referrer, permissions and a report-only CSP.
+  async headers() {
+    return securityHeaders();
+  },
   async rewrites() {
     const ownerConsole = process.env.OWNER_CONSOLE_INTERNAL_URL || 'http://127.0.0.1:8090';
     return [

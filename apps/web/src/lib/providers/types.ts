@@ -58,5 +58,7 @@ export interface AIProvider {
     tools: ModelToolDefinition[]
     /** Enables the shorter generation budget for WhatsApp replies. */
     isWhatsApp?: boolean
+    /** Hard cap on generated tokens; set per channel by the runtime. */
+    maxOutputTokens?: number
   }): Promise<ModelResult>
 }

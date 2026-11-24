@@ -246,7 +246,10 @@ describe('human handoff tool', () => {
     expect(conversation?.status).toBe('handed_off')
     expect(conversation?.state).toBe('human_handoff')
     expect(conversation?.handoff_reason).toBe('pricing_question')
-    expect(store.audit_events.rows?.[0]?.action).toBe('conversation.handoff_requested')
+    const actions = (store.audit_events.rows ?? []).map((row) => row.action)
+    expect(actions).toContain('conversation.handoff_requested')
+    // The owner is alerted (dashboard + WhatsApp) on every agent-initiated handoff.
+    expect(actions).toContain('conversation.handoff_alerted')
   })
 
   test('handoff requires an existing conversation', async () => {

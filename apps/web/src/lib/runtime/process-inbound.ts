@@ -11,6 +11,7 @@ import { ensureOpenConversation, getConversationRef } from '@/lib/runtime/conver
 import { resolveBusinessAgent } from '@/lib/runtime/tenant'
 import { executeTool } from '@/lib/ai/tools'
 import { armConversationSla } from '@/lib/sla'
+import { detectHumanHandoffRequest, triggerHumanHandoff } from '@/lib/ai/handoff-alert'
 import {
   assertWithinLimit,
   EntitlementExceededError,
@@ -169,6 +170,22 @@ export async function processInboundMessage(
   const consent = await getConsentStatus(db, contact.contactId, input.channelType)
   if (consent === 'opted_out') {
     return skipReply('contact_opted_out', input, conversationId, contact.contactId)
+  }
+
+  // Explicit "let me talk to a person" requests are honoured before any model call:
+  // the agent stops answering this conversation and the owner is alerted at once.
+  if (detectHumanHandoffRequest(input.text)) {
+    const handoff = await triggerHumanHandoff(db, {
+      organizationId: input.organizationId,
+      businessId: input.businessId,
+      conversationId,
+      contactId: contact.contactId,
+      channelId: input.channelId,
+      reason: 'customer_requested',
+      lastMessage: input.text,
+      source: 'customer_request',
+    })
+    return { reply: handoff.customerReply, conversationId, contactId: contact.contactId }
   }
 
   let serverActionResult: unknown
