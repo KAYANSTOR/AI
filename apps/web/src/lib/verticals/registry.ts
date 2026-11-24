@@ -1,5 +1,6 @@
 export type BaseEngine = 'booking_engine' | 'commerce_engine' | 'event_engine' | 'lead_engine'
 export type VerticalId =
+  | 'personal_assistant'
   | 'clinic' | 'dental_beauty' | 'salon_barber' | 'legal_consulting' | 'maintenance_workshop' | 'gym_fitness'
   | 'ecommerce_store' | 'restaurant_cafe' | 'bakery_sweets' | 'pharmacy' | 'fashion_tailoring' | 'wholesale'
   | 'event_hall' | 'artist_entertainment' | 'photography' | 'hotel_chalet' | 'car_rental'
@@ -96,6 +97,7 @@ function define(
 }
 
 export const VERTICALS: readonly VerticalDefinition[] = [
+  define('personal_assistant', 'lead_engine', 'المساعد الشخصي', 'Bot', 'المهام والمعلومات الشخصية', { leads: 'المهام الشخصية', services: 'المعلومات الشخصية' }, 'أدر مهام صاحب الحساب ومعلوماته الخاصة بأمان، ولا تتعامل مع العملاء أو المبيعات أو المواعيد التجارية.', ['task', 'due_date']),
   define('clinic', 'booking_engine', 'عيادة ومركز طبي', 'Stethoscope', 'التخصصات والخدمات الطبية', { appointments: 'المواعيد الطبية', services: 'الخدمات الطبية' }, 'رتّب الاستفسارات والمواعيد دون تشخيص أو وصف علاج.', ['service_id', 'date', 'patient_name']),
   define('dental_beauty', 'booking_engine', 'عيادات الأسنان والتجميل', 'Smile', 'العلاجات والجلسات', { appointments: 'مواعيد العلاجات', services: 'العلاجات والجلسات' }, 'ساعد في اختيار موعد وقدم معلومات الخدمات المعتمدة دون تشخيص.', ['service_id', 'date', 'patient_name']),
   define('salon_barber', 'booking_engine', 'صالون تجميل وحلاقة', 'Scissors', 'الخدمات والجلسات', { appointments: 'الحجوزات', services: 'الخدمات والجلسات' }, 'وجّه العميل إلى الخدمة والموعد المناسبين.', ['service_id', 'date']),
