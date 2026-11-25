@@ -6,6 +6,7 @@ import { formatDateTime } from '@/lib/i18n/format'
 import { MobileEmptyState } from '@/components/ui/empty-state'
 import { CreateReportForm } from './create-report-form'
 import { ReportRowActions } from './report-row-actions'
+import { AgentQualityPanel } from './agent-quality-panel'
 
 export const dynamic = 'force-dynamic'
 
@@ -55,6 +56,8 @@ export default async function ReportsPage() {
           تقارير مرتبطة بنشاطك في قاعدة البيانات — بدون قوائم تجريبية.
         </p>
       </div>
+
+      <AgentQualityPanel />
 
       {!context.businessId ? (
         <div className="rounded-xl border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-text">

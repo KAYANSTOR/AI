@@ -445,6 +445,7 @@ export function PlansSubscriptionsPage({
       )}
 
       <BillingOperationsPanel onNotify={onNotify} />
+      <UsageCreditsPanel onNotify={onNotify} />
       <FreeQuotaExemptionsPanel onNotify={onNotify} />
 
       <ModalDialog
@@ -960,6 +961,59 @@ function BillingOperationsPanel({ onNotify }: { onNotify: (type: 'success' | 'er
 }
 
 interface FreeQuotaExemption { fingerprint: string; reason: string; granted_by: string | null; created_at: string }
+
+function UsageCreditsPanel({ onNotify }: { onNotify: (type: 'success' | 'error' | 'info', text: string) => void }) {
+  const [organizations, setOrganizations] = React.useState<Array<{ id: string; name: string }>>([]);
+  const [organizationId, setOrganizationId] = React.useState('');
+  const [amount, setAmount] = React.useState('');
+  const [busy, setBusy] = React.useState(false);
+  const request = React.useRef<{ key: string; id: string } | null>(null);
+  React.useEffect(() => {
+    let current = true;
+    apiFetch<{ items: Array<{ id: string; name: string }> }>('/api/owner/workspaces')
+      .then(data => { if (current) setOrganizations([...new Map(data.items.map(item => [item.id, item])).values()]); })
+      .catch(() => { if (current) onNotify('error', 'تعذّر تحميل المؤسسات.'); });
+    return () => { current = false; };
+  }, [onNotify]);
+
+  async function grant(event: React.FormEvent) {
+    event.preventDefault();
+    if (busy) return;
+    const key = `${organizationId}:${amount}`;
+    if (request.current?.key !== key) request.current = { key, id: crypto.randomUUID() };
+    setBusy(true);
+    try {
+      const result = await apiFetch<{ item: { balance_after: number } }>('/api/owner/billing/usage-credits', {
+        method: 'POST', body: { organizationId, amount: Number(amount), requestId: request.current.id },
+      });
+      onNotify('success', `تم الشحن. الرصيد الجديد ${formatNumber(result.item.balance_after)}.`);
+      request.current = null;
+      setAmount('');
+    } catch (error) {
+      onNotify('error', error instanceof Error ? error.message : 'تعذّر شحن الرصيد.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="mt-6 space-y-3 rounded-xl border border-[var(--k-line)] bg-[var(--k-surface)] p-5">
+      <h2 className="text-base font-bold">شحن رصيد المهام</h2>
+      <form onSubmit={grant} className="grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
+        <label className="text-sm">المؤسسة
+          <select required className={inputClass} value={organizationId} onChange={event => setOrganizationId(event.target.value)}>
+            <option value="">اختر مؤسسة</option>
+            {organizations.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+          </select>
+        </label>
+        <label className="text-sm">عدد الأرصدة
+          <input required type="number" min={1} max={1000000} step={1} value={amount} onChange={event => setAmount(event.target.value)} className={inputClass} />
+        </label>
+        <button disabled={busy || !organizationId} type="submit" className={`${primaryBtnClass} self-end`}>شحن الرصيد</button>
+      </form>
+    </section>
+  );
+}
 
 function FreeQuotaExemptionsPanel({ onNotify }: { onNotify: (type: 'success' | 'error' | 'info', text: string) => void }) {
   const [items, setItems] = React.useState<FreeQuotaExemption[]>([]);

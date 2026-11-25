@@ -5,6 +5,7 @@ import { findUserById } from '@/lib/auth/users'
 import { normalizePhone } from '@/lib/auth/users'
 import { extractPersonalMemories } from '@/lib/personal-assistant/runtime'
 import { savePersonalMemory } from '@/lib/personal-assistant/memory-retrieval'
+import { organizationAgentKind } from '@/lib/personal-assistant/executive/specialized-agents'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -60,7 +61,7 @@ async function processExtractionJobs(db: ReturnType<typeof createAdminClient>) {
 }
 
 async function processReminders(db: ReturnType<typeof createAdminClient>) {
-  const { data: settingsRows } = await db.from('personal_assistant_settings').select('organization_id, user_id, whatsapp_channel_id, whatsapp_reminders_enabled, morning_brief_enabled, morning_brief_local_time, timezone, last_morning_brief_local_date').eq('whatsapp_reminders_enabled', true).limit(200)
+  const { data: settingsRows } = await db.from('personal_assistant_settings').select('organization_id, user_id, whatsapp_channel_id, whatsapp_reminders_enabled, morning_brief_enabled, morning_brief_local_time, timezone, last_morning_brief_local_date, ops_daily_report_enabled, last_ops_daily_report_local_date').eq('whatsapp_reminders_enabled', true).limit(200)
   let queued = 0
   for (const settings of settingsRows ?? []) {
     if (!settings.whatsapp_channel_id) continue
@@ -84,6 +85,27 @@ async function processReminders(db: ReturnType<typeof createAdminClient>) {
           await db.from('personal_assistant_settings').update({ last_morning_brief_local_date: today }).eq('organization_id', settings.organization_id).eq('user_id', settings.user_id)
           queued += 1
         }
+      }
+    }
+    if (settings.ops_daily_report_enabled && dueTimeReached(now, settings.timezone || 'Asia/Aden', settings.morning_brief_local_time || '08:00')) {
+      const today = localDate(now, settings.timezone || 'Asia/Aden')
+      if (settings.last_ops_daily_report_local_date === today) continue
+      const kind = await organizationAgentKind(db, settings.organization_id)
+      if (kind !== 'ops') continue
+      const membership = await db.from('organization_members').select('role').eq('organization_id', settings.organization_id)
+        .eq('user_id', settings.user_id).maybeSingle()
+      if (membership.data?.role !== 'owner' && membership.data?.role !== 'admin') continue
+      const since = new Date(now.getTime() - 24 * 60 * 60_000).toISOString()
+      const summary = await db.rpc('agent_quality_summary', { p_org_id: settings.organization_id, p_since: since }).single()
+      if (summary.error || !summary.data) continue
+      const { resolved, tasks_completed: completed, tasks } = summary.data
+      const body = `تقرير العمليات خلال آخر 24 ساعة: أُغلقت ${resolved} محادثة، ونجحت ${completed} من ${tasks} مهمة منتهية.`
+      const result = await enqueuePersonalMessage(db, { organizationId: settings.organization_id, channelId: settings.whatsapp_channel_id,
+        recipient, idempotencyKey: `ops-daily-report:${settings.user_id}:${today}`, body })
+      if (result === 'queued' || result === 'duplicate') {
+        await db.from('personal_assistant_settings').update({ last_ops_daily_report_local_date: today })
+          .eq('organization_id', settings.organization_id).eq('user_id', settings.user_id)
+        queued += 1
       }
     }
   }

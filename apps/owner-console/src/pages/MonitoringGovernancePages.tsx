@@ -563,6 +563,7 @@ const REPORT_CATALOG = [
   { id: 'ai_usage', label: 'تقرير استهلاك AI' },
   { id: 'model_costs', label: 'تقرير تكلفة النماذج' },
   { id: 'agents', label: 'تقرير أداء الوكلاء' },
+  { id: 'agent_quality', label: 'جودة الوكلاء ورضا العملاء' },
   { id: 'channels', label: 'تقرير استخدام القنوات' },
   { id: 'errors', label: 'تقرير الأخطاء' },
   { id: 'activity', label: 'تقرير النشاط والتدقيق' },

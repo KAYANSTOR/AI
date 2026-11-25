@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { requirePersonalAssistantApi } from '@/lib/personal-assistant/api-context'
+import { requireExecutiveAssistantApi } from '@/lib/personal-assistant/api-context'
 import { appendThreadMessage } from '@/lib/personal-assistant/thread'
 import { runPersonalAssistantTurn } from '@/lib/personal-assistant/runtime'
 import { buildEngineDeps } from '@/lib/central-bot/deps'
@@ -19,7 +19,7 @@ const KIND_PREFIX: Record<string, string> = { image: '[صورة] ', document: '[
 
 /** Uploaded image/file or recorded voice note -> same validation path as every channel. */
 export async function POST(request: Request) {
-  const access = await requirePersonalAssistantApi()
+  const access = await requireExecutiveAssistantApi()
   if (access instanceof NextResponse) return access
 
   const declared = Number(request.headers.get('content-length') ?? '')

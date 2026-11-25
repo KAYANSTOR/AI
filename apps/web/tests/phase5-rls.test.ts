@@ -129,12 +129,12 @@ describe('migration 0086 · project guard rails', () => {
     expect(SQL).toContain('DROP TRIGGER IF EXISTS')
   })
 
-  test('the migration file is numbered last and contiguous with the project sequence', async () => {
+  test('the migration file is contiguous with the project sequence', async () => {
     const files = readFileSync(new URL('../../../packages/db/scripts/migrate.mjs', import.meta.url), 'utf8')
     expect(files).toContain('FILE_PATTERN')
     const list = (await import('node:fs')).readdirSync(new URL('../../../packages/db/migrations', import.meta.url))
       .filter((name: string) => /^\d{4}_.+\.sql$/.test(name))
       .sort()
-    expect(list[list.length - 1]).toBe('0086_templates_connectors_and_vault.sql')
+    expect(list[86]).toBe('0086_templates_connectors_and_vault.sql')
   })
 })

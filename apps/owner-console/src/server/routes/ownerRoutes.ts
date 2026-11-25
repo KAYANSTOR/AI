@@ -1,4 +1,5 @@
 import { Router, type Request, type Response } from 'express';
+import { grantPlatformUsageCredits } from '../services/platformDataService';
 import { claimFirstRunOwner, confirmOwnerMfa, getAuthStatus, getClientIp, loginOwner, requireOwnerAuth, requirePermission, setupOwnerMfa, writeAuditLog, revokeOwnerSession, setSessionCookie, clearSessionCookie } from '../security/auth';
 import { platformStatus, platformUsers, platformUserDetail, platformWorkspaces, platformPlans, platformSubscriptions, platformAgents, platformAgentDetail, platformCreateAgent, platformAiUsage, platformChannels, platformConversations, platformEntitlements, platformBillingLedger, platformOverview, updatePlatformUser, platformUserAction, subscriptionAction, updatePlatformAgent, platformEntitlementOverride, platformConversationDetail, platformQueueConversationIntervention, updatePlatformWorkspaceStatus, platformCreateWorkspace, savePlatformPlan, platformAutomations, createPlatformAutomation, updatePlatformAutomation, platformKnowledge, platformApiIntegrations, createPlatformApiKey, revokePlatformApiKey, platformMonitoring, platformLogs, platformReport, platformAiProviders, platformNotificationsSupport, rotatePlatformChannelSecret, testPlatformChannel, platformSearch, platformAuditLogs, platformSettings, updatePlatformSetting, platformSecurity, createPlatformAdmin, updatePlatformWorkspaceAddon, platformCreateConversation, createPlatformAnnouncement, createPlatformSupportTicket, updatePlatformSupportTicket, acknowledgePlatformAlert, resolvePlatformLog, reviewPlatformWalletPayment, platformManualWalletReceipt, platformBillingCatalog, savePlatformWallet, savePlatformPrice, reviewPlatformPayment, platformPaymentReceipt, platformAgentSandboxTest, platformFreeQuotaExemptions, addFreeQuotaExemption, removeFreeQuotaExemption } from '../services/platformDataService';
 export const ownerRouter = Router();
@@ -333,6 +334,15 @@ platformDataRouter.get('/billing/manual-wallet-requests/:id/receipt', async (req
   } catch(err){handleError(res,err,404);}
 });
 platformDataRouter.get('/billing/catalog', async (_req,res)=>{try{res.json(await platformBillingCatalog());}catch(err){handleError(res,err,503);}});
+platformDataRouter.post('/billing/usage-credits', requirePermission('billing:write'), async (req, res) => {
+  try {
+    const entry = await grantPlatformUsageCredits(String(req.body?.organizationId ?? ''), String(req.body?.requestId ?? ''),
+      req.ownerAdmin!.id, typeof req.body?.amount === 'number' ? req.body.amount : NaN);
+    res.status(201).json({ item: entry });
+  } catch (error) {
+    handleError(res, error instanceof Error && 'code' in error ? new Error('تعذّر شحن الرصيد. تحقق من المؤسسة والكمية.') : error);
+  }
+});
 platformDataRouter.post('/billing/wallets', requirePermission('billing:write'), async (req,res)=>{try{const result=await savePlatformWallet(req.body||{});writeAuditLog({actor:req.ownerAdmin!,action:'billing.wallet.updated',entityType:'manual_yemen_wallet',entityId:String(result.id),summary:'تحديث محفظة يمنية في PostgreSQL.',after:result,ipAddress:getClientIp(req)});res.status(201).json({item:result});}catch(err){handleError(res,err);}});
 platformDataRouter.post('/billing/prices', requirePermission('billing:write'), async (req,res)=>{try{const result=await savePlatformPrice(req.body||{});writeAuditLog({actor:req.ownerAdmin!,action:'billing.price.updated',entityType:'plan_price',entityId:String(result.id),summary:'تحديث سعر متعدد العملات في PostgreSQL.',after:result,ipAddress:getClientIp(req)});res.status(201).json({item:result});}catch(err){handleError(res,err);}});
 platformDataRouter.get('/billing/payment-requests/:id/receipt', async (req,res)=>{try{const result=await platformPaymentReceipt(String(req.params.id));if(!result){res.status(404).end();return;}res.setHeader('Content-Type',result.receipt_mime_type);res.send(Buffer.from(result.receipt_image_base64,'base64'));}catch(err){handleError(res,err,503);}});

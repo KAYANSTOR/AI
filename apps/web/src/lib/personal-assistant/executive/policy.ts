@@ -1,3 +1,5 @@
+import { SPECIALIZED_AGENTS, type SpecializedAgentKind } from './specialized-agents'
+
 /**
  * Policy engine for the executive agent.
  *
@@ -36,6 +38,11 @@ export const AGENT_TOOLS: Record<string, ToolSpec> = {
   calendar_list_events: { name: 'calendar_list_events', risk: 'low', readOnly: true, labelAr: 'قراءة جدول Google Calendar', untouchedAr: 'قراءة فقط، لم يُضف أو يُعدّل أي حدث.' },
   calendar_create_event: { name: 'calendar_create_event', risk: 'medium', readOnly: false, labelAr: 'إضافة حدث في Google Calendar', untouchedAr: 'لم يُعدّل أي حدث آخر ولم يُحذف شيء.' },
   calendar_update_event: { name: 'calendar_update_event', risk: 'medium', readOnly: false, labelAr: 'تعديل حدث في Google Calendar', untouchedAr: 'لم يُعدّل أي حدث آخر ولم يُحذف شيء.' },
+  draft_quote: { name: 'draft_quote', risk: 'low', readOnly: true, labelAr: 'إعداد مسودة عرض سعر', untouchedAr: 'مسودة فقط، لم يُرسل عرض ولم تُسجل دفعة.' },
+  find_business_records: { name: 'find_business_records', risk: 'low', readOnly: true, labelAr: 'البحث في المعرفة والحجوزات والطلبات', untouchedAr: 'لم تُعدّل سجلات النشاط.' },
+  escalate_customer: { name: 'escalate_customer', risk: 'high', readOnly: false, labelAr: 'تصعيد محادثة عميل لموظف', untouchedAr: 'لم تتأثر المحادثات الأخرى.' },
+  assign_team_task: { name: 'assign_team_task', risk: 'high', readOnly: false, labelAr: 'إسناد مهمة لعضو في الفريق', untouchedAr: 'لم تُسند مهام لأي حساب آخر.' },
+  configure_ops_daily_report: { name: 'configure_ops_daily_report', risk: 'high', readOnly: false, labelAr: 'جدولة تقرير عمليات يومي', untouchedAr: 'لن تُرسل التقارير لأرقام العملاء.' },
 }
 
 const RISK_ORDER: RiskLevel[] = ['low', 'medium', 'high', 'financial']
@@ -56,17 +63,21 @@ export function effectiveRisk(tool: ToolSpec, provenance: Provenance): RiskLevel
 
 export type PolicyDecision =
   | { allow: true; risk: RiskLevel; needsApproval: boolean }
-  | { allow: false; reason: 'unknown_tool' | 'approval_required' | 'kill_switch_active' }
+  | { allow: false; reason: 'unknown_tool' | 'approval_required' | 'kill_switch_active' | 'tool_not_allowed_for_agent' }
 
 export function evaluatePolicy(input: {
   toolName: string
   provenance: Provenance
   approvalVerified: boolean
   killSwitchActive: boolean
+  agentKind?: SpecializedAgentKind | null
 }): PolicyDecision {
   if (input.killSwitchActive) return { allow: false, reason: 'kill_switch_active' }
   const tool = AGENT_TOOLS[input.toolName]
-  if (!tool) return { allow: false, reason: 'unknown_tool' }
+  if (!Object.hasOwn(AGENT_TOOLS, input.toolName)) return { allow: false, reason: 'unknown_tool' }
+  if (input.agentKind && !SPECIALIZED_AGENTS[input.agentKind].tools.includes(input.toolName)) {
+    return { allow: false, reason: 'tool_not_allowed_for_agent' }
+  }
   const risk = effectiveRisk(tool, input.provenance)
   const needsApproval = requiresApproval(risk)
   if (needsApproval && !input.approvalVerified) return { allow: false, reason: 'approval_required' }

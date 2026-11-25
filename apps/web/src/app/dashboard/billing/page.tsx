@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/db/server'
 import { getDashboardContext } from '@/lib/dashboard/context'
 import { CreditCard, Zap, Radio, Workflow, Megaphone } from 'lucide-react'
-import { formatNumber } from '@/lib/i18n/format'
+import { formatDateTime, formatNumber } from '@/lib/i18n/format'
 import { loadBillingSnapshot } from '@/lib/billing/entitlements'
 import { PLAN_CATALOG } from '@/lib/billing/plan-catalog'
 import { isEsaalatPaymentConfigured, listEsaalatReceivingWallets } from '@/lib/billing/esaalat'
@@ -17,6 +17,12 @@ export default async function BillingPage() {
   const context = await getDashboardContext()
   if (!context) redirect('/login')
   const db = await createClient()
+
+  const [creditWallet, creditLedger] = await Promise.all([
+    db.from('org_credit_wallets').select('balance').eq('org_id', context.organizationId).maybeSingle(),
+    db.from('credit_ledger_entries').select('id, delta, balance_after, created_at').eq('org_id', context.organizationId)
+      .order('created_at', { ascending: false }).limit(25),
+  ])
 
   const snapshot = await loadBillingSnapshot(db, context.organizationId)
   const { data: planRows } = await db.from('plans').select('id,code,name,monthly_price,limits,is_active')
@@ -138,6 +144,27 @@ export default async function BillingPage() {
               </h2>
             </div>
           </div>
+        </div>
+      </div>
+
+      <div>
+        <h2 className="mb-3 text-lg font-bold text-primary-dark">رصيد المهام</h2>
+        <div className="space-y-2 rounded-2xl border border-primary bg-white p-4 text-primary-dark">
+          {creditWallet.error || creditLedger.error ? <p role="alert">تعذّر تحميل الرصيد.</p> : <>
+            <p className="text-xl font-bold">{formatNumber(Number(creditWallet.data?.balance ?? 0))} رصيد متاح</p>
+            <p className="text-sm">يُخصم رصيد واحد لكل خطوة بعد الخطوتين الأوليين في مهمة الوكيل المتخصص.</p>
+            <h3 className="mt-3 font-bold">آخر حركات الرصيد</h3>
+            {(creditLedger.data ?? []).length === 0 ? <p className="text-sm">لا توجد حركات رصيد.</p> : (
+              <ul className="divide-y divide-primary">
+                {(creditLedger.data ?? []).map(entry => (
+                  <li key={String(entry.id)} className="flex flex-wrap justify-between gap-1 py-2 text-sm">
+                    <span>{Number(entry.delta) > 0 ? 'شحن' : 'استهلاك مهمة'} · {formatNumber(Math.abs(Number(entry.delta)))}</span>
+                    <span>{formatDateTime(String(entry.created_at), context.timezone)} · الرصيد {formatNumber(Number(entry.balance_after))}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </>}
         </div>
       </div>
 

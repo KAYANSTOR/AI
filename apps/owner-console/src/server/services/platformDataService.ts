@@ -1044,12 +1044,34 @@ export async function platformReport(type:string) {
     ai_usage:{title:'تقرير استهلاك الذكاء الاصطناعي',headers:[{key:'created_at',label:'التاريخ'},{key:'workspace_name',label:'مساحة العمل'},{key:'agent_name',label:'الوكيل'},{key:'model',label:'النموذج'},{key:'input_tokens',label:'رموز الإدخال'},{key:'output_tokens',label:'رموز الإخراج'},{key:'status',label:'الحالة'}],sql:`SELECT r.created_at::text created_at,o.name workspace_name,a.name agent_name,r.model,r.input_tokens,r.output_tokens,r.status FROM agent_runs r LEFT JOIN organizations o ON o.id=r.organization_id LEFT JOIN ai_agents a ON a.id=r.agent_id ORDER BY r.created_at DESC LIMIT 2000`},
     model_costs:{title:'تقرير تكلفة النماذج',headers:[{key:'model',label:'النموذج'},{key:'requests',label:'الطلبات'},{key:'tokens',label:'الرموز'},{key:'recorded_cost_usd',label:'التكلفة المسجلة بالدولار'}],sql:`SELECT COALESCE(r.model,'غير محدد') model,COUNT(*)::int requests,COALESCE(SUM(COALESCE(r.input_tokens,0)+COALESCE(r.output_tokens,0)),0)::bigint tokens,COALESCE(SUM(l.units*COALESCE(l.unit_cost,0)),0)::numeric recorded_cost_usd FROM agent_runs r LEFT JOIN usage_ledger l ON l.reference_id=r.id AND l.currency='USD' GROUP BY r.model ORDER BY requests DESC`},
     agents:{title:'تقرير أداء الوكلاء',headers:[{key:'agent_name',label:'الوكيل'},{key:'workspace_name',label:'مساحة العمل'},{key:'runs',label:'التشغيلات'},{key:'failed',label:'الفاشلة'},{key:'tokens',label:'الرموز'}],sql:`SELECT a.name agent_name,o.name workspace_name,COUNT(r.id)::int runs,COUNT(r.id) FILTER(WHERE r.status='failed')::int failed,COALESCE(SUM(COALESCE(r.input_tokens,0)+COALESCE(r.output_tokens,0)),0)::bigint tokens FROM ai_agents a JOIN organizations o ON o.id=a.organization_id LEFT JOIN agent_runs r ON r.agent_id=a.id GROUP BY a.id,a.name,o.name ORDER BY runs DESC`},
+    agent_quality: {
+      title: 'جودة الوكلاء ورضا العملاء خلال آخر 30 يوماً',
+      headers: [{ key: 'workspace_name', label: 'مساحة العمل' }, { key: 'auto_resolution_rate', label: 'الحل التلقائي %' },
+        { key: 'task_completion_rate', label: 'نجاح المهام %' }, { key: 'csat', label: 'رضا العميل %' }, { key: 'ratings', label: 'عدد التقييمات' }],
+      sql: `SELECT o.name AS workspace_name,
+        round(100.0 * q.auto_resolved / nullif(q.resolved, 0), 1) AS auto_resolution_rate,
+        round(100.0 * q.tasks_completed / nullif(q.tasks, 0), 1) AS task_completion_rate,
+        round(100.0 * q.positive_ratings / nullif(q.ratings, 0), 1) AS csat, q.ratings
+        FROM (SELECT id, name FROM organizations ORDER BY created_at DESC LIMIT 2000) o
+        CROSS JOIN LATERAL public.agent_quality_summary(o.id, now() - interval '30 days') q
+        WHERE q.resolved > 0 OR q.tasks > 0 ORDER BY o.name`,
+    },
     channels:{title:'تقرير استخدام القنوات',headers:[{key:'channel_type',label:'القناة'},{key:'channels',label:'عدد القنوات'},{key:'conversations',label:'المحادثات'},{key:'messages',label:'الرسائل'}],sql:`SELECT ch.channel_type,COUNT(DISTINCT ch.id)::int channels,COUNT(DISTINCT c.id)::int conversations,COUNT(m.id)::int messages FROM channels ch LEFT JOIN conversations c ON c.channel_id=ch.id LEFT JOIN messages m ON m.conversation_id=c.id GROUP BY ch.channel_type ORDER BY channels DESC`},
     errors:{title:'تقرير الأخطاء',headers:[{key:'source',label:'المصدر'},{key:'message',label:'الخطأ'},{key:'created_at',label:'التاريخ'}],sql:`SELECT 'agent_run' source,COALESCE(error_code,'failed') message,created_at::text created_at FROM agent_runs WHERE status IN('failed','blocked') UNION ALL SELECT 'webhook_event',COALESCE(error_message,'failed'),received_at::text FROM webhook_events WHERE processing_status='failed' ORDER BY created_at DESC LIMIT 2000`},
     activity:{title:'تقرير النشاط والتدقيق',headers:[{key:'organization_name',label:'مساحة العمل'},{key:'action',label:'الإجراء'},{key:'entity_type',label:'نوع السجل'},{key:'created_at',label:'التاريخ'}],sql:`SELECT o.name organization_name,e.action,e.entity_type,e.created_at::text created_at FROM audit_events e LEFT JOIN organizations o ON o.id=e.organization_id ORDER BY e.created_at DESC LIMIT 2000`}
   };
   const report=reports[type];if(!report)throw new Error('نوع التقرير غير معروف.');
   return {title:report.title,headers:report.headers,rows:await query(report.sql)};
+}
+
+export async function grantPlatformUsageCredits(orgId: string, requestId: string, actorId: string, amount: number) {
+  const uuid = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i;
+  if (!uuid.test(orgId) || !uuid.test(requestId) || !Number.isSafeInteger(amount) || amount < 1 || amount > 1_000_000) {
+    throw new Error('حدد مؤسسة وعدداً صحيحاً من الأرصدة بين 1 ومليون.');
+  }
+  const [entry] = await query(`SELECT id, delta, balance_after::integer AS balance_after
+    FROM public.grant_usage_credits($1::uuid, $2::uuid, $3::uuid, $4::integer)`, [orgId, requestId, actorId, amount]);
+  return entry;
 }
 
 

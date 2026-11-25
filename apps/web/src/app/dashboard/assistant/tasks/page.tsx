@@ -1,9 +1,12 @@
 import Link from 'next/link'
+import { redirect } from 'next/navigation'
+import { getDashboardContext } from '@/lib/dashboard/context'
 import { PersonalAssistantTasksPanel } from '@/components/dashboard/personal-assistant-tasks-panel'
 
 export const dynamic = 'force-dynamic'
 
-export default function PersonalAssistantTasksPage() {
+export default async function PersonalAssistantTasksPage() {
+  if (!(await getDashboardContext())?.personalAssistantEnabled) redirect('/dashboard/assistant?tab=tasks')
   return <div className="space-y-4">
     <Link href="/dashboard/settings" className="text-sm font-semibold text-secondary">← العودة إلى الإعدادات</Link>
     <header>

@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { loadAgentContext } from '../load-agent-context'
 import { AgentTrainer } from '../agent-trainer'
+import { SpecializedAgentPanel } from './specialized-agent-panel'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,6 +24,7 @@ export default async function AgentSettingsPage() {
       <Link href="/dashboard/agent" className="text-sm font-semibold text-secondary">
         ← الوكيل الذكي
       </Link>
+      <SpecializedAgentPanel />
       <AgentTrainer
         agentId={data.agentId}
         businessName={data.businessName}

@@ -12,5 +12,6 @@ export default async function PersonalAssistantPage({ searchParams }: { searchPa
   const context = await getDashboardContext()
   // «مدرب كيان» feeds personal memory only for the personal-assistant sector (owner/admin).
   const showTrainer = Boolean(context && (context.role === 'owner' || context.role === 'admin') && trainingChecklist(context.businessTypeId).target === 'memory')
-  return <PersonalExecutiveApp initialTab={initialTab} showTrainer={showTrainer} />
+  const personal = context?.personalAssistantEnabled === true
+  return <PersonalExecutiveApp initialTab={personal || initialTab === 'tasks' ? initialTab : 'chat'} showTrainer={showTrainer} personal={personal} />
 }

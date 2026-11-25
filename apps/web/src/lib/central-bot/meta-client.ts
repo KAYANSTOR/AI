@@ -2,6 +2,7 @@ import type { CentralBotConfig } from './config'
 
 /** Minimal Meta Cloud API client for the central bot. `fetchImpl` is injectable for tests. */
 type FetchLike = typeof fetch
+type SenderConfig = Pick<CentralBotConfig, 'accessToken' | 'phoneNumberId' | 'graphBaseUrl'>
 
 export class CentralMetaError extends Error {
   constructor(message: string, readonly status: number) {
@@ -10,7 +11,7 @@ export class CentralMetaError extends Error {
   }
 }
 
-async function graph(config: CentralBotConfig, path: string, init: RequestInit, fetchImpl: FetchLike) {
+async function graph(config: SenderConfig, path: string, init: RequestInit, fetchImpl: FetchLike) {
   const response = await fetchImpl(`${config.graphBaseUrl}/${path}`, {
     ...init,
     headers: { Authorization: `Bearer ${config.accessToken}`, ...(init.headers ?? {}) },
@@ -32,7 +33,7 @@ export async function sendCentralText(config: CentralBotConfig, to: string, text
 
 /** Interactive reply buttons (max 3, title ≤ 20 chars, id ≤ 256 chars). */
 export async function sendCentralButtons(
-  config: CentralBotConfig,
+  config: SenderConfig,
   to: string,
   text: string,
   buttons: { id: string; title: string }[],

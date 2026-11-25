@@ -2,6 +2,8 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { Bot, Check, Lock } from 'lucide-react'
 import { getDashboardContext } from '@/lib/dashboard/context'
+import { createClient } from '@/lib/db/server'
+import { canUseBusinessExecutiveAgent, organizationAgentKind } from '@/lib/personal-assistant/executive/specialized-agents'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,6 +18,7 @@ export default async function PersonalAssistantLayout({ children }: { children: 
   const context = await getDashboardContext()
   if (!context) redirect('/login')
   if (context.personalAssistantEnabled) return <>{children}</>
+  if (canUseBusinessExecutiveAgent(await organizationAgentKind(await createClient(), context.organizationId), context.role)) return <>{children}</>
   return (
     <section dir="rtl" aria-labelledby="pa-upgrade-title" className="mx-auto max-w-lg overflow-hidden rounded-3xl border border-border bg-surface shadow-card">
       <div className="bg-primary-dark p-6 text-primary">

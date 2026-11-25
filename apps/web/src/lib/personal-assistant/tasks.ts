@@ -105,6 +105,7 @@ export async function upsertPersonalSettings(db: DbClient, owner: PersonalOwner,
   whatsappChannelId?: string | null
   whatsappRemindersEnabled?: boolean
   morningBriefEnabled?: boolean
+  opsDailyReportEnabled?: boolean
   morningBriefLocalTime?: string
   timezone?: string
 }) {
@@ -114,7 +115,10 @@ export async function upsertPersonalSettings(db: DbClient, owner: PersonalOwner,
     if (!channel.data) throw new Error('invalid_whatsapp_channel')
   }
   if (input.morningBriefLocalTime && !/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/.test(input.morningBriefLocalTime)) throw new Error('invalid_local_time')
-  if (input.timezone && !/^[A-Za-z_]+(?:\/[A-Za-z0-9_+\-]+){0,2}$/.test(input.timezone)) throw new Error('invalid_timezone')
+  if (input.timezone) {
+    try { new Intl.DateTimeFormat('en', { timeZone: input.timezone }) }
+    catch { throw new Error('invalid_timezone') }
+  }
   const existing = await getPersonalSettings(db, owner)
   const updates: Record<string, unknown> = {
     organization_id: owner.organizationId,
@@ -124,6 +128,7 @@ export async function upsertPersonalSettings(db: DbClient, owner: PersonalOwner,
     morning_brief_enabled: input.morningBriefEnabled ?? existing?.morning_brief_enabled ?? false,
     morning_brief_local_time: input.morningBriefLocalTime ?? existing?.morning_brief_local_time ?? '08:00:00',
     timezone: input.timezone ?? existing?.timezone ?? 'Asia/Riyadh',
+    ...(input.opsDailyReportEnabled !== undefined ? { ops_daily_report_enabled: input.opsDailyReportEnabled } : {}),
   }
   const { data, error } = await db.from('personal_assistant_settings').upsert(updates, { onConflict: 'organization_id,user_id' })
     .select('id, whatsapp_channel_id, whatsapp_reminders_enabled, morning_brief_enabled, morning_brief_local_time, timezone, last_morning_brief_local_date').single()

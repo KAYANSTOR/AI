@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { requirePersonalAssistantApi } from '@/lib/personal-assistant/api-context'
+import { requireExecutiveAssistantApi } from '@/lib/personal-assistant/api-context'
 import { decideApproval, setKillSwitch } from '@/lib/personal-assistant/executive/engine'
 import { buildEngineDeps } from '@/lib/central-bot/deps'
 
@@ -11,7 +11,7 @@ const HASH_RE = /^[0-9a-f]{64}$/
 
 /** Tasks, pending approvals and receipts of this owner (RLS-scoped reads). */
 export async function GET() {
-  const access = await requirePersonalAssistantApi()
+  const access = await requireExecutiveAssistantApi()
   if (access instanceof NextResponse) return access
   const scope = (table: string, columns: string) => access.db.from(table).select(columns)
     .eq('org_id', access.owner.organizationId).eq('user_id', access.owner.userId)
@@ -31,7 +31,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const access = await requirePersonalAssistantApi()
+  const access = await requireExecutiveAssistantApi()
   if (access instanceof NextResponse) return access
   const body = await request.json().catch(() => null) as Record<string, unknown> | null
   if (!body || typeof body !== 'object') return NextResponse.json({ error: 'invalid_request_body' }, { status: 400 })

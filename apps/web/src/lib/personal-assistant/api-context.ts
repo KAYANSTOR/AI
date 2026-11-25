@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/db/admin'
 import { getCurrentOrg } from '@/lib/org'
 import type { DbClient } from '@/lib/db/client'
 import { loadPersonalAssistantAccess, PERSONAL_ASSISTANT_FORBIDDEN } from './access'
+import { canUseBusinessExecutiveAgent, organizationAgentKind } from './executive/specialized-agents'
 
 export type PersonalApiContext = {
   /** Session client (RLS: the caller's own rows only). */
@@ -38,4 +39,12 @@ export async function requirePersonalAssistantApi(overrides: Partial<AccessDeps>
     return NextResponse.json(PERSONAL_ASSISTANT_FORBIDDEN, { status: 403 })
   }
   return { db, admin: deps.adminDb(), owner: { organizationId: org.organizationId, userId: user.id } }
+}
+
+export async function requireExecutiveAssistantApi() {
+  return requirePersonalAssistantApi({ hasAccess: async (db, organizationId) => {
+    if (await loadPersonalAssistantAccess(createAdminClient(), organizationId)) return true
+    const org = await getCurrentOrg()
+    return Boolean(org && canUseBusinessExecutiveAgent(await organizationAgentKind(db, organizationId), org.role))
+  } })
 }

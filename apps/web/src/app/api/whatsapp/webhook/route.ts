@@ -22,6 +22,7 @@ import {
 } from '@/lib/runtime/security'
 import { deliverOutbound, recordDeliveredOutboundMessage } from '@/lib/runtime/outbound'
 import { normalizeWhatsAppInbound } from '@/lib/channels/whatsapp-provider-adapter'
+import { readCsatReply } from '@/lib/channels/conversation-rating'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -374,6 +375,18 @@ export async function POST(req: NextRequest) {
           externalUserId: remotePhone,
           senderPhone: normalizeE164(remotePhone),
           displayName: profileName || null,
+        }
+
+        const rating = !isAppEcho ? readCsatReply(msg) : null
+        if (rating) {
+          const recorded = await db.rpc('record_conversation_rating', {
+            p_survey_id: rating.surveyId, p_org_id: channel.organizationId, p_channel_id: channel.id,
+            p_phone: identity.senderPhone.replace(/[^0-9]/g, ''), p_rating: rating.rating,
+          })
+          if (recorded.error) throw new Error('conversation_rating_failed')
+          await markWebhookProcessed(db, eventRowId, 'processed')
+          eventRowId = null
+          continue
         }
 
         if (isAppEcho) {

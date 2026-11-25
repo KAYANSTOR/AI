@@ -3,7 +3,9 @@ import { createAdminClient } from '@/lib/db/admin'
 import { claimOutboundEvent, nextOutboxFailureState } from '@/lib/channels/outbox'
 import { CredentialConfigError, CredentialMissingError, requireCredential } from '@/lib/credentials/service'
 import { resolveChannelProviderCredentials } from '@/lib/credentials/resolve'
-import { MetaApiError, sendInstagramText, sendWhatsAppTemplate, type WhatsAppTemplateInput } from '@/lib/providers/meta'
+import { MetaApiError, requireGraphBase, sendInstagramText, sendWhatsAppTemplate, type WhatsAppTemplateInput } from '@/lib/providers/meta'
+import { CentralMetaError, sendCentralButtons } from '@/lib/central-bot/meta-client'
+import { csatButtons } from '@/lib/channels/conversation-rating'
 import { sendTwilioSms } from '@/lib/providers/twilio'
 import { sendTelegramText } from '@/lib/providers/telegram'
 import { sendMessengerText } from '@/lib/providers/messenger'
@@ -52,6 +54,23 @@ export type OutboundChannel = {
   providerAccountId: string | null
   externalIdentifier: string | null
   connectionMode?: WhatsAppConnectionMode | string | null
+}
+
+export async function deliverWhatsAppCsat(channel: OutboundChannel, recipient: string, body: string, surveyId: string) {
+  if (channel.channelType !== 'whatsapp' || !channel.providerAccountId || channel.connectionMode === 'qr_unofficial') {
+    throw new Error('unsupported_outbound_channel: whatsapp_csat')
+  }
+  const credentials = await resolveOwnedChannelCredentials(channel)
+  try {
+    await sendCentralButtons({
+      accessToken: requireCredential(credentials, 'meta', 'access_token'),
+      phoneNumberId: channel.providerAccountId,
+      graphBaseUrl: requireGraphBase(),
+    }, recipient, body, csatButtons(surveyId))
+  } catch (error) {
+    if (error instanceof CentralMetaError) throw new MetaApiError('WhatsApp CSAT delivery failed', error.status)
+    throw error
+  }
 }
 
 /**

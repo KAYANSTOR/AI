@@ -76,7 +76,7 @@ function useVisiblePolling(callback: () => void, enabled: boolean) {
   }, [enabled])
 }
 
-export function PersonalExecutiveApp({ initialTab, showTrainer = false }: { initialTab: AssistantTab; showTrainer?: boolean }) {
+export function PersonalExecutiveApp({ initialTab, showTrainer = false, personal = true }: { initialTab: AssistantTab; showTrainer?: boolean; personal?: boolean }) {
   const router = useRouter()
   const [tab, setTab] = useState<AssistantTab>(initialTab)
   const [agent, setAgent] = useState<AgentData | null>(null)
@@ -142,8 +142,8 @@ export function PersonalExecutiveApp({ initialTab, showTrainer = false }: { init
         </button>
       </section>
 
-      <TabsList className="grid w-full grid-cols-4">
-        {TAB_LABELS.map(({ id, label, icon: Icon }) => (
+      <TabsList className={cx('grid w-full', personal ? 'grid-cols-4' : 'grid-cols-2')}>
+        {TAB_LABELS.filter(({ id }) => personal || id === 'chat' || id === 'tasks').map(({ id, label, icon: Icon }) => (
           <TabsTrigger key={id} active={tab === id} onClick={() => selectTab(id)} aria-controls={`pa-panel-${id}`} id={`pa-tab-${id}`} className="inline-flex items-center justify-center gap-1.5 text-xs sm:text-sm">
             <Icon size={15} aria-hidden />
             <span>{label}</span>
@@ -153,10 +153,10 @@ export function PersonalExecutiveApp({ initialTab, showTrainer = false }: { init
       </TabsList>
 
       <div role="tabpanel" id={`pa-panel-${tab}`} aria-labelledby={`pa-tab-${tab}`}>
-        {tab === 'chat' ? <ChatTab /> : null}
+        {tab === 'chat' ? <ChatTab personal={personal} /> : null}
         {tab === 'tasks' ? <TasksTab data={agent} onChanged={loadAgent} /> : null}
-        {tab === 'memory' ? <div className="space-y-4">{showTrainer ? <TrainerPanel /> : null}<PersonalAssistantMemoryPanel /></div> : null}
-        {tab === 'tools' ? <ToolsPanel /> : null}
+        {personal && tab === 'memory' ? <div className="space-y-4">{showTrainer ? <TrainerPanel /> : null}<PersonalAssistantMemoryPanel /></div> : null}
+        {personal && tab === 'tools' ? <ToolsPanel /> : null}
       </div>
 
       <Dialog
@@ -247,7 +247,7 @@ function WhatsAppLinkCard() {
   )
 }
 
-function ChatTab() {
+function ChatTab({ personal }: { personal: boolean }) {
   const [messages, setMessages] = useState<ThreadMessage[]>([])
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
@@ -356,7 +356,7 @@ function ChatTab() {
 
   return (
     <div className="space-y-3">
-      <WhatsAppLinkCard />
+      {personal ? <WhatsAppLinkCard /> : null}
       <section aria-label="المحادثة الموحدة" className="rounded-2xl border border-border bg-surface">
         <div className="max-h-[55dvh] min-h-56 space-y-2 overflow-y-auto overscroll-contain p-3" aria-live="polite">
           {messages.length === 0 ? <p className="py-10 text-center text-sm text-text-muted">ابدأ بطلب مثل: «ذكّرني بدفع الإيجار يوم الخميس».</p> : null}

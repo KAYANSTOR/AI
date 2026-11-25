@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { requirePersonalAssistantApi } from '@/lib/personal-assistant/api-context'
+import { requireExecutiveAssistantApi } from '@/lib/personal-assistant/api-context'
 import { appendThreadMessage, listThread } from '@/lib/personal-assistant/thread'
 import { runPersonalAssistantTurn } from '@/lib/personal-assistant/runtime'
 import { buildEngineDeps, mirrorToWhatsApp } from '@/lib/central-bot/deps'
@@ -14,7 +14,7 @@ const MAX_CHARS = 2000
 
 /** Unified thread: web + WhatsApp messages of this owner only (RLS-scoped read). */
 export async function GET() {
-  const access = await requirePersonalAssistantApi()
+  const access = await requireExecutiveAssistantApi()
   if (access instanceof NextResponse) return access
   try {
     const [messages, policy] = await Promise.all([
@@ -31,7 +31,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const access = await requirePersonalAssistantApi()
+  const access = await requireExecutiveAssistantApi()
   if (access instanceof NextResponse) return access
   const body = await request.json().catch(() => null) as { text?: unknown } | null
   const text = typeof body?.text === 'string' ? body.text.trim() : ''

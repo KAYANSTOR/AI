@@ -1,5 +1,5 @@
 import type { DbClient } from '@/lib/db/client'
-import { deliverOutbound, deliverWhatsAppTemplate, isPermanentOutboundError, recordDeliveredOutboundMessage } from '@/lib/runtime/outbound'
+import { deliverOutbound, deliverWhatsAppCsat, deliverWhatsAppTemplate, isPermanentOutboundError, recordDeliveredOutboundMessage } from '@/lib/runtime/outbound'
 import {
   OUTBOX_MAX_ATTEMPTS,
   OUTBOX_STALE_LOCK_MS,
@@ -94,6 +94,7 @@ export async function drainOutbox(
       }
 
       const conversationId = typeof payload.conversation_id === 'string' ? payload.conversation_id : null
+      const surveyId = event.event_type === 'conversation.csat_requested' ? String(payload.survey_id ?? '') : null
       const explicitTemplate = payload.whatsapp_template as WhatsAppTemplatePayload | undefined
       let templateToSend: WhatsAppTemplatePayload | undefined
       let approvedTemplateRow: WhatsAppTemplateRow | null = null
@@ -116,6 +117,11 @@ export async function drainOutbox(
             explicitTemplate: explicitTemplate ?? null,
             templateVariables: payload.template_variables,
           })
+          if (surveyId && (plan.kind !== 'text' || !channel.is_active)) {
+            await db.from('outbox_events').update({ status: 'cancelled', locked_at: null, last_error: 'csat_unavailable' })
+              .eq('id', event.id).eq('status', 'processing')
+            continue
+          }
           if (plan.kind === 'blocked') {
             await db.from('outbox_events').update({
               status: 'dead_letter',
@@ -165,7 +171,9 @@ export async function drainOutbox(
         externalIdentifier: channel.external_identifier,
         connectionMode: channel.connection_mode as string | null,
       }
-      if (templateToSend) {
+      if (surveyId) {
+        await deliverWhatsAppCsat(outboundChannel, event.recipient, body, surveyId)
+      } else if (templateToSend) {
         await deliverWhatsAppTemplate(db, { channel: outboundChannel, recipient: event.recipient, template: templateToSend })
       } else {
         await deliverOutbound(db, {
