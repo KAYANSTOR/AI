@@ -18,7 +18,8 @@ const nextConfig: NextConfig = {
     return securityHeaders();
   },
   async rewrites() {
-    const ownerConsole = process.env.OWNER_CONSOLE_INTERNAL_URL || 'http://127.0.0.1:8090';
+    const ownerConsole = (process.env.OWNER_CONSOLE_URL?.trim() || process.env.OWNER_CONSOLE_INTERNAL_URL || 'http://127.0.0.1:8090')
+      .replace(/\/+$/, '');
     return [
       { source: '/admin', destination: `${ownerConsole}/admin` },
       { source: '/admin/:path*', destination: `${ownerConsole}/admin/:path*` },

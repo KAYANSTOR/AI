@@ -1,5 +1,4 @@
 import { spawn } from 'node:child_process'
-import path from 'node:path'
 
 const root = process.cwd()
 const port = String(process.env.PORT || '8080')
@@ -49,14 +48,15 @@ process.on('SIGINT', () => stop(0))
 launch('whatsapp_gateway', ['apps/whatsapp-gateway/src/server.js'])
 launch('inbound_worker', ['--import', 'tsx', 'src/lib/runtime/inbound-worker.ts'], `${root}/apps/web`)
 
-const ownerConsoleEnv = {
-  ...process.env,
-  PORT: String(process.env.OWNER_CONSOLE_PORT || '8090'),
-  CREDENTIAL_ENCRYPTION_KEY: process.env.OWNER_CONSOLE_CREDENTIAL_ENCRYPTION_KEY || '',
-  OWNER_EMAIL: process.env.OWNER_CONSOLE_OWNER_EMAIL || 'jarallhalkboudi@gmail.com',
-  OWNER_PASSCODE: process.env.OWNER_CONSOLE_OWNER_PASSCODE || '',
+if (!process.env.OWNER_CONSOLE_URL?.trim()) {
+  const ownerConsoleEnv = {
+    ...process.env,
+    PORT: String(process.env.OWNER_CONSOLE_PORT || '8090'),
+    CREDENTIAL_ENCRYPTION_KEY: process.env.OWNER_CONSOLE_CREDENTIAL_ENCRYPTION_KEY || '',
+    OWNER_EMAIL: process.env.OWNER_CONSOLE_OWNER_EMAIL || 'jarallhalkboudi@gmail.com',
+    OWNER_PASSCODE: process.env.OWNER_CONSOLE_OWNER_PASSCODE || '',
+  }
+  launch('owner_console', ['--import', 'tsx', 'server.ts'], `${root}/apps/owner-console`, ownerConsoleEnv)
 }
-// The owner console uses the same canonical Railway PostgreSQL URL for its control plane and platform data.
-launch('owner_console', ['--import', 'tsx', 'server.ts'], `${root}/apps/owner-console`, ownerConsoleEnv)
 
 launch('kayan_web', [`${root}/node_modules/next/dist/bin/next`, 'start', '-H', '0.0.0.0', '-p', port], `${root}/apps/web`)
