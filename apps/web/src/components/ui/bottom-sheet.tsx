@@ -6,8 +6,8 @@ import { X } from 'lucide-react'
 import { cx } from './cx'
 import { useHistoryDismiss } from '@/hooks/use-history-dismiss'
 
-// Only the top-most sheet reacts to Esc when sheets are nested (e.g. a KayanSelect inside the payment sheet).
-const openSheets: string[] = []
+let openSheetCount = 0
+let previousBodyOverflow = ''
 
 /**
  * Mobile-first bottom sheet (centered card from `sm`). z-50, closes on Back,
@@ -34,47 +34,46 @@ export function BottomSheet({
   bodyClassName?: string
 }) {
   const titleId = useId()
+  const descriptionId = useId()
+  const dialogRef = useRef<HTMLDialogElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
   const changeRef = useRef(onOpenChange)
   useEffect(() => { changeRef.current = onOpenChange })
   useHistoryDismiss(open, () => changeRef.current(false))
 
   useEffect(() => {
-    if (!open) return
+    const dialog = dialogRef.current
+    if (!open || !dialog) return
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null
-    const overflow = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    openSheets.push(titleId)
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && openSheets[openSheets.length - 1] === titleId) changeRef.current(false)
+    if (openSheetCount === 0) {
+      previousBodyOverflow = document.body.style.overflow
+      document.body.style.overflow = 'hidden'
     }
-    window.addEventListener('keydown', onKey)
-    const focusTimer = window.setTimeout(() => {
-      const target = panelRef.current?.querySelector<HTMLElement>('[data-autofocus], input, button:not([data-sheet-close])')
-      target?.focus({ preventScroll: true })
-    }, 30)
+    openSheetCount++
+    // The browser top layer keeps a sheet opened from inside a native dialog interactive.
+    dialog.showModal()
+    panelRef.current?.querySelector<HTMLElement>('[data-autofocus], input, button:not([data-sheet-close])')
+      ?.focus({ preventScroll: true })
     return () => {
-      window.clearTimeout(focusTimer)
-      window.removeEventListener('keydown', onKey)
-      const index = openSheets.lastIndexOf(titleId)
-      if (index >= 0) openSheets.splice(index, 1)
-      document.body.style.overflow = overflow
+      dialog.close()
+      if (--openSheetCount === 0) document.body.style.overflow = previousBodyOverflow
       previous?.focus?.({ preventScroll: true })
     }
-  }, [open, titleId])
+  }, [open])
 
   if (!open || typeof document === 'undefined') return null
 
   return createPortal(
-    <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-[color-mix(in_srgb,var(--brand-secondary)_55%,transparent)] sm:items-center sm:p-4"
+    <dialog
+      ref={dialogRef}
+      aria-labelledby={titleId}
+      aria-describedby={description ? descriptionId : undefined}
+      className="fixed inset-0 z-50 m-0 hidden h-dvh max-h-none w-full max-w-none items-end justify-center border-0 bg-[color-mix(in_srgb,var(--brand-secondary)_55%,transparent)] p-0 open:flex sm:items-center sm:p-4"
+      onCancel={(event) => { event.preventDefault(); onOpenChange(false) }}
       onMouseDown={(event) => { if (event.target === event.currentTarget) onOpenChange(false) }}
     >
       <div
         ref={panelRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
         className={cx(
           'kayan-sheet flex max-h-[88dvh] w-full flex-col overflow-hidden rounded-t-[26px] border border-border bg-surface text-text shadow-raised sm:max-w-lg sm:rounded-[26px]',
           className
@@ -84,7 +83,7 @@ export function BottomSheet({
         <div className="flex shrink-0 items-start justify-between gap-3 border-b border-border px-4 pb-3 pt-3 sm:px-5">
           <div className="min-w-0">
             <h2 id={titleId} className="text-base font-extrabold text-secondary">{title}</h2>
-            {description ? <div className="mt-1 text-xs leading-5 text-text-muted">{description}</div> : null}
+            {description ? <div id={descriptionId} className="mt-1 text-xs leading-5 text-text-muted">{description}</div> : null}
           </div>
           <button
             type="button"
@@ -103,7 +102,7 @@ export function BottomSheet({
           </div>
         ) : null}
       </div>
-    </div>,
+    </dialog>,
     document.body
   )
 }

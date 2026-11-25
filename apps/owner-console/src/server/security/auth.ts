@@ -6,7 +6,19 @@ export type AdminRole = 'platform_owner' | 'super_admin' | 'ops_auditor'
 export interface AuthenticatedAdmin { id:string; email:string; fullName:string; role:AdminRole; permissions:string[]; sessionId:string; mfaEnabled:boolean }
 declare global { namespace Express { interface Request { ownerAdmin?: AuthenticatedAdmin } } }
 const sessions = new Map<string, AuthenticatedAdmin>(); let pool: ReturnType<typeof postgres>|undefined
-function sql(){if(pool)return pool;const url=process.env.DATABASE_URL?.trim();if(!url)throw new Error('DATABASE_URL غير مهيأ.');const host=new URL(url).hostname;pool=postgres(url,{ssl:process.env.DATABASE_SSL==='require'?'require':host.endsWith('.railway.internal')?false:'require',prepare:false,max:5,connect_timeout:10,connection:{TimeZone:'UTC',application_name:'kayan-owner-auth'}});return pool}
+function sql() {
+  if (pool) return pool
+  const url = process.env.DATABASE_URL?.trim()
+  if (!url) throw new Error('DATABASE_URL غير مهيأ.')
+  const host = new URL(url).hostname
+  const sslMode = process.env.DATABASE_SSL
+  const ssl = sslMode === 'require' ? 'require' : sslMode === 'disable' || host.endsWith('.railway.internal') ? false : 'require'
+  pool = postgres(url, {
+    ssl, prepare: false, max: 5, connect_timeout: 10,
+    connection: { TimeZone: 'UTC', application_name: 'kayan-owner-auth' },
+  })
+  return pool
+}
 const SESSION_DAYS = 30
 const SESSION_MAX_AGE_SECONDS = SESSION_DAYS * 24 * 60 * 60
 const ownerEmail=()=> (process.env.OWNER_EMAIL?.trim()||process.env.OWNER_CONSOLE_OWNER_EMAIL?.trim()||'platform_owner@kayan.ai').toLowerCase(); const permissions=['users:write','billing:write','ai:write','ops:write','settings:write']
@@ -14,9 +26,24 @@ function rowAdmin(r:any,sessionId=''):AuthenticatedAdmin{const role=r.role as Ad
 const ownerPasscode=()=>process.env.OWNER_PASSCODE?.trim()||process.env.OWNER_CONSOLE_OWNER_PASSCODE?.trim()||''
 async function bootstrap(){const db=sql();const [c]=await db`SELECT COUNT(*)::int count FROM platform_admins`;if(Number(c?.count)!==0)return;const pass=ownerPasscode();if(!pass)return;const [r]=await db`INSERT INTO platform_admins(email,full_name,role,permissions,password_hash) VALUES(${ownerEmail()},'Platform Owner','platform_owner',${JSON.stringify(permissions)}::text::jsonb,${hashPassword(pass)}) ON CONFLICT(email) DO NOTHING RETURNING id`;if(r)console.info('owner_console_admin_bootstrap_completed')}
 export function getClientIp(req:Request){const f=req.headers['x-forwarded-for'];return typeof f==='string'&&f?f.split(',')[0].trim():req.socket?.remoteAddress||'unknown'}
-export async function getAuthStatus(){await bootstrap();const [r]=await sql()`SELECT id,email FROM platform_admins WHERE role='platform_owner' AND status='active' LIMIT 1`;return{needsFirstRunClaim:!r&&!ownerPasscode(),envPasscodeConfigured:Boolean(ownerPasscode()),defaultOwnerEmail:r?.email??ownerEmail(),ownerExists:Boolean(r)}}
+function allowsLocalOwnerClaim() {
+  return process.env.NODE_ENV !== 'production' && !ownerPasscode()
+}
+export async function getAuthStatus(){await bootstrap();const [r]=await sql()`SELECT id,email FROM platform_admins WHERE role='platform_owner' AND status='active' LIMIT 1`;return{needsFirstRunClaim:!r&&allowsLocalOwnerClaim(),envPasscodeConfigured:Boolean(ownerPasscode()),defaultOwnerEmail:r?.email??ownerEmail(),ownerExists:Boolean(r)}}
 export async function writeAuditLog(p:{actor:{id:string;email:string;role:string};action:string;entityType:string;entityId:string;summary:string;before?:unknown;after?:unknown;ipAddress?:string}){try{await sql()`INSERT INTO platform_audit_logs(actor_id,actor_email,actor_role,action,entity_type,entity_id,summary,before_json,after_json,ip_address) VALUES(${p.actor.id}::uuid,${p.actor.email},${p.actor.role},${p.action},${p.entityType},${p.entityId},${p.summary},${p.before==null?null:JSON.stringify(p.before)}::text::jsonb,${p.after==null?null:JSON.stringify(p.after)}::text::jsonb,${p.ipAddress??null})`}catch(e){console.error('owner_audit_log_failed',e)}}
-export async function claimFirstRunOwner(p:{email:string;fullName:string;password:string;ipAddress:string;userAgent:string}){const [c]=await sql()`SELECT COUNT(*)::int count FROM platform_admins`;if(Number(c?.count)!==0)throw new Error('تم تفعيل حساب المالك مسبقاً.');if(p.password.length<8)throw new Error('Password must be at least 8 characters long.');const [r]=await sql()`INSERT INTO platform_admins(email,full_name,role,permissions,password_hash) VALUES(${p.email.trim().toLowerCase()},${p.fullName.trim()||'Platform Owner'},'platform_owner',${JSON.stringify(permissions)}::text::jsonb,${hashPassword(p.password)}) RETURNING id,email,full_name,role,permissions`;return{admin:rowAdmin(r),message:'تم إنشاء حساب مالك المنصة.'}}
+export async function claimFirstRunOwner(p:{email:string;fullName:string;password:string;ipAddress:string;userAgent:string}) {
+  if (!allowsLocalOwnerClaim()) throw new Error('تهيئة حساب المالك تتم من إعدادات الخادم.')
+  if (p.password.length < 8) throw new Error('Password must be at least 8 characters long.')
+  return sql().begin(async tx => {
+    await tx`SELECT pg_advisory_xact_lock(hashtext('kayan_owner_initialization'))`
+    const [c] = await tx`SELECT COUNT(*)::int count FROM platform_admins`
+    if (Number(c?.count) !== 0) throw new Error('تم تفعيل حساب المالك مسبقاً.')
+    const [r] = await tx`INSERT INTO platform_admins(email,full_name,role,permissions,password_hash)
+      VALUES (${p.email.trim().toLowerCase()}, ${p.fullName.trim() || 'Platform Owner'}, 'platform_owner',
+        ${JSON.stringify(permissions)}::text::jsonb, ${hashPassword(p.password)}) RETURNING id,email,full_name,role,permissions`
+    return { admin: rowAdmin(r), message: 'تم إنشاء حساب مالك المنصة.' }
+  })
+}
 export function setSessionCookie(res:Response,token:string,expiresAt:string){const secure=process.env.NODE_ENV==='production'?' Secure;':'';res.setHeader('Set-Cookie',`owner_session=${encodeURIComponent(token)}; Max-Age=${SESSION_MAX_AGE_SECONDS}; Expires=${new Date(expiresAt).toUTCString()}; HttpOnly; SameSite=Lax; Path=/${secure}`)}
 export function clearSessionCookie(res:Response){const secure=process.env.NODE_ENV==='production'?' Secure;':'';res.setHeader('Set-Cookie',`owner_session=; Max-Age=0; Expires=${new Date(0).toUTCString()}; HttpOnly; SameSite=Lax; Path=/${secure}`)}
 function cookieToken(req:Request){const raw=String(req.headers.cookie||'');const match=raw.split(';').map((v)=>v.trim()).find((v)=>v.startsWith('owner_session='));return match?decodeURIComponent(match.slice('owner_session='.length)):''}

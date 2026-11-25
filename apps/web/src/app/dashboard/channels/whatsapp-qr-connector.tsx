@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useRef, useState, useTransition } from 'react'
+import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { AlertTriangle, CheckCircle2, Link2, Loader2, QrCode, Trash2, Pencil, Smartphone } from 'lucide-react'
 import { startWhatsAppQrSessionAction, getWhatsAppQrSessionStatusAction, disconnectWhatsAppQrSessionAction, resetWhatsAppQrChannelAction } from './actions'
@@ -160,7 +161,7 @@ export function WhatsAppQrConnector({ disabled, connectionMode, publicNumber }: 
           </button>
           {session?.status === 'qr_required' && session.qrDataUrl ? (
             <div className="mx-auto flex max-w-sm flex-col items-center gap-3 rounded-xl border border-border bg-white p-4">
-              <img src={session.qrDataUrl} alt="رمز QR لربط واتساب" className="h-auto w-full max-w-[280px]" />
+              <Image unoptimized src={session.qrDataUrl} width={280} height={280} alt="رمز QR لربط واتساب" className="h-auto w-full max-w-[280px]" />
               <p className="text-center text-xs font-semibold text-gray-800">امسح الرمز من خيار الأجهزة المرتبطة في تطبيق واتساب.</p>
             </div>
           ) : null}

@@ -9,8 +9,8 @@
 --       anon           - visitors without a session
 --       authenticated  - signed-in users (RLS applies)
 --       service_role   - trusted server code: webhooks, cron, admin tasks (BYPASSRLS)
---   * default privileges so tables created by migrations are reachable by those roles.
---     Row-level security is what restricts rows; table grants alone expose nothing.
+--   * default privileges for legacy tables that rely on their RLS policies.
+--     Migrations can narrow those grants, including at column level.
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
@@ -82,9 +82,10 @@ GRANT EXECUTE ON FUNCTION auth.role() TO anon, authenticated, service_role;
 REVOKE ALL ON auth.users FROM anon, authenticated;
 GRANT SELECT ON auth.users TO service_role;
 
-ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON TABLES FROM anon, authenticated;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO anon, authenticated;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO service_role;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authenticated, service_role;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON FUNCTIONS TO anon, authenticated, service_role;
 
-GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO anon, authenticated, service_role;
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;

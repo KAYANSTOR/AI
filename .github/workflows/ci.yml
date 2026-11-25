@@ -69,5 +69,7 @@ jobs:
         run: npm run db:migrate
       - name: Verify knowledge runtime
         run: node packages/db/scripts/verify-knowledge-runtime.mjs
+      - name: Verify Phase 5 RLS on PostgreSQL
+        run: node packages/db/scripts/verify-phase5-rls.mjs
       - name: Verify migrations
         run: npm run db:status

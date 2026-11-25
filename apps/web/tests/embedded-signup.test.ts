@@ -1,12 +1,8 @@
 import { describe, expect, test } from 'bun:test'
 import type { DbClient } from '@/lib/db/client'
 import {
-  CompleteEmbeddedSignupInputSchema,
-  EmbeddedSignupSessionSchema,
   createEmbeddedSignupOAuthState,
-  debugCustomerAccessToken,
   ensureBusinessId,
-  hasMetaWabaAccess,
   verifyEmbeddedSignupOAuthState,
 } from '@/lib/channels/embedded-signup'
 import { createFakeDb } from './support/fake-db'

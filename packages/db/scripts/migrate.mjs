@@ -21,6 +21,7 @@ const HERE = dirname(fileURLToPath(import.meta.url))
 const ROOT = join(HERE, '..')
 const MIGRATIONS_DIR = join(ROOT, 'migrations')
 const BOOTSTRAP = join(ROOT, 'bootstrap.sql')
+const REPAIR_LEGACY_GRANTS = join(ROOT, 'repair-legacy-grants.sql')
 const FILE_PATTERN = /^(\d{4})_([a-z0-9_]+)\.sql$/i
 const LOCK = `hashtext('frontdesk_schema_migrations')`
 
@@ -153,8 +154,8 @@ export async function runMigrations(argv = []) {
       }
     }
 
-    // Re-run grants so objects created by migrations are reachable by the request roles.
-    await sql.begin((tx) => tx.unsafe(readFileSync(BOOTSTRAP, 'utf-8')))
+    // Repair databases bootstrapped with the old schema-wide grants, including upgrades with no pending migration.
+    await sql.begin((tx) => tx.unsafe(readFileSync(REPAIR_LEGACY_GRANTS, 'utf-8')))
     const latest = Math.max(-1, ...[...(await readApplied(sql)).values()].filter((r) => !r.failed_at).map((r) => Number(r.version)))
     log(`Database is at version ${String(latest).padStart(4, '0')}.`)
   } finally {

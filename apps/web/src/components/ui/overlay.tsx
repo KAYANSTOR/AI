@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, type ReactNode } from 'react'
+import { useEffect, useId, useRef, type ReactNode } from 'react'
 import { X } from 'lucide-react'
 import { IconButton } from './button'
 import { cx } from './cx'
@@ -46,20 +46,24 @@ export function Dialog({
   className,
 }: OverlayProps) {
   const ref = useDialog(open, onOpenChange)
+  const titleId = useId()
+  const descriptionId = useId()
   return (
     <dialog
       ref={ref}
+      aria-labelledby={titleId}
+      aria-describedby={description ? descriptionId : undefined}
       onCancel={() => onOpenChange(false)}
       onClose={() => onOpenChange(false)}
       className={cx(
-        'dialog-size m-auto max-h-[calc(100dvh-2rem)] overflow-y-auto overscroll-contain rounded-card border border-border bg-surface p-0 text-text shadow-overlay backdrop:bg-overlay/70 backdrop:backdrop-blur-sm',
+        'dialog-size z-50 m-auto max-h-[calc(100dvh-2rem)] overflow-y-auto overscroll-contain rounded-card border border-border bg-surface p-0 text-text shadow-overlay backdrop:bg-overlay/70 backdrop:backdrop-blur-sm',
         className
       )}
     >
       <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-border bg-surface p-5">
         <div>
-          <h2 className="type-heading-3">{title}</h2>
-          {description ? <p className="mt-1 type-body-small text-text-muted">{description}</p> : null}
+          <h2 id={titleId} className="type-heading-3">{title}</h2>
+          {description ? <p id={descriptionId} className="mt-1 type-body-small text-text-muted">{description}</p> : null}
         </div>
         <IconButton variant="ghost" size="sm" label="إغلاق" icon={<X className="h-icon-sm w-icon-sm" />} onClick={() => onOpenChange(false)} />
       </div>
@@ -79,21 +83,25 @@ export function Drawer({
   className,
 }: OverlayProps) {
   const ref = useDialog(open, onOpenChange)
+  const titleId = useId()
+  const descriptionId = useId()
   return (
     <dialog
       ref={ref}
+      aria-labelledby={titleId}
+      aria-describedby={description ? descriptionId : undefined}
       onCancel={() => onOpenChange(false)}
       onClose={() => onOpenChange(false)}
       className={cx(
-        'drawer-size ms-auto me-0 h-dvh max-h-none translate-x-0 border-0 border-s border-border bg-surface p-0 text-text shadow-overlay backdrop:bg-overlay/70 backdrop:backdrop-blur-sm',
+        'drawer-size z-50 ms-auto me-0 h-dvh max-h-none translate-x-0 border-0 border-s border-border bg-surface p-0 text-text shadow-overlay backdrop:bg-overlay/70 backdrop:backdrop-blur-sm',
         className
       )}
     >
       <div className="flex h-full flex-col">
         <div className="flex items-start justify-between gap-4 border-b border-border p-5 pt-safe">
           <div>
-            <h2 className="type-heading-3">{title}</h2>
-            {description ? <p className="mt-1 type-body-small text-text-muted">{description}</p> : null}
+            <h2 id={titleId} className="type-heading-3">{title}</h2>
+            {description ? <p id={descriptionId} className="mt-1 type-body-small text-text-muted">{description}</p> : null}
           </div>
           <IconButton variant="ghost" size="sm" label="إغلاق" icon={<X className="h-icon-sm w-icon-sm" />} onClick={() => onOpenChange(false)} />
         </div>
