@@ -26,16 +26,37 @@ jobs:
           cache: npm
       - uses: oven-sh/setup-bun@v2
       - name: Install
+        id: web_install
         run: npm ci
       - name: Diff Whitespace Check
         run: git diff --check HEAD^ HEAD
       - name: Owner Console Typecheck
         run: npm run lint --workspace @kayan-ai/owner-console
       - name: Lint
-        run: npm run lint
+        run: |
+          report="$RUNNER_TEMP/web-eslint.json"
+          lint_status=0
+          npm run lint --workspace=apps/web -- --format json --output-file "$report" || lint_status=$?
+          if [ -f "$report" ]; then
+            node --input-type=module - "$report" <<'JS'
+          import { readFileSync } from 'node:fs'
+          import { relative } from 'node:path'
+          const report = JSON.parse(readFileSync(process.argv[2], 'utf8'))
+          for (const { filePath, messages } of report) {
+            for (const { severity, ruleId, line, column } of messages) {
+              if (severity !== 2) continue
+              const file = relative(process.cwd(), filePath)
+              console.log(`::error file=${file},line=${line ?? 1},col=${column ?? 1}::ESLint: ${ruleId ?? 'parser error'}`)
+            }
+          }
+          JS
+          fi
+          exit "$lint_status"
       - name: Typecheck
+        if: ${{ !cancelled() && steps.web_install.outcome == 'success' }}
         run: npm run typecheck
       - name: Unit tests
+        if: ${{ !cancelled() && steps.web_install.outcome == 'success' }}
         run: npm test
       - name: Build
         run: npm run build

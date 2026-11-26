@@ -8,7 +8,7 @@
  */
 
 /** Digits-only comparison key so JID formatting differences never leak past. */
-function phoneDigits(value) {
+export function phoneDigits(value) {
   return String(value ?? '').replace(/\D/g, '')
 }
 
@@ -17,14 +17,14 @@ function phoneDigits(value) {
  * @param {string | null} phone raw phone digits from the WhatsApp JID
  * @returns {boolean}
  */
-function isIgnoredPhone(ignored, phone) {
+export function isIgnoredPhone(ignored, phone) {
   const digits = phoneDigits(phone)
   if (!digits) return false
   return ignored.has(digits)
 }
 
 /** Normalize a list of raw numbers into a digit-only Set for isIgnoredPhone. */
-function ignoredPhoneNumbers(list) {
+export function ignoredPhoneNumbers(list) {
   const set = new Set()
   for (const entry of Array.isArray(list) ? list : []) {
     const digits = phoneDigits(entry)
@@ -32,5 +32,3 @@ function ignoredPhoneNumbers(list) {
   }
   return set
 }
-
-module.exports = { isIgnoredPhone, ignoredPhoneNumbers, phoneDigits }
