@@ -6,6 +6,7 @@ import { NavigationProgress } from './navigation-progress'
 import { MobileTabBar } from './mobile-tab-bar'
 import { OfflineBanner } from './offline-banner'
 import { DashboardEntrySplash } from './dashboard-entry-splash'
+import { canSearchBusiness } from '@/lib/dashboard/navigation-policy'
 
 export function DashboardShell({
   children,
@@ -14,6 +15,8 @@ export function DashboardShell({
   businessTypeId,
   timezone,
   personalAssistantEnabled = false,
+  enabledCapabilities,
+  role,
 }: {
   children: React.ReactNode
   setupBanner?: React.ReactNode
@@ -21,6 +24,8 @@ export function DashboardShell({
   businessTypeId: string | null
   timezone: string
   personalAssistantEnabled?: boolean
+  enabledCapabilities: string[]
+  role: string
 }) {
   return (
     <div className="dashboard-viewport" dir="rtl">
@@ -30,14 +35,14 @@ export function DashboardShell({
         <NavigationProgress />
       </Suspense>
       <div className="dashboard-app-shell">
-        <Header organizationName={organizationName} businessTypeId={businessTypeId} timezone={timezone} />
+        <Header organizationName={organizationName} businessTypeId={businessTypeId} timezone={timezone} showBusinessSearch={canSearchBusiness({ businessTypeId, enabledCapabilities })} />
         {setupBanner ? <div className="dashboard-setup-banner">{setupBanner}</div> : null}
         <main className="dashboard-main-scroll" id="dashboard-main">
           <div className="dashboard-page-content animate-page-enter">{children}</div>
         </main>
       </div>
       {/* Fixed to the viewport, outside the overflow-hidden app frame. */}
-      <MobileTabBar businessTypeId={businessTypeId} personalAssistantEnabled={personalAssistantEnabled} />
+      <MobileTabBar businessTypeId={businessTypeId} personalAssistantEnabled={personalAssistantEnabled} enabledCapabilities={enabledCapabilities} role={role} />
     </div>
   )
 }

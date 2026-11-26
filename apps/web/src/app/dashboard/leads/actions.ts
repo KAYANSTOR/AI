@@ -1,8 +1,8 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { getCurrentOrg } from '@/lib/org'
-import { createClient } from '@/lib/db/server'
+import { requireBusinessDashboardCapability } from '@/lib/capabilities/guard'
+import { actionErrorMessage } from '@/lib/i18n/action-error'
 import { transitionLead, LeadTransitionError } from '@/lib/leads'
 
 export type LeadActionResult = { ok: true } | { ok: false; error: string }
@@ -13,13 +13,10 @@ export async function updateLeadStatusAction(input: {
   nextAction?: string | null
   ownerMemberId?: string | null
 }): Promise<LeadActionResult> {
-  const org = await getCurrentOrg()
-  if (!org) return { ok: false, error: 'Unauthorized' }
-  if (org.role === 'read_only') return { ok: false, error: 'read_only role cannot update leads' }
-
-  const db = await createClient()
-
   try {
+    const org = await requireBusinessDashboardCapability('lead_capture')
+    if (org.role === 'read_only') return { ok: false, error: 'ليس لديك صلاحية تعديل الفرص.' }
+    const db = org.db
     await transitionLead(db, {
       organizationId: org.organizationId,
       leadId: input.leadId,
@@ -32,7 +29,7 @@ export async function updateLeadStatusAction(input: {
     if (error instanceof LeadTransitionError) {
       return { ok: false, error: error.message }
     }
-    return { ok: false, error: error instanceof Error ? error.message : 'update failed' }
+    return { ok: false, error: actionErrorMessage(error, 'تعذّر تحديث الفرصة.') }
   }
 
   revalidatePath('/dashboard/leads')

@@ -9,50 +9,52 @@ import {
   CalendarPlus, FilePlus2, ClipboardList, Megaphone, Bot, Brain, ListTodo, Sun,
 } from 'lucide-react'
 import { getVertical } from '@/lib/verticals/registry'
+import { dashboardNavigation, type NavigationAccess, type TabId, type QuickActionId } from '@/lib/dashboard/navigation-policy'
 
-const tabs = [
-  { href: '/dashboard', label: 'الرئيسية', icon: Home },
-  { href: '/dashboard/contacts', label: 'العملاء', icon: Contact },
-  { href: '/dashboard/analytics', label: 'التقارير', icon: BarChart3 },
-  { href: '/dashboard/conversations', label: 'الوارد', icon: MessageSquareText },
-] as const
+const tabs = {
+  home: { href: '/dashboard', label: 'الرئيسية', icon: Home },
+  contacts: { href: '/dashboard/contacts', label: 'العملاء', icon: Contact },
+  appointments: { href: '/dashboard/appointments', label: 'المواعيد', icon: CalendarPlus },
+  orders: { href: '/dashboard/orders', label: 'الطلبات', icon: ClipboardList },
+  inbox: { href: '/dashboard/conversations', label: 'الوارد', icon: MessageSquareText },
+  analytics: { href: '/dashboard/analytics', label: 'التقارير', icon: BarChart3 },
+  assistant: { href: '/dashboard/assistant', label: 'المساعد', icon: Bot },
+  tasks: { href: '/dashboard/assistant/tasks', label: 'مهامي', icon: ListTodo },
+  billing: { href: '/dashboard/billing', label: 'الباقات', icon: FilePlus2 },
+} satisfies Record<TabId, { href: string; label: string; icon: typeof Home }>
 
-const quickActions = [
-  { href: '/dashboard/contacts', label: 'إضافة عميل', description: 'سجّل بيانات عميل جديد', icon: Contact },
-  { href: '/dashboard/appointments', label: 'موعد جديد', description: 'أضف موعداً للنشاط', icon: CalendarPlus },
-  { href: '/dashboard/quotes/new', label: 'عرض سعر', description: 'أنشئ عرضاً للعميل', icon: FilePlus2 },
-  { href: '/dashboard/orders/new', label: 'طلب جديد', description: 'سجّل طلباً جديداً', icon: ClipboardList },
-  { href: '/dashboard/campaigns', label: 'حملة تواصل', description: 'جهّز حملة كمسودة', icon: Megaphone },
-  { href: '/dashboard/agent', label: 'إعداد المساعد', description: 'راجع الوكيل الذكي', icon: Bot },
-]
+const quickActions = {
+  contacts: { href: '/dashboard/contacts', label: 'إضافة عميل', description: 'سجّل بيانات عميل جديد', icon: Contact },
+  appointments: { href: '/dashboard/appointments', label: 'موعد جديد', description: 'أضف موعداً للنشاط', icon: CalendarPlus },
+  quotes: { href: '/dashboard/quotes/new', label: 'عرض سعر', description: 'أنشئ عرضاً للعميل', icon: FilePlus2 },
+  orders: { href: '/dashboard/orders/new', label: 'طلب جديد', description: 'سجّل طلباً جديداً', icon: ClipboardList },
+  campaigns: { href: '/dashboard/campaigns', label: 'حملة تواصل', description: 'جهّز حملة كمسودة', icon: Megaphone },
+  agent: { href: '/dashboard/agent', label: 'إعداد المساعد', description: 'راجع الوكيل الذكي', icon: Bot },
+  assistant: { href: '/dashboard/assistant', label: 'Kayan AI الشخصي', description: 'محادثة ومهام وموافقات', icon: Bot },
+  memory: { href: '/dashboard/assistant?tab=memory', label: 'الذاكرة الشخصية', description: 'راجع ما يتذكره مساعدك', icon: Brain },
+  summary: { href: '/dashboard/assistant/tasks#daily-summary', label: 'الملخص اليومي', description: 'اضبط وقت الملخص اليومي', icon: Sun },
+  tools: { href: '/dashboard/assistant?tab=tools', label: 'الموصلات والخزنة', description: 'أدر أدواتك المتصلة', icon: ListTodo },
+} satisfies Record<QuickActionId, { href: string; label: string; description: string; icon: typeof Home }>
 
-/** Shown only when the personal-assistant sector or add-on is active. */
-const personalAssistantActions = [
-  { href: '/dashboard/assistant', label: 'Kayan AI الشخصي', description: 'محادثة ومهام وموافقات', icon: Bot },
-  { href: '/dashboard/assistant?tab=memory', label: 'الذاكرة الشخصية', description: 'راجع ما يتذكره مساعدك', icon: Brain },
-  { href: '/dashboard/assistant/tasks', label: 'المهام والتذكيرات', description: 'أدر مهامك ومواعيدك', icon: ListTodo },
-  { href: '/dashboard/assistant/tasks#daily-summary', label: 'الملخص اليومي', description: 'اضبط وقت الملخص اليومي', icon: Sun },
-]
-
-export function MobileTabBar({ businessTypeId, personalAssistantEnabled = false }: { businessTypeId: string | null; personalAssistantEnabled?: boolean }) {
+export function MobileTabBar(access: NavigationAccess) {
   const pathname = usePathname()
-  const vertical = getVertical(businessTypeId)
+  const vertical = getVertical(access.businessTypeId)
   const [open, setOpen] = useState(false)
   const triggerRef = useRef<HTMLButtonElement>(null)
   const sheetRef = useRef<HTMLDivElement>(null)
   const { dismissForNavigation } = useHistoryDismiss(open, () => setOpen(false))
-  const isActive = (href: string) => href === '/dashboard'
-    ? pathname === href
-    : pathname === href || pathname.startsWith(href + '/')
-  const verticalActions = vertical.baseEngine === 'booking_engine'
-    ? [{ href: '/dashboard/appointments', label: `${vertical.labels.appointments} جديد`, description: 'احجز موعداً أو جلسة', icon: CalendarPlus }, ...quickActions.filter((action) => action.href !== '/dashboard/appointments')]
-    : vertical.baseEngine === 'commerce_engine'
-      ? [{ href: '/dashboard/orders/new', label: `${vertical.labels.orders} جديد`, description: 'سجّل طلب عميل', icon: ClipboardList }, ...quickActions.filter((action) => action.href !== '/dashboard/orders/new' && action.href !== '/dashboard/appointments')]
-      : vertical.baseEngine === 'event_engine'
-        ? [{ href: '/dashboard/appointments', label: `${vertical.labels.appointments} جديد`, description: 'تحقق من التاريخ وسجّل الحجز', icon: CalendarPlus }, ...quickActions.filter((action) => action.href !== '/dashboard/appointments')]
-        : [{ href: '/dashboard/leads', label: `${vertical.labels.leads} جديد`, description: 'سجّل استفساراً جديداً', icon: Contact }, ...quickActions.filter((action) => action.href !== '/dashboard/appointments')]
-
-  const sheetActions = personalAssistantEnabled ? [...verticalActions, ...personalAssistantActions] : verticalActions
+  const navigation = dashboardNavigation(access)
+  const visibleTabs = navigation.tabs.map((id) => ({
+    ...tabs[id],
+    label: id === 'contacts' ? vertical.labels.contacts : id === 'appointments' ? vertical.labels.appointments : id === 'orders' ? vertical.labels.orders : tabs[id].label,
+  }))
+  const sheetActions = navigation.actions.map((id) => quickActions[id])
+  const activeHref = visibleTabs.map((item) => item.href).filter((href) =>
+    href === '/dashboard' ? pathname === href : pathname === href || pathname.startsWith(href + '/')
+  ).sort((a, b) => b.length - a.length)[0]
+  const isActive = (href: string) => activeHref === href
+  const split = Math.ceil(visibleTabs.length / 2)
+  const hasActions = sheetActions.length > 0
 
   useEffect(() => {
     if (!open) return
@@ -82,17 +84,17 @@ export function MobileTabBar({ businessTypeId, personalAssistantEnabled = false 
   return (
     <>
       <nav className="dashboard-bottom-nav" aria-label="التنقل الرئيسي">
-        <div className="dashboard-bottom-nav-inner">
-          {tabs.slice(0, 2).map(({ href, label, icon: Icon }) => (
+        <div className="dashboard-bottom-nav-inner" style={{ gridTemplateColumns: hasActions ? `repeat(${split}, minmax(0, 1fr)) 68px repeat(${visibleTabs.length - split}, minmax(0, 1fr))` : `repeat(${visibleTabs.length}, minmax(0, 1fr))` }}>
+          {visibleTabs.slice(0, split).map(({ href, label, icon: Icon }) => (
             <Link key={href} href={href} aria-current={isActive(href) ? 'page' : undefined} className={'dashboard-bottom-tab' + (isActive(href) ? ' is-active' : '')}>
               <Icon size={20} strokeWidth={isActive(href) ? 2.5 : 1.8} aria-hidden="true" />
-              <span>{href === '/dashboard/contacts' ? vertical.labels.contacts : label}</span>
+              <span>{label}</span>
             </Link>
           ))}
-          <button ref={triggerRef} type="button" onClick={() => setOpen(true)} aria-label="فتح الإجراءات السريعة" aria-expanded={open} className="dashboard-fab">
+          {hasActions && <button ref={triggerRef} type="button" onClick={() => setOpen(true)} aria-label="فتح الإجراءات السريعة" aria-expanded={open} className="dashboard-fab">
             <Plus size={27} strokeWidth={2.4} aria-hidden="true" />
-          </button>
-          {tabs.slice(2).map(({ href, label, icon: Icon }) => (
+          </button>}
+          {visibleTabs.slice(split).map(({ href, label, icon: Icon }) => (
             <Link key={href} href={href} aria-current={isActive(href) ? 'page' : undefined} className={'dashboard-bottom-tab' + (isActive(href) ? ' is-active' : '')}>
               <Icon size={20} strokeWidth={isActive(href) ? 2.5 : 1.8} aria-hidden="true" />
               <span>{label}</span>
@@ -100,7 +102,7 @@ export function MobileTabBar({ businessTypeId, personalAssistantEnabled = false 
           ))}
         </div>
       </nav>
-      {open ? (
+      {open && hasActions ? (
         <div className="dashboard-sheet-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) close() }}>
           <section ref={sheetRef} role="dialog" aria-modal="true" aria-labelledby="quick-actions-title" className="dashboard-quick-sheet">
             <div className="dashboard-sheet-handle" aria-hidden="true" />
@@ -120,7 +122,7 @@ export function MobileTabBar({ businessTypeId, personalAssistantEnabled = false 
                 </Link>
               ))}
             </div>
-            <p className="mt-4 text-center text-[11px] leading-5 text-text-muted">إنشاء حملة يحفظها كمسودة؛ لا يبدأ الإرسال قبل مراجعة الجمهور والموافقة.</p>
+            {navigation.actions.includes('campaigns') && <p className="mt-4 text-center text-[11px] leading-5 text-text-muted">إنشاء حملة يحفظها كمسودة؛ لا يبدأ الإرسال قبل مراجعة الجمهور والموافقة.</p>}
           </section>
         </div>
       ) : null}

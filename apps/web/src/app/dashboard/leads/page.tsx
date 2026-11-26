@@ -1,16 +1,21 @@
-import { getDashboardContext } from '@/lib/dashboard/context'
-import { createClient } from '@/lib/db/server'
+import { requireBusinessDashboardCapability, CapabilityDisabledError, NotAuthorizedError } from '@/lib/capabilities/guard'
 import { redirect } from 'next/navigation'
 import { ar } from '@/lib/i18n/ar'
 import { formatDate, formatNumber } from '@/lib/i18n/format'
 import { LeadStatusControl } from './lead-status-control'
 
 export default async function LeadsPage() {
-  const context = await getDashboardContext()
-  if (!context) redirect('/login')
+  let context
+  try {
+    context = await requireBusinessDashboardCapability('lead_capture')
+  } catch (error) {
+    if (error instanceof CapabilityDisabledError) redirect('/dashboard')
+    if (error instanceof NotAuthorizedError) redirect('/login')
+    throw error
+  }
 
   const canEdit = context.role !== 'read_only'
-  const db = await createClient()
+  const db = context.db
   const { data: leads } = await db
     .from('leads')
     .select(

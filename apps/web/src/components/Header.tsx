@@ -55,10 +55,12 @@ export function Header({
   organizationName,
   businessTypeId,
   timezone,
+  showBusinessSearch = true,
 }: {
   organizationName: string
   businessTypeId: string | null
   timezone: string
+  showBusinessSearch?: boolean
 }) {
   const pathname = usePathname()
   const router = useRouter()
@@ -107,7 +109,7 @@ export function Header({
       <span className="text-sm font-bold">{initial}</span>
     </Link>
   )
-  const searchPanel = searchOpen ? (
+  const searchPanel = showBusinessSearch && searchOpen ? (
     <div className="kayan-header-search">
       <GlobalSearch autoFocus onNavigate={dismissForNavigation} />
     </div>
@@ -127,7 +129,7 @@ export function Header({
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
-            {searchToggle}
+            {showBusinessSearch && searchToggle}
             <NotificationsBell />
             <Link href="/dashboard/settings" aria-label="الإعدادات" className="kayan-header-action">
               <Settings size={18} aria-hidden="true" />
@@ -154,7 +156,7 @@ export function Header({
           <p className="mt-0.5 truncate text-[11px] opacity-75">{page.subtitle}</p>
         </div>
         <div className="flex shrink-0 items-center gap-1">
-          {searchToggle}
+          {showBusinessSearch && searchToggle}
           <NotificationsBell />
           {accountLink}
         </div>

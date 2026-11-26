@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/db/server'
 import { getDashboardContext } from '@/lib/dashboard/context'
+import { canSearchBusiness, hasBusinessNavigationCapability } from '@/lib/dashboard/navigation-policy'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -31,6 +32,9 @@ export async function GET(request: Request) {
   const context = await getDashboardContext()
   if (!context) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
 
+  if (!canSearchBusiness(context)) return NextResponse.json({ error: 'search_not_enabled' }, { status: 403 })
+  const canSearchContacts = hasBusinessNavigationCapability(context, 'lead_capture')
+  const canSearchInbox = hasBusinessNavigationCapability(context, 'inbox')
   const q = sanitizeQuery(new URL(request.url).searchParams.get('q') ?? '')
   if (q.length < 2) return NextResponse.json({ results: [] as GlobalSearchResult[] })
 
@@ -51,7 +55,7 @@ export async function GET(request: Request) {
   }
 
   const contactRows = contacts ?? []
-  const results: GlobalSearchResult[] = contactRows.map((row) => ({
+  const results: GlobalSearchResult[] = canSearchContacts ? contactRows.map((row) => ({
     id: `contact:${row.id}`,
     type: 'contact' as const,
     title:
@@ -61,10 +65,10 @@ export async function GET(request: Request) {
       'عميل غير مسجل',
     subtitle: (row.phone as string | null) || (row.email as string | null) || null,
     href: `/dashboard/contacts/${row.id}`,
-  }))
+  })) : []
 
-  if (contactRows.length > 0) {
-    const { data: conversations } = await db
+  if (canSearchInbox && contactRows.length > 0) {
+    const { data: conversations, error: conversationError } = await db
       .from('conversations')
       .select('id, contact_id, updated_at')
       .eq('organization_id', context.organizationId)
@@ -75,6 +79,7 @@ export async function GET(request: Request) {
       .order('updated_at', { ascending: false })
       .limit(5)
 
+    if (conversationError) return NextResponse.json({ error: 'search_failed' }, { status: 500 })
     for (const conversation of conversations ?? []) {
       const contact = contactRows.find((row) => row.id === conversation.contact_id)
       results.push({

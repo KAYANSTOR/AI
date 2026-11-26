@@ -1,8 +1,7 @@
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { MessageSquare, Phone, Radio, ListTodo, History } from 'lucide-react'
-import { getDashboardContext } from '@/lib/dashboard/context'
-import { createClient } from '@/lib/db/server'
+import { requireBusinessDashboardCapability, CapabilityDisabledError, NotAuthorizedError } from '@/lib/capabilities/guard'
 import { formatDateTime } from '@/lib/i18n/format'
 import { SectionHeader } from '@/components/ui/section-header'
 import { ListRow } from '@/components/ui/list-row'
@@ -15,11 +14,17 @@ export default async function CustomerProfilePage({
 }: {
   params: Promise<{ contactId: string }>
 }) {
-  const context = await getDashboardContext()
-  if (!context) redirect('/login')
+  let context
+  try {
+    context = await requireBusinessDashboardCapability('lead_capture')
+  } catch (error) {
+    if (error instanceof CapabilityDisabledError) redirect('/dashboard')
+    if (error instanceof NotAuthorizedError) redirect('/login')
+    throw error
+  }
 
   const { contactId } = await params
-  const db = await createClient()
+  const db = context.db
 
   const { data: contact } = await db
     .from('contacts')
@@ -30,13 +35,13 @@ export default async function CustomerProfilePage({
 
   if (!contact) notFound()
 
-  const { data: conversations } = await db
+  const { data: conversations } = context.enabledCapabilities.includes('inbox') ? await db
     .from('conversations')
     .select('id, channel_type, status, updated_at')
     .eq('organization_id', context.organizationId)
     .eq('contact_id', contactId)
     .order('updated_at', { ascending: false })
-    .limit(10)
+    .limit(10) : { data: [] }
 
   const latestConversation = conversations?.[0]
   const preferredChannel = latestConversation?.channel_type || 'whatsapp'

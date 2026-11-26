@@ -2,6 +2,7 @@ import type { DbClient } from '@/lib/db/client'
 import { createClient } from '@/lib/db/server'
 import { getDashboardContext, type DashboardContext } from '@/lib/dashboard/context'
 import { capabilityLabel } from '@/lib/i18n/labels'
+import { hasBusinessNavigationCapability } from '@/lib/dashboard/navigation-policy'
 
 /**
  * The server-side capability gate.
@@ -43,6 +44,13 @@ export async function requireMember(): Promise<AuthorizedContext> {
 export async function requireCapability(capability: string): Promise<AuthorizedContext> {
   const ctx = await requireMember()
   if (!ctx.enabledCapabilities.includes(capability)) throw new CapabilityDisabledError(capability)
+  return ctx
+}
+
+/** Business dashboard routes must not inherit legacy CRM permissions of a personal workspace. */
+export async function requireBusinessDashboardCapability(capability: string): Promise<AuthorizedContext> {
+  const ctx = await requireMember()
+  if (!hasBusinessNavigationCapability(ctx, capability)) throw new CapabilityDisabledError(capability)
   return ctx
 }
 

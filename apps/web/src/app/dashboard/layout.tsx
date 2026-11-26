@@ -36,6 +36,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
       businessTypeId={context.businessTypeId}
       timezone={context.timezone}
       personalAssistantEnabled={context.personalAssistantEnabled}
+      enabledCapabilities={context.enabledCapabilities}
+      role={context.role}
       setupBanner={setupBanner}
     >
       {children}

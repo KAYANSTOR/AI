@@ -1,13 +1,17 @@
 import Link from 'next/link'
 import {
   BarChart3, BookOpen, Bot, CalendarDays, Contact, CreditCard,
-  Megaphone, MessageSquareText, RadioTower, Workflow,
+  Megaphone, MessageSquareText, RadioTower, Workflow, ShoppingBag, Users,
 } from 'lucide-react'
 
 const services = [
   { href: '/dashboard/conversations', title: 'صندوق الوارد', description: 'رسائل العملاء', icon: MessageSquareText, capability: 'inbox' },
   { href: '/dashboard/contacts', title: 'العملاء', description: 'جهات الاتصال', icon: Contact, capability: 'lead_capture' },
   { href: '/dashboard/appointments', title: 'المواعيد', description: 'الحجوزات القادمة', icon: CalendarDays, capability: 'appointments' },
+  { href: '/dashboard/services', title: 'الخدمات', description: 'إعداد الخدمات ومدتها', icon: Workflow, capability: 'appointments' },
+  { href: '/dashboard/orders', title: 'الطلبات', description: 'متابعة طلبات العملاء', icon: ShoppingBag, capability: 'orders' },
+  { href: '/dashboard/quotes', title: 'عروض الأسعار', description: 'إعداد ومتابعة العروض', icon: CreditCard, capability: 'quotes' },
+  { href: '/dashboard/leads', title: 'الفرص', description: 'متابعة الاستفسارات', icon: Users, capability: 'lead_capture' },
   { href: '/dashboard/agent', title: 'المساعد الذكي', description: 'إعداد الوكيل', icon: Bot, capability: null },
   { href: '/dashboard/channels', title: 'القنوات', description: 'واتساب والتواصل', icon: RadioTower, capability: null },
   { href: '/dashboard/knowledge', title: 'قاعدة المعرفة', description: 'معلومات النشاط', icon: BookOpen, capability: 'knowledge_base' },

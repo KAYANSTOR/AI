@@ -1,15 +1,20 @@
 import { redirect } from 'next/navigation'
-import { getDashboardContext } from '@/lib/dashboard/context'
-import { createClient } from '@/lib/db/server'
+import { requireBusinessDashboardCapability, CapabilityDisabledError, NotAuthorizedError } from '@/lib/capabilities/guard'
 import { formatDate } from '@/lib/i18n/format'
 import { ContactsDirectory } from './contacts-directory'
 
 export const dynamic = 'force-dynamic'
 
 export default async function ContactsPage() {
-  const context = await getDashboardContext()
-  if (!context) redirect('/login')
-  const db = await createClient()
+  let context
+  try {
+    context = await requireBusinessDashboardCapability('lead_capture')
+  } catch (error) {
+    if (error instanceof CapabilityDisabledError) redirect('/dashboard')
+    if (error instanceof NotAuthorizedError) redirect('/login')
+    throw error
+  }
+  const db = context.db
   const { data: contacts, error } = await db
     .from('contacts')
     .select('id, full_name, phone, email, created_at')
