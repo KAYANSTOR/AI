@@ -24,7 +24,7 @@ export async function saveOwnerPresenceSettingsAction(input: unknown): Promise<O
     human_takeover_scope: parsed.value.scope,
   }
   // Turning the feature off releases any running pause immediately.
-  if (!parsed.value.enabled) patch.human_paused_until = null
+  if (!parsed.value.enabled || parsed.value.scope === 'conversation') patch.human_paused_until = null
   const { data, error } = await db.from('channels').update(patch)
     .eq('id', parsed.value.channelId).eq('organization_id', org.organizationId).eq('channel_type', 'whatsapp')
     .select('id')

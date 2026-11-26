@@ -5,7 +5,7 @@ import { Bot, FileText, ImageIcon, Loader2, Mic, Paperclip } from 'lucide-react'
 import { ChatBubble, type ChatBubbleType } from '@/components/ui/chat-bubble'
 import type { ThreadMessage } from '@/lib/inbox/messages'
 import { mediaBadgeFor, type MediaBadge } from '@/lib/inbox/media-badge'
-import { loadOlderMessagesAction } from './actions'
+import { loadOlderMessagesAction, markAsReadAction } from './actions'
 import { appendOptimistic, confirmOptimistic, failOptimistic, outboundTickFor, reconcileWithServer, type InboxMessage } from '@/lib/inbox/optimistic'
 import { INBOX_OPTIMISTIC_EVENT, type InboxOptimisticDetail } from '@/lib/inbox/optimistic-events'
 
@@ -66,6 +66,12 @@ export function MessageThread({
     setSyncedId(lastInitialId)
     setMessages((current) => reconcileWithServer(current, initialMessages))
   }
+
+  useEffect(() => {
+    void markAsReadAction(conversationId).then((result) => {
+      if (!result.ok) console.warn('Unable to mark conversation as read')
+    }).catch(() => console.warn('Unable to mark conversation as read'))
+  }, [conversationId, lastInitialId])
 
   useEffect(() => {
     function onOptimistic(event: Event) {

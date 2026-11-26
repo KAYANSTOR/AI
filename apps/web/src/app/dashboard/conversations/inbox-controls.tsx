@@ -46,7 +46,7 @@ export function InboxControls({
           {closed ? 'مغلقة' : handedOff ? 'بانتظار الفريق' : 'مفتوحة'}
         </span>
 
-        {!closed && !handedOff && (
+        {!closed && !handedOff && aiEnabled && (
           <button
             type="button"
             disabled={pending}
@@ -58,7 +58,7 @@ export function InboxControls({
           </button>
         )}
 
-        {handedOff && !closed && (
+        {!closed && (handedOff || !aiEnabled) && (
           <button
             type="button"
             disabled={pending}

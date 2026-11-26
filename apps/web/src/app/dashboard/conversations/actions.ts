@@ -198,6 +198,7 @@ export async function resumeAiAction(conversationId: string): Promise<InboxResul
         ai_enabled: true,
         state: 'waiting_customer',
         ai_paused_at: null,
+        human_paused_until: null,
         handoff_reason: null,
         human_assignee_id: null,
         updated_at: new Date().toISOString(),

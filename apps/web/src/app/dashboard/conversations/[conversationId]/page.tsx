@@ -9,7 +9,6 @@ import { ChatBubble } from '@/components/ui/chat-bubble'
 import { loadConversationMessages } from '@/lib/inbox/messages'
 import { MessageThread } from '../message-thread'
 import { ReplyComposer } from '../reply-composer'
-import { markAsReadAction } from '../actions'
 
 export default async function ConversationThreadPage({
   params,
@@ -44,8 +43,6 @@ export default async function ConversationThreadPage({
       .eq('organization_id', ctx.organizationId)
       .order('created_at', { ascending: false }),
   ])
-
-  await markAsReadAction(conversationId)
 
   const contact = conversation.contacts as unknown as { full_name: string | null; phone: string | null } | null
   const channel = conversation.channels as unknown as { channel_type: string } | null
