@@ -160,7 +160,7 @@ export function DashboardTour({ access, storageKey = 'default' }: { access: Tour
   const [busy, setBusy] = useState(false)
   const [dismissed, setDismissed] = useState(false)
   const [reopenRequested, setReopenRequested] = useState(false)
-  const [exploredSet, setExploredSet] = useState<Set<string>>(() => readLocalExplored(storageKey))
+  const [exploredSet, setExploredSet] = useState<Set<string>>(() => new Set())
   const saving = useRef(false)
 
   const progress = stored ? restoreTourProgress(stored, steps) : null
@@ -173,7 +173,8 @@ export function DashboardTour({ access, storageKey = 'default' }: { access: Tour
   const showInnerCard = Boolean(innerGuide && !exploredSet.has(innerGuide.screenKey))
 
   useEffect(() => {
-    setExploredSet(readLocalExplored(storageKey))
+    const timeout = window.setTimeout(() => setExploredSet(readLocalExplored(storageKey)), 0)
+    return () => window.clearTimeout(timeout)
   }, [storageKey])
 
   useEffect(() => {
@@ -184,9 +185,12 @@ export function DashboardTour({ access, storageKey = 'default' }: { access: Tour
         setReopenRequested(true)
       }
     }
-    syncHash()
+    const timeout = window.setTimeout(syncHash, 0)
     window.addEventListener('hashchange', syncHash)
-    return () => window.removeEventListener('hashchange', syncHash)
+    return () => {
+      window.clearTimeout(timeout)
+      window.removeEventListener('hashchange', syncHash)
+    }
   }, [pathname])
 
   useEffect(() => {

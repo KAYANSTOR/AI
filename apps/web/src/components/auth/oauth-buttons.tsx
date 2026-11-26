@@ -1,4 +1,5 @@
 import { AlertCircle } from 'lucide-react'
+import Link from 'next/link'
 import { oauthErrorMessage } from '@/lib/auth/oauth/messages'
 
 const buttonClass =
@@ -32,7 +33,7 @@ export function OAuthButtons({ mode, returnTo, error, provider }: { mode: 'login
       </a>
       {mode === 'signup' ? (
         <p className="text-center text-xs leading-5 text-text-muted">
-          بالمتابعة عبر Google فإنك توافق على <a href="/terms" className="font-semibold text-secondary underline">الشروط</a> و<a href="/privacy" className="font-semibold text-secondary underline">سياسة الخصوصية</a>.
+          بالمتابعة عبر Google فإنك توافق على <Link href="/terms" className="font-semibold text-secondary underline">الشروط</Link> و<Link href="/privacy" className="font-semibold text-secondary underline">سياسة الخصوصية</Link>.
         </p>
       ) : null}
       <div className="relative py-1" aria-hidden="true">
