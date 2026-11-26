@@ -47,13 +47,13 @@ describe('dashboard server entrypoint wiring', () => {
     const code = source('services/actions.ts')
     for (const name of ['createServiceAction', 'deleteServiceAction']) {
       const body = code.split('export async function ' + name)[1].split('export async function ')[0]
-      expect(body.indexOf("await requireAdminCapability('appointments')")).toBeGreaterThanOrEqual(0)
+      expect(body.indexOf("await requireAdminCapability('appointments')")).toBeGreaterThan(-1)
       expect(body.indexOf("await requireAdminCapability('appointments')")).toBeLessThan(body.indexOf("ctx.db.from('services')"))
     }
   })
   test('appointment creation validates ownership before inserting', () => {
     const body = source('appointments/actions.ts').split('export async function createAppointmentAction')[1]
-    expect(body.indexOf('await validateAppointmentInput')).toBeGreaterThanOrEqual(0)
+    expect(body.indexOf('await validateAppointmentInput')).toBeGreaterThan(-1)
     expect(body.indexOf('await validateAppointmentInput')).toBeLessThan(body.indexOf(".from('appointments').insert"))
   })
   test('status writes compare the previously observed status', () => {
