@@ -5,7 +5,7 @@ import { acquireWebhookEvent, markWebhookProcessed } from '@/lib/channels/idempo
 import { resolveChannelExact } from '@/lib/runtime/tenant'
 import { processInboundMessage } from '@/lib/runtime/process-inbound'
 import { deliverOutbound, recordDeliveredOutboundMessage } from '@/lib/runtime/outbound'
-import { telegramUpdateId } from '@/lib/providers/telegram'
+import { resolveTelegramEventId } from '@/lib/providers/telegram'
 import { fromTelegram } from '@/lib/media/attachment'
 import { handleInboundMedia } from '@/lib/media/pipeline'
 import { downloaderForChannel } from '@/lib/media/channel-downloader'
@@ -70,28 +70,31 @@ export async function POST(
       return NextResponse.json({ ok: true, ignored: true })
     }
 
-    const externalEventId = telegramUpdateId(updateId as number)
+    const exactChannel = await resolveChannelExact(db, {
+      channelType: 'telegram',
+      providerAccountId: String(channel.provider_account_id),
+    })
+    if (!exactChannel || exactChannel.id !== channel.id || exactChannel.organizationId !== channel.organization_id) {
+      return NextResponse.json({ error: 'channel_unavailable' }, { status: 404 })
+    }
+
+    const externalEventId = await resolveTelegramEventId(db, updateId as number, {
+      channelId: exactChannel.id,
+      organizationId: exactChannel.organizationId,
+      botId: String(channel.provider_account_id),
+    })
     const acquired = await acquireWebhookEvent(db, 'telegram', externalEventId, payload)
     if (acquired.status === 'duplicate') return NextResponse.json({ ok: true, duplicate: true })
     if (acquired.status === 'error') return NextResponse.json({ error: 'event_claim_failed' }, { status: 500 })
     eventRowId = acquired.eventRowId
 
-    const exactChannel = await resolveChannelExact(db, {
-      channelType: 'telegram',
-      providerAccountId: String(channel.provider_account_id),
-    })
-    if (!exactChannel || exactChannel.id !== channel.id) {
-      await markWebhookProcessed(db, eventRowId, 'failed', 'unmapped_telegram_bot')
-      eventRowId = null
-      return NextResponse.json({ ok: true, ignored: true })
-    }
-
-    await db.from('webhook_events').update({
-      organization_id: channel.organization_id,
-      channel_id: channel.id,
+    const { error: bindError } = await db.from('webhook_events').update({
+      organization_id: exactChannel.organizationId,
+      channel_id: exactChannel.id,
       event_type: 'message.received',
       signature_verified: true,
     }).eq('id', eventRowId)
+    if (bindError) throw new Error('telegram_event_binding_failed')
 
     const media = message.text ? null : fromTelegram(message as unknown as Record<string, unknown>)
     const text = (message.text ?? message.caption ?? '').trim()

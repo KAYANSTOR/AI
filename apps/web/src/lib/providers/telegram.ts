@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto'
+import type { DbClient } from '@/lib/db/client'
 
 const TELEGRAM_API = 'https://api.telegram.org'
 
@@ -72,7 +73,31 @@ export async function sendTelegramText(input: {
   })
 }
 
-/** Stable event id for Telegram updates (including edited messages). */
-export function telegramUpdateId(updateId: number): string {
-  return createHash('sha256').update(`telegram:${updateId}`).digest('hex')
+/** A Telegram update sequence belongs to a bot, not to every bot in the platform. */
+export function telegramUpdateId(updateId: number, channelId: string, botId: string): string {
+  return createHash('sha256').update(JSON.stringify(['telegram', channelId, botId, updateId])).digest('hex')
+}
+
+/**
+ * Preserve retries of existing events that were recorded before scoped keys were introduced.
+ * A legacy key is reusable ONLY when its persisted channel and organization match the
+ * authenticated, resolved channel. A foreign bot's old key must never suppress this update.
+ * Keep the same key through webhook claiming, inbound persistence and outbound delivery.
+ */
+export async function resolveTelegramEventId(
+  db: DbClient,
+  updateId: number,
+  scope: { channelId: string; organizationId: string; botId: string },
+): Promise<string> {
+  const scoped = telegramUpdateId(updateId, scope.channelId, scope.botId)
+  const legacy = createHash('sha256').update(`telegram:${updateId}`).digest('hex')
+  const { data, error } = await db.from('webhook_events')
+    .select('id')
+    .eq('provider', 'telegram')
+    .eq('external_event_id', legacy)
+    .eq('channel_id', scope.channelId)
+    .eq('organization_id', scope.organizationId)
+    .maybeSingle()
+  if (error) throw new Error('telegram_legacy_event_lookup_failed')
+  return data ? legacy : scoped
 }
