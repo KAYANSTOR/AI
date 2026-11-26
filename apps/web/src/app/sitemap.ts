@@ -15,6 +15,7 @@ const publicRoutes = [
   '/faq',
   '/contact',
   '/privacy',
+  '/data-deletion',
   '/terms',
 ] as const
 

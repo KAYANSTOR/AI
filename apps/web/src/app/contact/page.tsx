@@ -49,6 +49,7 @@ export default function ContactPage() {
               <p className="mt-2 text-sm leading-7 text-text-muted">
                 لطلبات الدعم أو الشراكات أو الاستفسارات التجارية، انتقل إلى الموقع الرسمي لشركة كيان سوفت.
               </p>
+              <Link href="/data-deletion" className="mt-4 block text-sm font-semibold text-secondary underline underline-offset-4">طلب حذف البيانات والخصوصية</Link>
               <a href="https://kayan-soft.online" target="_blank" rel="noopener noreferrer" className="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-secondary hover:text-secondary">
                 موقع كيان سوفت <ArrowLeft size={15} aria-hidden="true" />
               </a>
