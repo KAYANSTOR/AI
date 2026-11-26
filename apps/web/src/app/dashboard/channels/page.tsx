@@ -7,6 +7,7 @@ import { OwnerPresencePanel, type OwnerPresenceChannel } from './owner-presence-
 import { normalizeSettings } from '@/lib/runtime/owner-presence'
 import { ar } from '@/lib/i18n/ar'
 import { databaseErrorMessage, logDatabaseError } from '@/lib/db/errors'
+import { canManageMetaChannels, META_LINK_NOTICES, type MetaLinkStatus } from '@/lib/channels/meta-connection'
 
 export const dynamic = 'force-dynamic'
 
@@ -30,9 +31,12 @@ export default async function ChannelsPage({
   if (!context) redirect('/login')
 
   const status = (await searchParams)?.status
+  const linkNotice = status && Object.prototype.hasOwnProperty.call(META_LINK_NOTICES, status)
+    ? META_LINK_NOTICES[status as MetaLinkStatus]
+    : null
 
   const db = await createClient()
-  const canManage = context.role === 'owner' || context.role === 'admin'
+  const canManage = canManageMetaChannels(context.role)
 
   let rows: ChannelRow[] = []
   let channelsError: string | null = null
@@ -56,8 +60,8 @@ export default async function ChannelsPage({
   // WhatsApp has three independently managed connection modes. Legacy rows without
   // a mode are treated as the standard Cloud API connection.
   const whatsappModes = [
-    { key: 'whatsapp-business-app', connectionMode: 'coexistence', label: 'واتساب الأعمال عبر Meta', provider: 'Meta · WhatsApp Business App', description: 'اربط تطبيق WhatsApp Business مع Kayan AI مع استمرار استخدام التطبيق على الهاتف.' },
-    { key: 'whatsapp-meta-api', connectionMode: 'cloud_api', label: 'واتساب العادي عبر Meta', provider: 'Meta · WhatsApp Cloud API', description: 'اربط رقم WhatsApp Cloud API مباشرة عبر إعداد Meta الرسمي. قد تتطلب Meta نقل الرقم من تطبيق واتساب الحالي.' },
+    { key: 'whatsapp-business-app', connectionMode: 'coexistence', label: 'واتساب للأعمال · التعايش', provider: 'ميتا', description: 'اربط الرقم مع الاستمرار في استخدام تطبيق واتساب للأعمال على الهاتف.' },
+    { key: 'whatsapp-meta-api', connectionMode: 'cloud_api', label: 'واتساب للأعمال · الربط السحابي', provider: 'ميتا', description: 'اربط رقمًا بخدمة واتساب السحابية وقدّم رمز التحقق بخطوتين عند طلبه.' },
     { key: 'whatsapp-qr', connectionMode: 'qr_unofficial', label: 'واتساب عبر QR أو رقم الهاتف', provider: 'WhatsApp Web · QR / Pairing Code', description: 'اربط حساب واتساب من هاتفك بمسح QR أو إدخال رمز الربط الذي يولّده رقم الهاتف.' },
   ] as const
 
@@ -134,7 +138,6 @@ export default async function ChannelsPage({
     <div className="space-y-6">
       <header className="space-y-4 rounded-[1.15rem] border border-border bg-background/55 p-5 sm:p-6">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-secondary">Kayan Connect</p>
           <h1 className="mt-1 text-2xl font-bold tracking-tight text-text">{ar.channels.title}</h1>
           <p className="mt-1 max-w-3xl text-sm leading-6 text-text-muted">
             اربط قنوات التواصل التي يستخدمها عملاؤك، وأدر حالة كل قناة من مكان واحد. تظهر هنا القنوات المدعومة فعلياً في حسابك.
@@ -150,12 +153,7 @@ export default async function ChannelsPage({
       )}
 
       {channelsError && <Notice tone="error" message={channelsError} />}
-      {status === 'meta_success' && (
-        <Notice tone="success" message="تم تفويض حساب Meta وحفظ بيانات القناة. افتح بطاقة WhatsApp لمراجعة حالة الربط والخطوة التالية المناسبة لنوع الاتصال." />
-      )}
-      {status === 'meta_error' && (
-        <Notice tone="error" message="تعذّر إكمال ربط Meta. أعد المحاولة من بطاقة WhatsApp ثم استخدم إعادة فحص الاتصال." />
-      )}
+      {linkNotice && <Notice tone={status === 'meta_success' ? 'success' : 'error'} message={linkNotice} />}
 
       <ChannelsConsole cards={cards} canManage={canManage} />
 

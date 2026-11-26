@@ -12,15 +12,19 @@
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
 import { createAdminClient } from '@/lib/db/admin'
 import type { DbClient } from '@/lib/db/client'
-import { deleteChannelCredential, loadChannelCredentials, saveChannelCredential } from '@/lib/credentials/service'
 import { normalizeChannelNumber } from '@/lib/channels/management'
 import { resolveWhatsAppConnectionMode } from '@/lib/channels/whatsapp-connection-mode'
+import { bindMetaChannel } from '@/lib/channels/meta-binding'
+import { isMetaSocialChannel, MetaLinkError, metaLinkStatusFromGraph, type MetaLinkStatus, type MetaSocialChannel } from '@/lib/channels/meta-connection'
 import { z } from 'zod'
 
-const GRAPH_VERSION = 'v26.0'
+const META_GRAPH_VERSION = 'v26.0'
 
 const EMBEDDED_SIGNUP_CALLBACK_PATH = '/api/whatsapp/embedded-signup-callback'
+const META_SOCIAL_CALLBACK_PATH = '/api/meta/connect/callback'
 const EMBEDDED_SIGNUP_STATE_TTL_SECONDS = 30 * 60
+
+type MetaSocialTarget = { channel: MetaSocialChannel; pageId: string | null }
 
 type EmbeddedSignupOAuthStatePayload = {
   version: 1
@@ -28,6 +32,7 @@ type EmbeddedSignupOAuthStatePayload = {
   issuedAt: number
   nonce: string
   redirectUri: string
+  social?: MetaSocialTarget
 }
 
 function oauthStateSecret(): string {
@@ -40,7 +45,7 @@ function oauthStateSecret(): string {
  * Always use Railway's active public hostname at runtime. The same canonical
  * URI is signed into state, sent to Meta, and supplied again during code exchange.
  */
-export function getMetaEmbeddedSignupRedirectUri(): string {
+export function getMetaEmbeddedSignupRedirectUri(social = false): string {
   const railwayDomain = process.env.RAILWAY_PUBLIC_DOMAIN?.trim()
   const configuredBase = railwayDomain
     ? (railwayDomain.includes('://') ? railwayDomain : `https://${railwayDomain}`)
@@ -54,7 +59,7 @@ export function getMetaEmbeddedSignupRedirectUri(): string {
   if (base.protocol !== 'https:' && base.hostname !== 'localhost') {
     throw new Error('Meta OAuth callback must use HTTPS')
   }
-  return new URL(EMBEDDED_SIGNUP_CALLBACK_PATH, base.origin).toString()
+  return new URL(social ? META_SOCIAL_CALLBACK_PATH : EMBEDDED_SIGNUP_CALLBACK_PATH, base.origin).toString()
 }
 
 type OAuthNoncePersist = (organizationId: string, nonceHash: string, expiresAt: string) => Promise<void>
@@ -68,7 +73,7 @@ async function persistOAuthStateNonce(
   const admin = createAdminClient()
   // Expired rows are safe to purge opportunistically; active nonces are untouched.
   await admin.from('meta_embedded_signup_state_nonces')
-    .delete().lt('expires_at', new Date().toISOString())
+    .delete().eq('organization_id', organizationId).lt('expires_at', new Date().toISOString())
   const { error } = await admin.from('meta_embedded_signup_state_nonces').insert({
     organization_id: organizationId,
     nonce_hash: nonceHash,
@@ -95,9 +100,10 @@ async function consumeOAuthStateNonce(
 /** Creates signed, short-lived OAuth state and stores its nonce for one-time use. */
 export async function createEmbeddedSignupOAuthState(
   organizationId: string,
-  persistNonce: OAuthNoncePersist = persistOAuthStateNonce
+  persistNonce: OAuthNoncePersist = persistOAuthStateNonce,
+  social?: MetaSocialTarget
 ): Promise<{ state: string; redirectUri: string }> {
-  const redirectUri = getMetaEmbeddedSignupRedirectUri()
+  const redirectUri = getMetaEmbeddedSignupRedirectUri(Boolean(social))
   const issuedAt = Math.floor(Date.now() / 1000)
   const nonce = randomBytes(24).toString('base64url')
   const payload: EmbeddedSignupOAuthStatePayload = {
@@ -106,6 +112,7 @@ export async function createEmbeddedSignupOAuthState(
     issuedAt,
     nonce,
     redirectUri,
+    ...(social ? { social } : {}),
   }
   const encoded = Buffer.from(JSON.stringify(payload)).toString('base64url')
   const signature = createHmac('sha256', oauthStateSecret()).update(encoded).digest('base64url')
@@ -125,8 +132,9 @@ export async function createEmbeddedSignupOAuthState(
 export async function verifyEmbeddedSignupOAuthState(
   state: string,
   organizationId: string,
-  consumeNonce: OAuthNonceConsume = consumeOAuthStateNonce
-): Promise<{ redirectUri: string } | null> {
+  consumeNonce: OAuthNonceConsume = consumeOAuthStateNonce,
+  social: MetaSocialChannel | false = false
+): Promise<{ redirectUri: string; social?: MetaSocialTarget } | null> {
   try {
     if (!state || state.length > 4096) return null
     const parts = state.split('.')
@@ -155,13 +163,20 @@ export async function verifyEmbeddedSignupOAuthState(
       typeof payload.redirectUri !== 'string'
     ) return null
 
-    const canonicalRedirectUri = getMetaEmbeddedSignupRedirectUri()
+    if (social) {
+      const target = payload.social
+      if (!target || !isMetaSocialChannel(target.channel) || target.channel !== social ||
+        (target.pageId !== null && (typeof target.pageId !== 'string' || !/^\d{1,40}$/.test(target.pageId)))) return null
+    } else if (payload.social !== undefined) return null
+
+    const canonicalRedirectUri = getMetaEmbeddedSignupRedirectUri(Boolean(social))
     if (payload.redirectUri !== canonicalRedirectUri) return null
 
     const nonceHash = createHash('sha256').update(payload.nonce).digest('hex')
     const consumed = await consumeNonce(organizationId, nonceHash)
-    return consumed ? { redirectUri: canonicalRedirectUri } : null
-  } catch {
+    return consumed ? { redirectUri: canonicalRedirectUri, ...(payload.social ? { social: payload.social } : {}) } : null
+  } catch (error) {
+    console.warn('Meta OAuth state verification failed', { errorType: error instanceof Error ? error.name : 'unknown' })
     return null
   }
 }
@@ -173,11 +188,11 @@ export function getMetaGraphBaseUrl(): string {
     // Keep custom Graph hosts, but do not let a stale version in the configured
     // production URL silently override the version selected by this integration.
     if (/^https:\/\/graph\.facebook\.com(?:\/v\d+\.\d+)?$/i.test(normalized)) {
-      return normalized.replace(/\/v\d+\.\d+$/i, '') + `/${GRAPH_VERSION}`
+      return normalized.replace(/\/v\d+\.\d+$/i, '') + `/${META_GRAPH_VERSION}`
     }
     return normalized
   }
-  return `https://graph.facebook.com/${GRAPH_VERSION}`
+  return `https://graph.facebook.com/${META_GRAPH_VERSION}`
 }
 
 function requireEnv(name: string): string {
@@ -187,8 +202,9 @@ function requireEnv(name: string): string {
 }
 
 /** Keep Meta Graph requests bounded so mobile signup cannot hang indefinitely. */
-function fetchMeta(input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> {
+export function fetchMeta(input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> {
   return fetch(input, {
+    cache: 'no-store',
     ...init,
     signal: AbortSignal.timeout(15_000),
   })
@@ -222,7 +238,7 @@ export const CompleteEmbeddedSignupInputSchema = z.object({
   organizationId: z.string().uuid(),
   businessId: z.string().uuid().nullable(),
   organizationName: z.string().trim().max(200).nullable().optional(),
-  requestedMode: z.enum(['coexistence', 'cloud_api']).default('coexistence'),
+  requestedMode: z.enum(['coexistence', 'cloud_api']).optional(),
   session: EmbeddedSignupSessionSchema,
 }).strict()
 
@@ -240,10 +256,10 @@ export type EmbeddedSignupResult =
         history: { status: string; requestId: string | null; errorCode: number | null }
       }
     }
-  | { ok: false; error: string }
+  | { ok: false; error: string; status?: MetaLinkStatus }
 
 /** Exchange the short-lived code from FB.login for a business integration token. */
-async function exchangeCodeForBusinessToken(code: string, redirectUri?: string | null): Promise<Buffer> {
+export async function exchangeMetaCode(code: string, redirectUri?: string | null): Promise<Buffer> {
   const appId = requireEnv('NEXT_PUBLIC_META_APP_ID')
   const appSecret = requireEnv('META_APP_SECRET')
   const url = new URL(`${getMetaGraphBaseUrl()}/oauth/access_token`)
@@ -254,9 +270,10 @@ async function exchangeCodeForBusinessToken(code: string, redirectUri?: string |
 
   const response = await fetchMeta(url.toString(), { method: 'GET' })
   if (!response.ok) {
-    // Do not log provider response bodies; they may contain sensitive OAuth data.
-    console.error('EmbeddedSignup: code exchange failed', { status: response.status })
-    throw new Error('تعذّر إتمام الربط مع Meta. حاول مرة أخرى.')
+    const body = await response.json().catch(() => null) as { error?: { code?: number; error_subcode?: number } } | null
+    const code = body?.error?.code
+    console.error('Meta code exchange failed', { status: response.status, code })
+    throw new MetaLinkError(body?.error?.error_subcode === 36007 ? 'meta_expired' : metaLinkStatusFromGraph(code, response.status))
   }
 
   // Meta may return either a plain token string or a JSON object.
@@ -289,12 +306,14 @@ async function subscribeAppToWaba(wabaId: string, businessToken: string): Promis
     method: 'POST',
     headers: { Authorization: `Bearer ${businessToken}` },
   })
-  const body = await response.json().catch(() => null) as { success?: boolean; error?: { message?: string } } | null
+  const body = await response.json().catch(() => null) as { success?: boolean; error?: { code?: number } } | null
   if (!response.ok || body?.success !== true) {
     console.error('EmbeddedSignup: subscribe_apps failed', {
       status: response.status,
-      error: body?.error?.message ?? 'Meta did not confirm subscription',
+      code: body?.error?.code,
     })
+    const status = metaLinkStatusFromGraph(body?.error?.code, response.status)
+    if (status !== 'meta_error') throw new MetaLinkError(status)
     throw new Error('لم تؤكد Meta تفعيل استقبال إشعارات واتساب. تحقق من صلاحيات التطبيق ثم أعد الربط.')
   }
 }
@@ -336,6 +355,7 @@ async function requestCoexistenceSync(
     const { data: existing, error: readError } = await admin
       .from('whatsapp_coexistence_sync_requests')
       .select('status, request_id, error_code')
+      .eq('organization_id', input.organizationId)
       .eq('channel_id', input.channelId)
       .eq('phone_number_id', input.phoneNumberId)
       .eq('sync_type', input.syncType)
@@ -381,7 +401,7 @@ async function requestCoexistenceSync(
         error_code: errorCode,
         error_message: errorCode ? 'meta_error_' + errorCode : 'meta_sync_request_not_confirmed',
         updated_at: new Date().toISOString(),
-      }).eq('id', claim.id)
+      }).eq('id', claim.id).eq('organization_id', input.organizationId)
       return { status: 'failed', requestId: null, errorCode }
     }
 
@@ -396,6 +416,7 @@ async function requestCoexistenceSync(
         updated_at: new Date().toISOString(),
       })
       .eq('id', claim.id)
+      .eq('organization_id', input.organizationId)
     if (updateError) {
       console.error('EmbeddedSignup: sync accepted by Meta but local request state was not saved', {
         syncType: input.syncType,
@@ -414,7 +435,7 @@ async function requestCoexistenceSync(
       error_code: errorCode,
       error_message: 'meta_sync_request_failed',
       updated_at: new Date().toISOString(),
-    }).eq('id', claim.id)
+    }).eq('id', claim.id).eq('organization_id', input.organizationId)
     console.error('EmbeddedSignup: coexistence sync request failed', {
       syncType: input.syncType,
       errorCode,
@@ -450,12 +471,14 @@ async function fetchVerifiedPhoneNumber(
     display_phone_number?: string
     is_on_biz_app?: boolean
     platform_type?: string
-    error?: { message?: string }
+    error?: { code?: number }
   } | null
   if (!response.ok || body?.id !== phoneNumberId) {
+    const status = metaLinkStatusFromGraph(body?.error?.code, response.status)
+    if (status !== 'meta_error') throw new MetaLinkError(status)
     console.error('EmbeddedSignup: phone verification failed', {
       status: response.status,
-      error: body?.error?.message ?? 'Phone number was not confirmed by Meta',
+      code: body?.error?.code,
     })
     throw new Error('لم تتمكن Meta من التحقق من رقم واتساب المرتبط. أعد الربط وتأكد من اختيار الرقم الصحيح.')
   }
@@ -475,12 +498,14 @@ async function verifyPhoneBelongsToWaba(
   })
   const body = await response.json().catch(() => null) as {
     data?: Array<{ id?: string }>
-    error?: { message?: string }
+    error?: { code?: number }
   } | null
   if (!response.ok || !body?.data?.some((phone) => phone.id === phoneNumberId)) {
+    const status = metaLinkStatusFromGraph(body?.error?.code, response.status)
+    if (status !== 'meta_error') throw new MetaLinkError(status)
     console.error('EmbeddedSignup: phone/WABA association failed', {
       status: response.status,
-      error: body?.error?.message ?? 'Phone number is not listed under the selected WABA',
+      code: body?.error?.code,
     })
     throw new Error('رقم واتساب الذي أعادته Meta لا يتبع حساب الأعمال المحدد. أعد اختيار الحساب والرقم.')
   }
@@ -497,6 +522,10 @@ export type MetaTokenDebugResult = {
 
 /** Always validate the exchanged token, even when IDs came from the browser. */
 export async function debugCustomerAccessToken(tokenBuffer: Buffer): Promise<MetaTokenDebugResult> {
+  return debugMetaAccessToken(tokenBuffer, ['whatsapp_business_management', 'whatsapp_business_messaging'])
+}
+
+export async function debugMetaAccessToken(tokenBuffer: Buffer, requiredScopes: readonly string[]): Promise<MetaTokenDebugResult> {
   if (!Buffer.isBuffer(tokenBuffer) || tokenBuffer.length === 0) {
     throw new Error('تعذّر التحقق من التفويض الذي أعادته Meta. أعد الربط.')
   }
@@ -515,41 +544,37 @@ export async function debugCustomerAccessToken(tokenBuffer: Buffer): Promise<Met
       expires_at?: number
       granular_scopes?: Array<{ scope?: string; target_ids?: string[] }>
     }
-    error?: { message?: string }
+    error?: { code?: number }
   } | null
 
   if (!response.ok || !body?.data) {
     console.error('EmbeddedSignup: token debug failed', {
       status: response.status,
-      error: body?.error?.message ?? 'Meta returned no token debug data',
+      code: body?.error?.code,
     })
-    throw new Error('تعذّر التحقق من صلاحية التفويض الذي أعادته Meta. أعد الربط.')
+    throw new MetaLinkError(metaLinkStatusFromGraph(body?.error?.code, response.status))
   }
   const data = body.data
-  if (data.is_valid !== true) {
-    throw new Error('تعذّر التحقق من صلاحية التفويض الذي أعادته Meta. أعد الربط.')
-  }
   if (String(data.app_id ?? '') !== appId) {
-    throw new Error('رفضت Meta التفويض لأنه لا يتبع تطبيق Kayan AI الحالي. أعد الربط من التطبيق الصحيح.')
-  }
-
-  const scopes = Array.isArray(data.scopes) ? data.scopes : []
-  const required = ['whatsapp_business_management', 'whatsapp_business_messaging']
-  if (required.some((scope) => !scopes.includes(scope))) {
-    throw new Error('لم تمنح Meta جميع صلاحيات WhatsApp المطلوبة. أعد الربط ووافق على صلاحيات إدارة وإرسال الرسائل.')
+    throw new MetaLinkError('meta_permission')
   }
 
   const expiresAt = typeof data.expires_at === 'number' ? data.expires_at : null
-  if (expiresAt !== null && expiresAt !== 0 && expiresAt < Math.floor(Date.now() / 1000)) {
-    throw new Error('انتهت صلاحية التفويض الذي أعادته Meta. أعد ربط الرقم.')
+  if (data.is_valid !== true || (expiresAt && expiresAt <= Math.floor(Date.now() / 1000))) {
+    throw new MetaLinkError('meta_expired')
+  }
+
+  const scopes = Array.isArray(data.scopes) ? data.scopes : []
+  if (requiredScopes.some((scope) => !scopes.includes(scope))) {
+    throw new MetaLinkError('meta_permission')
   }
 
   const granularScopes = Array.isArray(data.granular_scopes) ? data.granular_scopes : []
   const managementGrant = granularScopes.find((grant) => grant.scope === 'whatsapp_business_management')
-  if (!managementGrant) {
-    throw new Error('تعذّر تأكيد صلاحية الوصول إلى حساب WhatsApp Business. أعد الربط.')
+  if (requiredScopes.includes('whatsapp_business_management') && !managementGrant) {
+    throw new MetaLinkError('meta_permission')
   }
-  const grantedWabaIds = (managementGrant.target_ids ?? [])
+  const grantedWabaIds = (managementGrant?.target_ids ?? [])
     .filter((id, index, all) => Boolean(id) && all.indexOf(id) === index)
   return { scopes, expiresAt, granularScopes, grantedWabaIds }
 }
@@ -709,14 +734,14 @@ export async function completeEmbeddedSignup(input: unknown): Promise<EmbeddedSi
   let tokenBuffer: Buffer | null = null
 
   try {
-    tokenBuffer = await exchangeCodeForBusinessToken(session.code, session.redirectUri)
+    tokenBuffer = await exchangeMetaCode(session.code, session.redirectUri)
     const tokenDebug = await debugCustomerAccessToken(tokenBuffer)
     const businessToken = tokenBuffer.toString('utf8')
     const resources = await resolveSignupResources(session, businessToken, tokenDebug.grantedWabaIds)
     const phoneNumberId = resources.phoneNumberId
     const wabaId = resources.wabaId
     if (!hasMetaWabaAccess(tokenDebug, wabaId)) {
-      throw new Error('تعذّر تأكيد أن التفويض يسمح بالوصول إلى حساب WhatsApp المختار. أعد الربط واختر الحساب الصحيح.')
+      throw new MetaLinkError('meta_permission')
     }
 
     const admin = createAdminClient()
@@ -728,95 +753,22 @@ export async function completeEmbeddedSignup(input: unknown): Promise<EmbeddedSi
       platformType: phoneState.platformType,
       sessionMarkedCoexistence: session.isOnBusinessApp === true,
     })
-    if (connectionMode !== requestedMode) {
-      throw new Error(requestedMode === 'coexistence'
-        ? 'أكدت Meta أن هذا الرقم لا يعمل في تطبيق WhatsApp Business. استخدم بطاقة واتساب العادي عبر Meta بدلاً من هذه البطاقة.'
-        : 'أكدت Meta أن هذا الرقم مرتبط بتطبيق WhatsApp Business ويدعم الاستمرار معه. استخدم بطاقة واتساب الأعمال عبر Meta.')
+    if (requestedMode && connectionMode !== requestedMode) {
+      throw new Error(connectionMode === 'cloud_api'
+        ? 'لم تؤكد ميتا وضع التعايش لهذا الرقم. اختر بطاقة الربط السحابي فقط.'
+        : 'أكدت ميتا التعايش مع تطبيق واتساب للأعمال. اختر بطاقة وضع التعايش.')
     }
     const displayNumber = phoneState.displayPhoneNumber ??
       (session.displayPhoneNumber ? normalizeChannelNumber(session.displayPhoneNumber) : null)
     const primaryWaacIds = Array.from(new Set((session.primaryWaacIds ?? [])
       .map((id) => String(id).trim()).filter((id) => /^\d{1,40}$/.test(id)))).slice(0, 100)
 
-    const { data: existingRows, error: readError } = await admin.from('channels')
-      .select('id, connection_mode')
-      .eq('organization_id', organizationId)
-      .eq('channel_type', 'whatsapp')
-    if (readError) throw new Error('تعذّر قراءة قنوات واتساب الحالية.')
-    const existing = existingRows?.find((row) => row.connection_mode === connectionMode) ??
-      (connectionMode === 'cloud_api' ? existingRows?.find((row) => !row.connection_mode) : undefined)
-
-    const pendingPatch = {
-      business_id: resolvedBusinessId,
-      provider_account_id: phoneNumberId,
-      external_identifier: displayNumber,
-      verification_status: 'pending',
-      is_active: false,
-      waba_id: wabaId,
-      connection_mode: connectionMode,
-      primary_waac_ids: primaryWaacIds,
-      updated_at: new Date().toISOString(),
-    }
-    const written = existing
-      ? await admin.from('channels').update(pendingPatch).eq('id', existing.id).select('id').single()
-      : await admin.from('channels').insert({
-          organization_id: organizationId,
-          channel_type: 'whatsapp',
-          ...pendingPatch,
-        }).select('id').single()
-    if (written.error || !written.data) {
-      console.error('EmbeddedSignup: failed to save pending channel', written.error)
-      throw new Error('تعذّر حفظ قناة واتساب. حاول مرة أخرى.')
-    }
-
-    const channelId = written.data.id as string
-    try {
-      // Save the encrypted token before webhook subscription; the exchanged
-      // single-use OAuth code must not be the only durable authorization copy.
-      await saveChannelCredential(admin, {
-        organizationId, channelId, provider: 'meta',
-        credentialType: 'access_token', value: businessToken,
-      })
-      await saveChannelCredential(admin, {
-        organizationId, channelId, provider: 'meta',
-        credentialType: 'business_account_id', value: wabaId,
-      })
-      await saveChannelCredential(admin, {
-        organizationId, channelId, provider: 'meta',
-        credentialType: 'phone_number_id', value: phoneNumberId,
-      })
-    } catch (credentialWriteError) {
-      await deleteChannelCredential(admin, {
-        organizationId, channelId, provider: 'meta',
-      }).catch((cleanupError) => {
-        console.error('EmbeddedSignup: partial credential cleanup failed', cleanupError)
-      })
-      throw credentialWriteError
-    }
-
-    const persistedCredentials = await loadChannelCredentials(admin, channelId, 'meta')
-    if (
-      persistedCredentials.access_token !== businessToken ||
-      persistedCredentials.business_account_id !== wabaId ||
-      persistedCredentials.phone_number_id !== phoneNumberId
-    ) {
-      throw new Error('تعذّر التحقق من حفظ بيانات اعتماد Meta المشفّرة.')
-    }
-
     await subscribeAppToWaba(wabaId, businessToken)
-
-    // Activate the verified channel before requesting sync: Meta may deliver
-    // contact/history webhooks immediately after each smb_app_data call, and
-    // webhook resolution only accepts active verified channels.
-    const activated = await admin.from('channels').update({
-      verification_status: connectionMode === 'coexistence' ? 'verified' : 'pending',
-      is_active: connectionMode === 'coexistence',
-      updated_at: new Date().toISOString(),
-    }).eq('id', channelId).eq('organization_id', organizationId).select('id').single()
-    if (activated.error || !activated.data) {
-      console.error('EmbeddedSignup: unable to finalize channel state', { channelId, error: activated.error })
-      throw new Error('تم حفظ التفويض، لكن تعذّر تأكيد حالة قناة واتساب. أعد المحاولة من صفحة القنوات.')
-    }
+    const channelId = await bindMetaChannel(admin, {
+      organizationId, businessId: resolvedBusinessId, channelType: 'whatsapp',
+      assetId: phoneNumberId, accessToken: businessToken,
+      whatsapp: { wabaId, displayNumber, connectionMode, primaryWaacIds },
+    })
 
     const coexistenceSync = connectionMode === 'coexistence'
       ? await requestCoexistenceDataSync(admin, {
@@ -843,13 +795,14 @@ export async function completeEmbeddedSignup(input: unknown): Promise<EmbeddedSi
       isOnBusinessApp: connectionMode === 'coexistence',
       message: connectionMode === 'coexistence'
         ? (coexistenceSync?.contacts.status === 'requested' && coexistenceSync.history.status === 'requested'
-          ? 'تم ربط WhatsApp Business مع Kayan AI. طلبنا مزامنة جهات الاتصال وسجل المحادثات من Meta؛ لا يلزم إدخال PIN.'
-          : 'تم ربط WhatsApp Business مع Kayan AI، لكن طلب مزامنة البيانات لم يكتمل بالكامل. يمكنك استخدام القناة، ويمكن مراجعة حالة المزامنة من سجل الربط.')
-        : 'تم تفويض Meta وحفظ بيانات القناة. أكمل تسجيل رقم الإرسال برمز PIN المكوّن من 6 أرقام قبل التفعيل.',
+          ? 'تم الربط بوضع التعايش مع تطبيق واتساب للأعمال. طلبنا مزامنة جهات الاتصال وسجل المحادثات.'
+          : 'تم الربط بوضع التعايش مع تطبيق واتساب للأعمال. القناة جاهزة للاستخدام، ومزامنة البيانات غير مكتملة.')
+        : 'تم حفظ تفويض واتساب. إذا كانت القناة تحتاج إلى إعداد، أكمل تسجيل الرقم برمز التحقق بخطوتين.',
       ...(coexistenceSync ? { coexistenceSync } : {}),
     }
   } catch (error) {
-    console.error('EmbeddedSignup: complete failed', error)
+    if (error instanceof MetaLinkError) return { ok: false, error: error.message, status: error.status }
+    console.error('EmbeddedSignup: complete failed', { errorType: error instanceof Error ? error.name : 'unknown' })
     const message = error instanceof Error && /^(تعذّر|لم تتمكن|لم تؤكد|رفضت Meta|انتهت|تم حفظ)/.test(error.message)
       ? error.message
       : 'تعذّر إتمام ربط واتساب. لم يتم تفعيل القناة لأن التحقق أو حفظ بيانات الربط لم يكتمل.'

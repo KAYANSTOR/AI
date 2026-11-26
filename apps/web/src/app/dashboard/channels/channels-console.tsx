@@ -9,7 +9,7 @@ import {
   saveChannelAction,
   setChannelActiveAction,
   testChannelAction,
-  connectWhatsAppChannelAction,
+  startInstagramMetaLinkAction,
   connectTelegramChannelAction,
   completeMessengerConnectionAction,
   deleteChannelAction,
@@ -20,6 +20,8 @@ import { WhatsAppQrConnector } from './whatsapp-qr-connector'
 import { MessengerConnectButton } from '@/components/channels/messenger-connect-button'
 import { registerWhatsAppCloudApiNumberAction } from '@/app/onboarding/embedded-signup-actions'
 import { ChannelCard as UIChannelCard, type ChannelStatus } from '@/components/ui/channel-card'
+import { isMetaChannel } from '@/lib/channels/meta-connection'
+import { whatsAppConnectionModeLabel } from '@/lib/channels/whatsapp-connection-mode'
 
 type ChannelCard = {
   key: string
@@ -38,6 +40,10 @@ type ChannelCard = {
 
 type State = 'not_connected' | 'pending' | 'verified' | 'disabled' | 'error'
 
+function isMetaCard(card: ChannelCard) {
+  return isMetaChannel(card.type) && card.connectionMode !== 'qr_unofficial'
+}
+
 function stateOf(card: ChannelCard): State {
   if (!card.connected) return 'not_connected'
   if (card.verificationStatus === 'pending') return 'pending'
@@ -48,8 +54,8 @@ function stateOf(card: ChannelCard): State {
 }
 
 const stateCopy: Record<State, { title: string; hint: string }> = {
-  not_connected: { title: 'غير مربوط', hint: 'ابدأ بالربط عبر Meta لاستقبال رسائل العملاء' },
-  pending: { title: 'إعداد WhatsApp غير مكتمل', hint: 'اربط الرقم عبر Meta ثم أكمل تسجيل Cloud API باستخدام PIN من 6 أرقام' },
+  not_connected: { title: 'غير مربوط', hint: 'اربط القناة لاستقبال رسائل العملاء' },
+  pending: { title: 'الإعداد غير مكتمل', hint: 'أكمل خطوات الربط لتفعيل القناة' },
   verified: { title: 'مربوط', hint: 'القناة جاهزة للتوجيه والرد' },
   disabled: { title: 'متوقف', hint: 'القناة موجودة لكنها غير مفعّلة' },
   error: { title: 'يحتاج إعادة محاولة', hint: 'راجع بيانات الربط ثم أعد المحاولة' },
@@ -76,13 +82,12 @@ export function ChannelsConsole({
   return (
     <div className="space-y-6">
       {notice ? <p role="status" className="rounded-xl border border-border bg-surface px-4 py-3 text-sm text-text">{notice}</p> : null}
-      <section aria-labelledby="whatsapp-channel-options-title" className="space-y-3">
+      <section aria-labelledby="meta-channels-title" className="space-y-3">
         <div>
-          <h2 id="whatsapp-channel-options-title" className="text-base font-bold text-text">قنوات واتساب</h2>
-          <p className="mt-1 text-xs leading-6 text-text-muted">اختر طريقة الربط المناسبة. لكل بطاقة اتصال وإعدادات وحالة مستقلة.</p>
+          <h2 id="meta-channels-title" className="text-base font-bold text-text">قنوات ميتا</h2>
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
-          {cards.filter((card) => card.type === 'whatsapp').map((card) => {
+          {cards.filter(isMetaCard).map((card) => {
             const state = stateOf(card)
             const status: ChannelStatus =
               state === 'verified' ? 'connected' : state === 'pending' || state === 'error' ? 'needsSetup' : 'disconnected'
@@ -90,11 +95,13 @@ export function ChannelsConsole({
               <UIChannelCard
                 key={card.key}
                 name={card.label}
-                description={card.publicNumber ? `${card.publicNumber} · ${card.provider}` : card.description}
+                description={card.connected
+                  ? [card.type === 'whatsapp' ? whatsAppConnectionModeLabel(card.connectionMode) : null, card.publicNumber].filter(Boolean).join(' · ') || card.description
+                  : card.description}
                 status={status}
                 icon={<MessageCircle className="h-6 w-6" aria-hidden="true" />}
-                iconBg="bg-[#25D366]"
-                actionLabel={state === 'verified' ? 'إدارة الاتصال' : state === 'pending' ? 'استكمال الربط' : 'إعداد هذه الطريقة'}
+                iconBg="bg-primary"
+                actionLabel={state === 'verified' ? 'إدارة الاتصال' : state === 'pending' ? 'استكمال الربط' : canManage ? 'ربط القناة' : 'عرض التفاصيل'}
                 onAction={() => setOpenKey(card.key)}
               />
             )
@@ -109,11 +116,11 @@ export function ChannelsConsole({
             <p className="mt-1 text-xs text-text-muted">القنوات المربوطة بنشاطك التجاري</p>
           </div>
           <span className="rounded-full border border-success/30 bg-success/10 px-3 py-1 text-xs font-semibold text-success">
-            {cards.filter((card) => card.type !== 'whatsapp' && card.connected && card.verificationStatus === 'verified' && card.isActive).length} نشطة
+            {cards.filter((card) => !isMetaCard(card) && card.connected && card.verificationStatus === 'verified' && card.isActive).length} نشطة
           </span>
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
-        {cards.filter((card) => card.type !== 'whatsapp' && card.connected && card.verificationStatus === 'verified').map((card) => {
+        {cards.filter((card) => !isMetaCard(card) && card.connected && card.verificationStatus === 'verified').map((card) => {
           const state = stateOf(card)
           const status: ChannelStatus =
             state === 'verified' ? 'connected' : state === 'pending' || state === 'error' ? 'needsSetup' : 'disconnected'
@@ -179,7 +186,7 @@ export function ChannelsConsole({
           <p className="mt-1 text-xs text-text-muted">اختر قناة لإكمال إعدادها وربطها بحسابك</p>
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
-          {cards.filter((card) => card.type !== 'whatsapp' && (!card.connected || card.verificationStatus !== 'verified')).map((card) => {
+          {cards.filter((card) => !isMetaCard(card) && (!card.connected || card.verificationStatus !== 'verified')).map((card) => {
             const state = stateOf(card)
             const getIcon = () => card.type === 'messenger' ? <MessageCircle className="h-6 w-6" aria-hidden="true" /> : <MessageSquare className="h-6 w-6" aria-hidden="true" />
             return (
@@ -222,6 +229,7 @@ function ChannelDialog({
   const [telegramBotToken, setTelegramBotToken] = useState('')
   const [messengerPages, setMessengerPages] = useState<Array<{ id: string; name: string }>>([])
   const [selectedMessengerPage, setSelectedMessengerPage] = useState('')
+  const [instagramPageId, setInstagramPageId] = useState('')
   const state = stateOf(card)
 
   if (!spec) return null
@@ -232,9 +240,7 @@ function ChannelDialog({
       setNotice(null)
       setTestResult(null)
       const result =
-        card.type === 'whatsapp'
-          ? await connectWhatsAppChannelAction({ number: identifier })
-          : card.type === 'telegram'
+        card.type === 'telegram'
             ? await connectTelegramChannelAction({ botToken: telegramBotToken })
             : await saveChannelAction({ channelType: card.type, identifier, publicNumber })
       setNotice({
@@ -242,6 +248,21 @@ function ChannelDialog({
         text: result.ok ? result.message ?? 'تم حفظ الربط.' : result.error ?? 'تعذّر إكمال الربط.',
       })
       if (result.ok) router.refresh()
+    })
+  }
+
+  function connectInstagram() {
+    if (!canManage || busy) return
+    startTransition(async () => {
+      setNotice(null)
+      try {
+        const result = await startInstagramMetaLinkAction({ pageId: instagramPageId })
+        if (result.ok) window.location.assign(result.url)
+        else setNotice({ ok: false, text: result.error })
+      } catch (error) {
+        console.error('Unable to start Instagram link', { errorType: error instanceof Error ? error.name : 'unknown' })
+        setNotice({ ok: false, text: 'تعذّر الاتصال بخدمة الربط. حاول مرة أخرى.' })
+      }
     })
   }
 
@@ -361,12 +382,12 @@ function ChannelDialog({
             <section className="space-y-3 rounded-2xl border border-border bg-background p-4">
               <div>
                 <h2 className="text-sm font-bold text-text">
-                  {card.connectionMode === 'coexistence' ? 'الربط عبر WhatsApp Business App' : 'الربط عبر WhatsApp Cloud API'}
+                  {whatsAppConnectionModeLabel(card.connectionMode)}
                 </h2>
                 <p className="mt-1 text-xs leading-6 text-text-muted">
                   {card.connectionMode === 'coexistence'
-                    ? 'هذا المسار مخصص لرقم يعمل في تطبيق WhatsApp Business، مع إبقاء التطبيق متاحاً على الهاتف.'
-                    : 'هذا المسار مخصص لربط رقم WhatsApp Cloud API مباشرة. إذا كان الرقم مستخدماً في تطبيق واتساب، فقد تطلب Meta نقله إلى منصة الأعمال قبل إكمال الإعداد.'}
+                    ? 'اربط الرقم مع الاستمرار في استخدام تطبيق واتساب للأعمال على الهاتف.'
+                    : 'اربط الرقم بخدمة واتساب السحابية. قد تطلب ميتا نقل الرقم من التطبيق قبل إكمال الإعداد.'}
                 </p>
               </div>
               <WhatsAppEmbeddedSignupButton
@@ -387,10 +408,9 @@ function ChannelDialog({
 
           {card.type === 'whatsapp' && card.connected && card.connectionMode === 'coexistence' ? (
             <section className="space-y-2 rounded-2xl border border-success/30 bg-success/5 p-4">
-              <h3 className="text-sm font-bold text-text">الاستمرار باستخدام تطبيق WhatsApp Business</h3>
+              <h3 className="text-sm font-bold text-text">استخدام الرقم على تطبيق واتساب للأعمال</h3>
               <p className="text-xs leading-6 text-text-muted">
-                أكدت Meta أن الرقم مسجل في Cloud API وما زال يعمل في تطبيق WhatsApp Business.
-                لا تستخدم تسجيل الرقم التقليدي ولا تدخل PIN لهذا الاتصال.
+                أكدت ميتا التعايش. يعمل الرقم على التطبيق وفي الخدمة السحابية ويُفعّل تلقائيًا.
               </p>
             </section>
           ) : null}
@@ -436,12 +456,27 @@ function ChannelDialog({
             </section>
           ) : null}
 
-          {card.type === 'messenger' ? (
+          {card.type === 'instagram' ? (
+            <form className="space-y-3" onSubmit={(event) => { event.preventDefault(); connectInstagram() }}>
+              <p className="text-sm leading-6 text-text-muted">اختر صفحة فيسبوك المرتبطة بحساب إنستغرام المهني.</p>
+              <label className="block text-sm font-semibold text-text">
+                معرّف صفحة فيسبوك (اختياري)
+                <span className="mt-1 block text-xs font-normal text-text-muted">أدخله إذا كنت تدير أكثر من صفحة.</span>
+                <input value={instagramPageId} onChange={(event) => setInstagramPageId(event.target.value)}
+                  maxLength={40} inputMode="numeric" dir="ltr" disabled={!canManage || busy}
+                  className="mt-2 min-h-12 w-full rounded-xl border border-border bg-surface px-3 text-sm text-text" />
+              </label>
+              <button type="submit" disabled={!canManage || busy}
+                className="inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:opacity-50">
+                {card.connected ? 'إعادة الربط عبر ميتا' : 'متابعة الربط عبر ميتا'}
+              </button>
+            </form>
+          ) : card.type === 'messenger' ? (
             <section className="space-y-5">
               <div className="rounded-2xl border border-border bg-background p-5">
                 <div className="flex items-center gap-3">
                   <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#0866FF]/10 text-[#0866FF]"><MessageCircle size={24} /></span>
-                  <div><h2 className="text-base font-bold text-text">ربط صفحة Facebook</h2><p className="mt-1 text-xs leading-6 text-text-muted">سجّل الدخول بالحساب الذي يدير الصفحة ووافق على صلاحيات الرسائل وWebhooks.</p></div>
+                  <div><h2 className="text-base font-bold text-text">ربط رسائل صفحة فيسبوك</h2><p className="mt-1 text-xs leading-6 text-text-muted">سجّل الدخول بالحساب الذي يدير الصفحة ووافق على صلاحيات الرسائل والإشعارات.</p></div>
                 </div>
                 <ul className="mt-4 space-y-2 text-xs leading-6 text-text-muted">
                   <li>اختر صفحة واحدة لربطها بصندوق الوارد.</li>
@@ -449,7 +484,7 @@ function ChannelDialog({
                   <li>يُحفظ رمز الصفحة مشفّراً على الخادم ولا يصل إلى المتصفح.</li>
                 </ul>
               </div>
-              <MessengerConnectButton disabled={!canManage || busy}
+              <MessengerConnectButton disabled={!canManage || busy} linked={card.connected}
                 onPages={(pages) => { setMessengerPages(pages); setSelectedMessengerPage(pages[0]?.id ?? ''); setNotice({ok:true,text:'تم التفويض. اختر الصفحة التي تريد ربطها.'}) }}
                 onError={(message) => setNotice({ok:false,text:message})} />
               {messengerPages.length > 0 ? (
@@ -471,7 +506,6 @@ function ChannelDialog({
                   </button>
                 </div>
               ):null}
-              <p className="text-xs leading-5 text-text-muted">يتطلب الربط صلاحيات Meta ‏pages_show_list وpages_messaging وpages_manage_metadata. وقد تتطلب إتاحته لجميع العملاء مراجعة Meta.</p>
             </section>
           ) : card.type === 'telegram' ? (
             <section className="space-y-5">
@@ -528,9 +562,7 @@ function ChannelDialog({
                 {spec.bindingLabel}
               </span>
               <span className="mt-1 block text-xs leading-5 text-text-muted">
-                {card.type === 'instagram'
-                  ? 'يُستخدم فقط لإنشاء الربط؛ لن نعرضه في الصفحة بعد الحفظ.'
-                  : 'أدخل المعرّف أو الرقم المطلوب للقناة.'}
+                أدخل المعرّف أو الرقم المطلوب للقناة.
               </span>
               <input
                 value={identifier}
@@ -606,7 +638,7 @@ function ChannelDialog({
                 حذف إعدادات القناة
               </button>
             ) : null}
-            {canManage && card.type !== 'messenger' && card.type !== 'whatsapp' ? (
+            {canManage && !isMetaChannel(card.type) ? (
               <button
                 type="button"
                 onClick={submit}
@@ -615,12 +647,6 @@ function ChannelDialog({
               >
                 {busy ? <Loader2 size={18} className="animate-spin" /> : <Link2 size={17} />}
                 {state === 'verified' ? 'إعادة التحقق' : 'حفظ والربط'}
-              </button>
-            ) : null}
-            {canManage && card.connected ? (
-              <button type="button" onClick={removeChannel} disabled={busy}
-                className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-error/30 px-4 text-sm font-semibold text-error hover:bg-error/5 disabled:opacity-50">
-                حذف إعدادات القناة
               </button>
             ) : null}
             {state !== 'not_connected' ? (

@@ -2,13 +2,58 @@ import { describe, expect, test } from 'bun:test'
 import type { DbClient } from '@/lib/db/client'
 import {
   createEmbeddedSignupOAuthState,
+  debugMetaAccessToken,
+  debugCustomerAccessToken,
   ensureBusinessId,
+  hasMetaWabaAccess,
   verifyEmbeddedSignupOAuthState,
 } from '@/lib/channels/embedded-signup'
 import { createFakeDb } from './support/fake-db'
+import { META_LINK_NOTICES } from '@/lib/channels/meta-connection'
 
 const ORG = 'aaaaaaaa-0000-4000-8000-000000000001'
 const EXISTING_BUSINESS = 'bbbbbbbb-0000-4000-8000-000000000001'
+
+describe('Meta token authorization', () => {
+  test('rejects missing messaging permissions and expired tokens and scopes the WhatsApp grant', async () => {
+    const previousAppId = process.env.NEXT_PUBLIC_META_APP_ID
+    const previousSecret = process.env.META_APP_SECRET
+    const appId = '10000000'
+    process.env.NEXT_PUBLIC_META_APP_ID = appId
+    process.env.META_APP_SECRET = 'synthetic-app-secret'
+    const accepted = { app_id: appId, is_valid: true, expires_at: 0 }
+    const originalFetch = globalThis.fetch
+    const responses = [
+      Response.json({ data: { ...accepted, scopes: ['pages_show_list'] } }),
+      Response.json({ data: { ...accepted, expires_at: 1 } }),
+      Response.json({ data: {
+        ...accepted,
+        scopes: ['whatsapp_business_management', 'whatsapp_business_messaging'],
+        granular_scopes: [{ scope: 'whatsapp_business_management', target_ids: ['10000001'] }],
+      } }),
+    ]
+    globalThis.fetch = (async () => {
+      const response = responses.shift()
+      if (!response) throw new Error('Unexpected call to Meta')
+      return response
+    }) as typeof fetch
+    const token = Buffer.from('synthetic-token')
+    try {
+      await expect(debugMetaAccessToken(token, ['pages_messaging'])).rejects.toThrow(META_LINK_NOTICES.meta_permission)
+      await expect(debugMetaAccessToken(token, ['pages_messaging'])).rejects.toThrow(META_LINK_NOTICES.meta_expired)
+      const grant = await debugCustomerAccessToken(token)
+      expect(hasMetaWabaAccess(grant, '10000001')).toBe(true)
+      expect(hasMetaWabaAccess(grant, '10000002')).toBe(false)
+    } finally {
+      globalThis.fetch = originalFetch
+      token.fill(0)
+      if (previousAppId === undefined) delete process.env.NEXT_PUBLIC_META_APP_ID
+      else process.env.NEXT_PUBLIC_META_APP_ID = previousAppId
+      if (previousSecret === undefined) delete process.env.META_APP_SECRET
+      else process.env.META_APP_SECRET = previousSecret
+    }
+  })
+})
 
 describe('WhatsApp Embedded Signup business binding', () => {
   test('reuses the organization business already linked to its profile', async () => {
@@ -140,6 +185,25 @@ describe('WhatsApp Embedded Signup OAuth callback state', () => {
     } finally { restoreTestEnvironment() }
   })
 
+  test('binds a social authorization to its organization, purpose and selected page', async () => {
+    configureTestEnvironment()
+    const nonces = createNonceStore()
+    const social = { channel: 'messenger', pageId: '10000001' } as const
+    try {
+      const result = await createEmbeddedSignupOAuthState(ORG, nonces.persist, social)
+      expect(new URL(result.redirectUri).pathname).toBe('/api/meta/connect/callback')
+      expect(await verifyEmbeddedSignupOAuthState(result.state, ORG, nonces.consume)).toBeNull()
+      expect(await verifyEmbeddedSignupOAuthState(result.state, ORG, nonces.consume, 'instagram')).toBeNull()
+      expect(await verifyEmbeddedSignupOAuthState(
+        result.state, 'cccccccc-0000-4000-8000-000000000001', nonces.consume, 'messenger',
+      )).toBeNull()
+      expect(await verifyEmbeddedSignupOAuthState(result.state, ORG, nonces.consume, 'messenger')).toEqual({
+        redirectUri: result.redirectUri, social,
+      })
+      expect(await verifyEmbeddedSignupOAuthState(result.state, ORG, nonces.consume, 'messenger')).toBeNull()
+    } finally { restoreTestEnvironment() }
+  })
+
   test('rejects a modified or expired state before nonce consumption', async () => {
     configureTestEnvironment()
     const nonces = createNonceStore()
@@ -147,9 +211,6 @@ describe('WhatsApp Embedded Signup OAuth callback state', () => {
     try {
       const result = await createEmbeddedSignupOAuthState(ORG, nonces.persist)
       const [encoded, signature] = result.state.split('.')
-      // The final base64url character of an HMAC-SHA256 signature carries
-      // padding bits, so flipping it may not change any decoded byte. Change
-      // the first character instead, whose six bits all belong to byte 0.
       const changed = signature.startsWith('A') ? 'B' : 'A'
       const tampered = encoded + '.' + changed + signature.slice(1)
       expect(await verifyEmbeddedSignupOAuthState(tampered, ORG, nonces.consume)).toBeNull()

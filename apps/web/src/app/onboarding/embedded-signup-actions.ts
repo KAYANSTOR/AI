@@ -8,19 +8,21 @@ import { canRegisterWhatsAppCloudApiNumber } from '@/lib/channels/whatsapp-conne
 import { getMetaGraphBaseUrl } from '@/lib/channels/embedded-signup'
 import { getCurrentOrg } from '@/lib/org'
 import { actionErrorMessage } from '@/lib/i18n/action-error'
+import { canManageMetaChannels, MetaLinkError, META_LINK_NOTICES, metaLinkStatusFromGraph, type MetaLinkStatus } from '@/lib/channels/meta-connection'
+import { publicMetaConnectionMode } from '@/lib/channels/whatsapp-connection-mode'
 import {
   completeEmbeddedSignup,
   createEmbeddedSignupOAuthState,
   verifyEmbeddedSignupOAuthState,
 } from '@/lib/channels/embedded-signup'
 
-export type OnboardingResult = { ok: boolean; error?: string; message?: string }
+export type OnboardingResult = { ok: boolean; error?: string; message?: string; status?: MetaLinkStatus }
 
 async function requireOnboardingAdmin() {
   const org = await getCurrentOrg()
   if (!org) throw new Error('الجلسة منتهية. سجّل الدخول من جديد.')
-  if (org.role !== 'owner' && org.role !== 'admin') {
-    throw new Error('إعداد النشاط متاح لمالك النشاط أو المسؤول فقط.')
+  if (!canManageMetaChannels(org.role)) {
+    throw new MetaLinkError('meta_forbidden')
   }
   return org
 }
@@ -86,7 +88,7 @@ export async function completeWhatsAppEmbeddedSignupAction(input: {
     const org = await requireOnboardingAdmin()
     const oauthState = await verifyEmbeddedSignupOAuthState(input.state, org.organizationId)
     if (!oauthState) {
-      return { ok: false, error: 'انتهت صلاحية جلسة Meta أو لم تتطابق مع الحساب الحالي. أعد بدء الربط.' }
+      return { ok: false, status: 'meta_expired', error: META_LINK_NOTICES.meta_expired }
     }
 
     const db = await createClient()
@@ -101,7 +103,7 @@ export async function completeWhatsAppEmbeddedSignupAction(input: {
       organizationId: org.organizationId,
       businessId: (profile?.business_id as string | null) ?? null,
       organizationName: org.organizationName,
-      requestedMode: input.requestedMode ?? 'coexistence',
+      requestedMode: input.requestedMode,
       session: {
         code: input.code,
         phoneNumberId: input.phoneNumberId ?? null,
@@ -115,7 +117,7 @@ export async function completeWhatsAppEmbeddedSignupAction(input: {
       },
     })
 
-    if (!result.ok) return { ok: false, error: result.error }
+    if (!result.ok) return { ok: false, error: result.error, status: result.status }
 
     await auditSetup(
       org.organizationId,
@@ -127,7 +129,7 @@ export async function completeWhatsAppEmbeddedSignupAction(input: {
         phone_number_id: result.phoneNumberId,
         waba_id: result.wabaId,
         display_number: result.displayNumber,
-        connection_mode: result.isOnBusinessApp ? 'coexistence' : 'standard',
+        connection_mode: publicMetaConnectionMode(result.isOnBusinessApp ? 'coexistence' : 'cloud_api'),
         primary_waac_ids: Array.isArray(input.primaryWaacIds) ? input.primaryWaacIds : [],
       }
     )
@@ -136,6 +138,7 @@ export async function completeWhatsAppEmbeddedSignupAction(input: {
     revalidatePath('/dashboard/channels')
     return { ok: true, message: result.message }
   } catch (error) {
+    if (error instanceof MetaLinkError) return { ok: false, error: error.message, status: error.status }
     return { ok: false, error: actionErrorMessage(error, 'تعذّر إتمام ربط واتساب عبر Meta.') }
   }
 }
@@ -154,7 +157,7 @@ export async function registerWhatsAppCloudApiNumberAction(input: {
     const admin = createAdminClient()
     const { data: channelRows, error: channelError } = await admin
       .from('channels')
-      .select('id, provider_account_id, business_id, channel_type, connection_mode, waba_id')
+      .select('id, provider_account_id, business_id, channel_type, connection_mode, waba_id, metadata')
       .eq('organization_id', org.organizationId)
       .eq('channel_type', 'whatsapp')
 
@@ -177,7 +180,7 @@ export async function registerWhatsAppCloudApiNumberAction(input: {
     }
 
     const phoneNumberId = String(channel.provider_account_id)
-    const credentials = await loadChannelCredentials(admin, channel.id, 'meta')
+    const credentials = await loadChannelCredentials(admin, channel.id, 'meta', org.organizationId)
     const accessToken = credentials.access_token?.trim()
     const storedPhoneNumberId = credentials.phone_number_id?.trim()
     if (!accessToken || !storedPhoneNumberId) {
@@ -202,25 +205,29 @@ export async function registerWhatsAppCloudApiNumberAction(input: {
       id?: string
       is_on_biz_app?: boolean
       platform_type?: string
-      error?: { message?: string }
+      error?: { code?: number }
     } | null
     if (!phoneCheckResponse.ok || phoneCheck?.id !== phoneNumberId) {
       console.error('WhatsApp registration: could not verify Meta phone mode', {
         httpStatus: phoneCheckResponse.status,
-        metaMessage: phoneCheck?.error?.message ?? null,
+        metaCode: phoneCheck?.error?.code,
       })
+      const status = metaLinkStatusFromGraph(phoneCheck?.error?.code, phoneCheckResponse.status)
+      if (status !== 'meta_error') return { ok: false, error: META_LINK_NOTICES[status] }
       return { ok: false, error: 'تعذّر التحقق من وضع الرقم لدى Meta. لم نرسل PIN ولم ننفذ التسجيل؛ أعد فحص الربط.' }
     }
     if (phoneCheck.is_on_biz_app === true) {
       if (phoneCheck.platform_type?.toUpperCase() === 'CLOUD_API') {
-        const { error: coexistenceUpdateError } = await admin.from('channels').update({
+        const { data: updatedMode, error: coexistenceUpdateError } = await admin.from('channels').update({
           connection_mode: 'coexistence',
+          metadata: { ...channel.metadata, meta_connection_mode: 'coexistence' },
           waba_id: credentials.business_account_id?.trim() || credentials.waba_id?.trim() || channel.waba_id,
           verification_status: 'verified',
           is_active: true,
           updated_at: new Date().toISOString(),
         }).eq('id', channel.id).eq('organization_id', org.organizationId)
-        if (coexistenceUpdateError) {
+          .eq('provider_account_id', phoneNumberId).select('id').maybeSingle()
+        if (coexistenceUpdateError || !updatedMode) {
           console.error('WhatsApp registration: Coexistence was detected but channel state update failed', {
             channelId: channel.id,
             error: coexistenceUpdateError,
@@ -260,8 +267,9 @@ export async function registerWhatsAppCloudApiNumberAction(input: {
       console.error('WhatsApp registration: Meta rejected phone registration', {
         httpStatus: response.status,
         metaCode: code,
-        details: body?.error?.error_data?.details ?? null,
       })
+      const status = metaLinkStatusFromGraph(code ?? undefined, response.status)
+      if (status !== 'meta_error') return { ok: false, error: META_LINK_NOTICES[status] }
 
       if (code === 133005) {
         return { ok: false, error: 'رمز PIN غير صحيح. أدخل رمز التحقق بخطوتين الحالي لهذا الرقم.' }
@@ -293,6 +301,8 @@ export async function registerWhatsAppCloudApiNumberAction(input: {
       .eq('id', channel.id)
       .eq('organization_id', org.organizationId)
       .eq('channel_type', 'whatsapp')
+      .eq('provider_account_id', phoneNumberId)
+      .or('connection_mode.eq.cloud_api,connection_mode.is.null')
       .select('id')
       .single()
 

@@ -8,6 +8,8 @@ import {
   parseMetaEmbeddedSignupEvent,
   type MetaEmbeddedSignupSession,
 } from '@/lib/channels/embedded-signup-session'
+import { META_LINK_NOTICES, metaLinkStatusFromGraph } from '@/lib/channels/meta-connection'
+import { useMetaAuthorization } from './use-meta-authorization'
 
 const META_GRAPH_VERSION = 'v26.0'
 
@@ -82,6 +84,11 @@ export function WhatsAppEmbeddedSignupButton({
   const [sdkError, setSdkError] = useState<string | null>(null)
   const pendingSignup = useRef<PendingSignup | null>(null)
   const mounted = useRef(true)
+  const { authorization, takeState } = useMetaAuthorization(
+    createWhatsAppEmbeddedSignupOAuthStateAction,
+    Boolean(appId && configId && sdkReady && !disabled),
+    busy,
+  )
 
   useEffect(() => {
     mounted.current = true
@@ -183,16 +190,12 @@ export function WhatsAppEmbeddedSignupButton({
       if (!isTrustedMetaEmbeddedSignupOrigin(event.origin)) return
       const parsed = parseMetaEmbeddedSignupEvent(event.origin, event.data)
       const pending = pendingSignup.current
-      if (!pending || parsed.kind === 'ignore') return
+      if (!pending || pending.completing || parsed.kind === 'ignore') return
 
       if (parsed.kind === 'cancel') {
         pendingSignup.current = null
         setBusy(false)
-        onError?.(
-          parsed.currentStep
-            ? 'تم إلغاء ربط واتساب عند خطوة: ' + parsed.currentStep
-            : 'تم إلغاء ربط واتساب قبل اكتمال العملية.'
-        )
+        onError?.(META_LINK_NOTICES.meta_cancelled)
         return
       }
 
@@ -200,7 +203,7 @@ export function WhatsAppEmbeddedSignupButton({
         pendingSignup.current = null
         setBusy(false)
         console.error('Meta Embedded Signup reported an error', { code: parsed.code })
-        onError?.(parsed.message)
+        onError?.(META_LINK_NOTICES[metaLinkStatusFromGraph(Number(parsed.code))])
         return
       }
 
@@ -212,52 +215,52 @@ export function WhatsAppEmbeddedSignupButton({
     return () => window.removeEventListener('message', handleMessage)
   }, [finishIfReady, onError])
 
-  async function launch() {
+  function launch() {
     if (busy || disabled) return
-    if (!appId || !configId) {
-      onError?.('ربط واتساب عبر Meta غير مُفعّل بعد. أكمل App ID وConfiguration ID في إعدادات المنصة.')
-      return
-    }
-    if (!sdkReady || !window.FB) {
-      onError?.(sdkError ?? 'خدمة Meta لم تجهز بعد. انتظر حتى يكتمل تحميلها ثم حاول مرة أخرى.')
-      return
-    }
+    const sdk = window.FB
+    if (!sdk || !authorization || !sdkReady) return
+    const state = takeState()
+    if (!state) return
 
     setBusy(true)
     try {
-      const stateResult = await createWhatsAppEmbeddedSignupOAuthStateAction()
-      if (!stateResult.ok) {
-        setBusy(false)
-        onError?.(stateResult.error)
-        return
-      }
-
-      pendingSignup.current = {
-        state: stateResult.state,
+      const attempt: PendingSignup = {
+        state,
         code: null,
         session: null,
         completing: false,
       }
+      pendingSignup.current = attempt
+      window.setTimeout(() => {
+        if (!mounted.current || pendingSignup.current !== attempt || attempt.completing) return
+        pendingSignup.current = null
+        setBusy(false)
+        onError?.('لم يكتمل التفويض في نافذة ميتا. أعد المحاولة.')
+      }, 240_000)
 
-      window.FB.login((response) => {
+      sdk.login((response) => {
+        if (!mounted.current || pendingSignup.current !== attempt) return
         const code = response.authResponse?.code?.trim()
         if (!code) {
           // The session event may already have reported a cancellation or error.
-          if (!pendingSignup.current) return
           pendingSignup.current = null
           setBusy(false)
           onError?.(
-            response.error?.message
-              ? 'رفضت Meta تسجيل الدخول: ' + response.error.message
-              : 'لم تُرجع Meta رمز التفويض. أعد المحاولة وأكمل جميع خطوات الموافقة.'
+            response.error || response.status === 'not_authorized'
+              ? META_LINK_NOTICES.meta_permission
+              : META_LINK_NOTICES.meta_cancelled
           )
           return
         }
 
-        const pending = pendingSignup.current
-        if (!pending) return
-        pending.code = code
+        attempt.code = code
         void finishIfReady()
+        window.setTimeout(() => {
+          if (!mounted.current || pendingSignup.current !== attempt || attempt.completing) return
+          pendingSignup.current = null
+          setBusy(false)
+          onError?.('لم يصل تأكيد الربط من ميتا. أعد المحاولة.')
+        }, 10_000)
       }, {
         config_id: configId,
         auth_type: 'rerequest',
@@ -278,14 +281,11 @@ export function WhatsAppEmbeddedSignupButton({
     }
   }
 
-  if (!appId) {
-    return <p className="rounded-xl border border-warning/40 bg-warning/5 px-4 py-3 text-xs leading-6 text-text">ربط Meta غير مهيأ؛ أضف NEXT_PUBLIC_META_APP_ID إلى إعدادات المنصة.</p>
-  }
-  if (!configId) {
+  if (!appId || !configId) {
     return <p className="rounded-xl border border-warning/40 bg-warning/5 px-4 py-3 text-xs leading-6 text-text">
       {mode === 'cloud_api'
-        ? 'لم يتم إعداد تدفق واتساب Cloud API بعد. أضف NEXT_PUBLIC_META_CLOUD_API_CONFIG_ID من إعدادات تطبيق Meta إلى متغيرات Railway.'
-        : 'لم يتم إعداد تدفق واتساب الأعمال عبر Meta. تحقق من NEXT_PUBLIC_META_EMBEDDED_CONFIG_ID في إعدادات Railway.'}
+        ? 'الربط السحابي غير مهيأ حاليًا.'
+        : 'ربط واتساب بوضع التعايش غير مهيأ حاليًا.'}
     </p>
   }
 
@@ -294,20 +294,21 @@ export function WhatsAppEmbeddedSignupButton({
       <button
         type="button"
         onClick={launch}
-        disabled={disabled || busy || !sdkReady}
+        disabled={disabled || busy || !sdkReady || !authorization}
         className={
           className ??
           'inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#1877F2] px-6 text-base font-semibold text-white transition-colors hover:bg-[#166FE5] disabled:opacity-60'
         }
       >
-        {busy || (!sdkReady && !sdkError) ? (
+        {busy || (!authorization && !sdkError && !disabled) ? (
           <Loader2 size={18} className="animate-spin" aria-hidden="true" />
         ) : (
           <MessageCircle size={18} aria-hidden="true" />
         )}
-        {busy ? 'جارٍ إكمال الربط مع Meta…' : !sdkReady ? 'جارٍ تجهيز Meta…' : 'ربط واتساب عبر Meta'}
+        {busy ? 'جارٍ إكمال الربط مع ميتا…' : authorization?.ok === false ? 'إعادة المحاولة' : !authorization && !disabled ? 'جارٍ تجهيز الربط…' : 'ربط واتساب عبر ميتا'}
       </button>
       {sdkError ? <p role="status" className="text-xs text-error">{sdkError}</p> : null}
+      {authorization?.ok === false && <p role="status" className="text-xs text-error">{authorization.error}</p>}
     </div>
   )
 }

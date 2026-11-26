@@ -23,7 +23,7 @@ export const CHANNEL_SPECS: readonly ChannelSpec[] = [
     provider: 'Meta / WhatsApp Web QR',
     bindingColumn: 'provider_account_id',
     bindingLabel: 'رقم واتساب',
-    bindingPlaceholder: 'مثال +967777123456',
+    bindingPlaceholder: '',
     bindingHint: 'اختر الربط الرسمي من Meta أو ربط WhatsApp Web عبر QR/رمز الهاتف. الربط عبر QR غير رسمي.',
     publicNumberLabel: 'رقم واتساب المحفوظ',
     setup: [
@@ -37,16 +37,14 @@ export const CHANNEL_SPECS: readonly ChannelSpec[] = [
   {
     type: 'instagram',
     label: 'إنستغرام',
-    provider: 'Meta',
+    provider: 'ميتا',
     bindingColumn: 'provider_account_id',
-    bindingLabel: 'معرّف حساب إنستغرام (account ID)',
-    bindingPlaceholder: 'مثال 17841400000000000',
-    bindingHint: 'المعرّف الرقمي للحساب المهني من لوحة Meta. لا يُستخدم اسم المستخدم للربط.',
+    bindingLabel: 'حساب إنستغرام المهني',
+    bindingPlaceholder: '',
+    bindingHint: 'اربط حساب إنستغرام مهنيًا مرتبطًا بصفحة فيسبوك تديرها.',
     publicNumberLabel: null,
     setup: [
-      'حوّل الحساب إلى حساب أعمال واربطه بصفحة على Meta.',
-      'اشترك في حقل messages لحساب إنستغرام.',
-      'انسخ account ID والصقه هنا ثم اضغط ربط.',
+      'اربط حساب إنستغرام المهني بصفحة فيسبوك واختر الصفحة عند التفويض.',
     ],
     testScope: 'أن المعرّف محفوظ ونشط وأن النظام يوجّه رسائل هذا الحساب إلى شركتك.',
   },
@@ -70,18 +68,15 @@ export const CHANNEL_SPECS: readonly ChannelSpec[] = [
   },
   {
     type: 'messenger',
-    label: 'Facebook Messenger',
-    provider: 'Meta',
+    label: 'ماسنجر',
+    provider: 'ميتا',
     bindingColumn: 'provider_account_id',
-    bindingLabel: 'صفحة Facebook',
-    bindingPlaceholder: 'اختر صفحة بعد تسجيل الدخول إلى Facebook',
+    bindingLabel: 'صفحة فيسبوك',
+    bindingPlaceholder: 'اختر صفحة بعد تسجيل الدخول إلى فيسبوك',
     bindingHint: 'اربط صفحة تملك صلاحية إدارة الرسائل عليها؛ سيتم حفظ رمز الصفحة مشفّراً.',
     publicNumberLabel: null,
     setup: [
-      'اضغط «ربط صفحة Facebook» وسجّل الدخول بالحساب الذي يدير الصفحة.',
-      'وافق على صلاحيات عرض الصفحات وإدارة الرسائل والاشتراك في Webhooks.',
-      'اختر الصفحة التي تريد ربطها.',
-      'سيتحقق Kayan AI من صلاحية الصفحة واشتراك Webhook قبل تفعيل القناة.',
+      'سجّل الدخول بالحساب الذي يدير الصفحة ووافق على صلاحيات الرسائل، ثم اختر الصفحة.',
     ],
     testScope: 'التحقق من هوية صفحة Facebook وصلاحية رمزها واشتراك التطبيق في إشعارات الرسائل.',
   },
@@ -126,7 +121,8 @@ export type BindingTestResult = {
 
 export async function verifyChannelBinding(
   db: DbClient,
-  channel: ChannelRow
+  channel: ChannelRow,
+  organizationId: string
 ): Promise<BindingTestResult> {
   const spec = getChannelSpec(channel.channel_type)
   if (!spec) {
@@ -172,6 +168,7 @@ export async function verifyChannelBinding(
   }
 
   const resolved = await resolveChannelExact(db, {
+    organizationId,
     channelType: channel.channel_type,
     providerAccountId:
       spec.type === 'whatsapp' && !channel.provider_account_id ? null : channel.provider_account_id,

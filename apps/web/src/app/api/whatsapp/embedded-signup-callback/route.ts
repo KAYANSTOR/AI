@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { completeWhatsAppEmbeddedSignupAction } from '@/app/onboarding/embedded-signup-actions'
+import type { MetaLinkStatus } from '@/lib/channels/meta-connection'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -37,7 +38,7 @@ function safeDecode(value: string): string | null {
   }
 }
 
-function redirectToChannels(request: NextRequest, status: 'meta_success' | 'meta_error') {
+function redirectToChannels(request: NextRequest, status: MetaLinkStatus) {
   const url = new URL('/dashboard/channels', request.url)
   url.searchParams.set('status', status)
   const response = NextResponse.redirect(url)
@@ -69,7 +70,10 @@ export async function GET(request: NextRequest) {
       hasState: Boolean(state),
       hasProviderError: Boolean(params.get('error')),
     })
-    return redirectToChannels(request, 'meta_error')
+    if (params.get('error') === 'access_denied' || params.get('error_reason') === 'user_denied') {
+      return redirectToChannels(request, 'meta_cancelled')
+    }
+    return redirectToChannels(request, params.has('error') ? 'meta_permission' : 'meta_error')
   }
 
   try {
@@ -91,7 +95,7 @@ export async function GET(request: NextRequest) {
         hasBusinessPortfolioId: Boolean(businessPortfolioId),
       })
     }
-    return redirectToChannels(request, result.ok ? 'meta_success' : 'meta_error')
+    return redirectToChannels(request, result.ok ? 'meta_success' : result.status ?? 'meta_error')
   } catch (error) {
     console.error('Meta embedded signup callback failed unexpectedly', error)
     return redirectToChannels(request, 'meta_error')
