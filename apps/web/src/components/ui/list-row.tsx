@@ -52,7 +52,7 @@ export function ListRow({
       {/* Leading icon & text */}
       <div className="flex min-w-0 flex-1 items-center gap-3">
         {icon && (
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-light text-primary">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-light text-secondary">
             {icon}
           </div>
         )}

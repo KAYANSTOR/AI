@@ -6,7 +6,6 @@ import type { DashboardContext } from '@/lib/dashboard/context'
 import { loadPersonalOverview } from '@/lib/dashboard/personal-overview'
 import { formatDateTime, formatNumber } from '@/lib/i18n/format'
 import { SectionHeader } from '@/components/ui/section-header'
-import { MobileEmptyState } from '@/components/ui/empty-state'
 
 const tools = [
   { href: '/dashboard/assistant/tasks', title: 'المهام والتذكيرات', description: 'نظّم يومك ومواعيدك', icon: ClipboardList },
@@ -38,7 +37,13 @@ async function PersonalActivity({ context }: { context: DashboardContext }) {
     <section className="space-y-3" aria-label="مهام تحتاج متابعة">
       <SectionHeader title="مهام تحتاج متابعة" action="عرض الكل" actionHref="/dashboard/assistant/tasks" />
       {tasks === null ? <p role="alert" className="rounded-2xl border border-border bg-surface p-4 text-sm text-error">تعذّر تحميل مهامك. يمكنك إعادة المحاولة من صفحة المهام.</p> :
-        tasks.length === 0 ? <MobileEmptyState icon={<ClipboardList size={30} aria-hidden />} title="لا توجد مهام مفتوحة" description="ابدأ بتنظيم يومك بإضافة مهمة أو اطلب من مساعدك إنشاء تذكير." action={<Link href="/dashboard/assistant/tasks" className="inline-flex min-h-11 items-center rounded-xl bg-primary-dark px-4 text-sm font-bold text-primary-dark-foreground">إضافة مهمة</Link>} /> :
+        tasks.length === 0 ? (
+          <div className="space-y-2 rounded-2xl border border-border bg-surface p-4">
+            <p className="text-sm font-bold text-text">لا توجد مهام مفتوحة</p>
+            <p className="text-xs leading-5 text-text-muted">يمكنك إضافة مهمة أو طلب تذكير من المساعد.</p>
+            <Link href="/dashboard/assistant/tasks" className="inline-flex min-h-11 items-center rounded-xl bg-primary-dark px-4 text-sm font-bold text-primary-dark-foreground">إضافة مهمة</Link>
+          </div>
+        ) :
         <ul className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-surface">
           {tasks.map(task => <li key={task.id} className="flex items-center gap-3 p-3.5">
             <span className="dashboard-service-icon shrink-0"><Clock3 size={18} aria-hidden /></span>

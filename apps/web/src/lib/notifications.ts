@@ -25,6 +25,18 @@ export function notificationMemberFilter(memberId: string | null) {
   return memberId ? `member_id.is.null,member_id.eq.${memberId}` : 'member_id.is.null'
 }
 
+// Match SLA escalation keys and legacy technical labels without hiding regular high-priority alerts.
+export const personalNotificationFilter =
+  'and(or(idempotency_key.is.null,and(idempotency_key.not.like.sla-default:%,idempotency_key.not.like.esc:%:sla_warning:%,idempotency_key.not.like.esc:%:sla_breach:%)),title.not.in.(تجاوز SLA,تحذير SLA),body.not.ilike.%sla_warning%,body.not.ilike.%sla_breach%)'
+
+export function localizeNotification<T extends { title: string; body: string }>(notification: T) {
+  const translate = (text: string) => text
+    .replace(/sla_warning/gi, 'اقتراب انتهاء مهلة الاستجابة')
+    .replace(/sla_breach/gi, 'تجاوز مهلة الاستجابة')
+    .replace(/(?:مهلة\s+)?\bSLA\b/gi, 'مهلة الاستجابة')
+  return { ...notification, title: translate(notification.title), body: translate(notification.body) }
+}
+
 export async function createNotification(
   db: DbClient | Awaited<ReturnType<typeof createClient>>,
   args: {

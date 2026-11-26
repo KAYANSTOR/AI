@@ -279,7 +279,7 @@ describe('Phase 5.1: Kayan Personal natural persona & tone preferences', () => {
 describe('Phase 5.2: Live web search with AbortSignal timeout, sanitization, and explicit errors', () => {
   test('sanitizes HTML/prompt-injections, rejects private result URLs, and wraps untrusted context', async () => {
     const res = await runLiveWebSearch('سعر الذهب اليوم', {
-      env: {},
+      env: { NODE_ENV: 'test' },
       preferDuckDuckGo: true,
       fetchImpl: (async () =>
         new Response(
@@ -310,7 +310,7 @@ describe('Phase 5.2: Live web search with AbortSignal timeout, sanitization, and
     const db = asDb(setupPhase5Db())
 
     const timeoutRes = await runLiveWebSearch('أخبار التقنية', {
-      env: {},
+      env: { NODE_ENV: 'test' },
       preferDuckDuckGo: true,
       timeoutMs: 200,
       fetchImpl: ((_url: unknown, init?: RequestInit) =>
@@ -337,7 +337,7 @@ describe('Phase 5.2: Live web search with AbortSignal timeout, sanitization, and
       {
         accessOverrides: accessFor(db, { userId: OWNER_USER_A, organizationId: ORG_A, role: 'owner' }),
         searchDeps: {
-          env: {},
+          env: { NODE_ENV: 'test' },
           fetchImpl: (async () => new Response('down', { status: 503 })) as unknown as typeof fetch,
         },
       }
@@ -516,7 +516,7 @@ describe('Phase 5.4: Website URL training with strict SSRF protection & injectio
     expect(json.flagged).toBe(true)
     expect(json.organizationId).toBe(ORG_A)
 
-    const kbRows = fake.rows('knowledge_base')
+    const kbRows = fake.store.knowledge_base.rows ?? []
     expect(kbRows.length).toBe(1)
     expect(kbRows[0].organization_id).toBe(ORG_A)
     expect(String(kbRows[0].content)).not.toContain('Ignore all previous instructions')
@@ -591,7 +591,7 @@ describe('Phase 5.5: Complete dashboard tour coverage & auto-hide behavior', () 
       const guide = screenTourGuide(path, commercialAccess)
       expect(guide).not.toBeNull()
       if (guide) {
-        expect(guide.steps.length).toBeGreaterThanOrEqual(1)
+        expect(guide.steps.length >= 1).toBe(true)
         expect(guide.title.length).toBeGreaterThan(2)
         seenKeys.add(guide.screenKey)
       }

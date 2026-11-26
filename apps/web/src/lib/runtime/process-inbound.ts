@@ -13,7 +13,7 @@ import { resolveBusinessAgent } from '@/lib/runtime/tenant'
 import { selectBusinessAgent } from '@/lib/runtime/business-agent'
 import { executeTool } from '@/lib/ai/tools'
 import { armConversationSla } from '@/lib/sla'
-import { isIgnoredPhone, ignoredPhones } from '@/lib/channels/phone-policy'
+import { IgnoredPhoneError, isIgnoredPhone, ignoredPhones } from '@/lib/channels/phone-policy'
 import { detectHumanHandoffRequest, triggerHumanHandoff } from '@/lib/ai/handoff-alert'
 import {
   assertWithinLimit,

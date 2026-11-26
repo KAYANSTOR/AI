@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/db/server'
 import { getDashboardContext } from '@/lib/dashboard/context'
-import { notificationMemberFilter, type NotificationRow } from '@/lib/notifications'
+import { localizeNotification, notificationMemberFilter, personalNotificationFilter, type NotificationRow } from '@/lib/notifications'
+import { isPersonalWorkspace } from '@/lib/dashboard/navigation-policy'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -32,20 +33,20 @@ export async function GET() {
     return NextResponse.json({ error: 'notifications_failed' }, { status: 500 })
   }
 
-  const { data, error } = await db
+  const query = db
     .from('notifications')
     .select(NOTIFICATION_COLUMNS)
     .eq('organization_id', context.organizationId)
     .or(notificationMemberFilter(memberId))
-    .order('created_at', { ascending: false })
-    .limit(20)
+  if (isPersonalWorkspace(context)) query.or(personalNotificationFilter)
+  const { data, error } = await query.order('created_at', { ascending: false }).limit(20)
 
   if (error) {
     console.error('Unable to load notifications:', error.message)
     return NextResponse.json({ error: 'notifications_failed' }, { status: 500 })
   }
 
-  const notifications = (data ?? []) as NotificationRow[]
+  const notifications = ((data ?? []) as NotificationRow[]).map(localizeNotification)
   return NextResponse.json({
     notifications,
     unread: notifications.filter((notification) => !notification.is_read).length,
@@ -76,6 +77,7 @@ export async function POST(request: Request) {
     .eq('organization_id', context.organizationId)
     .or(notificationMemberFilter(memberId))
     .eq('is_read', false)
+  if (isPersonalWorkspace(context)) query.or(personalNotificationFilter)
 
   if (!body.all) {
     if (!body.id) return NextResponse.json({ error: 'missing_id' }, { status: 400 })

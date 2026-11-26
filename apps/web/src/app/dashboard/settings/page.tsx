@@ -4,6 +4,7 @@ import { createClient } from '@/lib/db/server'
 import { loadBillingSnapshot } from '@/lib/billing/entitlements'
 import { PLAN_CATALOG } from '@/lib/billing/plan-catalog'
 import { SettingsHub } from './settings-hub'
+import { isPersonalWorkspace } from '@/lib/dashboard/navigation-policy'
 
 export const dynamic = 'force-dynamic'
 
@@ -11,12 +12,13 @@ export default async function SettingsPage() {
   const context = await getDashboardContext()
   if (!context) redirect('/login')
   const db = await createClient()
-  const [{ data: allCaps }, snapshot] = await Promise.all([
-    db.from('capabilities').select('id, name, description').order('name'),
+  const personal = isPersonalWorkspace(context)
+  const [capabilities, snapshot] = await Promise.all([
+    personal ? null : db.from('capabilities').select('id, name, description').order('name'),
     loadBillingSnapshot(db, context.organizationId),
   ])
   const enabledMap = new Map(context.enabledCapabilities.map((id) => [id, true]))
-  const capabilityRows = (allCaps ?? []).map((capability) => ({
+  const capabilityRows = (capabilities?.data ?? []).map((capability) => ({
     id: String(capability.id),
     name: capability.name || capability.id,
     description: capability.description ?? '',
@@ -35,8 +37,7 @@ export default async function SettingsPage() {
   return (
     <SettingsHub
       organizationName={context.organizationName}
-      accountId={context.organizationId}
-      accountIdentity={context.email ?? context.phone ?? 'حساب مساحة العمل'}
+      accountIdentity={context.email ?? context.phone ?? 'الحساب'}
       role={context.role}
       setupComplete={context.setupComplete}
       planName={plan?.name ?? snapshot.planCode}
@@ -44,6 +45,7 @@ export default async function SettingsPage() {
       capabilityRows={capabilityRows}
       isAdmin={context.role === 'owner' || context.role === 'admin'}
       personalAssistantEnabled={context.personalAssistantEnabled}
+      personal={personal}
     />
   )
 }

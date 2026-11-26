@@ -508,7 +508,7 @@ describe('Assistant API handlers and executive policy governance', () => {
     const notifyList = await handleAssistantNotifyGet({ accessOverrides: ownerAccess })
     expect(notifyList.status).toBe(200)
     const notifyJson = await notifyList.json() as { messages: unknown[] }
-    expect(notifyJson.messages.length).toBeGreaterThanOrEqual(2)
+    expect(notifyJson.messages.length >= 2).toBe(true)
 
     const trainRes = await handleAssistantTrainingPost(
       new Request('http://localhost/api/assistant/training', {

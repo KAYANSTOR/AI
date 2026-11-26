@@ -115,7 +115,7 @@ export function NotificationsBell() {
   }
 
   return (
-    <div ref={containerRef} className="relative">
+    <div ref={containerRef}>
       <button
         type="button"
         onClick={toggle}
@@ -136,7 +136,7 @@ export function NotificationsBell() {
         <div
           role="dialog"
           aria-label={ar.header.notifications}
-          className="absolute end-0 top-[calc(100%+0.5rem)] z-50 w-80 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-border bg-surface shadow-xl animate-fade-in"
+          className="notifications-popover absolute inset-x-3 top-[calc(100%+0.5rem)] mx-auto max-w-80 overflow-hidden rounded-xl border border-border bg-surface shadow-xl animate-fade-in"
         >
           <div className="flex items-center justify-between border-b border-border px-4 py-3">
             <h2 className="text-sm font-bold text-text">{ar.header.notifications}</h2>
@@ -162,7 +162,7 @@ export function NotificationsBell() {
             </div>
           </div>
 
-          <div className="max-h-80 overflow-y-auto scrollbar-thin">
+          <div className="max-h-[min(20rem,50dvh)] overflow-y-auto scrollbar-thin">
             {loading && items.length === 0 ? (
               <div className="flex items-center justify-center gap-2 py-10 text-xs text-text-muted">
                 <Loader2 size={14} className="animate-spin" aria-hidden="true" />

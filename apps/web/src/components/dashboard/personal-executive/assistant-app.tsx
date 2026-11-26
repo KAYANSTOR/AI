@@ -111,7 +111,7 @@ export function PersonalExecutiveApp({ initialTab, showTrainer = false, personal
   const pendingCount = agent?.approvals.length ?? 0
 
   return (
-    <div dir="rtl" className="space-y-4 pb-28">
+    <div dir="rtl" className={cx('space-y-4', tab !== 'chat' && 'pb-28')}>
       <section
         aria-live="polite"
         className={cx(
@@ -301,7 +301,7 @@ function ChatTab({ personal }: { personal: boolean }) {
   const [limits, setLimits] = useState<MediaLimits | null>(null)
   const [uploading, setUploading] = useState(false)
   const [recordingSeconds, setRecordingSeconds] = useState<number | null>(null)
-  const endRef = useRef<HTMLDivElement>(null)
+  const threadRef = useRef<HTMLDivElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const recorderRef = useRef<{ recorder: MediaRecorder; timer: ReturnType<typeof setInterval>; stream: MediaStream } | null>(null)
 
@@ -385,7 +385,10 @@ function ChatTab({ personal }: { personal: boolean }) {
     void load()
   }, [load])
   useVisiblePolling(load, true)
-  useEffect(() => { endRef.current?.scrollIntoView({ block: 'end' }) }, [messages.length])
+  useEffect(() => {
+    const thread = threadRef.current
+    if (thread) thread.scrollTop = thread.scrollHeight
+  }, [messages.length])
 
   async function send(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -404,7 +407,7 @@ function ChatTab({ personal }: { personal: boolean }) {
     <div className="space-y-3">
       {personal ? <WhatsAppLinkCard /> : null}
       <section aria-label="المحادثة الموحدة" className="rounded-2xl border border-border bg-surface">
-        <div className="max-h-[55dvh] min-h-56 space-y-2 overflow-y-auto overscroll-contain p-3" aria-live="polite">
+        <div ref={threadRef} className="max-h-[55dvh] min-h-56 space-y-2 overflow-y-auto overscroll-contain p-3 pb-4" aria-live="polite">
           {messages.length === 0 ? <p className="py-10 text-center text-sm text-text-muted">ابدأ بطلب مثل: «ذكّرني بدفع الإيجار يوم الخميس».</p> : null}
           {messages.map((message) => {
             const mine = message.direction === 'inbound'
@@ -423,7 +426,6 @@ function ChatTab({ personal }: { personal: boolean }) {
               </div>
             )
           })}
-          <div ref={endRef} />
         </div>
         {error ? <p role="alert" className="mx-3 mb-2 rounded-xl bg-error-soft p-2 text-xs text-error">{error}</p> : null}
         {recordingSeconds !== null ? (
@@ -432,7 +434,7 @@ function ChatTab({ personal }: { personal: boolean }) {
             جارٍ التسجيل {recordingSeconds} / {limits?.audioMaxSeconds ?? 30} ث — اضغط الإيقاف للإرسال
           </p>
         ) : null}
-        <form onSubmit={send} className="flex items-end gap-2 border-t border-border p-3">
+        <form onSubmit={send} className="assistant-chat-composer flex items-end gap-2 rounded-2xl border border-border bg-surface p-3 shadow-card">
           <input
             ref={fileRef}
             type="file"

@@ -1,13 +1,11 @@
 import { describe, expect, it } from 'bun:test'
-import { createLocalJWKSet, exportJWK, generateKeyPair, SignJWT, decodeJwt, decodeProtectedHeader } from 'jose'
-import { createOAuthState, readOAuthState, sanitizeReturnTo } from '@/lib/auth/oauth/state'
+import { createLocalJWKSet, exportJWK, generateKeyPair, SignJWT } from 'jose'
+import { createOAuthState, isOAuthProvider, readOAuthState, sanitizeReturnTo } from '@/lib/auth/oauth/state'
 import {
   buildAuthorizationUrl,
-  createAppleClientSecret,
   getOAuthProviderConfig,
   pkceChallenge,
   verifyIdToken,
-  type AppleConfig,
 } from '@/lib/auth/oauth/providers'
 import { resolveOAuthAccount, type OAuthAccountDeps } from '@/lib/auth/oauth/account'
 import {
@@ -57,13 +55,12 @@ describe('OAuth state (CSRF + open redirect)', () => {
     expect(await readOAuthState('not-a-state', created.binding, 'google')).toBeNull()
     expect(await readOAuthState(created.state, 'other-browser-binding', 'google')).toBeNull()
     expect(await readOAuthState(created.state, undefined, 'google')).toBeNull()
-    expect(await readOAuthState(created.state, created.binding, 'apple')).toBeNull()
   })
 
   it('rejects an expired state', async () => {
     const past = Date.now() - 20 * 60 * 1000
-    const created = await createOAuthState({ provider: 'apple', mode: 'signup', returnTo: '/dashboard' }, past)
-    expect(await readOAuthState(created.state, created.binding, 'apple')).toBeNull()
+    const created = await createOAuthState({ provider: 'google', mode: 'signup', returnTo: '/dashboard' }, past)
+    expect(await readOAuthState(created.state, created.binding, 'google')).toBeNull()
   })
 
   it('never allows an external redirect target', () => {
@@ -79,7 +76,6 @@ describe('OAuth state (CSRF + open redirect)', () => {
 describe('OAuth providers', () => {
   it('reports unconfigured providers without throwing (build works without keys)', () => {
     expect(getOAuthProviderConfig('google', {})).toBeNull()
-    expect(getOAuthProviderConfig('apple', { APPLE_CLIENT_ID: 'svc' })).toBeNull()
     expect(getOAuthProviderConfig('google', { GOOGLE_CLIENT_ID: 'id', GOOGLE_CLIENT_SECRET: 's' })?.clientId).toBe('id')
   })
 
@@ -95,20 +91,11 @@ describe('OAuth providers', () => {
     expect(url.searchParams.get('scope')).toBe('openid email profile')
   })
 
-  it('uses form_post for Apple and signs an ES256 client secret', async () => {
-    const { privateKey } = await generateKeyPair('ES256', { extractable: true })
-    const pkcs8 = await import('jose').then((j) => j.exportPKCS8(privateKey))
-    const config = getOAuthProviderConfig('apple', {
-      APPLE_CLIENT_ID: 'ai.kayan.web', APPLE_TEAM_ID: 'TEAM123456', APPLE_KEY_ID: 'KEY1234567', APPLE_PRIVATE_KEY: pkcs8.replace(/\n/g, '\\n'),
-    })!
-    const url = new URL(buildAuthorizationUrl(config, { state: 's', nonce: 'n', codeChallenge: 'c', redirectUri: 'https://k/cb' }))
-    expect(url.searchParams.get('response_mode')).toBe('form_post')
-    const secret = await createAppleClientSecret(config as AppleConfig)
-    expect(decodeProtectedHeader(secret)).toEqual({ alg: 'ES256', kid: 'KEY1234567' })
-    const claims = decodeJwt(secret)
-    expect(claims.iss).toBe('TEAM123456')
-    expect(claims.sub).toBe('ai.kayan.web')
-    expect(claims.aud).toBe('https://appleid.apple.com')
+  it('only accepts Google as an OAuth provider', () => {
+    expect(isOAuthProvider('google')).toBe(true)
+    for (const provider of ['github', 'facebook', 'unknown', '', null]) {
+      expect(isOAuthProvider(provider)).toBe(false)
+    }
   })
 
   it('verifies the id_token signature, audience, issuer and nonce', async () => {

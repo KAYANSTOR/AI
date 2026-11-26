@@ -7,10 +7,13 @@ import { formatDateTime } from '@/lib/i18n/format'
 import { SectionHeader } from '@/components/ui/section-header'
 import { ListRow } from '@/components/ui/list-row'
 import { MobileEmptyState } from '@/components/ui/empty-state'
-import { notificationMemberFilter } from '@/lib/notifications'
+import { localizeNotification, notificationMemberFilter, personalNotificationFilter, type NotificationRow } from '@/lib/notifications'
+import { isPersonalWorkspace } from '@/lib/dashboard/navigation-policy'
 import { NotificationReadAction } from './notification-read-action'
 
 export const dynamic = 'force-dynamic'
+
+type NotificationItem = Pick<NotificationRow, 'id' | 'title' | 'body' | 'entity_type' | 'entity_id' | 'is_read' | 'created_at'>
 
 export default async function NotificationsPage() {
   const context = await getDashboardContext()
@@ -25,11 +28,13 @@ export default async function NotificationsPage() {
     .eq('user_id', context.userId)
     .maybeSingle()
 
-  const { data: notifications, error: notificationsError } = await db
+  const query = db
     .from('notifications')
     .select('id, title, body, entity_type, entity_id, is_read, created_at')
     .eq('organization_id', context.organizationId)
     .or(notificationMemberFilter((member?.id as string | null) ?? null))
+  if (isPersonalWorkspace(context)) query.or(personalNotificationFilter)
+  const { data: notifications, error: notificationsError } = await query
     .order('created_at', { ascending: false })
     .limit(50)
 
@@ -54,9 +59,9 @@ export default async function NotificationsPage() {
   const now = new Date()
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
 
-  const items = notifications ?? []
+  const items = ((notifications ?? []) as NotificationItem[]).map(localizeNotification)
   const unreadCount = items.filter((item) => !item.is_read).length
-  const renderNotification = (notification: (typeof items)[number]) => (
+  const renderNotification = (notification: NotificationItem) => (
     <div key={notification.id} className="flex items-center gap-2">
       <Link
         href={getNotificationHref(notification.entity_type, notification.entity_id)}
