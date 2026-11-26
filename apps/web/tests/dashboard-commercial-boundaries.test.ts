@@ -56,7 +56,7 @@ const modules = [
     "inbox"
   ]
 ] as const
-const capabilities = ['orders', 'quotes', 'inbox']
+const capabilities = ['orders', 'quotes', 'inbox', 'appointments']
 const source = (path: string) => readFileSync(new URL('../src/app/dashboard/' + path, import.meta.url), 'utf8')
 
 describe('commercial dashboard boundaries', () => {

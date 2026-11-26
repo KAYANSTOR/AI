@@ -1,7 +1,8 @@
 import { Suspense } from 'react'
 import { Calendar } from 'lucide-react'
-import { requireCapability, CapabilityDisabledError, NotAuthorizedError } from '@/lib/capabilities/guard'
+import { requireBusinessDashboardCapability, CapabilityDisabledError, NotAuthorizedError } from '@/lib/capabilities/guard'
 import { createClient } from '@/lib/db/server'
+import { canWriteBusinessCapability } from '@/lib/dashboard/navigation-policy'
 import { redirect } from 'next/navigation'
 import { AppointmentForm } from './appointment-form'
 import { ar } from '@/lib/i18n/ar'
@@ -14,13 +15,14 @@ export const dynamic = 'force-dynamic'
 export default async function AppointmentsPage() {
   let context
   try {
-    context = await requireCapability('appointments')
+    context = await requireBusinessDashboardCapability('appointments')
   } catch (error) {
     if (error instanceof CapabilityDisabledError) redirect('/dashboard')
     if (error instanceof NotAuthorizedError) redirect('/login')
     throw error
   }
 
+  const canManage = canWriteBusinessCapability(context, 'appointments')
   return (
     <div className="space-y-6">
       <div>
@@ -30,15 +32,15 @@ export default async function AppointmentsPage() {
 
       <div className="grid min-w-0 grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Left: Add Appointment Form (Suspense) */}
-        <div className="min-w-0 rounded-2xl border border-border bg-surface p-5 shadow-2xs lg:col-span-1">
+        {canManage && <div className="min-w-0 rounded-2xl border border-border bg-surface p-5 shadow-2xs lg:col-span-1">
           <h2 className="mb-4 font-semibold text-text">{ar.appointments.addTitle}</h2>
           <Suspense fallback={<AppointmentFormSkeleton />}>
             <AppointmentFormSection organizationId={context.organizationId} />
           </Suspense>
-        </div>
+        </div>}
 
         {/* Right: Appointments List (Suspense) */}
-        <div className="min-w-0 overflow-hidden rounded-2xl border border-border bg-surface shadow-2xs lg:col-span-2">
+        <div className={canManage ? "min-w-0 overflow-hidden rounded-2xl border border-border bg-surface shadow-2xs lg:col-span-2" : "min-w-0 overflow-hidden rounded-2xl border border-border bg-surface shadow-2xs lg:col-span-3"}>
           <Suspense fallback={<AppointmentTableSkeleton />}>
             <AppointmentListSection
               organizationId={context.organizationId}
@@ -53,7 +55,7 @@ export default async function AppointmentsPage() {
 
 async function AppointmentFormSection({ organizationId }: { organizationId: string }) {
   const db = await createClient()
-  const [{ data: services }, { data: contacts }] = await Promise.all([
+  const [{ data: services, error: servicesError }, { data: contacts, error: contactsError }] = await Promise.all([
     db
       .from('services')
       .select('id, name, duration_minutes')
@@ -66,6 +68,8 @@ async function AppointmentFormSection({ organizationId }: { organizationId: stri
       .order('created_at', { ascending: false })
       .limit(50),
   ])
+
+  if (servicesError || contactsError) return <p role="alert" className="text-sm text-error">تعذّر تحميل بيانات الحجز. حدّث الصفحة وحاول مجدداً.</p>
 
   return (
     <AppointmentForm
@@ -95,12 +99,14 @@ async function AppointmentListSection({
   timezone: string
 }) {
   const db = await createClient()
-  const { data: appointments } = await db
+  const { data: appointments, error } = await db
     .from('appointments')
     .select('id, starts_at, status, contact_id, service_id, contacts(full_name, phone), services(name)')
     .eq('organization_id', organizationId)
     .order('starts_at', { ascending: true })
     .limit(50)
+
+  if (error) return <p role="alert" className="p-4 text-sm text-error">تعذّر تحميل المواعيد. حدّث الصفحة وحاول مجدداً.</p>
 
   if (!appointments?.length) {
     return (

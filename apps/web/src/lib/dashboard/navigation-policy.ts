@@ -16,6 +16,11 @@ export function hasBusinessNavigationCapability(access: Pick<NavigationAccess, '
   return !isPersonalWorkspace(access) && access.enabledCapabilities.includes(capability)
 }
 
+/** Canonical organization roles from migration 0023; deny unknown roles and read-only. */
+export function canWriteBusinessCapability(access: Pick<NavigationAccess, 'businessTypeId' | 'enabledCapabilities' | 'role'>, capability: string): boolean {
+  return hasBusinessNavigationCapability(access, capability) && ['owner', 'admin', 'manager', 'member'].includes(access.role)
+}
+
 export function canSearchBusiness(access: Pick<NavigationAccess, 'businessTypeId' | 'enabledCapabilities'>): boolean {
   return hasBusinessNavigationCapability(access, 'lead_capture') || hasBusinessNavigationCapability(access, 'inbox')
 }
@@ -31,7 +36,7 @@ export function dashboardNavigation(access: NavigationAccess): { tabs: TabId[]; 
   }
   const allowed = (capability: string) => hasBusinessNavigationCapability(access, capability)
   const admin = access.role === 'owner' || access.role === 'admin'
-  const editable = access.role !== 'read_only'
+  const editable = ['owner', 'admin', 'manager', 'member'].includes(access.role)
   const engine = getVertical(access.businessTypeId).baseEngine
   const primary: TabId[] = engine === 'commerce_engine' ? ['orders', 'appointments'] : ['appointments', 'orders']
   const tabs: TabId[] = ['home']

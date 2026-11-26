@@ -2,7 +2,7 @@ import type { DbClient } from '@/lib/db/client'
 import { createClient } from '@/lib/db/server'
 import { getDashboardContext, type DashboardContext } from '@/lib/dashboard/context'
 import { capabilityLabel } from '@/lib/i18n/labels'
-import { hasBusinessNavigationCapability } from '@/lib/dashboard/navigation-policy'
+import { canWriteBusinessCapability, hasBusinessNavigationCapability } from '@/lib/dashboard/navigation-policy'
 
 /**
  * The server-side capability gate.
@@ -51,6 +51,20 @@ export async function requireCapability(capability: string): Promise<AuthorizedC
 export async function requireBusinessDashboardCapability(capability: string): Promise<AuthorizedContext> {
   const ctx = await requireMember()
   if (!hasBusinessNavigationCapability(ctx, capability)) throw new CapabilityDisabledError(capability)
+  return ctx
+}
+
+/** A commercial mutation requires both sector access and a writable membership role. */
+export async function requireBusinessDashboardWriter(capability: string): Promise<AuthorizedContext> {
+  const ctx = await requireBusinessDashboardCapability(capability)
+  if (!canWriteBusinessCapability(ctx, capability)) throw new NotAuthorizedError('ليس لديك صلاحية تعديل هذه البيانات.')
+  return ctx
+}
+
+/** Commercial configuration is restricted to owners and administrators. */
+export async function requireBusinessDashboardAdmin(capability: string): Promise<AuthorizedContext> {
+  const ctx = await requireBusinessDashboardCapability(capability)
+  if (ctx.role !== 'owner' && ctx.role !== 'admin') throw new NotAuthorizedError()
   return ctx
 }
 

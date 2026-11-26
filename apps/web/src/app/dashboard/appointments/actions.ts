@@ -1,7 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { requireCapability, audit } from '@/lib/capabilities/guard'
+import { requireBusinessDashboardWriter, audit } from '@/lib/capabilities/guard'
 import { actionErrorMessage, dbActionError } from '@/lib/i18n/action-error'
 import { validateAppointmentInput } from '@/lib/appointments/validate-input'
 import { dispatchWorkflowTrigger } from '@/lib/workflows/triggers'
@@ -21,7 +21,7 @@ export async function changeAppointmentStatusAction(
   nextStatus: 'pending' | 'confirmed' | 'cancelled' | 'completed' | 'no_show'
 ): Promise<AppointmentResult> {
   try {
-    const ctx = await requireCapability('appointments')
+    const ctx = await requireBusinessDashboardWriter('appointments')
 
     const { data: current, error: readError } = await ctx.db
       .from('appointments')
@@ -86,7 +86,7 @@ export async function createAppointmentAction(input: {
   endsAt: string
 }): Promise<AppointmentResult> {
   try {
-    const ctx = await requireCapability('appointments')
+    const ctx = await requireBusinessDashboardWriter('appointments')
     const validated = await validateAppointmentInput(ctx.db, ctx.organizationId, input)
     if (!validated.ok) return validated
     const { error } = await ctx.db.from('appointments').insert({

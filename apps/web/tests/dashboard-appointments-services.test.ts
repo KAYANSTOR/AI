@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import type { DbClient } from '@/lib/db/client'
+import { canWriteBusinessCapability, hasBusinessNavigationCapability } from '@/lib/dashboard/navigation-policy'
 import { validateAppointmentInput } from '@/lib/appointments/validate-input'
 import { createFakeDb } from './support/fake-db'
 
@@ -39,7 +40,7 @@ describe('dashboard server entrypoint wiring', () => {
   const source = (path: string) => readFileSync(new URL('../src/app/dashboard/' + path, import.meta.url), 'utf8')
   for (const path of ['appointments/page.tsx', 'services/page.tsx']) {
     test(path + ' enforces the capability before reading data', () => {
-      expect(source(path)).toContain("await requireCapability('appointments')")
+      expect(source(path)).toContain("await requireBusinessDashboardCapability('appointments')")
       expect(source(path)).toContain("if (error instanceof CapabilityDisabledError) redirect('/dashboard')")
     })
   }
@@ -47,8 +48,8 @@ describe('dashboard server entrypoint wiring', () => {
     const code = source('services/actions.ts')
     for (const name of ['createServiceAction', 'deleteServiceAction']) {
       const body = code.split('export async function ' + name)[1].split('export async function ')[0]
-      expect(body.indexOf("await requireAdminCapability('appointments')")).toBeGreaterThan(-1)
-      expect(body.indexOf("await requireAdminCapability('appointments')")).toBeLessThan(body.indexOf("ctx.db.from('services')"))
+      expect(body.indexOf("await requireBusinessDashboardAdmin('appointments')")).toBeGreaterThan(-1)
+      expect(body.indexOf("await requireBusinessDashboardAdmin('appointments')")).toBeLessThan(body.indexOf("ctx.db.from('services')"))
     }
   })
   test('appointment creation validates ownership before inserting', () => {
@@ -58,5 +59,27 @@ describe('dashboard server entrypoint wiring', () => {
   })
   test('status writes compare the previously observed status', () => {
     expect(source('appointments/actions.ts')).toContain(".eq('status', previousStatus)")
+  })
+})
+
+describe('appointment sector and role policy', () => {
+  const access = { businessTypeId: 'clinic', enabledCapabilities: ['appointments'] }
+  test('personal workspace cannot use inherited appointment permission', () => {
+    const personal = { ...access, businessTypeId: 'personal_assistant', role: 'owner' }
+    expect(hasBusinessNavigationCapability(personal, 'appointments')).toBe(false)
+    expect(canWriteBusinessCapability(personal, 'appointments')).toBe(false)
+  })
+  test('only canonical writable roles may mutate appointments', () => {
+    for (const role of ['owner', 'admin', 'manager', 'member']) expect(canWriteBusinessCapability({ ...access, role }, 'appointments')).toBe(true)
+    for (const role of ['read_only', 'viewer', 'unknown']) expect(canWriteBusinessCapability({ ...access, role }, 'appointments')).toBe(false)
+    expect(canWriteBusinessCapability({ ...access, role: 'owner', enabledCapabilities: [] }, 'appointments')).toBe(false)
+  })
+  test('both appointment mutations enforce writer guard before touching the database', () => {
+    const code = readFileSync(new URL('../src/app/dashboard/appointments/actions.ts', import.meta.url), 'utf8')
+    for (const name of ['changeAppointmentStatusAction', 'createAppointmentAction']) {
+      const body = code.split('export async function ' + name)[1].split('export async function ')[0]
+      expect(body.indexOf("await requireBusinessDashboardWriter('appointments')")).toBeGreaterThan(-1)
+      expect(body.indexOf("await requireBusinessDashboardWriter('appointments')")).toBeLessThan(body.indexOf('ctx.db'))
+    }
   })
 })

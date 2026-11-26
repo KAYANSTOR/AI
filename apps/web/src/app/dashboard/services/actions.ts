@@ -1,7 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { requireAdminCapability } from '@/lib/capabilities/guard'
+import { requireBusinessDashboardAdmin } from '@/lib/capabilities/guard'
 import { actionErrorMessage, dbActionError } from '@/lib/i18n/action-error'
 
 export type SimpleResult = { ok: true } | { ok: false; error: string }
@@ -15,7 +15,7 @@ export async function createServiceAction(input: {
   price_currency: string
 }): Promise<SimpleResult> {
   try {
-    const ctx = await requireAdminCapability('appointments')
+    const ctx = await requireBusinessDashboardAdmin('appointments')
     const name = typeof input.name === 'string' ? input.name.trim() : ''
     const duration = input.duration_minutes
     const price = input.price_amount
@@ -46,7 +46,7 @@ export async function createServiceAction(input: {
 
 export async function deleteServiceAction(id: string): Promise<SimpleResult> {
   try {
-    const ctx = await requireAdminCapability('appointments')
+    const ctx = await requireBusinessDashboardAdmin('appointments')
     const { data, error } = await ctx.db.from('services').delete()
       .eq('id', id).eq('organization_id', ctx.organizationId).select('id').maybeSingle()
     if (error) return { ok: false, error: dbActionError(error) }
