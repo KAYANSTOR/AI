@@ -196,8 +196,8 @@ describe('WhatsApp brevity guard', () => {
     for (const channel of ['whatsapp', 'whatsapp_qr']) {
       const prompt = applyChannelFormatRules(legacy, channel)
       expect(prompt.startsWith(legacy)).toBe(true)
-      expect(prompt.trimEnd().endsWith('اسأل سؤالاً واحداً قصيراً فقط.')).toBe(true)
-      expect(prompt).toContain('سطر إلى 3 أسطر')
+      expect(prompt.trimEnd().endsWith('اذكرها كاملة بوضوح في أسطر مرتبة.')).toBe(true)
+      expect(prompt).toContain('أكمل الجمل والمعلومات دائماً')
       expect(applyChannelFormatRules(prompt, channel)).toBe(prompt)
       expect(prompt.split(WHATSAPP_BREVITY_MARKER).length).toBe(2)
     }
@@ -207,8 +207,8 @@ describe('WhatsApp brevity guard', () => {
   test('maxOutputTokens is capped for WhatsApp channels', () => {
     expect(maxOutputTokensForChannel('whatsapp')).toBe(WHATSAPP_MAX_OUTPUT_TOKENS)
     expect(maxOutputTokensForChannel('whatsapp_qr')).toBe(WHATSAPP_MAX_OUTPUT_TOKENS)
-    expect(WHATSAPP_MAX_OUTPUT_TOKENS).toBeLessThan(351)
-    expect(maxOutputTokensForChannel('preview')).toBe(1024)
+    expect(WHATSAPP_MAX_OUTPUT_TOKENS).toBe(2048)
+    expect(maxOutputTokensForChannel('preview')).toBe(4096)
   })
 
   test('the runtime injects the rule and the cap into every provider call', async () => {
@@ -219,10 +219,11 @@ describe('WhatsApp brevity guard', () => {
     expect(runtime).toContain(': maxOutputTokensForChannel(args.channel)')
   })
 
-  test('an article-style reply is trimmed to a few short lines unless details were requested', () => {
+  test('normalizes formatting without losing any lines regardless of detail request', () => {
     const essay = ['## مرحباً بك', '**أهلاً وسهلاً** بك في متجرنا الرائع.', 'نقدم مجموعة واسعة من الخدمات.', 'لدينا فريق محترف.', 'نسعد بخدمتك دائماً.', 'تواصل معنا في أي وقت.'].join('\n')
     const brief = enforceWhatsAppBrevity(essay, 'كم سعر التوصيل؟')
-    expect(brief.split('\n').length).toBeLessThan(4)
+    expect(brief.split('\n').length).toBe(6)
+    expect(brief).toContain('تواصل معنا في أي وقت.')
     expect(brief).not.toContain('**')
     expect(brief).not.toContain('##')
     const list = enforceWhatsAppBrevity(essay, 'أرسل لي قائمة المنتجات')
