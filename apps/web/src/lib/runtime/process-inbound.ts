@@ -75,6 +75,14 @@ export function setAgentTurnRunner(runner: typeof runAgentTurn | null) {
   agentTurnRunner = runner ?? runAgentTurn
 }
 
+type PersonalOwnerIdentityLookup = (userId: string) => Promise<{ id: string; phone: string | null } | null>
+let personalOwnerIdentityLookup: PersonalOwnerIdentityLookup = findUserById
+
+/** Inject only the auth identity lookup; organization membership and settings stay real. */
+export function setPersonalOwnerIdentityLookup(lookup: PersonalOwnerIdentityLookup | null) {
+  personalOwnerIdentityLookup = lookup ?? findUserById
+}
+
 let personalTurnRunner: typeof runPersonalAssistantTurn = runPersonalAssistantTurn
 /** Test seam: replaces the personal-assistant owner turn while keeping inbound gates real. */
 export function setPersonalTurnRunner(runner: typeof runPersonalAssistantTurn | null) {
@@ -189,15 +197,14 @@ async function resolvePersonalAssistantOwner(
   if (linkedOwner && options.isPersonalWorkspace) return linkedOwner
 
   try {
-    const admin = createAdminClient()
-    const { data: settings } = await admin.from('personal_assistant_settings')
+    const { data: settings } = await db.from('personal_assistant_settings')
       .select('user_id').eq('organization_id', input.organizationId)
       .eq('whatsapp_channel_id', input.channelId).eq('whatsapp_reminders_enabled', true).maybeSingle()
     if (settings?.user_id) {
-      const { data: membership } = await admin.from('organization_members').select('user_id')
+      const { data: membership } = await db.from('organization_members').select('user_id')
         .eq('organization_id', input.organizationId).eq('user_id', settings.user_id).eq('role', 'owner').maybeSingle()
       if (membership?.user_id) {
-        const owner = await findUserById(String(membership.user_id))
+        const owner = await personalOwnerIdentityLookup(String(membership.user_id))
         if (owner?.phone && normalizePhone(owner.phone) === normalizePhone(senderE164)) {
           return { userId: String(owner.id) }
         }
@@ -213,7 +220,7 @@ async function resolvePersonalAssistantOwner(
       for (const row of (owners ?? []) as Array<{ user_id?: unknown }>) {
         const ownerId = String(row.user_id ?? '')
         if (!ownerId) continue
-        const owner = await findUserById(ownerId)
+        const owner = await personalOwnerIdentityLookup(ownerId)
         if (owner?.phone && normalizePhone(owner.phone) === normalizePhone(senderE164)) {
           return { userId: String(owner.id) }
         }
@@ -332,6 +339,20 @@ export async function processInboundMessage(
   }
 
   const personalOwner = await resolvePersonalAssistantOwner(db, input, { isPersonalWorkspace })
+
+  // A verified owner on a business channel must not create commercial records or SLA.
+  if (personalOwner && !isPersonalWorkspace && !input.prestored) {
+    try {
+      const result = await personalTurnRunner(db, {
+        organizationId: input.organizationId,
+        userId: personalOwner.userId,
+      }, input.text)
+      return { reply: result.reply, conversationId: '', contactId: '' }
+    } catch (error) {
+      console.error('personal_assistant_inbound_failed', error)
+      return { reply: null, conversationId: '', contactId: '' }
+    }
+  }
 
   const stored = input.prestored ?? await storeInboundMessage(db, { ...input, messageType: 'text', content: input.text })
   const conversationId = stored.conversationId
