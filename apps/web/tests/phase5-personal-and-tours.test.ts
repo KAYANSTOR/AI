@@ -132,7 +132,7 @@ function setupPhase5Db() {
       rows: [
         {
           id: 'pt-1',
-          org_id: ORG_A,
+          organization_id: ORG_A,
           user_id: OWNER_USER_A,
           title: 'مراجعة تقرير الصباح',
           status: 'pending',
@@ -141,7 +141,7 @@ function setupPhase5Db() {
         },
         {
           id: 'pt-b',
-          org_id: ORG_B,
+          organization_id: ORG_B,
           user_id: OWNER_USER_B,
           title: 'مهمة سرية للمنظمة الأخرى',
           status: 'pending',
@@ -303,7 +303,7 @@ describe('Phase 5.2: Live web search with AbortSignal timeout, sanitization, and
     expect(res.summary).not.toContain('Ignore previous instructions')
     expect(res.summary).not.toContain('<script>')
     expect(res.results.some((r) => r.url.includes('127.0.0.1'))).toBe(false)
-    expect(res.untrustedContext).toContain('<<UNTRUSTED_DATA source="live_web_search">>')
+    expect(res.untrustedContext).toContain('<<UNTRUSTED_DATA>> source="live_web_search"')
   })
 
   test('returns clear Arabic error without swallowing on AbortSignal timeout or network failure', async () => {
@@ -429,7 +429,8 @@ describe('Phase 5.4: Website URL training with strict SSRF protection & injectio
     expect(isBlockedIpAddress('::ffff:127.0.0.1')).toBe(true)
     expect(isBlockedIpAddress('8.8.8.8')).toBe(false)
 
-    await expect(validatePublicWebsiteUrl('http://localhost:3000/secret')).rejects.toThrow('ssrf_blocked_host')
+    await expect(validatePublicWebsiteUrl('http://localhost:3000/secret')).rejects.toThrow('ssrf_blocked_port')
+    await expect(validatePublicWebsiteUrl('http://localhost/secret')).rejects.toThrow('ssrf_blocked_host')
     await expect(validatePublicWebsiteUrl('http://127.0.0.1/admin')).rejects.toThrow('ssrf_blocked_ip')
     await expect(validatePublicWebsiteUrl('http://169.254.169.254/latest/meta-data/')).rejects.toThrow('ssrf_blocked_ip')
     await expect(validatePublicWebsiteUrl('file:///etc/passwd')).rejects.toThrow('unsupported_url_protocol')
