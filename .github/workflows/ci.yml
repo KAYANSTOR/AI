@@ -75,5 +75,7 @@ jobs:
         run: node packages/db/scripts/verify-phase6-rls.mjs
       - name: Verify atomic central link on PostgreSQL
         run: node packages/db/scripts/verify-central-link.mjs
+      - name: Verify dashboard tour progress isolation
+        run: node packages/db/scripts/verify-tour-progress.mjs
       - name: Verify migrations
         run: npm run db:status

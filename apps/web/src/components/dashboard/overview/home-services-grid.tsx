@@ -26,7 +26,7 @@ export function HomeServicesGrid({ enabledCapabilities }: { enabledCapabilities:
     service.capability === null || enabledCapabilities.includes(service.capability)
   )
   return (
-    <section className="space-y-3">
+    <section data-tour-target="business_services" className="space-y-3">
       <div className="flex items-end justify-between gap-3">
         <div>
           <h2 className="text-base font-extrabold text-text">خدمات مساحة العمل</h2>
@@ -36,7 +36,7 @@ export function HomeServicesGrid({ enabledCapabilities }: { enabledCapabilities:
       </div>
       <div className="grid grid-cols-3 gap-2.5">
         {visible.map(({ href, title, description, icon: Icon }) => (
-          <Link key={href} href={href} className="dashboard-service-card">
+          <Link key={href} href={href} data-tour-target={href === '/dashboard/appointments' ? 'appointments' : href === '/dashboard/orders' ? 'orders' : href === '/dashboard/conversations' ? 'inbox' : undefined} className="dashboard-service-card">
             <span className="dashboard-service-icon"><Icon size={20} aria-hidden="true" /></span>
             <span className="block truncate text-xs font-extrabold text-text">{title}</span>
             <span className="mt-1 block line-clamp-1 text-[10px] text-text-muted">{description}</span>

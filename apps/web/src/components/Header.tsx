@@ -105,7 +105,7 @@ export function Header({
     </button>
   )
   const accountLink = (
-    <Link href="/dashboard/account" aria-label="الحساب" className="kayan-header-action kayan-header-avatar">
+    <Link href="/dashboard/account" data-tour-target="account" aria-label="الحساب" className="kayan-header-action kayan-header-avatar">
       <span className="text-sm font-bold">{initial}</span>
     </Link>
   )

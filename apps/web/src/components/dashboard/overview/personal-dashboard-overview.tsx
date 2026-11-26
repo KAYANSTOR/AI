@@ -63,7 +63,7 @@ function ActivitySkeleton() {
 export function PersonalDashboardOverview({ context }: { context: DashboardContext }) {
   const enabled = context.personalAssistantEnabled
   return <div className="space-y-6">
-    <section className="dashboard-kpi-hero" aria-labelledby="personal-home-title">
+    <section data-tour-target="personal_main" className="dashboard-kpi-hero" aria-labelledby="personal-home-title">
       <div className="relative z-10 flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-xs font-semibold text-primary/85">مساحتك الخاصة · Kayan AI</p>
@@ -78,7 +78,7 @@ export function PersonalDashboardOverview({ context }: { context: DashboardConte
       <p className="relative z-10 mt-4 flex items-center gap-2 text-xs leading-5 text-primary/80"><ShieldCheck size={15} className="shrink-0" aria-hidden />مهامك وذاكرتك الشخصية معزولة عن بيانات النشاط التجاري.</p>
     </section>
     {enabled && <>
-      <section className="space-y-3">
+      <section data-tour-target="personal_tools" className="space-y-3">
         <SectionHeader title="أدواتك الشخصية" />
         <p className="text-xs leading-5 text-text-muted">اختر ما تريد إنجازه، وتابع باقي أعمالك من المساعد.</p>
         <div className="grid grid-cols-3 gap-2.5">

@@ -72,6 +72,7 @@ export default async function AccountPage() {
       </section>
 
       <div className="space-y-2.5">
+        <Link href="/dashboard#dashboard-guide" className="block"><ListRow title="دليل الاستخدام" subtitle="استأنف الجولة أو أعدها من الرئيسية" trailing="chevron" /></Link>
         <Link href="/dashboard/settings" className="block">
           <ListRow
             title="الإعدادات والتفضيلات"

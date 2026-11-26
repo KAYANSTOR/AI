@@ -83,7 +83,7 @@ export function MobileTabBar(access: NavigationAccess) {
 
   return (
     <>
-      <nav className="dashboard-bottom-nav" aria-label="التنقل الرئيسي">
+      <nav data-tour-target="navigation" className="dashboard-bottom-nav" aria-label="التنقل الرئيسي">
         <div className="dashboard-bottom-nav-inner" style={{ gridTemplateColumns: hasActions ? `repeat(${split}, minmax(0, 1fr)) 68px repeat(${visibleTabs.length - split}, minmax(0, 1fr))` : `repeat(${visibleTabs.length}, minmax(0, 1fr))` }}>
           {visibleTabs.slice(0, split).map(({ href, label, icon: Icon }) => (
             <Link key={href} href={href} aria-current={isActive(href) ? 'page' : undefined} className={'dashboard-bottom-tab' + (isActive(href) ? ' is-active' : '')}>

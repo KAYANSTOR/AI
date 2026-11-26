@@ -18,7 +18,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const verifyBanner = user?.email && !user.emailVerifiedAt ? <EmailVerificationBanner email={user.email} /> : null
 
   const onboardingBanner = !context.setupComplete ? (
-    <div className="flex items-center justify-between gap-3 rounded-2xl border border-accent/40 bg-accent/15 px-3 py-3 text-xs text-text">
+    <div data-tour-target="setup" className="flex items-center justify-between gap-3 rounded-2xl border border-accent/40 bg-accent/15 px-3 py-3 text-xs text-text">
       <span className="min-w-0 leading-5">
         <strong className="block font-extrabold">أكمل إعداد نشاطك</strong>
         <span className="text-text-muted">اربط القناة وجهّز الوكيل قبل التشغيل.</span>
@@ -38,6 +38,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
       personalAssistantEnabled={context.personalAssistantEnabled}
       enabledCapabilities={context.enabledCapabilities}
       role={context.role}
+      setupComplete={context.setupComplete}
+      tourIdentity={context.organizationId + ':' + context.userId + ':' + context.businessTypeId + ':' + context.personalAssistantEnabled}
       setupBanner={setupBanner}
     >
       {children}

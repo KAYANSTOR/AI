@@ -396,3 +396,6 @@
 @utility pb-safe {
   padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
 }
+
+/* Non-modal guide highlight stays inside the real target; no overlay or z-index changes. */
+[data-tour-active="true"] { outline: 3px solid var(--brand-accent); outline-offset: -3px; }
