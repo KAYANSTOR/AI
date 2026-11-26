@@ -6,7 +6,8 @@ import { HomeServicesGrid } from '@/components/dashboard/overview/home-services-
 import { DashboardActivitySection, DashboardActivitySkeleton } from '@/components/dashboard/overview/dashboard-activity-section'
 import { DashboardAgentHealthSection, DashboardAgentHealthSkeleton } from '@/components/dashboard/overview/dashboard-agent-health-section'
 import Link from 'next/link'
-import { Brain, ListTodo, MessageCircle, Plug } from 'lucide-react'
+import { Brain, ListTodo } from 'lucide-react'
+import { PersonalDashboardOverview } from '@/components/dashboard/overview/personal-dashboard-overview'
 import { isPersonalWorkspace } from '@/lib/dashboard/navigation-policy'
 
 export const dynamic = 'force-dynamic'
@@ -15,22 +16,7 @@ export default async function DashboardPage() {
   const context = await getDashboardContext()
   if (!context) redirect('/login')
   if (isPersonalWorkspace(context)) {
-    return (
-      <div className="space-y-4">
-        <section className="rounded-2xl border border-border bg-surface p-5">
-          <h1 className="text-xl font-extrabold text-text">مساعدك الشخصي</h1>
-          <p className="mt-2 text-sm leading-6 text-text-muted">ابدأ محادثة، اطلب تنظيم مهامك، أو راجع ما يتذكره مساعدك.</p>
-          <Link href={context.personalAssistantEnabled ? '/dashboard/assistant' : '/dashboard/billing'} className="mt-4 flex min-h-12 items-center justify-center gap-2 rounded-xl bg-primary-dark px-4 font-bold text-primary-dark-foreground">
-            <MessageCircle size={19} aria-hidden /> {context.personalAssistantEnabled ? 'ابدأ محادثة' : 'راجع باقتك'}
-          </Link>
-        </section>
-        {context.personalAssistantEnabled && <section aria-label="أدواتك الشخصية" className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <Link href="/dashboard/assistant/tasks" className="dashboard-service-card"><ListTodo size={20} aria-hidden /><span className="font-bold text-text">المهام والتذكيرات</span></Link>
-          <Link href="/dashboard/assistant?tab=memory" className="dashboard-service-card"><Brain size={20} aria-hidden /><span className="font-bold text-text">الذاكرة الشخصية</span></Link>
-          <Link href="/dashboard/assistant?tab=tools" className="dashboard-service-card"><Plug size={20} aria-hidden /><span className="font-bold text-text">الأدوات المتصلة</span></Link>
-        </section>}
-      </div>
-    )
+    return <PersonalDashboardOverview context={context} />
   }
   return (
     <div className="space-y-6">
