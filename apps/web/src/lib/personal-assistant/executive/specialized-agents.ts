@@ -3,25 +3,26 @@ import type { DbClient } from '@/lib/db/client'
 export const SPECIALIZED_AGENTS = {
   personal: {
     name: 'Kayan Personal',
-    description: 'المواعيد والتذكيرات والبريد والمهام والذاكرة الشخصية',
+    description: 'المواعيد والتذكيرات والبريد والمهام والذاكرة الشخصية والبحث الحي والتصدير',
     tools: ['create_reminder', 'draft_message', 'delete_memory', 'update_task_status', 'gmail_summarize_recent',
-      'gmail_create_draft', 'gmail_send_email', 'calendar_list_events', 'calendar_create_event', 'calendar_update_event'],
+      'gmail_create_draft', 'gmail_send_email', 'calendar_list_events', 'calendar_create_event', 'calendar_update_event',
+      'live_web_search', 'set_personal_tone', 'analyze_and_export'],
   },
   business: {
     name: 'Kayan Business',
     description: 'مبيعات واتساب وقاعدة المعرفة والحجوزات والطلبات وتصعيد المحادثات',
-    tools: ['query_org_stats', 'get_sector_report', 'update_agent_directives', 'train_agent_knowledge', 'send_owner_alert', 'draft_message', 'send_customer_message', 'find_business_records', 'escalate_customer'],
+    tools: ['query_org_stats', 'get_sector_report', 'update_agent_directives', 'train_agent_knowledge', 'send_owner_alert', 'live_web_search', 'analyze_and_export', 'draft_message', 'send_customer_message', 'find_business_records', 'escalate_customer'],
   },
   freelancer: {
     name: 'Kayan Freelancer',
     description: 'مسودات عروض الأسعار ومتابعة الدفعات واجتماعات العملاء',
-    tools: ['draft_quote', 'get_sector_report', 'update_agent_directives', 'train_agent_knowledge', 'send_owner_alert', 'create_reminder', 'draft_message', 'send_customer_message', 'calendar_list_events',
+    tools: ['draft_quote', 'get_sector_report', 'update_agent_directives', 'train_agent_knowledge', 'send_owner_alert', 'live_web_search', 'analyze_and_export', 'create_reminder', 'draft_message', 'send_customer_message', 'calendar_list_events',
       'calendar_create_event', 'calendar_update_event', 'update_task_status'],
   },
   ops: {
     name: 'Kayan Ops',
     description: 'تنفيذ متعدد الخطوات وتقارير تشغيلية وتوزيع مهام الفريق',
-    tools: ['query_org_stats', 'get_sector_report', 'update_agent_directives', 'train_agent_knowledge', 'send_owner_alert', 'assign_team_task', 'configure_ops_daily_report', 'create_reminder', 'update_task_status', 'draft_message'],
+    tools: ['query_org_stats', 'get_sector_report', 'update_agent_directives', 'train_agent_knowledge', 'send_owner_alert', 'live_web_search', 'analyze_and_export', 'assign_team_task', 'configure_ops_daily_report', 'create_reminder', 'update_task_status', 'draft_message'],
   },
 } satisfies Record<string, { name: string; description: string; tools: string[] }>
 

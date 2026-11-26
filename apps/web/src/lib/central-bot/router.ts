@@ -124,6 +124,9 @@ async function activate(db: DbClient, phone: string, code: string, msg: CentralI
 }
 
 export async function handleCentralInbound(db: DbClient, msg: CentralInbound, deps: CentralDeps): Promise<string> {
+  if (/(?:@g\.us|@broadcast|@newsletter|^status@broadcast)$/i.test(msg.from.trim())) {
+    return 'invalid_sender'
+  }
   const phone = normalizeE164(msg.from)
   if (!/^\+[1-9][0-9]{7,14}$/.test(phone)) return 'invalid_sender'
   const text = (msg.text ?? '').trim()

@@ -7,15 +7,15 @@
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
 import { EncryptJWT, jwtDecrypt } from 'jose'
 
-export type OAuthProvider = 'google' | 'apple'
+export type OAuthProvider = 'google'
 export type OAuthMode = 'login' | 'signup'
-export const OAUTH_PROVIDERS: readonly OAuthProvider[] = ['google', 'apple']
+export const OAUTH_PROVIDERS: readonly OAuthProvider[] = ['google']
 export const OAUTH_STATE_TTL_SECONDS = 10 * 60
 export const OAUTH_BINDING_COOKIE = 'kayan_oauth_binding'
 const DEFAULT_RETURN_TO = '/dashboard'
 
 export function isOAuthProvider(value: unknown): value is OAuthProvider {
-  return value === 'google' || value === 'apple'
+  return value === 'google'
 }
 
 /** Same-site relative paths only; anything that could leave the origin falls back. */

@@ -1,4 +1,5 @@
 import type { CentralBotConfig } from './config'
+import { splitWhatsAppMessage } from '@/lib/channels/whatsapp-format'
 
 /** Minimal Meta Cloud API client for the central bot. `fetchImpl` is injectable for tests. */
 type FetchLike = typeof fetch
@@ -24,11 +25,14 @@ async function graph(config: SenderConfig, path: string, init: RequestInit, fetc
 function toDigits(phone: string) { return phone.replace(/\D/g, '') }
 
 export async function sendCentralText(config: CentralBotConfig, to: string, text: string, fetchImpl: FetchLike = fetch) {
-  await graph(config, `${config.phoneNumberId}/messages`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ messaging_product: 'whatsapp', to: toDigits(to), type: 'text', text: { preview_url: false, body: text.slice(0, 4096) } }),
-  }, fetchImpl)
+  const chunks = splitWhatsAppMessage(text, 4000)
+  for (const chunk of chunks) {
+    await graph(config, `${config.phoneNumberId}/messages`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messaging_product: 'whatsapp', to: toDigits(to), type: 'text', text: { preview_url: false, body: chunk } }),
+    }, fetchImpl)
+  }
 }
 
 /** Interactive reply buttons (max 3, title ≤ 20 chars, id ≤ 256 chars). */

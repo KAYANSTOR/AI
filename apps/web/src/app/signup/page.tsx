@@ -4,10 +4,10 @@ import { isAuthConfigured } from '@/lib/auth/config'
 import { SignupForm } from './signup-form'
 
 export const metadata: Metadata = {
-  title: 'إنشاء حساب للشركة',
+  title: 'إنشاء حساب',
   robots: { index: false, follow: false },
   description:
-    'أنشئ حساب شركتك في KAYAN AI، اختر نوع نشاطها، وابدأ إعداد الخدمات والقنوات وتفعيل الوكيل الذكي.',
+    'أنشئ حسابك في KAYAN AI، اختر نوع نشاطك، وأكمل إعداد الخدمات والقنوات وتفعيل الوكيل الذكي.',
 }
 
 export default async function SignupPage({
@@ -22,8 +22,8 @@ export default async function SignupPage({
 
   return (
     <AuthShell
-      title="إنشاء حساب للشركة"
-      subtitle="أنشئ مساحة شركتك في دقيقة. نجهّز لك الوحدات المناسبة لنوع نشاطك، ويمكنك تعديلها لاحقًا."
+      title="إنشاء حساب جديد"
+      subtitle="سجّل دخولك أو أنشئ حسابك في دقيقة، ثم أدخل اسم شركتك وأكمل الإعداد."
     >
       <SignupForm authConfigured={authConfigured} oauthError={oauthError} oauthProvider={oauthProvider} />
     </AuthShell>

@@ -16,6 +16,12 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const context = await getDashboardContext()
   if (!context) redirect('/login')
   const user = await getCurrentUser()
+  if (
+    user?.userMetadata?.organization_name_pending === true ||
+    user?.userMetadata?.business_type_pending === true
+  ) {
+    redirect('/onboarding')
+  }
   const verifyBanner = user?.email && !user.emailVerifiedAt ? <EmailVerificationBanner email={user.email} /> : null
 
   const canManageSetup = ['owner', 'admin'].includes(context.role)

@@ -5,9 +5,9 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Loader2 } from 'lucide-react'
 import { signUpAction } from '@/lib/auth/actions'
-import { NETWORK_ERROR_MESSAGE } from '@/lib/auth/messages'
+import { AUTH_MESSAGES, NETWORK_ERROR_MESSAGE } from '@/lib/auth/messages'
 import { FormError, TextField, submitClass } from '@/components/auth/field'
-import { BUSINESS_TYPES, DEFAULT_BUSINESS_TYPE } from '@/lib/capabilities/business-types'
+import { isBusinessTypeId } from '@/lib/capabilities/business-types'
 import { SectorPicker } from '@/components/ui/sector-picker'
 import { PhoneField } from '@/components/auth/phone-field'
 import { DEFAULT_COUNTRY, toE164 } from '@/lib/phone/arab-countries'
@@ -18,8 +18,7 @@ const MIN_PASSWORD_LENGTH = 8
 
 export function SignupForm({ authConfigured, oauthError = null, oauthProvider = null }: { authConfigured: boolean; oauthError?: string | null; oauthProvider?: string | null }) {
   const router = useRouter()
-  const [companyName, setCompanyName] = useState('')
-  const [businessType, setBusinessType] = useState<string>(DEFAULT_BUSINESS_TYPE)
+  const [businessType, setBusinessType] = useState<string>('')
   const [identityMethod, setIdentityMethod] = useState<'email' | 'phone'>('email')
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
@@ -34,10 +33,13 @@ export function SignupForm({ authConfigured, oauthError = null, oauthProvider = 
   function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setError(null)
+    if (!businessType || !isBusinessTypeId(businessType)) {
+      setError(AUTH_MESSAGES.businessTypeRequired)
+      return
+    }
     startTransition(async () => {
       try {
         const result = await signUpAction({
-          companyName,
           businessTypeId: businessType,
           email: identityMethod === 'email' ? email : undefined,
           phone: identityMethod === 'phone' ? (toE164(dial, phone) ?? phone) : undefined,
@@ -56,26 +58,14 @@ export function SignupForm({ authConfigured, oauthError = null, oauthProvider = 
     })
   }
 
-  const hint = BUSINESS_TYPES.find((type) => type.id === businessType)?.hint
-
   return (
     <form className="space-y-5" method="post" onSubmit={onSubmit}>
       <OAuthButtons mode="signup" error={oauthError} provider={oauthProvider} />
       <FormError message={error} />
 
-      <TextField
-        id="companyName"
-        label="اسم الشركة"
-        value={companyName}
-        onChange={setCompanyName}
-        autoComplete="organization"
-        placeholder="مثال: عيادات النخبة"
-      />
-
       <div>
-        <p className="mb-1.5 block text-sm font-medium text-text">نوع النشاط</p>
-        <SectorPicker id="businessType" name="businessType" value={businessType} onChange={setBusinessType} />
-        {hint ? <p className="mt-1.5 text-xs leading-6 text-text-muted">{hint}</p> : null}
+        <p className="mb-1.5 block text-sm font-medium text-text">نوع النشاط <span className="text-error" aria-hidden="true">*</span></p>
+        <SectorPicker id="businessType" name="businessType" value={businessType} onChange={(next) => { setBusinessType(next); setError(null) }} />
       </div>
 
       <fieldset className="space-y-3">

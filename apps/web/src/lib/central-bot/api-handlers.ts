@@ -15,6 +15,20 @@ import {
 import type { ValidatedFact } from '@/lib/knowledge/layer'
 import { loadReadiness, loadVerticalId } from '@/lib/trainer/router'
 import type { GenerateFn } from '@/lib/trainer/extract'
+import { runLiveWebSearch, type LiveSearchDeps } from '@/lib/personal-assistant/live-search'
+import { loadPersonalPersona, savePersonalPersona } from '@/lib/personal-assistant/persona'
+import {
+  createBackgroundExportTask,
+  getExportTaskResult,
+  isExportFormat,
+  isExportSource,
+  listExportTasks,
+  runBackgroundExportTask,
+  type ExportFormat,
+  type ExportSource,
+} from '@/lib/personal-assistant/exports'
+import { requirePersonalAssistantApi } from '@/lib/personal-assistant/api-context'
+import { trainAgentFromWebsiteUrl, type WebsiteFetchDeps } from '@/lib/trainer/url-ingest'
 
 const NO_STORE = { 'Cache-Control': 'no-store' }
 const VALID_PERIODS = new Set<ReportPeriod>(['today', '24h', '7d', '30d'])
@@ -27,12 +41,45 @@ const VALID_CATEGORIES = new Set<ValidatedFact['category']>([
   'general',
 ])
 
+const BAD_REQUEST_CODES = new Set([
+  'invalid_directive',
+  'empty_notification_body',
+  'empty_training_input',
+  'training_content_too_short',
+  'unsafe_training_input',
+  'invalid_website_url',
+  'unsupported_url_protocol',
+  'url_credentials_forbidden',
+  'ssrf_blocked_hostname',
+  'ssrf_blocked_host',
+  'ssrf_blocked_port',
+  'ssrf_blocked_ip',
+  'ssrf_blocked_dns',
+  'ssrf_blocked_redirect',
+  'website_dns_failed',
+  'website_too_many_redirects',
+  'website_unsupported_content_type',
+  'unsupported_website_content_type',
+  'website_response_too_large',
+  'website_content_too_large',
+  'website_content_empty',
+  'invalid_export_source',
+  'invalid_export_format',
+  'empty_custom_export_text',
+  'invalid_persona_tone',
+  'invalid_persona_dialect',
+  'invalid_owner',
+])
+
 export type AssistantOperationalDeps = {
   accessOverrides?: Partial<AccessDeps>
   sendText?: (to: string, text: string) => Promise<void>
   mirror?: (db: OwnerAssistantApiContext['admin'], owner: OwnerAssistantApiContext['owner'], text: string) => Promise<boolean>
   generate?: GenerateFn
   now?: () => Date
+  searchDeps?: LiveSearchDeps
+  fetchDeps?: WebsiteFetchDeps
+  scheduleBackground?: (work: () => Promise<void>) => void
 }
 
 function parseJsonObject(value: unknown): Record<string, unknown> | null {
@@ -40,16 +87,11 @@ function parseJsonObject(value: unknown): Record<string, unknown> | null {
 }
 
 function resolveErrorStatus(code: string): number {
-  if (code === 'owner_permission_required') return 403
-  if (
-    code === 'invalid_directive' ||
-    code === 'empty_notification_body' ||
-    code === 'empty_training_input' ||
-    code === 'training_content_too_short' ||
-    code === 'unsafe_training_input'
-  ) {
-    return 400
-  }
+  if (code === 'owner_permission_required' || code === 'export_access_forbidden') return 403
+  if (code === 'export_task_not_found') return 404
+  if (code === 'website_fetch_timeout') return 504
+  if (code === 'website_http_error' || code === 'website_fetch_failed') return 502
+  if (BAD_REQUEST_CODES.has(code)) return 400
   return 500
 }
 
@@ -235,6 +277,7 @@ export async function handleAssistantTrainingPost(request: Request, deps: Assist
   const body = parseJsonObject(await request.json().catch(() => null))
   if (!body) return NextResponse.json({ error: 'invalid_request_body' }, { status: 400, headers: NO_STORE })
 
+  const websiteUrl = typeof body.url === 'string' ? body.url.trim() : ''
   const text = typeof body.text === 'string' ? body.text : ''
   const title = typeof body.title === 'string' ? body.title : null
   const directive = typeof body.directive === 'string' ? body.directive : null
@@ -244,6 +287,19 @@ export async function handleAssistantTrainingPost(request: Request, deps: Assist
       : null
 
   try {
+    if (websiteUrl) {
+      const result = await trainAgentFromWebsiteUrl(
+        access.admin,
+        access.owner,
+        { url: websiteUrl, category },
+        { ...deps.fetchDeps, generate: deps.generate, now: deps.now }
+      )
+      const mirrored = deps.mirror
+        ? await deps.mirror(access.admin, access.owner, result.reply)
+        : await mirrorToWhatsApp(access.admin, access.owner, result.reply)
+      return NextResponse.json({ ...result, mirrored }, { status: 201, headers: NO_STORE })
+    }
+
     const result = await trainAgentFromBotConversation(
       access.admin,
       access.owner,
@@ -256,5 +312,160 @@ export async function handleAssistantTrainingPost(request: Request, deps: Assist
     return NextResponse.json({ ...result, mirrored }, { status: 201, headers: NO_STORE })
   } catch (error) {
     return errorJson(error, 'training_save_failed')
+  }
+}
+
+export async function handleAssistantPersonaGet(deps: AssistantOperationalDeps = {}) {
+  const access = await requirePersonalAssistantApi(deps.accessOverrides)
+  if (access instanceof NextResponse) return access
+  try {
+    const persona = await loadPersonalPersona(access.admin, access.owner)
+    return NextResponse.json({ persona }, { headers: NO_STORE })
+  } catch (error) {
+    return errorJson(error, 'persona_load_failed')
+  }
+}
+
+export async function handleAssistantPersonaPost(request: Request, deps: AssistantOperationalDeps = {}) {
+  const access = await requirePersonalAssistantApi(deps.accessOverrides)
+  if (access instanceof NextResponse) return access
+  const body = parseJsonObject(await request.json().catch(() => null))
+  if (!body) return NextResponse.json({ error: 'invalid_request_body' }, { status: 400, headers: NO_STORE })
+
+  try {
+    const persona = await savePersonalPersona(
+      access.admin,
+      access.owner,
+      {
+        tone: body.tone,
+        dialect: body.dialect,
+        preferredTitle: body.preferredTitle,
+        customStyle: body.customStyle,
+      },
+      { now: deps.now }
+    )
+    return NextResponse.json({ ok: true, persona }, { headers: NO_STORE })
+  } catch (error) {
+    return errorJson(error, 'persona_save_failed')
+  }
+}
+
+export async function handleAssistantSearchPost(request: Request, deps: AssistantOperationalDeps = {}) {
+  const access = await requirePersonalAssistantApi(deps.accessOverrides)
+  if (access instanceof NextResponse) return access
+  const body = parseJsonObject(await request.json().catch(() => null))
+  if (!body) return NextResponse.json({ error: 'invalid_request_body' }, { status: 400, headers: NO_STORE })
+
+  const query = typeof body.query === 'string' ? body.query : ''
+  const result = await runLiveWebSearch(query, deps.searchDeps)
+  if (!result.ok) {
+    const status = result.code === 'invalid_query' ? 400 : result.code === 'search_timeout' ? 504 : 502
+    return NextResponse.json({ error: result.code, messageAr: result.messageAr }, { status, headers: NO_STORE })
+  }
+  return NextResponse.json(
+    {
+      ok: true,
+      query: result.query,
+      summary: result.summary,
+      results: result.results,
+      flagged: result.flagged,
+      source: result.source,
+    },
+    { headers: NO_STORE }
+  )
+}
+
+export async function handleAssistantExportsGet(request: Request, deps: AssistantOperationalDeps = {}) {
+  const access = await requirePersonalAssistantApi(deps.accessOverrides)
+  if (access instanceof NextResponse) return access
+  const owner = access.owner
+  const url = new URL(request.url)
+  const taskId = url.searchParams.get('taskId')
+  const download = url.searchParams.get('download') === '1'
+
+  try {
+    if (taskId) {
+      const task = await getExportTaskResult(access.admin, owner, taskId)
+      if (!task) return NextResponse.json({ error: 'export_task_not_found' }, { status: 404, headers: NO_STORE })
+      if (download) {
+        if (task.state !== 'done' || !task.file) {
+          return NextResponse.json({ error: 'export_not_ready', state: task.state }, { status: 409, headers: NO_STORE })
+        }
+        return new NextResponse(task.file.content, {
+          status: 200,
+          headers: {
+            ...NO_STORE,
+            'Content-Type': task.file.mimeType,
+            'Content-Disposition': `attachment; filename="${task.file.fileName}"`,
+            'X-Content-Type-Options': 'nosniff',
+          },
+        })
+      }
+      return NextResponse.json({ task }, { headers: NO_STORE })
+    }
+
+    const tasks = await listExportTasks(access.admin, owner)
+    return NextResponse.json({ tasks }, { headers: NO_STORE })
+  } catch (error) {
+    return errorJson(error, 'export_read_failed')
+  }
+}
+
+export async function handleAssistantExportsPost(request: Request, deps: AssistantOperationalDeps = {}) {
+  const access = await requirePersonalAssistantApi(deps.accessOverrides)
+  if (access instanceof NextResponse) return access
+  const body = parseJsonObject(await request.json().catch(() => null))
+  if (!body) return NextResponse.json({ error: 'invalid_request_body' }, { status: 400, headers: NO_STORE })
+
+  const owner = access.owner
+  if (body.source !== undefined && !isExportSource(body.source)) {
+    return NextResponse.json({ error: 'invalid_export_source' }, { status: 400, headers: NO_STORE })
+  }
+  if (body.format !== undefined && !isExportFormat(body.format)) {
+    return NextResponse.json({ error: 'invalid_export_format' }, { status: 400, headers: NO_STORE })
+  }
+  const source: ExportSource = body.source !== undefined ? (body.source as ExportSource) : 'sector_report'
+  const format: ExportFormat = body.format !== undefined ? (body.format as ExportFormat) : 'md'
+  const period = typeof body.period === 'string' && VALID_PERIODS.has(body.period as ReportPeriod)
+    ? (body.period as ReportPeriod)
+    : '24h'
+  const title = typeof body.title === 'string' ? body.title : undefined
+  const customText = typeof body.customText === 'string' ? body.customText : undefined
+  const background = body.background === true
+
+  try {
+    const created = await createBackgroundExportTask(
+      access.admin,
+      owner,
+      { source, format, period, title, customText },
+      { now: deps.now }
+    )
+
+    if (background) {
+      const work = async () => {
+        try {
+          await runBackgroundExportTask(access.admin, owner, created.taskId, { now: deps.now })
+        } catch (error) {
+          console.error('background_export_run_failed', {
+            taskId: created.taskId,
+            error: error instanceof Error ? error.message : String(error),
+          })
+        }
+      }
+      if (deps.scheduleBackground) {
+        deps.scheduleBackground(work)
+      } else {
+        void work()
+      }
+      return NextResponse.json(
+        { ok: true, taskId: created.taskId, state: created.state },
+        { status: 202, headers: NO_STORE }
+      )
+    }
+
+    const task = await runBackgroundExportTask(access.admin, owner, created.taskId, { now: deps.now })
+    return NextResponse.json({ ok: task.state === 'done', task }, { status: 201, headers: NO_STORE })
+  } catch (error) {
+    return errorJson(error, 'export_create_failed')
   }
 }

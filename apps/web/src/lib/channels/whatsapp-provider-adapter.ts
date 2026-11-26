@@ -1,5 +1,6 @@
 import { sendWhatsAppText } from '@/lib/providers/meta'
 import { callWhatsAppGateway } from '@/lib/providers/whatsapp-gateway'
+import { splitWhatsAppMessage } from './whatsapp-format'
 
 export type WhatsAppConnectionMode = 'cloud_api' | 'coexistence' | 'qr_unofficial'
 export type WhatsAppProvider = 'meta' | 'baileys'
@@ -79,10 +80,14 @@ export class BaileysWhatsAppAdapter implements WhatsAppProviderAdapter {
   async sendText(input: { credentials: WhatsAppAdapterCredentials; from: string; to: string; body: string; channelId?: string }) {
     if (baileysSendText) return baileysSendText(input)
     if (!input.channelId) throw new Error('baileys_transport_not_configured')
-    return callWhatsAppGateway('POST', '/sessions/' + input.channelId + '/send', {
-      recipient: input.to,
-      text: input.body,
-    }).then(() => ({ messageId: null }))
+    const chunks = splitWhatsAppMessage(input.body, 3800)
+    for (const chunk of chunks) {
+      await callWhatsAppGateway('POST', '/sessions/' + input.channelId + '/send', {
+        recipient: input.to,
+        text: chunk,
+      })
+    }
+    return { messageId: null }
   }
 }
 

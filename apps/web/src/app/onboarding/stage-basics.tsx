@@ -2,16 +2,16 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { Loader2, CheckCircle2, ArrowLeft } from 'lucide-react'
-import { getVertical } from '@/lib/verticals/registry'
+import { isBusinessTypeId } from '@/lib/capabilities/business-types'
 import { SectorPicker } from '@/components/ui/sector-picker'
 import { saveBasicsAction } from './actions'
 
 /**
  * Stage 1 — ابدأ.
  *
- * The three things the fast path actually needs: the business name, what kind of business
- * it is, and the number it already uses. Every field autosaves (debounced) so leaving the
- * page never loses typing; the primary action saves once more and moves on.
+ * The three things the fast path actually needs: the business/company name, what kind of
+ * business it is, and the number it already uses. Every field autosaves (debounced) once
+ * valid; the primary action validates explicitly before advancing.
  */
 export function StageBasics({
   initial,
@@ -23,7 +23,9 @@ export function StageBasics({
   onContinue: () => void
 }) {
   const [name, setName] = useState(initial.name || businessName)
-  const [businessTypeId, setBusinessTypeId] = useState<string>(getVertical(initial.businessTypeId).id)
+  const [businessTypeId, setBusinessTypeId] = useState<string>(
+    initial.businessTypeId && isBusinessTypeId(initial.businessTypeId) ? initial.businessTypeId : ''
+  )
   const [phone, setPhone] = useState(initial.phone)
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle')
   const [error, setError] = useState<string | null>(null)
@@ -32,8 +34,6 @@ export function StageBasics({
   const timezone = useRef<string>(initial.timezone)
 
   useEffect(() => {
-    // The browser knows the real timezone; the profile default is UTC. Sending it along
-    // turns a placeholder default into a correct one without asking the customer.
     try {
       const zone = Intl.DateTimeFormat().resolvedOptions().timeZone
       if (zone) timezone.current = zone
@@ -47,7 +47,7 @@ export function StageBasics({
       firstRender.current = false
       return
     }
-    if (name.trim().length < 2) return
+    if (name.trim().length < 2 || !businessTypeId || !isBusinessTypeId(businessTypeId)) return
     const handle = setTimeout(async () => {
       setSaveState('saving')
       const result = await saveBasicsAction({
@@ -68,8 +68,16 @@ export function StageBasics({
   }, [name, businessTypeId, phone])
 
   async function handleContinue() {
-    setBusy(true)
     setError(null)
+    if (name.trim().length < 2) {
+      setError('اكتب اسم الشركة أو النشاط (حرفان على الأقل).')
+      return
+    }
+    if (!businessTypeId || !isBusinessTypeId(businessTypeId)) {
+      setError('يرجى اختيار نوع النشاط قبل المتابعة.')
+      return
+    }
+    setBusy(true)
     const result = await saveBasicsAction({
       name,
       businessTypeId,
@@ -95,11 +103,12 @@ export function StageBasics({
 
       <div className="space-y-4">
         <label className="block">
-          <span className="text-sm font-semibold text-text">اسم النشاط</span>
+          <span className="text-sm font-semibold text-text">اسم الشركة / النشاط <span className="text-error" aria-hidden="true">*</span></span>
           <input
             value={name}
             onChange={(event) => setName(event.target.value)}
-            placeholder="مثال: روائع الأعراس"
+            placeholder="مثال: عيادات النخبة"
+            required
             className="mt-1.5 min-h-12 w-full rounded-xl border border-border bg-surface px-3 text-base text-text outline-none transition-colors focus:border-secondary focus:ring-2 focus:ring-accent/40"
           />
         </label>

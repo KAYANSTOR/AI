@@ -14,6 +14,9 @@ import {
   trainAgentFromBotConversation,
   type ReportPeriod,
 } from '@/lib/central-bot/operations'
+import { runLiveWebSearch } from '../live-search'
+import { savePersonalPersona } from '../persona'
+import { createBackgroundExportTask, isExportFormat, isExportSource, runBackgroundExportTask } from '../exports'
 
 /**
  * Executive task engine ("محضر أعمال").
@@ -88,6 +91,9 @@ export function dryRun(toolName: string, input: Record<string, unknown>): string
     case 'get_sector_report': return 'سيُستخرج ملخص العمليات الفوري للمحادثات والقطاع خلال الفترة المحددة.'
     case 'send_owner_alert': return `سيُرسل تنبيه أو ملخص تشغيلي للمالك عبر البوت المركزي: «${str(input.title || input.body, 140)}».`
     case 'train_agent_knowledge': return `ستُضاف معرفة جديدة لقاعدة معرفة الوكيل: «${str(input.text, 160)}».`
+    case 'live_web_search': return `سيُجرى بحث حي في الويب عن: «${str(input.query, 120)}».`
+    case 'set_personal_tone': return 'ستُحفظ تفضيلات نبرة ولهجة المساعد الشخصي لحسابك.'
+    case 'analyze_and_export': return `سيُحلّل ويُصدّر ملف بصيغة ${str(input.format, 10) || 'md'}.`
     default: return 'إجراء غير معروف'
   }
 }
@@ -208,6 +214,32 @@ const builtinExecutors: Record<string, ToolExecutor> = {
       directive: str(input.directive, 2000) || null,
       channel: 'whatsapp_central',
     })
+  },
+  live_web_search: async (_db, _owner, input) => {
+    const res = await runLiveWebSearch(str(input.query, 300))
+    if (!res.ok) throw new Error(res.code)
+    return { query: res.query, summary: res.summary, results: res.results, context: res.untrustedContext }
+  },
+  set_personal_tone: async (db, owner, input) => {
+    return savePersonalPersona(db, owner, {
+      tone: input.tone,
+      dialect: input.dialect,
+      preferredTitle: input.preferred_title,
+      customStyle: input.custom_style,
+    })
+  },
+  analyze_and_export: async (db, owner, input) => {
+    const source = isExportSource(input.source) ? input.source : 'sector_report'
+    const format = isExportFormat(input.format) ? input.format : 'md'
+    const created = await createBackgroundExportTask(db, owner, {
+      source,
+      format,
+      title: str(input.title, 200) || undefined,
+      period: (['today', '24h', '7d', '30d'].includes(String(input.period ?? '')) ? String(input.period) : '24h') as ReportPeriod,
+      customText: str(input.custom_text, 8000) || undefined,
+    })
+    const completed = await runBackgroundExportTask(db, owner, created.taskId)
+    return { taskId: completed.taskId, state: completed.state, fileName: completed.file?.fileName ?? null, sha256: completed.file?.sha256 ?? null }
   },
   ...connectorExecutors,
 }

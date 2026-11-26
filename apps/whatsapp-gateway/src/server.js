@@ -447,6 +447,32 @@ async function sessionStatus(channelId) {
   }
   return status
 }
+function splitGatewayText(text, maxChunk = 3800) {
+  const normalized = String(text || '').replace(/\r\n?/g, '\n').trim()
+  if (!normalized) return []
+  if (normalized.length <= maxChunk) return [normalized]
+  const chunks = []
+  let remaining = normalized
+  while (remaining.length > maxChunk) {
+    const win = remaining.slice(0, maxChunk)
+    let cut = win.lastIndexOf('\n\n')
+    if (cut < maxChunk * 0.35) {
+      const lineCut = win.lastIndexOf('\n')
+      if (lineCut >= maxChunk * 0.25) cut = lineCut
+    }
+    if (cut < maxChunk * 0.25) {
+      const spaceCut = win.lastIndexOf(' ')
+      if (spaceCut >= maxChunk * 0.25) cut = spaceCut + 1
+    }
+    if (cut <= 0) cut = maxChunk
+    const piece = remaining.slice(0, cut).trim()
+    if (piece) chunks.push(piece)
+    remaining = remaining.slice(cut).trimStart()
+  }
+  if (remaining) chunks.push(remaining)
+  return chunks
+}
+
 async function sendText(channelId, input) {
   const session = sockets.get(channelId)
   if (!session || session.status !== 'connected') throw Object.assign(new Error('whatsapp_session_not_connected'), { status: 409 })
@@ -454,20 +480,25 @@ async function sendText(channelId, input) {
   const digits = recipient.replace(/\D/g, '')
   const jid = recipient.includes('@') ? recipient : (digits.length >= 7 && digits.length <= 15 ? digits + '@s.whatsapp.net' : '')
   const text = String(input.text || '').trim()
-  if (!jid || !text || text.length > 8000) throw Object.assign(new Error('invalid_outbound_message'), { status: 400 })
-  // Register the provider ID before sending: Baileys emits the fromMe echo
-  // from inside sendMessage(), before the promise resolves.
-  const messageId = generateMessageIDV2(session.sock.user?.id)
-  botSentMessages.add(channelId, messageId)
-  try {
-    const result = await session.sock.sendMessage(jid, { text }, { messageId })
-    const sentId = result?.key?.id || messageId
-    if (sentId !== messageId) botSentMessages.add(channelId, sentId)
-    return { messageId: sentId }
-  } catch (error) {
-    botSentMessages.delete(channelId, messageId)
-    throw error
+  if (!jid || !text || text.length > 24000) throw Object.assign(new Error('invalid_outbound_message'), { status: 400 })
+  const chunks = splitGatewayText(text, 3800)
+  let lastSentId = null
+  for (const chunk of chunks) {
+    // Register the provider ID before sending: Baileys emits the fromMe echo
+    // from inside sendMessage(), before the promise resolves.
+    const messageId = generateMessageIDV2(session.sock.user?.id)
+    botSentMessages.add(channelId, messageId)
+    try {
+      const result = await session.sock.sendMessage(jid, { text: chunk }, { messageId })
+      const sentId = result?.key?.id || messageId
+      if (sentId !== messageId) botSentMessages.add(channelId, sentId)
+      lastSentId = sentId
+    } catch (error) {
+      botSentMessages.delete(channelId, messageId)
+      throw error
+    }
   }
+  return { messageId: lastSentId }
 }
 // Streams the bytes of a recently received media message with a hard size cap. The
 // declared fileLength is checked first so an oversized file is never downloaded.

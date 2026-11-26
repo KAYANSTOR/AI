@@ -4,8 +4,8 @@ import { cookies, headers } from 'next/headers'
 import { after } from 'next/server'
 import { redirect } from 'next/navigation'
 import { z } from 'zod'
-import { BUSINESS_TYPES } from '@/lib/capabilities/business-types'
 import { isAuthConfigured } from './config'
+import { validateSignUpInput } from './signup-validation'
 import { getCurrentUser } from './current-user'
 import { AUTH_MESSAGES } from './messages'
 import { burnPasswordCheck, MIN_PASSWORD_LENGTH, verifyPassword } from './password'
@@ -84,44 +84,28 @@ export async function signInAction(input: z.input<typeof signInSchema>): Promise
   }
 }
 
-const signUpSchema = z.object({
-  companyName: z.string().trim().min(2).max(120),
-  businessTypeId: z.string().trim().min(1),
-  email: z.string().trim().email().optional(),
-  phone: z.string().trim().optional(),
-  password: z.string().min(MIN_PASSWORD_LENGTH).max(200),
-  acceptedTerms: z.boolean().refine((value) => value === true),
-}).refine(
-  (value) =>
-    (Boolean(value.email) && !value.phone) ||
-    (!value.email && Boolean(value.phone && /^[+][1-9][0-9]{7,14}$/.test(normalizePhone(value.phone)))),
-  { path: ['email'], message: 'اختر بريداً إلكترونياً أو رقم هاتف دولياً صحيحاً.' }
-)
-
-export async function signUpAction(input: z.input<typeof signUpSchema>): Promise<AuthActionResult> {
+export async function signUpAction(input: {
+  companyName?: string
+  businessTypeId: string
+  email?: string
+  phone?: string
+  password: string
+  acceptedTerms: boolean
+}): Promise<AuthActionResult> {
   if (!isAuthConfigured()) return { ok: false, error: AUTH_MESSAGES.notConfigured }
-  const parsed = signUpSchema.safeParse(input)
-  if (!parsed.success) {
-    const field = parsed.error.issues[0]?.path[0]
-    if (field === 'companyName') return { ok: false, error: AUTH_MESSAGES.companyRequired }
-    if (field === 'email' || field === 'phone') return { ok: false, error: 'اكتب بريداً إلكترونياً أو رقم هاتف دولياً صحيحاً.' }
-    if (field === 'password') return { ok: false, error: AUTH_MESSAGES.weakPassword }
-    if (field === 'acceptedTerms') return { ok: false, error: 'يجب الموافقة على الشروط وسياسة الخصوصية لإنشاء الحساب.' }
-    return { ok: false, error: AUTH_MESSAGES.generic }
-  }
+  const validated = validateSignUpInput(input)
+  if (!validated.ok) return { ok: false, error: validated.error }
 
   const ip = await clientIp()
   if (isRateLimited(`signup:ip:${ip}`, 10, FIFTEEN_MINUTES)) return { ok: false, error: AUTH_MESSAGES.tooManyAttempts }
 
-  const email = parsed.data.email ? normalizeEmail(parsed.data.email) : null
-  const phone = parsed.data.phone ? normalizePhone(parsed.data.phone) : null
+  const email = validated.data.email ? normalizeEmail(validated.data.email) : null
+  const phone = validated.data.phone ? normalizePhone(validated.data.phone) : null
   const guard = await checkSignupGuards({ email, ip })
   if (!guard.ok) {
     return { ok: false, error: guard.reason === 'disposable_email' ? AUTH_MESSAGES.disposableEmail : AUTH_MESSAGES.tooManyAttempts }
   }
-  const businessTypeId = BUSINESS_TYPES.some((type) => type.id === parsed.data.businessTypeId)
-    ? parsed.data.businessTypeId
-    : BUSINESS_TYPES[0]?.id
+  const { businessTypeId, companyName } = validated.data
 
   try {
     if (email && (await findUserByEmail(email))) return { ok: false, error: AUTH_MESSAGES.emailTaken }
@@ -129,8 +113,11 @@ export async function signUpAction(input: z.input<typeof signUpSchema>): Promise
     const user = await createUser({
       email,
       phone,
-      password: parsed.data.password,
-      metadata: { organization_name: parsed.data.companyName, business_type_id: businessTypeId },
+      password: validated.data.password,
+      metadata: {
+        ...(companyName ? { organization_name: companyName } : { organization_name_pending: true }),
+        business_type_id: businessTypeId,
+      },
       termsAcceptedAt: new Date(),
       termsVersion: TERMS_VERSION,
       privacyPolicyVersion: PRIVACY_POLICY_VERSION,

@@ -1,3 +1,5 @@
+import { splitWhatsAppMessage } from '@/lib/channels/whatsapp-format'
+
 /**
  * Meta (WhatsApp / Instagram) outbound adapter.
  *
@@ -95,25 +97,28 @@ export async function sendWhatsAppText(
   if (!credentials.access_token) throw new Error('WhatsApp access_token is required')
   if (!credentials.phone_number_id) throw new Error('WhatsApp phone_number_id is required')
 
-  const response = await fetch(
-    requireGraphBase() + '/' + encodeURIComponent(credentials.phone_number_id) + '/messages',
-    {
-      method: 'POST',
-      headers: { Authorization: 'Bearer ' + credentials.access_token, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messaging_product: 'whatsapp', to, type: 'text', text: { body } }),
-    }
-  )
-  if (!response.ok) {
-    const payload = (await response.json().catch(() => null)) as
-      | { error?: { message?: string; error_user_title?: string; error_user_msg?: string; code?: number } }
-      | null
-    const detail = payload?.error?.error_user_msg || payload?.error?.error_user_title || payload?.error?.message
-    const code = typeof payload?.error?.code === 'number' ? ' (رمز Meta ' + payload.error.code + ')' : ''
-    throw new MetaApiError(
-      'رفضت Meta إرسال الرسالة (HTTP ' + response.status + ')' + code +
-        (detail ? '. ' + detail : '. تحقق من صلاحية نافذة المحادثة والرقم المستلم.'),
-      response.status
+  const chunks = splitWhatsAppMessage(body, 4000)
+  for (const chunk of chunks) {
+    const response = await fetch(
+      requireGraphBase() + '/' + encodeURIComponent(credentials.phone_number_id) + '/messages',
+      {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + credentials.access_token, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messaging_product: 'whatsapp', to, type: 'text', text: { body: chunk } }),
+      }
     )
+    if (!response.ok) {
+      const payload = (await response.json().catch(() => null)) as
+        | { error?: { message?: string; error_user_title?: string; error_user_msg?: string; code?: number } }
+        | null
+      const detail = payload?.error?.error_user_msg || payload?.error?.error_user_title || payload?.error?.message
+      const code = typeof payload?.error?.code === 'number' ? ' (رمز Meta ' + payload.error.code + ')' : ''
+      throw new MetaApiError(
+        'رفضت Meta إرسال الرسالة (HTTP ' + response.status + ')' + code +
+          (detail ? '. ' + detail : '. تحقق من صلاحية نافذة المحادثة والرقم المستلم.'),
+        response.status
+      )
+    }
   }
 }
 

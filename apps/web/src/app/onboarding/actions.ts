@@ -7,6 +7,7 @@ import { getCurrentOrg, type OrgContext } from '@/lib/org'
 import { actionErrorMessage, dbActionError } from '@/lib/i18n/action-error'
 import { isBusinessTypeId } from '@/lib/capabilities/business-types'
 import { applyBusinessType } from '@/lib/capabilities/profile'
+import { updateUserMetadata } from '@/lib/auth/users'
 import {
   activationStateForStep,
   stateAfterActivationTest,
@@ -150,8 +151,8 @@ export async function saveBasicsAction(input: {
       }
     }
     const businessTypeId = input.businessTypeId?.trim()
-    if (businessTypeId && !isBusinessTypeId(businessTypeId)) {
-      return { ok: false, error: 'نوع النشاط غير معروف.' }
+    if (!businessTypeId || !isBusinessTypeId(businessTypeId)) {
+      return { ok: false, error: 'يرجى اختيار نوع النشاط قبل المتابعة.' }
     }
     const phoneInput = input.phone?.trim()
     let publicPhone: string | null = null
@@ -196,11 +197,21 @@ export async function saveBasicsAction(input: {
       if (businessError) return { ok: false, error: dbActionError(businessError) }
     }
     if (name !== org.organizationName) {
-      const { error: orgError } = await db
+      const { error: orgError } = await createAdminClient()
         .from('organizations')
         .update({ name })
         .eq('id', org.organizationId)
       if (orgError) console.error('Unable to rename organization', orgError)
+    }
+    try {
+      await updateUserMetadata(org.userId, {
+        organization_name: name,
+        business_type_id: businessTypeId,
+        organization_name_pending: false,
+        business_type_pending: false,
+      })
+    } catch (metaError) {
+      console.error('Unable to update user setup metadata', metaError)
     }
     revalidatePath('/onboarding')
     revalidatePath('/dashboard')

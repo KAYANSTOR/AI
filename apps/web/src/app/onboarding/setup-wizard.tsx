@@ -4,8 +4,7 @@ import { KayanSelect } from '@/components/ui/kayan-select'
 import { SectorPickerField } from '@/components/ui/sector-picker'
 import { useState, useTransition, type FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
-import { Check, Loader2 } from 'lucide-react'
-import { DEFAULT_BUSINESS_TYPE } from '@/lib/capabilities/business-types'
+import { Loader2, Check } from 'lucide-react'
 import { saveBasicsAction, saveOnboardingStepAction } from './actions'
 import { createServiceAction } from '@/app/dashboard/services/actions'
 import { saveLocationAction } from '@/app/dashboard/locations/actions'
@@ -172,7 +171,7 @@ export function SetupWizard({ step, data }: { step: 1 | 2 | 3 | 4; data: SetupDa
       <form id="setup-step-form" onSubmit={onSubmit} className="mt-6 space-y-4" key={step}>
         {step === 1 ? <>
           <Field label="اسم النشاط" required><input name="name" required minLength={2} maxLength={120} defaultValue={data.businessName || data.organizationName} className={inputClass} placeholder="اسم النشاط التجاري" /></Field>
-          <div className="space-y-1.5 text-sm font-medium text-text"><p>نوع النشاط<span className="ms-1 text-error" aria-hidden="true">*</span></p><SectorPickerField name="businessTypeId" defaultValue={data.businessTypeId || DEFAULT_BUSINESS_TYPE} /></div>
+          <div className="space-y-1.5 text-sm font-medium text-text"><p>نوع النشاط<span className="ms-1 text-error" aria-hidden="true">*</span></p><SectorPickerField name="businessTypeId" defaultValue={data.businessTypeId || ''} /></div>
           <Field label="المدينة"><input name="city" maxLength={120} defaultValue={data.city} className={inputClass} placeholder="المدينة أو المنطقة" /></Field>
           <Field label="رابط الموقع"><input name="websiteUrl" type="url" dir="ltr" defaultValue={data.websiteUrl} className={`${inputClass} text-start`} placeholder="https://" /></Field>
           <Field label="المنطقة الزمنية"><input dir="ltr" value={timezone} onChange={(event) => setTimezone(event.target.value)} className={`${inputClass} text-start`} placeholder="Asia/Aden" /></Field>

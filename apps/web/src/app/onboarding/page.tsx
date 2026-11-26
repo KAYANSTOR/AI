@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/db/server'
+import { getCurrentUser } from '@/lib/auth/current-user'
 import { getDashboardContext } from '@/lib/dashboard/context'
 import { FastPath } from './fastpath'
 import { stageForStoredStep } from '@/lib/onboarding/stages'
@@ -20,8 +21,10 @@ export const metadata: Metadata = {
 export const dynamic = 'force-dynamic'
 
 export default async function OnboardingPage() {
-  const context = await getDashboardContext()
+  const [context, currentUser] = await Promise.all([getDashboardContext(), getCurrentUser()])
   if (!context) redirect('/login')
+  const companyPending = currentUser?.userMetadata?.organization_name_pending === true
+  const businessTypePending = currentUser?.userMetadata?.business_type_pending === true
   const db = await createClient()
 
   const { data: profile, error: profileError } = await db
@@ -97,9 +100,9 @@ export default async function OnboardingPage() {
       <FastPath
         initialStage={stageForStoredStep(Number(profile?.activation_step ?? 1))}
         data={{
-          organizationName: context.organizationName,
-          businessName: String(businessResult.data?.name ?? context.organizationName),
-          businessTypeId: String(profile?.business_type_id ?? context.businessTypeId ?? ''),
+          organizationName: companyPending ? '' : context.organizationName,
+          businessName: companyPending ? '' : String(businessResult.data?.name ?? context.organizationName),
+          businessTypeId: businessTypePending ? '' : String(profile?.business_type_id ?? context.businessTypeId ?? ''),
           publicPhone: String(profile?.public_phone_number ?? ''),
           timezone: String(profile?.timezone && profile.timezone !== 'UTC' ? profile.timezone : 'Asia/Aden'),
           smokeTestResult: initialOutcome,
@@ -120,7 +123,7 @@ export default async function OnboardingPage() {
           needsRetest: storedTest?.passed === true && !showStoredTest,
           canManage: context.role === 'owner' || context.role === 'admin',
           completed: {
-            basics: Boolean(businessId && businessResult.data?.name && profile?.business_type_id && profile?.timezone),
+            basics: !companyPending && !businessTypePending && Boolean(businessId && businessResult.data?.name && profile?.business_type_id && profile?.timezone),
             connect: channels.some(isOnboardingChannelReady),
             agent: Boolean(agent?.status === 'active' && profile?.setup_description && profile?.system_prompt_addition),
             test: Boolean(initialOutcome?.passed && initialReply?.status === 'answered'),

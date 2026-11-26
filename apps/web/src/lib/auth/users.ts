@@ -116,6 +116,16 @@ export async function createUser(input: {
   return mapUser(rows[0])!
 }
 
+export async function updateUserMetadata(id: string, patch: Record<string, unknown>): Promise<void> {
+  await getSql().unsafe(
+    `update auth.users
+        set raw_user_meta_data = coalesce(raw_user_meta_data, '{}'::jsonb) || $2::text::jsonb,
+            updated_at = now()
+      where id = $1::uuid`,
+    [id, JSON.stringify(patch)]
+  )
+}
+
 export async function recordSignIn(id: string): Promise<void> {
   await getSql().unsafe(`update auth.users set last_sign_in_at = now() where id = $1::uuid`, [id])
 }

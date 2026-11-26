@@ -23,12 +23,11 @@ export function absoluteUrl(request: NextRequest, pathname: string): string {
   return absolute(request, pathname)
 }
 
-/** Apple posts the callback cross-site (form_post), which needs SameSite=None; Secure. */
-export function oauthBindingCookieOptions(provider: OAuthProvider) {
+export function oauthBindingCookieOptions(_provider: OAuthProvider) {
   return {
     httpOnly: true,
-    secure: provider === 'apple' || process.env.NODE_ENV === 'production',
-    sameSite: (provider === 'apple' ? 'none' : 'lax') as 'none' | 'lax',
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax' as const,
     path: '/api/auth/oauth',
     maxAge: OAUTH_STATE_TTL_SECONDS,
   }

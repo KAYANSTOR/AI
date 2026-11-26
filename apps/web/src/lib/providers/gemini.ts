@@ -53,9 +53,31 @@ export const geminiProvider: AIProvider = {
         attempts += 1
         console.info('ai_provider_attempt', { provider: 'gemini', model, attempt: attempts })
         try {
+          const requestedTokens = input.maxOutputTokens ?? (input.isWhatsApp ? 2048 : 4096)
+          const isGemini3 = /^gemini-3/.test(model)
+          const isGemini25 = /^gemini-2\.5/.test(model)
+          // Thinking/reasoning tokens share maxOutputTokens on Gemini; disable thinking on 2.5 Flash
+          // or guarantee enough headroom so Arabic replies never truncate mid-sentence.
+          const thinkingConfig = isGemini3
+            ? { thinkingLevel: 'low' as const }
+            : isGemini25
+              ? { thinkingBudget: /pro/i.test(model) ? 128 : 0 }
+              : undefined
+          const effectiveMaxOutputTokens = isGemini3
+            ? Math.min(Math.max(requestedTokens, 2048), 8192)
+            : Math.max(requestedTokens, 1024)
           const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(model) + ':generateContent', {
             method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
-            body: JSON.stringify({ systemInstruction, contents, tools, generationConfig: { maxOutputTokens: input.maxOutputTokens ?? (input.isWhatsApp ? 350 : 1024), ...(input.isWhatsApp && /^gemini-3/.test(model) ? { thinkingConfig: { thinkingLevel: 'low' } } : {}) } }), signal: AbortSignal.timeout(15_000),
+            body: JSON.stringify({
+              systemInstruction,
+              contents,
+              tools,
+              generationConfig: {
+                maxOutputTokens: effectiveMaxOutputTokens,
+                ...(thinkingConfig ? { thinkingConfig } : {}),
+              },
+            }),
+            signal: AbortSignal.timeout(15_000),
           })
           const payload = (await response.json()) as GeminiResponse
           if (!response.ok) {

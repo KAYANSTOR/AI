@@ -36,7 +36,7 @@ export async function tryAgentReply(input: {
       messages: [{ role: 'user', content: message }],
       tools: [],
       isWhatsApp: true,
-      maxOutputTokens: 350,
+      maxOutputTokens: 1500,
     })
     const reply = result.content
       .filter((block): block is { type: 'text'; text: string } => block.type === 'text')

@@ -47,6 +47,9 @@ export const AGENT_TOOLS: Record<string, ToolSpec> = {
   get_sector_report: { name: 'get_sector_report', risk: 'low', readOnly: true, labelAr: 'ملخص العمليات الفوري حسب القطاع', untouchedAr: 'قراءة فقط، لم يُعدّل أي سجل.' },
   send_owner_alert: { name: 'send_owner_alert', risk: 'medium', readOnly: false, labelAr: 'إرسال تنبيه أو ملخص للمالك عبر البوت المركزي', untouchedAr: 'أُرسل التنبيه للمالك فقط دون مراسلة العملاء.' },
   train_agent_knowledge: { name: 'train_agent_knowledge', risk: 'medium', readOnly: false, labelAr: 'إضافة معرفة وتعليمات لقاعدة المعرفة', untouchedAr: 'لم تُعدّل أو تُحذف أي سجلات عملاء.' },
+  live_web_search: { name: 'live_web_search', risk: 'low', readOnly: true, labelAr: 'بحث حي في الويب', untouchedAr: 'قراءة فقط، لم يُعدّل أي سجل.' },
+  set_personal_tone: { name: 'set_personal_tone', risk: 'low', readOnly: false, labelAr: 'تخصيص نبرة ولهجة المساعد الشخصي', untouchedAr: 'اقتصر التحديث على تفضيلات أسلوبك الشخصي.' },
+  analyze_and_export: { name: 'analyze_and_export', risk: 'low', readOnly: false, labelAr: 'تحليل وتصدير ملف منظم', untouchedAr: 'قراءة وتصدير ملف فقط، لم تتغير سجلات النشاط.' },
 }
 
 const RISK_ORDER: RiskLevel[] = ['low', 'medium', 'high', 'financial']

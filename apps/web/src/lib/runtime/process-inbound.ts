@@ -2,7 +2,7 @@ import { isOwnerPauseActive } from '@/lib/runtime/owner-presence'
 import type { DbClient } from '@/lib/db/client'
 import { createAdminClient } from '@/lib/db/admin'
 import { findUserById, normalizePhone } from '@/lib/auth/users'
-import { resolveContactIdentity } from '@/lib/channels/contacts'
+import { normalizeE164, resolveContactIdentity } from '@/lib/channels/contacts'
 import { getConsentStatus, isOptOutMessage, recordOptOut } from '@/lib/channels/consent'
 import { checkEligibility } from '@/lib/channels/eligibility'
 import { runAgentTurn } from '@/lib/runtime/agent-runtime'
@@ -104,19 +104,122 @@ type InboundIdentity = {
   displayName?: string | null
 }
 
-async function resolvePersonalAssistantOwner(input: InboundIdentity) {
-  if (input.channelType !== 'whatsapp' || !input.senderPhone) return null
-  const admin = createAdminClient()
-  const { data: settings } = await admin.from('personal_assistant_settings')
-    .select('user_id').eq('organization_id', input.organizationId)
-    .eq('whatsapp_channel_id', input.channelId).eq('whatsapp_reminders_enabled', true).maybeSingle()
-  if (!settings?.user_id) return null
-  const { data: membership } = await admin.from('organization_members').select('user_id')
-    .eq('organization_id', input.organizationId).eq('user_id', settings.user_id).eq('role', 'owner').maybeSingle()
-  if (!membership?.user_id) return null
-  const owner = await findUserById(String(membership.user_id))
-  if (!owner?.phone || normalizePhone(owner.phone) !== normalizePhone(input.senderPhone)) return null
-  return { userId: String(owner.id) }
+const GROUP_OR_SYSTEM_JID_RE = /(?:@g\.us|@broadcast|@newsletter|^status@broadcast)$/i
+
+function isGroupOrBroadcastSender(input: { externalUserId?: string | null; senderPhone?: string | null }): boolean {
+  const ext = String(input.externalUserId ?? '').trim()
+  const phone = String(input.senderPhone ?? '').trim()
+  return (Boolean(ext) && GROUP_OR_SYSTEM_JID_RE.test(ext)) || (Boolean(phone) && GROUP_OR_SYSTEM_JID_RE.test(phone))
+}
+
+function normalizedSenderE164(input: { externalUserId?: string | null; senderPhone?: string | null }): string | null {
+  const candidates = [input.senderPhone, input.externalUserId]
+  for (const raw of candidates) {
+    if (!raw) continue
+    const trimmed = String(raw).trim()
+    if (!trimmed) continue
+    if (GROUP_OR_SYSTEM_JID_RE.test(trimmed)) continue
+    if (trimmed.includes('@') && !/@(?:s\.whatsapp\.net|c\.us)$/i.test(trimmed)) continue
+    const local = trimmed.includes('@') ? trimmed.split('@')[0] : trimmed
+    const e164 = normalizeE164(local)
+    if (/^\+[1-9][0-9]{7,14}$/.test(e164)) return e164
+  }
+  return null
+}
+
+async function isPersonalAssistantOrganization(db: DbClient, organizationId: string): Promise<boolean> {
+  const [orgRes, profileRes] = await Promise.all([
+    db.from('organizations').select('business_type').eq('id', organizationId).maybeSingle(),
+    db.from('business_profiles').select('business_type_id').eq('organization_id', organizationId).maybeSingle(),
+  ])
+  return (
+    orgRes.data?.business_type === 'personal_assistant' ||
+    profileRes.data?.business_type_id === 'personal_assistant'
+  )
+}
+
+async function resolveLinkedPersonalOwner(
+  db: DbClient,
+  input: InboundIdentity,
+  senderE164: string
+): Promise<{ userId: string } | null> {
+  const { data: links } = await db
+    .from('personal_assistant_links')
+    .select('user_id, whatsapp_phone, verified_at, kill_switch_active')
+    .eq('org_id', input.organizationId)
+
+  for (const row of (links ?? []) as Array<Record<string, unknown>>) {
+    if (!row.verified_at || row.kill_switch_active === true) continue
+    const linkPhone = normalizeE164(String(row.whatsapp_phone ?? ''))
+    if (!/^\+[1-9][0-9]{7,14}$/.test(linkPhone) || linkPhone !== senderE164) continue
+    const userId = String(row.user_id ?? '')
+    if (!userId) continue
+    const { data: member } = await db
+      .from('organization_members')
+      .select('role')
+      .eq('organization_id', input.organizationId)
+      .eq('user_id', userId)
+      .maybeSingle()
+    if (member?.role === 'owner' || member?.role === 'admin') {
+      return { userId }
+    }
+  }
+  return null
+}
+
+async function resolvePersonalAssistantOwner(
+  db: DbClient,
+  input: InboundIdentity,
+  options: { isPersonalWorkspace: boolean }
+): Promise<{ userId: string } | null> {
+  if (input.channelType !== 'whatsapp') return null
+  if (isGroupOrBroadcastSender(input)) return null
+
+  const senderE164 = normalizedSenderE164(input)
+  if (!senderE164) return null
+
+  const linkedOwner = await resolveLinkedPersonalOwner(db, input, senderE164)
+  if (linkedOwner && options.isPersonalWorkspace) return linkedOwner
+
+  try {
+    const admin = createAdminClient()
+    const { data: settings } = await admin.from('personal_assistant_settings')
+      .select('user_id').eq('organization_id', input.organizationId)
+      .eq('whatsapp_channel_id', input.channelId).eq('whatsapp_reminders_enabled', true).maybeSingle()
+    if (settings?.user_id) {
+      const { data: membership } = await admin.from('organization_members').select('user_id')
+        .eq('organization_id', input.organizationId).eq('user_id', settings.user_id).eq('role', 'owner').maybeSingle()
+      if (membership?.user_id) {
+        const owner = await findUserById(String(membership.user_id))
+        if (owner?.phone && normalizePhone(owner.phone) === normalizePhone(senderE164)) {
+          return { userId: String(owner.id) }
+        }
+      }
+    }
+
+    if (options.isPersonalWorkspace) {
+      const { data: owners } = await db
+        .from('organization_members')
+        .select('user_id, role')
+        .eq('organization_id', input.organizationId)
+        .eq('role', 'owner')
+      for (const row of (owners ?? []) as Array<{ user_id?: unknown }>) {
+        const ownerId = String(row.user_id ?? '')
+        if (!ownerId) continue
+        const owner = await findUserById(ownerId)
+        if (owner?.phone && normalizePhone(owner.phone) === normalizePhone(senderE164)) {
+          return { userId: String(owner.id) }
+        }
+      }
+    }
+  } catch (error) {
+    console.warn('personal_assistant_owner_lookup_unavailable', {
+      organizationId: input.organizationId,
+      reason: error instanceof Error ? error.message.slice(0, 120) : 'lookup_failed',
+    })
+  }
+
+  return null
 }
 
 function skipReply(reason: string, input: { organizationId: string; channelId: string }, conversationId: string, contactId: string) {
@@ -210,11 +313,25 @@ export async function processInboundMessage(
     return { reply: null, conversationId: '', contactId: '' }
   }
 
+  const isPersonalWorkspace = await isPersonalAssistantOrganization(db, input.organizationId)
+  const personalOwner = await resolvePersonalAssistantOwner(db, input, { isPersonalWorkspace })
+
+  // Owner-Only Strict Gate for Personal Assistant mode:
+  // Never create customer replies, conversations, or leak owner identity/memories
+  // when a third party or group messages a personal assistant channel/workspace.
+  if (isPersonalWorkspace && !personalOwner) {
+    console.info('personal_assistant_third_party_dropped', {
+      organizationId: input.organizationId,
+      channelId: input.channelId,
+      reason: isGroupOrBroadcastSender(input) ? 'group_or_broadcast' : 'unauthorized_sender',
+    })
+    return { reply: null, conversationId: '', contactId: '' }
+  }
+
   const stored = input.prestored ?? await storeInboundMessage(db, { ...input, messageType: 'text', content: input.text })
   const conversationId = stored.conversationId
   const contact = { contactId: stored.contactId }
 
-  const personalOwner = await resolvePersonalAssistantOwner(input)
   if (personalOwner) {
     try {
       const result = await runPersonalAssistantTurn(db, {

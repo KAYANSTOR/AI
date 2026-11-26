@@ -60,14 +60,3 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const q = request.nextUrl.searchParams
   return handle(request, provider, { code: q.get('code'), state: q.get('state'), error: q.get('error') })
 }
-
-/** Apple returns with response_mode=form_post. */
-export async function POST(request: NextRequest, { params }: { params: Promise<{ provider: string }> }) {
-  const { provider } = await params
-  const form = await request.formData().catch(() => null)
-  const read = (key: string) => {
-    const value = form?.get(key)
-    return typeof value === 'string' ? value : null
-  }
-  return handle(request, provider, { code: read('code'), state: read('state'), error: read('error') })
-}

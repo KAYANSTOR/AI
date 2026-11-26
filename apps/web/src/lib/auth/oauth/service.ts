@@ -1,5 +1,4 @@
 /** Production wiring for OAuth account resolution (PostgreSQL + security log). */
-import { BUSINESS_TYPES } from '@/lib/capabilities/business-types'
 import { logSecurityEvent } from '../security-log'
 import { PRIVACY_POLICY_VERSION, TERMS_VERSION } from '../terms'
 import {
@@ -27,10 +26,14 @@ export function oauthAccountDeps(ip: string | null): OAuthAccountDeps {
     markEmailVerified,
     revokePasswordAndSessions,
     async createOAuthUser({ email, name, provider }) {
-      const organizationName = (name?.trim() || email.split('@')[0] || 'نشاطي').slice(0, 120)
       const user = await createOAuthUser({
         email,
-        metadata: { organization_name: organizationName, business_type_id: BUSINESS_TYPES[0]?.id, full_name: name ?? undefined, signup_method: provider },
+        metadata: {
+          organization_name_pending: true,
+          business_type_pending: true,
+          full_name: name ?? undefined,
+          signup_method: provider,
+        },
         termsVersion: TERMS_VERSION,
         privacyPolicyVersion: PRIVACY_POLICY_VERSION,
       })

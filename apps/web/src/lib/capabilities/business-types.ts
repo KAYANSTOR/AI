@@ -9,15 +9,22 @@ export type BusinessTypeOption = {
   hint: string
 }
 
+const ENGINE_HINTS_AR: Record<(typeof VERTICALS)[number]['baseEngine'], string> = {
+  booking_engine: 'يهيئ المواعيد والردود الذكية واستقبال استفسارات العملاء تلقائياً.',
+  commerce_engine: 'يهيئ إدارة الطلبات والمنتجات وعروض الأسعار ومتابعة العملاء.',
+  event_engine: 'يهيئ حجوزات المواعيد والباقات وعروض الأسعار ومتابعة الطلبات.',
+  lead_engine: 'يهيئ استقبال العملاء المحتملين وعروض الأسعار وتنظيم المتابعة.',
+}
+
 export const BUSINESS_TYPES: readonly BusinessTypeOption[] = VERTICALS.map((vertical) => ({
   id: vertical.id,
   label: vertical.nameAr,
-  hint: vertical.requiredFields.length
-    ? `يهيئ ${vertical.enabledModules.join('، ')} ويجمع بيانات مثل ${vertical.requiredFields.slice(0, 3).join('، ')}.`
-    : 'إعداد نشاط مخصص.',
+  hint: vertical.id === 'personal_assistant'
+    ? 'مساعد شخصي خاص لإدارة مهامك وذاكرتك وتنبيهاتك.'
+    : ENGINE_HINTS_AR[vertical.baseEngine],
 }))
 
-export const DEFAULT_BUSINESS_TYPE: BusinessTypeId = 'clinic'
+export const DEFAULT_BUSINESS_TYPE: BusinessTypeId | '' = ''
 
 const LEGACY_IDS = new Set(['it_technology', 'weddings_events', 'sales', 'appointments', 'home_services'])
 

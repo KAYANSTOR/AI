@@ -43,9 +43,13 @@ function timestampMs(message) {
  */
 export function classifyUpsertMessage(message, upsertType, { isBotSent, now = Date.now() } = {}) {
   const remoteJid = message?.key?.remoteJid
+  const altJid = message?.key?.remoteJidAlt
   const messageId = message?.key?.id
   if (!remoteJid || !messageId) return { kind: 'ignore', reason: 'missing_key' }
-  if (remoteJid === 'status@broadcast' || remoteJid.endsWith('@g.us') || remoteJid.endsWith('@newsletter') || remoteJid.endsWith('@broadcast')) {
+  const isUnsupported = (jid) =>
+    typeof jid === 'string' &&
+    (jid === 'status@broadcast' || jid.endsWith('@g.us') || jid.endsWith('@newsletter') || jid.endsWith('@broadcast'))
+  if (isUnsupported(remoteJid) || isUnsupported(altJid)) {
     return { kind: 'ignore', reason: 'unsupported_chat' }
   }
   if (message.key.fromMe) {

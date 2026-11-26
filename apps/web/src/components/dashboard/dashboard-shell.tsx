@@ -43,7 +43,7 @@ export function DashboardShell({
         <Header organizationName={organizationName} businessTypeId={businessTypeId} timezone={timezone} showBusinessSearch={canSearchBusiness({ businessTypeId, enabledCapabilities })} />
         {setupBanner ? <div className="dashboard-setup-banner">{setupBanner}</div> : null}
         <main className="dashboard-main-scroll" id="dashboard-main">
-          <div className="dashboard-page-content animate-page-enter"><DashboardTour key={tourIdentity} access={{ businessTypeId, personalAssistantEnabled, enabledCapabilities, role, setupComplete }} />{children}</div>
+          <div className="dashboard-page-content animate-page-enter"><DashboardTour key={tourIdentity} storageKey={tourIdentity} access={{ businessTypeId, personalAssistantEnabled, enabledCapabilities, role, setupComplete }} />{children}</div>
         </main>
       </div>
       {/* Fixed to the viewport, outside the overflow-hidden app frame. */}

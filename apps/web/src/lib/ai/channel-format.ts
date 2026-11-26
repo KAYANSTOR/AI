@@ -16,25 +16,24 @@ export function isFastTextChannel(channel: string | null | undefined): boolean {
 export const WHATSAPP_BREVITY_MARKER = '[WHATSAPP_BREVITY_GUARD]'
 
 export const WHATSAPP_BREVITY_RULE = `${WHATSAPP_BREVITY_MARKER}
-قاعدة تنسيق إلزامية لقناة واتساب (تتقدم على أي تعليمات سابقة عن الطول أو الأسلوب):
-- اكتب الرد في سطر إلى 3 أسطر قصيرة فقط، بلهجة عربية طبيعية وودودة كأنك موظف يرد من جواله.
-- ادخل في الجواب مباشرة: بلا مقدمات أو ترحيب مطوّل أو تكرار لسؤال العميل أو خاتمة إنشائية.
-- لا تستخدم العناوين أو التنسيق العريض أو القوائم الطويلة، إلا إذا طلب العميل صراحةً قائمة منتجات أو أسعار أو تفاصيل.
-- عند الحاجة لمعلومة إضافية اسأل سؤالاً واحداً قصيراً فقط.`
+قاعدة تنسيق قناة واتساب:
+- اكتب الرد بلهجة عربية طبيعية ومباشرة، وتجنب المقدمات المكررة أو الإطالة غير المفيدة.
+- أكمل الجمل والمعلومات دائماً ولا تقطع الإجابة أو الجدول أو القائمة في المنتصف.
+- عند عرض تفاصيل أو قوائم أو أسعار أو جداول، اذكرها كاملة بوضوح في أسطر مرتبة.`
 
-/** Output budget for fast text channels; generous enough for a short list when asked. */
-export const WHATSAPP_MAX_OUTPUT_TOKENS = 350
-export const DEFAULT_MAX_OUTPUT_TOKENS = 1024
+/** Output budget for fast text channels; high enough for complete Arabic answers & structured lists. */
+export const WHATSAPP_MAX_OUTPUT_TOKENS = 2048
+export const DEFAULT_MAX_OUTPUT_TOKENS = 4096
 
 export function maxOutputTokensForChannel(channel: string | null | undefined): number {
   if (!isFastTextChannel(channel)) return DEFAULT_MAX_OUTPUT_TOKENS
   const override = Number(process.env.WHATSAPP_MAX_OUTPUT_TOKENS)
-  return Number.isFinite(override) && override >= 64 && override <= 1024
+  return Number.isFinite(override) && override >= 256 && override <= 4096
     ? Math.floor(override)
     : WHATSAPP_MAX_OUTPUT_TOKENS
 }
 
-/** Appends the brevity rule at the end of the system prompt (idempotent). */
+/** Appends the WhatsApp style rule at the end of the system prompt (idempotent). */
 export function applyChannelFormatRules(systemPrompt: string, channel: string | null | undefined): string {
   if (!isFastTextChannel(channel)) return systemPrompt
   if (systemPrompt.includes(WHATSAPP_BREVITY_MARKER)) return systemPrompt
@@ -47,30 +46,15 @@ export function customerAskedForDetails(userText: string | null | undefined): bo
   return DETAIL_REQUEST.test(String(userText ?? ''))
 }
 
-const MAX_BRIEF_LINES = 3
-const MAX_BRIEF_CHARS = 420
-
 /**
- * Last line of defence if a model ignores the instruction: strips markdown decoration and,
- * unless the customer asked for a list/details, keeps the reply to a few short lines,
- * cutting at a sentence boundary.
+ * Normalizes WhatsApp formatting without truncating sentences or dropping multi-line content,
+ * lists, or tables; oversized messages are delivered intact as sequential chunks downstream.
  */
-export function enforceWhatsAppBrevity(reply: string, userText?: string | null): string {
-  let text = reply
-    .replace(/\*\*(.+?)\*\*/g, '$1')
+export function enforceWhatsAppBrevity(reply: string, _userText?: string | null): string {
+  return reply
+    .replace(/\*\*([^*\n]+?)\*\*/g, '*$1*')
     .replace(/^#{1,6}\s+/gm, '')
+    .replace(/\r\n?/g, '\n')
     .replace(/\n{3,}/g, '\n\n')
     .trim()
-  if (customerAskedForDetails(userText)) return text
-
-  const lines = text.split('\n').map((line) => line.trim()).filter(Boolean)
-  if (lines.length <= MAX_BRIEF_LINES && text.length <= MAX_BRIEF_CHARS) return lines.join('\n')
-
-  text = lines.slice(0, MAX_BRIEF_LINES).join('\n')
-  if (text.length > MAX_BRIEF_CHARS) {
-    const slice = text.slice(0, MAX_BRIEF_CHARS)
-    const cut = Math.max(slice.lastIndexOf('.'), slice.lastIndexOf('؟'), slice.lastIndexOf('!'), slice.lastIndexOf('?'), slice.lastIndexOf('\n'))
-    text = (cut > MAX_BRIEF_CHARS * 0.4 ? slice.slice(0, cut + 1) : slice).trim()
-  }
-  return text
 }

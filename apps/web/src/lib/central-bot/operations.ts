@@ -8,6 +8,21 @@ import { loadReadiness } from '@/lib/trainer/router'
 import { getVertical, type BaseEngine, type VerticalDefinition } from '@/lib/verticals/registry'
 import { getCentralBotConfig } from './config'
 import { sendCentralText } from './meta-client'
+import { runLiveWebSearch, type LiveSearchDeps } from '@/lib/personal-assistant/live-search'
+import {
+  PERSONA_DIALECT_LABELS,
+  PERSONA_TONE_LABELS,
+  resolveDialectAlias,
+  resolveToneAlias,
+  savePersonalPersona,
+} from '@/lib/personal-assistant/persona'
+import {
+  createBackgroundExportTask,
+  runBackgroundExportTask,
+  type ExportFormat,
+  type ExportSource,
+} from '@/lib/personal-assistant/exports'
+import { trainAgentFromWebsiteUrl, type WebsiteFetchDeps } from '@/lib/trainer/url-ingest'
 
 export type CentralOwner = { organizationId: string; userId: string }
 export type OwnerRole = 'owner' | 'admin'
@@ -111,6 +126,10 @@ export type ParsedCentralCommand =
   | { kind: 'notify_summary'; period: ReportPeriod }
   | { kind: 'notify_alert'; title: string; body: string }
   | { kind: 'train'; content: string }
+  | { kind: 'train_url'; url: string }
+  | { kind: 'live_search'; query: string }
+  | { kind: 'persona'; field: 'tone' | 'dialect'; value: string }
+  | { kind: 'export'; source: ExportSource; format: ExportFormat; period: ReportPeriod }
 
 const MAX_DIRECTIVE_CHARS = 2000
 const MAX_ALERT_CHARS = 2000
@@ -129,9 +148,33 @@ const NOTIFY_ALERT_RE =
   /^\s*(?:أرسل|ارسل|إرسال|ارسال)\s+تنبيه(?:\s+للمالك)?\s*[:：]\s*(.+)$/us
 const TRAIN_RE =
   /^\s*(?:درّ?ب\s+الوكيل|تدريب\s+الوكيل|أضف\s+(?:للمعرفة|لقاعدة\s+المعرفة)|اضف\s+(?:للمعرفة|لقاعدة\s+المعرفة)|علّ?م\s+الوكيل|تحديث\s+المعرفة|معرفة\s+جديدة)\s*[:：]\s*(.+)$/us
+const TRAIN_URL_RE =
+  /^\s*(?:تدريب\s+من\s+رابط|أضف\s+رابط|اضف\s+رابط|رابط\s+الموقع|تدريب\s+الموقع)\s*[:：]\s*(.+)$/u
+const LIVE_SEARCH_RE =
+  /^\s*(?:ابحث(?:\s+عن)?|بحث\s+حي)\s*[:：]\s*(.+)$/us
+const PERSONA_TONE_RE =
+  /^\s*(?:نبرة\s+المساعد|أسلوب\s+المساعد|اسلوب\s+المساعد|تغيير\s+النبرة)\s*[:：]\s*(.+)$/u
+const PERSONA_DIALECT_RE =
+  /^\s*(?:لهجة\s+المساعد|تغيير\s+اللهجة)\s*[:：]\s*(.+)$/u
+const EXPORT_RE =
+  /^\s*(?:تصدير|صدّ?ر)\s+(تقرير|ملخص|المحادثات|المعرفة|المهام)(?:\s+(اليوم|الأسبوع|الاسبوع|الشهر))?(?:\s+(?:بصيغة\s+)?(csv|json|md|markdown))?\s*$/iu
 
 const DIRECTIVE_LINE_RE =
   /^\s*(?:توجيه|تعليمات|قاعدة|أسلوب\s+الرد|اسلوب\s+الرد)\s*[:：]\s*(.+)$/u
+
+function parseExportSourceWord(word: string): ExportSource {
+  if (word === 'المحادثات') return 'conversations'
+  if (word === 'المعرفة') return 'knowledge'
+  if (word === 'المهام') return 'tasks'
+  return 'sector_report'
+}
+
+function parseExportFormatWord(word: string | undefined): ExportFormat {
+  const lower = (word ?? '').toLowerCase()
+  if (lower === 'csv') return 'csv'
+  if (lower === 'json') return 'json'
+  return 'md'
+}
 
 function sanitizeDirectiveText(raw: string): string {
   return raw
@@ -180,9 +223,43 @@ export function parseCentralOperationalCommand(text: string): ParsedCentralComma
     return { kind: 'report', period: periodFromArabicWord(reportMatch[1]) }
   }
 
+  const trainUrlMatch = TRAIN_URL_RE.exec(trimmed)
+  if (trainUrlMatch) {
+    return { kind: 'train_url', url: trainUrlMatch[1].trim() }
+  }
+
+  const liveSearchMatch = LIVE_SEARCH_RE.exec(trimmed)
+  if (liveSearchMatch) {
+    return { kind: 'live_search', query: liveSearchMatch[1].trim() }
+  }
+
+  const toneMatch = PERSONA_TONE_RE.exec(trimmed)
+  if (toneMatch) {
+    return { kind: 'persona', field: 'tone', value: toneMatch[1].trim() }
+  }
+
+  const dialectMatch = PERSONA_DIALECT_RE.exec(trimmed)
+  if (dialectMatch) {
+    return { kind: 'persona', field: 'dialect', value: dialectMatch[1].trim() }
+  }
+
+  const exportMatch = EXPORT_RE.exec(trimmed)
+  if (exportMatch) {
+    return {
+      kind: 'export',
+      source: parseExportSourceWord(exportMatch[1]),
+      period: periodFromArabicWord(exportMatch[2]),
+      format: parseExportFormatWord(exportMatch[3]),
+    }
+  }
+
   const trainMatch = TRAIN_RE.exec(trimmed)
   if (trainMatch) {
-    return { kind: 'train', content: trainMatch[1].trim() }
+    const content = trainMatch[1].trim()
+    if (/^https?:\/\/\S+$/i.test(content)) {
+      return { kind: 'train_url', url: content }
+    }
+    return { kind: 'train', content }
   }
 
   return null
@@ -978,6 +1055,8 @@ export async function tryHandleCentralOperationalCommand(
     generate?: GenerateFn
     now?: () => Date
     channel?: 'whatsapp_central' | 'web'
+    searchDeps?: LiveSearchDeps
+    fetchDeps?: WebsiteFetchDeps
   } = {}
 ): Promise<{ status: string; reply: string } | null> {
   const command = parseCentralOperationalCommand(text)
@@ -1035,6 +1114,78 @@ export async function tryHandleCentralOperationalCommand(
       }
     }
 
+    if (command.kind === 'train_url') {
+      const trained = await trainAgentFromWebsiteUrl(
+        db,
+        owner,
+        { url: command.url },
+        { ...deps.fetchDeps, generate: deps.generate, now: deps.now }
+      )
+      return { status: 'website_trained', reply: trained.reply }
+    }
+
+    if (command.kind === 'live_search') {
+      await assertCentralBotOwner(db, owner)
+      const search = await runLiveWebSearch(command.query, deps.searchDeps)
+      if (!search.ok) {
+        return { status: search.code, reply: search.messageAr }
+      }
+      const links = search.results.slice(0, 3).map((item) => `• ${item.title}: ${item.url}`)
+      const reply = [search.summary, ...links].filter(Boolean).join('\n')
+      return { status: 'search_completed', reply }
+    }
+
+    if (command.kind === 'persona') {
+      await assertCentralBotOwner(db, owner)
+      if (command.field === 'tone') {
+        const tone = resolveToneAlias(command.value)
+        if (!tone) {
+          return {
+            status: 'invalid_persona',
+            reply: 'اختر نبرة صالحة: دافئ، تنفيذي مختصر، فصحى رسمية، أو ودود وبسيط.',
+          }
+        }
+        const saved = await savePersonalPersona(db, owner, { tone })
+        return {
+          status: 'persona_updated',
+          reply: `تم تحديث نبرة المساعد إلى «${PERSONA_TONE_LABELS[saved.tone].labelAr}» وحفظها لك.`,
+        }
+      }
+      const dialect = resolveDialectAlias(command.value)
+      if (!dialect) {
+        return {
+          status: 'invalid_persona',
+          reply: 'اختر لهجة صالحة: يمنية، خليجية، مصرية، شامية، أو فصحى معاصرة.',
+        }
+      }
+      const saved = await savePersonalPersona(db, owner, { dialect })
+      return {
+        status: 'persona_updated',
+        reply: `تم تحديث لهجة المساعد إلى «${PERSONA_DIALECT_LABELS[saved.dialect].labelAr}» وحفظها لك.`,
+      }
+    }
+
+    if (command.kind === 'export') {
+      await assertCentralBotOwner(db, owner)
+      const task = await createBackgroundExportTask(
+        db,
+        owner,
+        { source: command.source, format: command.format, period: command.period },
+        { now: deps.now }
+      )
+      const done = await runBackgroundExportTask(db, owner, task.taskId, { now: deps.now })
+      if (done.state !== 'done' || !done.file) {
+        return {
+          status: 'export_failed',
+          reply: `تعذّر إكمال التصدير (${done.lastError ?? 'خطأ غير متوقع'}).`,
+        }
+      }
+      return {
+        status: 'export_completed',
+        reply: `تم تجهيز ملف التصدير «${done.file.fileName}» (${done.file.format.toUpperCase()}).\n${done.file.summaryText}`,
+      }
+    }
+
     const trained = await trainAgentFromBotConversation(
       db,
       owner,
@@ -1055,6 +1206,32 @@ export async function tryHandleCentralOperationalCommand(
     }
     if (code === 'empty_notification_body') {
       return { status: 'invalid_notification', reply: 'أرسل نص التنبيه المطلوب بعد النقطتين.' }
+    }
+    if (
+      code === 'invalid_website_url' ||
+      code === 'unsupported_url_protocol' ||
+      code === 'url_credentials_forbidden' ||
+      code.startsWith('ssrf_blocked_') ||
+      code === 'website_dns_failed' ||
+      code === 'website_too_many_redirects' ||
+      code === 'website_unsupported_content_type' ||
+      code === 'unsupported_website_content_type' ||
+      code === 'website_response_too_large' ||
+      code === 'website_content_too_large' ||
+      code === 'website_content_empty' ||
+      code === 'website_fetch_timeout' ||
+      code === 'website_http_error' ||
+      code === 'website_fetch_failed'
+    ) {
+      return {
+        status: code,
+        reply:
+          code.startsWith('ssrf_blocked_') || code === 'unsupported_url_protocol' || code === 'url_credentials_forbidden'
+            ? 'الرابط مرفوض أمنياً: يُسمح فقط بروابط المواقع العامة عبر HTTP/HTTPS ولا تُقبل الروابط الداخلية أو الخاصة.'
+            : code === 'website_fetch_timeout'
+              ? 'انتهت مهلة الاتصال بالموقع قبل قراءة محتواه. حاول مرة أخرى لاحقاً.'
+              : 'تعذّرت قراءة محتوى الموقع أو الرابط غير صالح. تحقّق من الرابط وحاول مجدداً.',
+      }
     }
     throw error
   }
