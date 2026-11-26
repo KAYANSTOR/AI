@@ -319,7 +319,7 @@ function runtimeDb() {
     messages: { unique: [['conversation_id', 'external_message_id']], rows: [] },
     consents: { rows: [] },
     audit_events: { rows: [] },
-    business_profiles: { rows: [{ business_id: BIZ, activation_state: 'active' }] },
+    business_profiles: { rows: [{ organization_id: ORG, business_id: BIZ, activation_state: 'active' }] },
     ai_agents: { rows: [{ id: 'agent', organization_id: ORG, business_id: BIZ, status: 'active', created_at: '2026-01-01' }] },
     pending_actions: { rows: [] },
     notifications: { rows: [] },
@@ -385,6 +385,18 @@ describe('free plan fair-use guards before the model call', () => {
     expect(PAID.economy).toBe(false)
   })
 
+  test('an active profile without a tenant binding cannot reach the model or quota guard', async () => {
+    const counter = countingGuards(FREE)
+    setInboundGuardsFactory(() => counter.guards)
+    const fake = runtimeDb()
+    delete fake.store.business_profiles.rows![0].organization_id
+    const result = await send(fake.client as unknown as DbClient, 'unbound')
+    expect(result.reply).toBeNull()
+    expect(modelCalls).toHaveLength(0)
+    expect(counter.usage.flood).toBe(0)
+    expect(counter.seen).toHaveLength(0)
+  })
+
   test('consumption stops at the daily cap (10) with a fixed reply and no model call', async () => {
     const counter = countingGuards(FREE)
     setInboundGuardsFactory(() => counter.guards)
@@ -412,7 +424,12 @@ describe('free plan fair-use guards before the model call', () => {
 
   test('coalescing: a burst of rapid messages gets one reply (the newest message wins)', async () => {
     const counter = countingGuards(PAID)
-    setInboundGuardsFactory(() => ({ ...counter.guards, coalesceMs: 25 }))
+    let policyCalls = 0
+    setInboundGuardsFactory(() => ({
+      ...counter.guards,
+      coalesceMs: 25,
+      async policy() { policyCalls += 1; return PAID },
+    }))
     const fake = runtimeDb()
     const db = fake.client as unknown as DbClient
     const first = send(db, 'c1', 'مرحبا')
@@ -424,6 +441,8 @@ describe('free plan fair-use guards before the model call', () => {
     expect(result.reply).toBe(null)
     expect(modelCalls).toHaveLength(0)
     expect(counter.usage.flood).toBe(0)
+    // A silent activation failure must not masquerade as successful coalescing.
+    expect(policyCalls).toBe(1)
   })
 
   test('flood: the 5th AI call within a minute from the same contact is dropped silently', async () => {
