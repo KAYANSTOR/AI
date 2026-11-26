@@ -61,7 +61,7 @@ export function NewWhatsAppConversation() {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-sm transition hover:bg-primary-dark active:scale-[0.98]"
+        className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-sm transition hover:bg-primary-dark hover:text-primary-dark-foreground active:scale-[0.98]"
       >
         <MessageSquarePlus className="h-4 w-4" aria-hidden="true" />
         محادثة جديدة
@@ -209,7 +209,7 @@ export function NewWhatsAppConversation() {
               <button
                 type="submit"
                 disabled={pending || !phone.trim() || !consentConfirmed}
-                className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-bold text-primary-foreground shadow-sm transition hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-50"
+                className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-bold text-primary-foreground shadow-sm transition hover:bg-primary-dark hover:text-primary-dark-foreground disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {pending ? (
                   <>

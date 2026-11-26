@@ -103,7 +103,7 @@ export function FormError({ message }: { message: string | null }) {
 }
 
 export const submitClass =
-  'group inline-flex h-[52px] w-full items-center justify-center gap-2 rounded-2xl bg-primary px-6 py-3 text-[15px] font-semibold text-primary-foreground transition-[background-color,transform] duration-150 hover:bg-primary-dark active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-[0.45]'
+  'group inline-flex h-[52px] w-full items-center justify-center gap-2 rounded-2xl bg-primary px-6 py-3 text-[15px] font-semibold text-primary-foreground transition-[background-color,transform] duration-150 hover:bg-primary-dark hover:text-primary-dark-foreground active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-[0.45]'
 
 export const secondaryButtonClass =
   'inline-flex h-[52px] w-full items-center justify-center gap-2 rounded-2xl border border-border-strong bg-surface px-6 py-3 text-[15px] font-semibold text-text transition-colors hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-accent/20'

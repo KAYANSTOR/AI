@@ -39,7 +39,7 @@ const statusConfig: Record<
     icon: AlertTriangle,
     defaultAction: 'استكمال الربط',
     buttonClass:
-      'bg-primary text-primary-foreground hover:bg-primary-dark',
+      'bg-primary text-primary-foreground hover:bg-primary-dark hover:text-primary-dark-foreground',
   },
   disconnected: {
     badgeLabel: 'غير مربوطة',
@@ -47,7 +47,7 @@ const statusConfig: Record<
     icon: CircleDashed,
     defaultAction: 'ربط القناة',
     buttonClass:
-      'bg-primary text-primary-foreground hover:bg-primary-dark',
+      'bg-primary text-primary-foreground hover:bg-primary-dark hover:text-primary-dark-foreground',
   },
 }
 

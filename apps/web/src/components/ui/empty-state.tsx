@@ -46,7 +46,7 @@ export function MobileEmptyState({
           <button
             type="button"
             onClick={onAction}
-            className="mt-2 flex h-11 items-center justify-center rounded-xl bg-primary px-5 text-[14px] font-semibold text-primary-foreground shadow-sm transition hover:bg-primary-dark active:scale-95"
+            className="mt-2 flex h-11 items-center justify-center rounded-xl bg-primary px-5 text-[14px] font-semibold text-primary-foreground shadow-sm transition hover:bg-primary-dark hover:text-primary-dark-foreground active:scale-95"
           >
             {actionLabel}
           </button>

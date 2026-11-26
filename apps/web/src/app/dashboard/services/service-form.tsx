@@ -71,7 +71,7 @@ export function ServiceForm(_props: { organizationId: string }) {
           <input type="number" min={0} step="0.01" value={form.price_amount} onChange={(e) => setForm((f) => ({ ...f, price_amount: e.target.value }))} className="min-h-11 w-full rounded-lg border border-border bg-surface px-3 py-2 text-base text-text focus:outline-none focus:ring-2 focus:ring-accent/30 md:text-sm" placeholder="150" dir="ltr" />
         </div>
       </div>
-      <button type="submit" disabled={loading} className="flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary-dark py-2.5 text-base font-medium text-primary-foreground transition-colors hover:bg-primary disabled:opacity-60 md:text-sm">
+      <button type="submit" disabled={loading} className="flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary-dark py-2.5 text-base font-medium text-primary-dark-foreground transition-colors hover:bg-primary-dark/90 disabled:opacity-60 md:text-sm">
         {loading ? <Loader2 className="animate-spin" size={16} /> : ar.services.save}
       </button>
     </form>

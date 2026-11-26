@@ -32,7 +32,7 @@ export function QuoteActions({ quoteId, currentStatus }: { quoteId: string, curr
             <button
               onClick={() => handleStatusChange('sent')}
               disabled={loading !== null}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary-dark disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary-dark hover:text-primary-dark-foreground disabled:opacity-50"
             >
               {loading === 'sent' ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
               إرسال للعميل

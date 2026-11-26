@@ -31,7 +31,7 @@ export default async function QuotesPage() {
         </div>
         <Link
           href="/dashboard/quotes/new"
-          className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary-dark"
+          className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary-dark hover:text-primary-dark-foreground"
         >
           <Plus size={16} />
           إنشاء عرض سعر

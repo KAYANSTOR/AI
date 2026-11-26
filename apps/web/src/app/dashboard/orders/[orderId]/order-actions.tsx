@@ -32,7 +32,7 @@ export function OrderActions({ orderId, currentStatus }: { orderId: string, curr
             <button
               onClick={() => handleStatusChange('confirmation')}
               disabled={loading !== null}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary-dark disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary-dark hover:text-primary-dark-foreground disabled:opacity-50"
             >
               {loading === 'confirmation' ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
               طلب تأكيد
@@ -61,7 +61,7 @@ export function OrderActions({ orderId, currentStatus }: { orderId: string, curr
             <button
               onClick={() => handleStatusChange('processing')}
               disabled={loading !== null}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary-dark disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary-dark hover:text-primary-dark-foreground disabled:opacity-50"
             >
               {loading === 'processing' ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
               تأكيد وبدء المعالجة

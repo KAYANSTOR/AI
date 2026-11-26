@@ -421,7 +421,11 @@ async function startSession(input) {
 async function sessionStatus(channelId) {
   if (!/^[0-9a-f-]{36}$/i.test(channelId)) throw Object.assign(new Error('invalid_channel_id'), { status: 400 })
   const rows = await query("SELECT * FROM public.whatsapp_gateway_sessions WHERE channel_id=$1 LIMIT 1", [channelId])
-  return publicStatus(rows[0])
+  const status = publicStatus(rows[0])
+  if (status.status === 'connected' && sockets.get(channelId)?.status !== 'connected') {
+    return { ...status, status: 'reconnecting' }
+  }
+  return status
 }
 async function sendText(channelId, input) {
   const session = sockets.get(channelId)
@@ -499,17 +503,22 @@ async function logoutSession(channelId) {
   return { status: 'disconnected' }
 }
 async function restoreSessions() {
-  const rows = await query("SELECT s.channel_id,s.status,s.auth_creds_ciphertext FROM public.whatsapp_gateway_sessions s JOIN public.channels c ON c.id=s.channel_id WHERE c.is_active=true AND c.channel_type='whatsapp' AND c.connection_mode='qr_unofficial' AND s.auth_creds_ciphertext IS NOT NULL")
+  const rows = await query("SELECT s.channel_id,s.status,s.auth_creds_ciphertext,s.updated_at::text AS updated_at FROM public.whatsapp_gateway_sessions s JOIN public.channels c ON c.id=s.channel_id WHERE c.is_active=true AND c.channel_type='whatsapp' AND c.connection_mode='qr_unofficial'")
   let restored = 0
   let skipped = 0
   for (const row of rows) {
     let registered = false
-    try { registered = Boolean(decryptJson(row.auth_creds_ciphertext).registered) } catch {
+    try { registered = Boolean(row.auth_creds_ciphertext && decryptJson(row.auth_creds_ciphertext).registered) } catch {
       console.error('whatsapp_qr_session_restore_invalid_credentials', { channelId: row.channel_id })
     }
     if (!registered) {
       skipped += 1
       console.warn('whatsapp_qr_session_restore_skipped_unregistered', { channelId: row.channel_id, status: row.status })
+      if (!sockets.has(row.channel_id)) {
+        // Compare the observed session before marking it failed. Do not delete credentials
+        // and do not overwrite a session that was refreshed during startup.
+        await query("WITH stale AS (UPDATE public.whatsapp_gateway_sessions SET status='failed',qr_data_url=NULL,pairing_code=NULL,last_error='restore_unregistered',updated_at=now() WHERE channel_id=$1 AND auth_creds_ciphertext IS NOT DISTINCT FROM $2::text AND updated_at=$3::timestamptz RETURNING channel_id) UPDATE public.channels SET is_active=false,verification_status='failed',updated_at=now() WHERE id IN (SELECT channel_id FROM stale) AND channel_type='whatsapp' AND connection_mode='qr_unofficial'", [row.channel_id, row.auth_creds_ciphertext, row.updated_at])
+      }
       continue
     }
     restored += 1
@@ -533,9 +542,10 @@ async function handleRequest(request, response) {
   }
   const mediaMatch = /^\/sessions\/([0-9a-f-]{36})\/media\/([A-Za-z0-9_-]{1,128})$/i.exec(url.pathname)
   if (request.method === 'GET' && mediaMatch) return sendMedia(response, mediaMatch[1], mediaMatch[2], requestedMaxBytes(url.searchParams.get('maxBytes')))
-  const match = /^\/sessions\/([0-9a-f-]{36})\/(status|send|logout)$/i.exec(url.pathname)
+  const match = /^\/sessions\/([0-9a-f-]{36})\/(status|readiness|send|logout)$/i.exec(url.pathname)
   if (!match) return sendJson(response, 404, { error: 'not_found' })
   const channelId = match[1], action = match[2]
+  if (request.method === 'GET' && action === 'readiness') return sendJson(response, 200, { connected: sockets.get(channelId)?.status === 'connected' })
   if (request.method === 'GET' && action === 'status') return sendJson(response, 200, { session: await sessionStatus(channelId) })
   if (request.method === 'POST' && action === 'send') return sendJson(response, 200, { ok: true, ...(await sendText(channelId, await readJson(request))) })
   if (request.method === 'POST' && action === 'logout') return sendJson(response, 200, await logoutSession(channelId))

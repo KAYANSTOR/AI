@@ -17,6 +17,9 @@ import { evaluateSmokeTest, withReplyTestCheck, type SmokeTestOutcome } from '@/
 import { connectWhatsAppChannel } from '@/lib/channels/connect-service'
 import { isPlausiblePhoneNumber } from '@/lib/channels/connect'
 import { tryAgentReply, type ReplyTestResult } from '@/lib/onboarding/reply-test'
+import { buildBusinessSystemPrompt } from '@/lib/ai/prompt'
+import { selectBusinessAgent } from '@/lib/runtime/business-agent'
+import { activationFingerprint, readActivationEvidence } from '@/lib/onboarding/activation-evidence'
 import { normalizeChannelNumber } from '@/lib/channels/management'
 import {
   buildPromptAddition,
@@ -37,60 +40,62 @@ async function requireOnboardingAdmin(): Promise<OrgContext> {
   return org
 }
 
+async function loadActivationContext(
+  db: Awaited<ReturnType<typeof createClient>>,
+  org: OrgContext
+) {
+  const { data: profile, error } = await db
+    .from('business_profiles')
+    .select('business_id, activation_state, smoke_test_status, smoke_test_result, updated_at')
+    .eq('organization_id', org.organizationId)
+    .maybeSingle()
+  if (error) throw error
+  const businessId = typeof profile?.business_id === 'string' ? profile.business_id : null
+  const agent = businessId ? await selectBusinessAgent(db, org.organizationId, businessId) : null
+  const system = agent ? await buildBusinessSystemPrompt(db, org.organizationId, String(agent.id)) : null
+  const fingerprint = agent && businessId && system ? activationFingerprint({
+    organizationId: org.organizationId,
+    businessId,
+    agentId: String(agent.id),
+    provider: String(agent.model_provider ?? ''),
+    model: process.env.GEMINI_MODEL?.trim() || 'gemini-3.1-flash-lite-preview',
+    locale: String(agent.locale ?? ''),
+    temperature: String(agent.temperature ?? ''),
+    system,
+    name: String(agent.name ?? ''),
+  }) : ''
+  return { profile, businessId, system, fingerprint, activationState: String(profile?.activation_state ?? 'workspace_ready') }
+}
+
 async function runActivationChecks(
   db: Awaited<ReturnType<typeof createClient>>,
   org: OrgContext,
   message: string
 ) {
-  const structuralOutcome = await evaluateSmokeTest(db, org)
-  const { data: profile, error: profileError } = await db
-    .from('business_profiles')
-    .select('business_id, activation_state')
-    .eq('organization_id', org.organizationId)
-    .maybeSingle()
-  if (profileError) throw profileError
-
-  const businessId = (profile?.business_id as string | null) ?? null
-  const { data: agent, error: agentError } = businessId
-    ? await db
-        .from('ai_agents')
-        .select('id')
-        .eq('organization_id', org.organizationId)
-        .eq('business_id', businessId)
-        .eq('status', 'active')
-        .order('created_at', { ascending: true })
-        .limit(1)
-        .maybeSingle()
-    : { data: null, error: null }
-  if (agentError) throw agentError
-
-  const blocked = process.env.GEMINI_API_KEY
+  const [structuralOutcome, context] = await Promise.all([evaluateSmokeTest(db, org), loadActivationContext(db, org)])
+  const blocked = context.system && process.env.GEMINI_API_KEY
     ? await guardAiAction({ organizationId: org.organizationId, userId: org.userId, route: 'reply_test' })
     : null
-  const reply: ReplyTestResult = blocked ? { status: 'failed', message: blocked } : await tryAgentReply({
-    db,
-    organizationId: org.organizationId,
-    agentId: (agent?.id as string | undefined) ?? null,
-    message,
-  })
-
+  const reply: ReplyTestResult = !context.system
+    ? { status: 'failed', message: 'لا يوجد وكيل نشط لهذا النشاط. أكمل إعداد الوكيل أولاً.' }
+    : blocked ? { status: 'failed', message: blocked } : await tryAgentReply({ system: context.system, message })
   return {
-    outcome: withReplyTestCheck(structuralOutcome, reply.status),
+    outcome: { ...withReplyTestCheck(structuralOutcome, reply.status), testedAt: new Date().toISOString() },
     reply,
-    activationState: String(profile?.activation_state ?? 'workspace_ready'),
+    activationState: context.activationState,
+    fingerprint: context.fingerprint,
+    businessId: context.businessId,
+    profileUpdatedAt: context.profile?.updated_at,
   }
 }
 
 function persistedSmokeResult(
   outcome: SmokeTestOutcome,
   reply: ReplyTestResult,
-  message: string
+  message: string,
+  fingerprint: string
 ) {
-  return {
-    ...outcome,
-    reply,
-    testMessage: message.trim(),
-  }
+  return { ...outcome, reply, testMessage: message.trim(), fingerprint }
 }
 
 async function auditSetup(
@@ -386,22 +391,17 @@ export async function saveAgentSetupAction(input: {
   try {
     const org = await requireOnboardingAdmin()
     const db = await createClient()
-    const { data: profile } = await db
+    const { data: profile, error: profileError } = await db
       .from('business_profiles')
       .select('business_id, setup_description')
       .eq('organization_id', org.organizationId)
       .maybeSingle()
+    if (profileError) return { ok: false, error: dbActionError(profileError) }
+    const businessId = typeof profile?.business_id === 'string' ? profile.business_id : null
+    if (!businessId) return { ok: false, error: 'أكمل بيانات النشاط قبل إعداد الوكيل.' }
     const { draft } = parseAgentSetupDraft(input.draft, org.organizationName + ' AI')
     const promptAddition = buildPromptAddition(draft, org.organizationName + ' AI')
-    const { data: agent, error: agentError } = await db
-      .from('ai_agents')
-      .select('id, name')
-      .eq('organization_id', org.organizationId)
-      .neq('status', 'archived')
-      .order('created_at', { ascending: true })
-      .limit(1)
-      .maybeSingle()
-    if (agentError) return { ok: false, error: dbActionError(agentError) }
+    const agent = await selectBusinessAgent(db, org.organizationId, businessId, false)
     if (!agent) {
       const { data: created, error: createError } = await db
         .from('ai_agents')
@@ -469,13 +469,14 @@ export async function runActivationTestAction(input?: {
     const org = await requireOnboardingAdmin()
     const db = await createClient()
     const message = input?.message ?? 'السلام عليكم، أريد حجز موعد.'
-    const { outcome, reply, activationState } = await runActivationChecks(
-      db,
-      org,
-      message
-    )
-    const storedOutcome = persistedSmokeResult(outcome, reply, message)
-    const { error } = await createAdminClient()
+    if (typeof message !== 'string' || message.trim().length < 2 || message.length > 2000) {
+      return { ok: false, error: 'اكتب رسالة تجريبية من حرفين إلى 2000 حرف.' }
+    }
+    const { outcome, reply, activationState, fingerprint, businessId, profileUpdatedAt } = await runActivationChecks(db, org, message)
+    const versionMs = Date.parse(String(profileUpdatedAt ?? ''))
+    if (!businessId || !Number.isFinite(versionMs)) return { ok: false, error: 'أكمل بيانات النشاط أولاً.' }
+    const storedOutcome = persistedSmokeResult(outcome, reply, message, fingerprint)
+    const { data, error } = await createAdminClient()
       .from('business_profiles')
       .update({
         smoke_test_status: outcome.passed ? 'passed' : 'failed',
@@ -487,7 +488,12 @@ export async function runActivationTestAction(input?: {
         activation_step: stepAfterActivationTest({ currentState: activationState }),
       })
       .eq('organization_id', org.organizationId)
+      .eq('business_id', businessId)
+      .gte('updated_at', new Date(versionMs).toISOString())
+      .lt('updated_at', new Date(versionMs + 1).toISOString())
+      .select('business_id').maybeSingle()
     if (error) return { ok: false, error: dbActionError(error) }
+    if (!data) return { ok: false, error: 'تغير النشاط أثناء الاختبار. أعد المحاولة.' }
     revalidatePath('/onboarding')
     return { ok: true, outcome, reply }
   } catch (error) {
@@ -501,61 +507,52 @@ export async function activateAccountAction(): Promise<
   try {
     const org = await requireOnboardingAdmin()
     const db = await createClient()
-    const message = 'السلام عليكم، أريد حجز موعد.'
-    const { outcome, reply, activationState } = await runActivationChecks(
-      db,
-      org,
-      message
-    )
-    const admin = createAdminClient()
-    const storedOutcome = persistedSmokeResult(outcome, reply, message)
-
-    if (!outcome.passed) {
-      const { error: saveError } = await admin
-        .from('business_profiles')
-        .update({
-          smoke_test_status: 'failed',
-          smoke_test_result: storedOutcome,
-          activation_state: stateAfterActivationTest({
-            currentState: activationState,
-            passed: false,
-          }),
-        })
-        .eq('organization_id', org.organizationId)
-      if (saveError) return { ok: false, error: dbActionError(saveError), outcome }
+    const [structural, context] = await Promise.all([evaluateSmokeTest(db, org), loadActivationContext(db, org)])
+    const { profile, businessId, fingerprint, activationState } = context
+    if (activationState === 'active') return { ok: true, message: 'نشاطك مفعّل بالفعل' }
+    const evidence = profile?.smoke_test_status === 'passed' && process.env.GEMINI_API_KEY?.trim()
+      ? readActivationEvidence(profile.smoke_test_result, fingerprint)
+      : null
+    const outcome = withReplyTestCheck(structural, evidence ? 'answered' : 'failed')
+    const versionMs = Date.parse(String(profile?.updated_at ?? ''))
+    if (!businessId || !profile || !outcome.passed || !evidence || !Number.isFinite(versionMs)) {
       return {
         ok: false,
-        error: 'لم يكتمل الإعداد بعد. راجع الخطوات الناقصة ثم أعد الاختبار.',
-        outcome: storedOutcome,
+        error: !evidence
+          ? 'انتهت صلاحية اختبار الرد أو تغيرت الإعدادات. أعد الاختبار قبل تشغيل النشاط.'
+          : 'لم تكتمل الجاهزية الحالية. راجع القنوات والوكيل ثم أعد الاختبار.',
+        outcome,
       }
     }
 
-    const { data: profile } = await db
-      .from('business_profiles')
-      .select('business_id')
-      .eq('organization_id', org.organizationId)
-      .maybeSingle()
-
-    const { error } = await admin
+    // No model request is made here. The protected server-side evidence proves
+    // the reply; readiness and the current prompt fingerprint are checked again.
+    // Compare-and-set prevents concurrent profile changes from being overwritten.
+    const { data, error } = await createAdminClient()
       .from('business_profiles')
       .update({
         activation_state: 'active',
         activation_step: 11,
         smoke_test_status: 'passed',
-        smoke_test_result: storedOutcome,
+        smoke_test_result: persistedSmokeResult(
+          { ...outcome, testedAt: evidence.testedAt }, evidence.reply, evidence.testMessage, fingerprint
+        ),
       })
       .eq('organization_id', org.organizationId)
+      .eq('business_id', businessId)
+      .eq('smoke_test_status', 'passed')
+      .eq('smoke_test_result->>fingerprint', fingerprint)
+      .eq('smoke_test_result->>testedAt', evidence.testedAt)
+      // The database client serializes timestamps to milliseconds; retain the full
+      // matching millisecond rather than comparing a truncated value to microseconds.
+      .gte('updated_at', new Date(versionMs).toISOString())
+      .lt('updated_at', new Date(versionMs + 1).toISOString())
+      .select('business_id')
+      .maybeSingle()
     if (error) return { ok: false, error: dbActionError(error) }
+    if (!data) return { ok: false, error: 'تغيرت إعدادات النشاط أثناء التفعيل. أعد الاختبار.' }
 
-    await auditSetup(
-      org.organizationId,
-      (profile?.business_id as string | null) ?? null,
-      'tenant.activated',
-      'organization',
-      org.organizationId,
-      { source: 'fastpath' }
-    )
-
+    await auditSetup(org.organizationId, businessId, 'tenant.activated', 'organization', org.organizationId, { source: 'fastpath' })
     revalidatePath('/dashboard')
     revalidatePath('/onboarding')
     return { ok: true, message: 'تم تشغيل نشاطك' }

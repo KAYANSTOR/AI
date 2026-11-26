@@ -40,6 +40,8 @@
   --color-primary-dark: var(--k-primary-dark);
   --color-primary-light: var(--k-primary-light);
   --color-primary-foreground: var(--k-primary-foreground);
+  --color-primary-dark-foreground: var(--k-primary-dark-foreground);
+  --color-success-foreground: var(--k-success-foreground);
   --color-secondary: var(--k-secondary);
   --color-accent: var(--k-accent);
   --color-accent-light: var(--k-accent-light);
@@ -55,6 +57,8 @@
   --color-success: var(--k-success);
   --color-warning: var(--k-warning);
   --color-error: var(--k-error);
+  --color-error-foreground: var(--k-error-foreground);
+  --color-error-strong: var(--k-error-strong);
   --color-error-soft: var(--k-error-soft);
   --color-info: var(--k-info);
   --color-dark: var(--k-dark);
@@ -90,6 +94,7 @@
   --k-primary-dark: var(--brand-secondary);
   --k-primary-light: var(--brand-primary);
   --k-primary-foreground: var(--brand-secondary);
+  --k-primary-dark-foreground: #FFFFFF;
   --k-secondary: var(--brand-secondary);
   --k-accent: var(--brand-accent);
   --k-accent-light: color-mix(in srgb, var(--brand-accent) 22%, white);
@@ -103,8 +108,11 @@
   --k-border: color-mix(in srgb, var(--brand-secondary) 15%, var(--brand-primary));
   --k-border-strong: color-mix(in srgb, var(--brand-secondary) 38%, var(--brand-primary));
   --k-success: var(--brand-secondary);
+  --k-success-foreground: #FFFFFF;
   --k-warning: color-mix(in srgb, var(--brand-accent) 76%, var(--brand-secondary));
   --k-error: #A8402F;
+  --k-error-foreground: #FFFFFF;
+  --k-error-strong: #8F3325;
   --k-error-soft: #F6E1DC;
   --k-info: #3E7CB1;
   --k-whatsapp: #2FA866;
@@ -123,6 +131,7 @@
   --k-primary-dark: var(--brand-secondary);
   --k-primary-light: color-mix(in srgb, var(--brand-secondary) 60%, var(--brand-primary));
   --k-primary-foreground: var(--brand-secondary);
+  --k-primary-dark-foreground: #FFFFFF;
   --k-secondary: var(--brand-primary);
   --k-accent: var(--brand-accent);
   --k-accent-light: color-mix(in srgb, var(--brand-accent) 18%, var(--brand-secondary));
@@ -137,8 +146,11 @@
   --k-border: color-mix(in srgb, var(--brand-primary) 18%, var(--brand-secondary));
   --k-border-strong: color-mix(in srgb, var(--brand-primary) 32%, var(--brand-secondary));
   --k-success: var(--brand-primary);
+  --k-success-foreground: var(--brand-secondary);
   --k-warning: var(--brand-accent);
   --k-error: #E08A7A;
+  --k-error-foreground: #1F1917;
+  --k-error-strong: #F0A398;
   --k-error-soft: color-mix(in srgb, #E08A7A 18%, var(--brand-secondary));
   --k-info: #78A4CA;
   --k-dark: var(--brand-secondary);

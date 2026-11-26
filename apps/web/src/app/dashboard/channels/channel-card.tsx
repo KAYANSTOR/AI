@@ -174,7 +174,7 @@ export function ChannelCard({ data, channelType }: { data: ChannelCardData; chan
             type="button"
             onClick={runSave}
             disabled={pending || locked}
-            className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary-dark px-4 py-2 text-base font-medium text-primary-foreground transition-colors hover:bg-primary disabled:opacity-60 sm:w-auto md:text-sm"
+            className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary-dark px-4 py-2 text-base font-medium text-primary-dark-foreground transition-colors hover:bg-primary-dark/90 disabled:opacity-60 sm:w-auto md:text-sm"
           >
             {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plug size={16} aria-hidden="true" />}
             {data.connected ? ar.channels.updateBinding : ar.channels.connectChannel}

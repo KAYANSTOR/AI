@@ -184,7 +184,7 @@ export function StageAgent({
             type="button"
             onClick={handleGenerate}
             disabled={busy || !canManage || description.trim().length < 10}
-            className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary-dark px-6 text-base font-semibold text-primary-foreground transition-colors hover:bg-primary disabled:opacity-60 sm:w-auto"
+            className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary-dark px-6 text-base font-semibold text-primary-dark-foreground transition-colors hover:bg-primary-dark/90 disabled:opacity-60 sm:w-auto"
           >
             {busy ? (
               <Loader2 size={18} className="animate-spin" aria-hidden="true" />
@@ -312,7 +312,7 @@ export function StageAgent({
               type="button"
               onClick={handleSave}
               disabled={busy || !canManage}
-              className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-primary-dark px-6 text-base font-semibold text-primary-foreground transition-colors hover:bg-primary disabled:opacity-60"
+              className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-primary-dark px-6 text-base font-semibold text-primary-dark-foreground transition-colors hover:bg-primary-dark/90 disabled:opacity-60"
             >
               {busy ? <Loader2 size={18} className="animate-spin" aria-hidden="true" /> : null}
               اعتماد الإعداد

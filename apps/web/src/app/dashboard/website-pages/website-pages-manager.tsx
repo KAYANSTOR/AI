@@ -73,7 +73,7 @@ export function WebsitePagesManager({ pages, canManage }: { pages: WebsitePage[]
           <p className="mt-1 text-sm text-text-muted">أدر محتوى الصفحات ومساراتها وحالة نشرها.</p>
         </div>
         {canManage ? (
-          <button type="button" onClick={() => { setError(null); setOpen(true) }} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground transition hover:bg-primary-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2">
+          <button type="button" onClick={() => { setError(null); setOpen(true) }} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground transition hover:bg-primary-dark hover:text-primary-dark-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2">
             <Plus size={17} aria-hidden="true" /> إضافة صفحة
           </button>
         ) : null}
@@ -120,7 +120,7 @@ export function WebsitePagesManager({ pages, canManage }: { pages: WebsitePage[]
       </section>
 
       <Dialog open={open} onOpenChange={setOpen} title="إضافة صفحة موقع" description="أدخل بيانات الصفحة ومسارها وحالة نشرها." footer={(
-        <><button type="button" onClick={() => setOpen(false)} disabled={pending} className="min-h-11 rounded-xl border border-border px-4 text-sm font-semibold text-text hover:bg-background">إلغاء</button><button type="submit" form="website-page-form" disabled={pending} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-primary px-5 text-sm font-semibold text-primary-foreground hover:bg-primary-dark disabled:opacity-60">{pending ? <Loader2 size={16} className="animate-spin" aria-hidden="true" /> : null}حفظ</button></>
+        <><button type="button" onClick={() => setOpen(false)} disabled={pending} className="min-h-11 rounded-xl border border-border px-4 text-sm font-semibold text-text hover:bg-background">إلغاء</button><button type="submit" form="website-page-form" disabled={pending} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-primary px-5 text-sm font-semibold text-primary-foreground hover:bg-primary-dark hover:text-primary-dark-foreground disabled:opacity-60">{pending ? <Loader2 size={16} className="animate-spin" aria-hidden="true" /> : null}حفظ</button></>
       )}>
         <form id="website-page-form" onSubmit={onSubmit} className="space-y-4">
           <label className="block space-y-1.5 text-sm font-medium text-text">اسم الصفحة <span className="text-error">*</span><input name="name" required maxLength={120} autoFocus className={fieldClass} placeholder="مثال: الخدمات" /></label>

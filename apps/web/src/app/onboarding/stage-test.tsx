@@ -1,7 +1,8 @@
 'use client'
 
-import { useState } from 'react'
-import { CheckCircle2, CircleAlert, Loader2, Send, ShieldCheck, XCircle } from 'lucide-react'
+import { useState, useRef } from 'react'
+import { Button } from '@/components/ui/button'
+import { CheckCircle2, Send, ShieldCheck, XCircle } from 'lucide-react'
 import { runActivationTestAction, activateAccountAction } from './actions'
 import type { SmokeTestOutcome } from '@/lib/onboarding/smoke-test'
 import type { ReplyTestResult } from '@/lib/onboarding/reply-test'
@@ -13,6 +14,7 @@ const CHECK_LABELS: Record<string, string> = {
   active_channel: 'قناة مفعّلة',
   verified_channel: 'القناة متصلة ومتحقق منها',
   active_agent: 'الوكيل يعمل',
+  reply_test: 'اختبار الرد الحقيقي',
 }
 
 const CHECK_FIXES: Record<string, string> = {
@@ -23,6 +25,7 @@ const CHECK_FIXES: Record<string, string> = {
   verified_channel:
     'لم يكتمل التحقق من قناتك بعد. ارجع إلى «وصّل نشاطك» واضغط «إعادة المحاولة» لإكمال الربط.',
   active_agent: 'أكمل إعداد الوكيل في المرحلة الثالثة.',
+  reply_test: 'أعد اختبار الرد بعد حفظ إعدادات الوكيل.',
 }
 
 const DEFAULT_MESSAGE = 'السلام عليكم، أريد حجز موعد'
@@ -50,34 +53,53 @@ export function StageTest({
   const [message, setMessage] = useState(initialTestMessage?.trim() || DEFAULT_MESSAGE)
   const [outcome, setOutcome] = useState<SmokeTestOutcome | null>(initialOutcome)
   const [reply, setReply] = useState<ReplyTestResult | null>(initialReply)
-  const [busy, setBusy] = useState(false)
+  const [operation, setOperation] = useState<'test' | 'activate' | null>(null)
+  const inFlight = useRef(false)
+  const busy = operation !== null
   const [error, setError] = useState<string | null>(null)
 
   const passed = outcome?.passed === true && reply?.status === 'answered'
 
   async function handleTest() {
-    setBusy(true)
+    if (inFlight.current || !canManage || message.trim().length < 2) return
+    inFlight.current = true
+    setOperation('test')
     setError(null)
-    const result = await runActivationTestAction({ message })
-    setBusy(false)
-    if (result.outcome) setOutcome(result.outcome)
-    if (result.reply) setReply(result.reply)
-    if (!result.ok && !result.outcome) {
-      setError(result.error ?? 'تعذّر إجراء الاختبار. حاول مرة أخرى.')
+    setReply(null)
+    setOutcome(null)
+    try {
+      const result = await runActivationTestAction({ message })
+      if (result.outcome) setOutcome(result.outcome)
+      if (result.reply) setReply(result.reply)
+      if (!result.ok) setError(result.error ?? 'تعذّر إجراء الاختبار. حاول مرة أخرى.')
+    } catch {
+      setError('تعذّر الاتصال بالخادم. أعد الاختبار.')
+    } finally {
+      inFlight.current = false
+      setOperation(null)
     }
   }
 
   async function handleActivate() {
-    setBusy(true)
+    if (inFlight.current || !canManage || !passed) return
+    inFlight.current = true
+    setOperation('activate')
     setError(null)
-    const result = await activateAccountAction()
-    setBusy(false)
-    if (!result.ok) {
-      if (result.outcome) setOutcome(result.outcome)
-      setError(result.error ?? 'لم يكتمل التفعيل. راجع الخطوات ثم حاول مرة أخرى.')
-      return
+    try {
+      const result = await activateAccountAction()
+      if (!result.ok) {
+        setOutcome(result.outcome ?? null)
+        setReply(null)
+        setError(result.error ?? 'لم يكتمل التفعيل. راجع الخطوات ثم حاول مرة أخرى.')
+        return
+      }
+      onActivated()
+    } catch {
+      setError('تعذّر الاتصال بالخادم. تحقق من حالة النشاط ثم أعد المحاولة.')
+    } finally {
+      inFlight.current = false
+      setOperation(null)
     }
-    onActivated()
   }
 
   return (
@@ -97,9 +119,11 @@ export function StageTest({
             onChange={(event) => {
               setMessage(event.target.value)
               setReply(null)
+              setOutcome(null)
             }}
             rows={3}
-            disabled={!canManage}
+            maxLength={2000}
+            disabled={!canManage || busy}
             className="mt-1.5 w-full rounded-xl border border-border bg-surface p-3 text-base leading-7 text-text outline-none focus:border-secondary focus:ring-2 focus:ring-accent/40 disabled:opacity-60"
           />
         </label>
@@ -132,24 +156,25 @@ export function StageTest({
           </div>
         ) : null}
 
-        <button
-          type="button"
+        <Button
+          size="lg"
           onClick={handleTest}
-          disabled={busy || !canManage}
-          className="mt-4 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary-dark px-6 text-base font-semibold text-primary-foreground transition-colors hover:bg-primary disabled:opacity-60 sm:w-auto"
+          disabled={busy || !canManage || message.trim().length < 2}
+          loading={operation === 'test'}
+          loadingLabel="جارٍ اختبار الرد..."
+          leadingIcon={<Send size={18} aria-hidden="true" />}
+          className="mt-4 w-full sm:w-auto"
         >
-          {busy ? (
-            <Loader2 size={18} className="animate-spin" aria-hidden="true" />
-          ) : (
-            <Send size={18} aria-hidden="true" />
-          )}
           {outcome ? 'إعادة الاختبار' : 'إرسال الاختبار'}
-        </button>
+        </Button>
       </div>
 
       {outcome || reply ? (
         <div className="rounded-2xl border border-border bg-background p-5">
           <h2 className="text-sm font-bold text-text">نتيجة الفحص</h2>
+          {outcome?.testedAt && !Number.isNaN(Date.parse(outcome.testedAt)) ? (
+            <p className="mt-1 text-xs text-text-muted">آخر فحص: <time dateTime={outcome.testedAt}>{new Date(outcome.testedAt).toLocaleString('ar', { timeZone: 'Asia/Aden', dateStyle: 'short', timeStyle: 'short' })}</time> · توقيت اليمن</p>
+          ) : null}
           <ul className="mt-3 space-y-3">
             {(outcome?.checks ?? []).map((check) => (
               <li key={check.name} className="flex items-start gap-3">
@@ -170,21 +195,6 @@ export function StageTest({
                 </div>
               </li>
             ))}
-            <li className="flex items-start gap-3">
-              {reply?.status === 'answered' ? (
-                <CheckCircle2 size={18} className="mt-0.5 shrink-0 text-success" aria-hidden="true" />
-              ) : reply?.status === 'failed' ? (
-                <XCircle size={18} className="mt-0.5 shrink-0 text-error" aria-hidden="true" />
-              ) : (
-                <CircleAlert size={18} className="mt-0.5 shrink-0 text-warning" aria-hidden="true" />
-              )}
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-text">اختبار الرد الحقيقي</p>
-                <p className="mt-0.5 text-xs leading-5 text-text-muted">
-                  {reply?.message ?? 'لم يُجرَ اختبار الرد بعد. أرسل رسالة تجريبية وانتظر إجابة الوكيل.'}
-                </p>
-              </div>
-            </li>
           </ul>
         </div>
       ) : null}
@@ -200,20 +210,19 @@ export function StageTest({
           {passed
             ? 'نجحت الفحوص ووصل رد حقيقي من الوكيل. يمكنك تشغيل نشاطك الآن.'
             : 'لن يتم التشغيل قبل نجاح الفحوص ووصول رد حقيقي من الوكيل.'}
+          {passed ? ' نتيجة اختبار الرد صالحة لعشر دقائق ما دامت الإعدادات لم تتغير.' : ''}
         </p>
-        <button
-          type="button"
+        <Button
+          size="lg"
           onClick={handleActivate}
           disabled={busy || !passed || !canManage}
-          className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-success px-6 text-base font-semibold text-background transition-colors hover:opacity-90 disabled:opacity-50"
+          loading={operation === 'activate'}
+          loadingLabel="جارٍ التحقق وتفعيل النشاط..."
+          leadingIcon={<ShieldCheck size={18} aria-hidden="true" />}
+          className="w-full sm:w-auto"
         >
-          {busy ? (
-            <Loader2 size={18} className="animate-spin" aria-hidden="true" />
-          ) : (
-            <ShieldCheck size={18} aria-hidden="true" />
-          )}
           تشغيل نشاطي
-        </button>
+        </Button>
       </div>
     </div>
   )

@@ -32,7 +32,7 @@ export default function DashboardError({
       <button
         type="button"
         onClick={() => reset()}
-        className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-primary px-5 text-sm font-semibold text-primary-foreground shadow-sm transition hover:bg-primary-dark active:scale-95"
+        className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-primary px-5 text-sm font-semibold text-primary-foreground shadow-sm transition hover:bg-primary-dark hover:text-primary-dark-foreground active:scale-95"
       >
         <RotateCcw className="h-4 w-4" aria-hidden="true" />
         <span>إعادة المحاولة</span>

@@ -22,10 +22,18 @@ export type ChannelRowLike = {
   is_active: boolean | null
 }
 
+export function isOnboardingMessagingChannel(type: string): boolean {
+  return ['whatsapp', 'instagram', 'messenger', 'telegram', 'website'].includes(type)
+}
+
+export function isOnboardingChannelReady(row: ChannelRowLike): boolean {
+  return row.is_active === true && row.verification_status === 'verified'
+}
+
 export function describeChannelState(row: ChannelRowLike | null | undefined): ChannelConnectionState {
   if (!row) return 'not_connected'
   if (row.is_active === false || row.verification_status === 'disabled') return 'disabled'
-  if (row.verification_status === 'verified') return 'verified'
+  if (isOnboardingChannelReady(row)) return 'verified'
   if (row.verification_status === 'failed') return 'error'
   return 'pending'
 }
@@ -36,7 +44,7 @@ export function describeChannelState(row: ChannelRowLike | null | undefined): Ch
 export function selectOnboardingWhatsAppChannel<T extends ChannelRowLike & { id: string; connection_mode?: string | null }>(
   rows: readonly T[]
 ): T | null {
-  const stateRank = (row: T) => row.is_active === true && row.verification_status === 'verified' ? 0
+  const stateRank = (row: T) => isOnboardingChannelReady(row) ? 0
     : row.verification_status === 'pending' ? 1 : 2
   const modeRank = (row: T) => row.connection_mode === 'coexistence' ? 0
     : !row.connection_mode || row.connection_mode === 'cloud_api' ? 1

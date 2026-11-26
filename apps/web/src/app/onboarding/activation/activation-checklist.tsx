@@ -49,7 +49,7 @@ export function ActivationChecklist({ status }: { status: ActivationStatus }) {
         <li className="flex items-start gap-4 rounded-2xl border border-border bg-surface p-5">
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-background text-text-muted"><span className="text-sm font-bold">3</span></span>
           <div className="min-w-0 flex-1"><h2 className="font-semibold text-text">اختبار ثم تفعيل</h2><p className="mt-1 text-sm text-text-muted">سنفحص جاهزية النشاط والوكيل قبل تشغيل استقبال العملاء.</p></div>
-          <button type="button" onClick={activate} disabled={!status.canManage || status.active || pending} className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-lg bg-primary px-3 text-sm font-semibold text-primary-foreground hover:bg-primary-dark disabled:opacity-50">{pending ? <Loader2 size={15} className="animate-spin" aria-hidden="true" /> : null}{status.active ? 'مفعّل' : 'اختبار وتفعيل'}</button>
+          <button type="button" onClick={activate} disabled={!status.canManage || status.active || pending} className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-lg bg-primary px-3 text-sm font-semibold text-primary-foreground hover:bg-primary-dark hover:text-primary-dark-foreground disabled:opacity-50">{pending ? <Loader2 size={15} className="animate-spin" aria-hidden="true" /> : null}{status.active ? 'مفعّل' : 'اختبار وتفعيل'}</button>
         </li>
       </ol>
       {error ? <p role="alert" className="rounded-xl border border-error/30 bg-error/10 px-4 py-3 text-sm text-error">{error}</p> : null}

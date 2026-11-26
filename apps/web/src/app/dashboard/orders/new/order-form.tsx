@@ -180,7 +180,7 @@ export function OrderForm({ contacts, defaultValues }: { contacts: Contact[], de
         <button type="button" onClick={() => router.back()} className="rounded-lg px-4 py-2 text-sm font-medium text-text-muted hover:bg-surface transition-colors" disabled={loading}>
           إلغاء
         </button>
-        <button type="submit" disabled={loading} className="inline-flex items-center gap-2 rounded-lg bg-primary px-6 py-2 text-sm font-medium text-primary-foreground hover:bg-primary-dark transition-colors disabled:opacity-50">
+        <button type="submit" disabled={loading} className="inline-flex items-center gap-2 rounded-lg bg-primary px-6 py-2 text-sm font-medium text-primary-foreground hover:bg-primary-dark hover:text-primary-dark-foreground transition-colors disabled:opacity-50">
           {loading && <Loader2 size={16} className="animate-spin" />}
           حفظ المسودة
         </button>

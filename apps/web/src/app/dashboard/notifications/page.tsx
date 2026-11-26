@@ -113,7 +113,7 @@ export default async function NotificationsPage() {
           action={
             <Link
               href="/dashboard/channels"
-              className="mt-2 inline-flex h-11 items-center justify-center rounded-xl bg-primary px-5 text-sm font-semibold text-primary-foreground shadow-sm transition hover:bg-primary-dark"
+              className="mt-2 inline-flex h-11 items-center justify-center rounded-xl bg-primary px-5 text-sm font-semibold text-primary-foreground shadow-sm transition hover:bg-primary-dark hover:text-primary-dark-foreground"
             >
               ربط قناة
             </Link>

@@ -423,7 +423,7 @@ function ChannelDialog({
                   type="button"
                   onClick={registerWhatsAppNumber}
                   disabled={busy || !canManage || registrationPin.length !== 6}
-                  className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-primary-dark px-5 text-sm font-semibold text-primary-foreground hover:bg-primary disabled:opacity-50"
+                  className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-primary-dark px-5 text-sm font-semibold text-primary-dark-foreground hover:bg-primary-dark/90 disabled:opacity-50"
                 >
                   {busy ? <Loader2 size={18} className="animate-spin" /> : <CheckCircle2 size={17} />}
                   إكمال تسجيل الرقم

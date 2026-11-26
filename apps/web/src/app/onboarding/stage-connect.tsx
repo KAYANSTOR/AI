@@ -12,11 +12,7 @@ import {
 
 export type ConnectStageData = {
   whatsapp: { state: ChannelConnectionState; number: string | null; mode?: string | null } | null
-  phone: {
-    state: ChannelConnectionState
-    publicNumber: string | null
-    forwardingStatus: string | null
-  } | null
+  readyOtherChannels?: number
 }
 
 /**
@@ -39,14 +35,15 @@ export function StageConnect({
   onRefresh: () => void
 }) {
   const embeddedConfigured = isClientEmbeddedSignupConfigured()
-  const [phoneNumber, setPhoneNumber] = useState(publicPhone ?? '')
+  const [phoneNumber, setPhoneNumber] = useState(data.whatsapp?.number ?? publicPhone ?? '')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
 
   const whatsapp = data.whatsapp
   const whatsappState = whatsapp?.state ?? 'not_connected'
-  const connected = whatsappState === 'verified'
+  const otherReady = data.readyOtherChannels ?? 0
+  const connected = whatsappState === 'verified' || otherReady > 0
 
   async function handleConnect() {
     setBusy(true)
@@ -188,11 +185,16 @@ export function StageConnect({
         ) : null}
       </section>
 
+      {otherReady > 0 ? (
+        <p role="status" className="rounded-xl border border-success/30 bg-success/10 px-4 py-3 text-sm text-text">
+          توجد {otherReady} قناة مراسلة أخرى نشطة ومتحقق منها في هذا النشاط.
+        </p>
+      ) : null}
       <div className="flex flex-col gap-3 border-t border-border pt-5 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-xs leading-5 text-text-muted">
           {connected
             ? 'القناة موثقة وجاهزة. يمكنك متابعة إعداد الوكيل.'
-            : 'يمكنك متابعة إعداد الوكيل، لكن التشغيل سيبقى متوقفاً حتى توثيق قناة واتساب.'}
+            : 'يمكنك متابعة إعداد الوكيل، لكن التشغيل سيبقى متوقفاً حتى توثيق إحدى قنوات المراسلة المدعومة.'}
         </p>
         <button
           type="button"
@@ -200,7 +202,7 @@ export function StageConnect({
           disabled={!canManage}
           className={`inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl px-6 text-base font-semibold transition-colors disabled:opacity-60 sm:w-auto ${
             connected
-              ? 'bg-primary-dark text-primary-foreground hover:bg-primary'
+              ? 'bg-primary-dark text-primary-dark-foreground hover:bg-primary-dark/90'
               : 'border border-border bg-background text-text hover:border-secondary hover:text-secondary'
           }`}
         >

@@ -99,7 +99,7 @@ export function FastPath({
                   <span
                     className={`flex h-8 w-8 items-center justify-center rounded-full border-2 text-xs font-bold transition-colors ${
                       isDone
-                        ? 'border-secondary bg-primary-dark text-primary-foreground'
+                        ? 'border-secondary bg-primary-dark text-primary-dark-foreground'
                         : isCurrent
                           ? 'border-secondary bg-surface text-secondary'
                           : 'border-border bg-surface text-text-muted'

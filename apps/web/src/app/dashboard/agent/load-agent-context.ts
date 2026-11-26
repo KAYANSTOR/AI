@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/db/server'
 import { getDashboardContext } from '@/lib/dashboard/context'
 import { HIDDEN_TOOL_NAMES, TOOL_POLICIES } from '@/lib/ai/registry'
+import { selectBusinessAgent } from '@/lib/runtime/business-agent'
 import { calculateAgentReadiness } from '@/lib/ai/readiness'
 import type { AgentConsoleData } from './agent-console'
 
@@ -26,20 +27,7 @@ export async function loadAgentContext() {
     }
     if (!business) return { kind: 'no_business' as const, context }
 
-    const { data: agent, error: agentError } = await db
-      .from('ai_agents')
-      .select('id, name, locale, temperature, status, business_id, model_provider')
-      .eq('business_id', business.id)
-      .eq('organization_id', context.organizationId)
-      .neq('status', 'archived')
-      .order('created_at', { ascending: true })
-      .limit(1)
-      .maybeSingle()
-
-    if (agentError) {
-      console.error('loadAgentContext agent', agentError)
-      return { kind: 'error' as const, context }
-    }
+    const agent = await selectBusinessAgent(db, context.organizationId, String(business.id), false)
     if (!agent) redirect('/onboarding')
 
     const agentId = agent.id as string

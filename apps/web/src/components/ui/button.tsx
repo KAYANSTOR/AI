@@ -6,7 +6,7 @@ export type ButtonVariant = 'primary' | 'secondary' | 'accent' | 'outline' | 'gh
 export type ButtonSize = 'sm' | 'md' | 'lg' | 'icon'
 
 const variantClasses: Record<ButtonVariant, string> = {
-  primary: 'border-primary-dark bg-primary-dark text-white hover:bg-primary-dark/90 active:bg-primary-dark/80',
+  primary: 'border-primary-dark bg-primary-dark text-primary-dark-foreground hover:bg-primary-dark/90 active:bg-primary-dark/80',
   secondary: 'border-border-strong bg-surface text-text hover:bg-surface-muted active:bg-border',
   accent: 'border-accent bg-accent text-primary-dark hover:bg-accent/90 active:bg-accent/80',
   outline: 'border-border-strong bg-transparent text-text hover:bg-surface-muted active:bg-border',
@@ -22,7 +22,7 @@ const sizeClasses: Record<ButtonSize, string> = {
 }
 
 export const buttonBaseClass =
-  'inline-flex shrink-0 items-center justify-center gap-2 border font-semibold transition-colors focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus disabled:pointer-events-none disabled:opacity-disabled'
+  'inline-flex shrink-0 items-center justify-center gap-2 border font-semibold transition-colors focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-accent/40 disabled:pointer-events-none disabled:opacity-60'
 
 export function buttonClass({
   variant = 'primary',
@@ -74,7 +74,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       className={buttonClass({ variant, size, fullWidth, className })}
       {...props}
     >
-      {loading ? <Loader2 className="h-icon-sm w-icon-sm animate-spin" aria-hidden="true" /> : leadingIcon}
+      {loading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : leadingIcon}
       {loading && loadingLabel ? loadingLabel : children}
       {!loading && trailingIcon}
     </button>

@@ -17,7 +17,8 @@ export function gatewayConfiguration() {
 export async function callWhatsAppGateway<T>(
   method: 'GET' | 'POST',
   path: string,
-  body?: Record<string, unknown>
+  body?: Record<string, unknown>,
+  timeoutMs = 20_000
 ): Promise<T> {
   const { baseUrl, token } = gatewayConfiguration()
   const response = await fetch(baseUrl + path, {
@@ -25,7 +26,7 @@ export async function callWhatsAppGateway<T>(
     headers: { authorization: 'Bearer ' + token, ...(body ? { 'content-type': 'application/json' } : {}) },
     ...(body ? { body: JSON.stringify(body) } : {}),
     cache: 'no-store',
-    signal: AbortSignal.timeout(20_000),
+    signal: AbortSignal.timeout(timeoutMs),
   })
   const payload = await response.json().catch(() => null) as Record<string, unknown> | null
   if (!response.ok || !payload) {

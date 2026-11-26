@@ -153,7 +153,7 @@ export function StageBasics({
           type="button"
           onClick={handleContinue}
           disabled={busy}
-          className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary-dark px-6 text-base font-semibold text-primary-foreground transition-colors hover:bg-primary disabled:opacity-60 sm:w-auto"
+          className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary-dark px-6 text-base font-semibold text-primary-dark-foreground transition-colors hover:bg-primary-dark/90 disabled:opacity-60 sm:w-auto"
         >
           {busy ? <Loader2 size={18} className="animate-spin" aria-hidden="true" /> : null}
           تجهيز نشاطي

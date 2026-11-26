@@ -1,4 +1,5 @@
 import type { DbClient } from '@/lib/db/client'
+import { selectBusinessAgent } from './business-agent'
 
 export async function resolveChannelExact(db:DbClient,input:{channelType:string;providerAccountId?:string|null;externalIdentifier?:string|null}){
   const providerAccountId=input.providerAccountId?.trim() || null
@@ -21,7 +22,7 @@ export async function resolveChannelExact(db:DbClient,input:{channelType:string;
 export async function resolveBusinessAgent(db:DbClient,businessId:string){
   // Check if business profile is active (Go-live gate)
   const {data: profile} = await db.from('business_profiles')
-    .select('activation_state')
+    .select('activation_state, organization_id')
     .eq('business_id', businessId)
     .single()
     
@@ -30,9 +31,6 @@ export async function resolveBusinessAgent(db:DbClient,businessId:string){
     return null
   }
 
-  const {data,error}=await db.from('ai_agents')
-    .select('id,organization_id,business_id,name,model_provider,temperature,locale,status')
-    .eq('business_id',businessId).eq('status','active').order('created_at').limit(1).maybeSingle()
-  if(error) throw new Error(error.message)
-  return data ?? null
+  if (!profile.organization_id) return null
+  return selectBusinessAgent(db, String(profile.organization_id), businessId)
 }

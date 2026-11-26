@@ -132,6 +132,29 @@ describe('business agent resolution', () => {
     expect((await resolveBusinessAgent(db, BIZ_A))?.id).toBe('agent-a')
   })
 
+  test('prefers the canonical active front desk and excludes other organizations', async () => {
+    const { db } = setup({
+      business_profiles: { rows: [{ organization_id: ORG_A, business_id: BIZ_A, activation_state: 'active' }] },
+      ai_agents: { rows: [
+        { id: 'aux', organization_id: ORG_A, business_id: BIZ_A, slug: 'aux', status: 'active', created_at: '2026-01-01' },
+        { id: 'wrong', organization_id: ORG_B, business_id: BIZ_A, slug: 'frontdesk', status: 'active', created_at: '2026-01-01' },
+        { id: 'front', organization_id: ORG_A, business_id: BIZ_A, slug: 'frontdesk', status: 'active', created_at: '2026-01-02' },
+      ] },
+    })
+    expect((await resolveBusinessAgent(db, BIZ_A))?.id).toBe('front')
+  })
+
+  test('an inactive canonical front desk never silently routes through an auxiliary agent', async () => {
+    const { db } = setup({
+      business_profiles: { rows: [{ organization_id: ORG_A, business_id: BIZ_A, activation_state: 'active' }] },
+      ai_agents: { rows: [
+        { id: 'front', organization_id: ORG_A, business_id: BIZ_A, slug: 'frontdesk', status: 'draft' },
+        { id: 'aux', organization_id: ORG_A, business_id: BIZ_A, slug: 'aux', status: 'active' },
+      ] },
+    })
+    expect(await resolveBusinessAgent(db, BIZ_A)).toBeNull()
+  })
+
   test('never returns a suspended agent', async () => {
     const { db } = setup({
       ai_agents: {

@@ -106,7 +106,7 @@ export function AddExistingMemberForm({
         <button
           type="submit"
           disabled={pending}
-          className="inline-flex min-h-[52px] items-center justify-center gap-2 rounded-xl bg-primary px-5 text-sm font-semibold text-primary-foreground transition hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex min-h-[52px] items-center justify-center gap-2 rounded-xl bg-primary px-5 text-sm font-semibold text-primary-foreground transition hover:bg-primary-dark hover:text-primary-dark-foreground disabled:cursor-not-allowed disabled:opacity-50"
         >
           {pending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
           إضافة العضو

@@ -160,7 +160,7 @@ export function ChannelCredentials({ data }: { data: CredentialPanelData }) {
                   type="button"
                   onClick={() => save(field.type)}
                   disabled={isDisabled || pending || !(drafts[field.type] ?? '').trim()}
-                  className="inline-flex min-h-11 items-center gap-1.5 rounded-lg bg-primary-dark px-3 py-1.5 text-base font-medium text-primary-foreground transition-colors hover:bg-primary disabled:opacity-50 md:text-sm"
+                  className="inline-flex min-h-11 items-center gap-1.5 rounded-lg bg-primary-dark px-3 py-1.5 text-base font-medium text-primary-dark-foreground transition-colors hover:bg-primary-dark/90 disabled:opacity-50 md:text-sm"
                 >
                   {pending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save size={12} aria-hidden="true" />}
                   {entry ? 'استبدال' : 'حفظ'}

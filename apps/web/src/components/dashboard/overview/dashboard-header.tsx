@@ -24,7 +24,7 @@ export function DashboardHeader({
       </div>
       <Link
         href="/dashboard/appointments"
-        className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-primary px-5 text-sm font-semibold text-primary-foreground transition hover:bg-primary-dark active:scale-[0.98]"
+        className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-primary px-5 text-sm font-semibold text-primary-foreground transition hover:bg-primary-dark hover:text-primary-dark-foreground active:scale-[0.98]"
       >
         <CalendarPlus size={16} aria-hidden="true" />
         <span>استعراض المواعيد</span>

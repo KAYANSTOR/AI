@@ -73,7 +73,7 @@ export function ReplyComposer({
         <button
           type="submit"
           disabled={pending || !text.trim()}
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-sm transition hover:bg-primary-dark active:scale-95 disabled:opacity-45"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-sm transition hover:bg-primary-dark hover:text-primary-dark-foreground active:scale-95 disabled:opacity-45"
           aria-label="إرسال الرد"
         >
           {pending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5 rtl:-scale-x-100" />}

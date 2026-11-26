@@ -38,7 +38,7 @@ export function Chip({
           className={cx(
             'flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-bold',
             selected
-              ? 'bg-primary-dark text-primary-foreground'
+              ? 'bg-primary-dark text-primary-dark-foreground'
               : 'bg-surface-muted text-text-muted'
           )}
         >

@@ -6,8 +6,6 @@
  * credential is configured the test reports that it was skipped instead of pretending to
  * have answered — the required Go Live checks stay in smoke-test.ts and are unaffected.
  */
-import type { DbClient } from '@/lib/db/client'
-import { buildBusinessSystemPrompt } from '@/lib/ai/prompt'
 import { geminiProvider } from '@/lib/providers/gemini'
 
 export type ReplyTestResult = {
@@ -17,9 +15,7 @@ export type ReplyTestResult = {
 }
 
 export async function tryAgentReply(input: {
-  db: DbClient
-  organizationId: string
-  agentId: string | null
+  system: string
   message: string
 }): Promise<ReplyTestResult> {
   if (!process.env.GEMINI_API_KEY) {
@@ -35,15 +31,12 @@ export async function tryAgentReply(input: {
   }
 
   try {
-    const system = await buildBusinessSystemPrompt(
-      input.db,
-      input.organizationId,
-      input.agentId
-    )
     const result = await geminiProvider.call({
-      system,
+      system: input.system,
       messages: [{ role: 'user', content: message }],
       tools: [],
+      isWhatsApp: true,
+      maxOutputTokens: 350,
     })
     const reply = result.content
       .filter((block): block is { type: 'text'; text: string } => block.type === 'text')

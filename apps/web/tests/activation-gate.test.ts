@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test'
+import { activationFingerprint, readActivationEvidence, ACTIVATION_EVIDENCE_TTL_MS } from '@/lib/onboarding/activation-evidence'
 import {
   activationStateForStep,
   stateAfterActivationTest,
@@ -59,5 +60,26 @@ describe('activation state derivation', () => {
     expect(stateAfterActivationTest({ currentState: 'configuring', passed: true })).toBe('ready_to_activate')
     expect(stepAfterActivationTest({ currentState: 'active' })).toBe(11)
     expect(stepAfterActivationTest({ currentState: 'configuring' })).toBe(10)
+  })
+})
+
+
+describe('activation reply evidence', () => {
+  const input = { organizationId: 'org', businessId: 'biz', agentId: 'agent', provider: 'gemini', model: 'model', locale: 'ar', temperature: '0.2', system: 'prompt' }
+  const fingerprint = activationFingerprint(input)
+  const now = Date.parse('2026-11-26T04:00:00Z')
+  const stored = { passed: true, status: 'passed', fingerprint, testedAt: new Date(now).toISOString(), testMessage: 'سلام', reply: { status: 'answered', reply: 'وعليكم السلام' } }
+  test('reuses a fresh real reply only for the exact configuration', () => {
+    expect(readActivationEvidence(stored, fingerprint, now + 1000)?.reply.reply).toBe('وعليكم السلام')
+    for (const field of ['organizationId', 'businessId', 'agentId', 'provider', 'model', 'locale', 'temperature', 'system'] as const) {
+      expect(readActivationEvidence(stored, activationFingerprint({ ...input, [field]: 'changed' }), now)).toBeNull()
+    }
+  })
+  test('rejects expired, missing, failed and future proofs', () => {
+    expect(readActivationEvidence(stored, fingerprint, now + ACTIVATION_EVIDENCE_TTL_MS + 1)).toBeNull()
+    expect(readActivationEvidence(stored, fingerprint, now - 1)).toBeNull()
+    expect(readActivationEvidence({ ...stored, fingerprint: undefined }, fingerprint, now)).toBeNull()
+    expect(readActivationEvidence({ ...stored, passed: false }, fingerprint, now)).toBeNull()
+    expect(readActivationEvidence({ ...stored, reply: { status: 'answered', reply: '' } }, fingerprint, now)).toBeNull()
   })
 })

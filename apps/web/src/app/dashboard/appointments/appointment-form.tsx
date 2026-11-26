@@ -73,7 +73,7 @@ export function AppointmentForm({ services, contacts }: { organizationId: string
         <label className="mb-1 block text-sm font-medium text-text">{ar.appointments.startsAt}</label>
         <input dir="ltr" type="datetime-local" required value={startsAt} onChange={(e) => setStartsAt(e.target.value)} className="min-h-11 w-full rounded-lg border border-border bg-surface px-3 py-2 text-base text-text focus:outline-none focus:ring-2 focus:ring-accent/30 md:text-sm" />
       </div>
-      <button type="submit" disabled={loading} className="flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary-dark py-2.5 text-base font-medium text-primary-foreground transition-colors hover:bg-primary disabled:opacity-60 md:text-sm">
+      <button type="submit" disabled={loading} className="flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary-dark py-2.5 text-base font-medium text-primary-dark-foreground transition-colors hover:bg-primary-dark/90 disabled:opacity-60 md:text-sm">
         {loading ? <Loader2 className="animate-spin" size={16} /> : ar.appointments.confirm}
       </button>
     </form>

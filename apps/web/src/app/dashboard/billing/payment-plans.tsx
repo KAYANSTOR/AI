@@ -256,7 +256,7 @@ export function PaymentPlans({
                 type="button"
                 onClick={() => choosePlan(plan.code)}
                 disabled={pending}
-                className="mt-5 inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-bold text-primary-foreground transition hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-50"
+                className="mt-5 inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-bold text-primary-foreground transition hover:bg-primary-dark hover:text-primary-dark-foreground disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {pending ? <LoaderCircle size={16} className="animate-spin" /> : null}
                 المتابعة للدفع

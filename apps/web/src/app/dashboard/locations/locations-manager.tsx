@@ -166,7 +166,7 @@ export function LocationsManager({ rows, canManage }: { rows: LocationRow[]; can
             type="button"
             disabled={pending || !form.name.trim()}
             onClick={() => run(() => saveLocationAction(form), true)}
-            className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-base font-medium text-primary-foreground transition-colors hover:bg-primary-dark disabled:opacity-60 md:w-auto md:text-sm"
+            className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-base font-medium text-primary-foreground transition-colors hover:bg-primary-dark hover:text-primary-dark-foreground disabled:opacity-60 md:w-auto md:text-sm"
           >
             {pending ? <Loader2 className="animate-spin" size={14} /> : <Plus size={14} />}
             {form.id ? ar.locations.saveEdit : ar.locations.add}

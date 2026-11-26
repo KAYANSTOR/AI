@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import type { DbClient } from '@/lib/db/client'
 import { createFakeDb, type FakeDb } from './support/fake-db'
+import { loadOnboardingChannels } from '@/lib/onboarding/channel-readiness'
 import { evaluateSmokeTest, withReplyTestCheck } from '@/lib/onboarding/smoke-test'
 
 const ORG = 'aaaaaaaa-0000-4000-8000-000000000001'
@@ -105,6 +106,7 @@ describe('onboarding smoke test', () => {
             channel_type: 'whatsapp',
             is_active: true,
             verification_status: 'pending',
+            external_identifier: '+967777123456',
           },
         ],
       },
@@ -117,6 +119,30 @@ describe('onboarding smoke test', () => {
 
     expect(outcome.passed).toBe(false)
     expect(outcome.checks.find((check) => check.name === 'verified_channel')?.ok).toBe(false)
+  })
+
+  test('QR requires a live gateway socket and remains scoped to the business', async () => {
+    const { db } = setup({
+      channels: { rows: [
+        { id: 'qr', organization_id: ORG, business_id: BIZ, channel_type: 'whatsapp', connection_mode: 'qr_unofficial', is_active: true, verification_status: 'verified' },
+        { id: 'other', organization_id: ORG, business_id: 'other-business', channel_type: 'whatsapp', connection_mode: 'qr_unofficial', is_active: true, verification_status: 'verified' },
+      ] },
+    })
+    expect((await loadOnboardingChannels(db, ORG, BIZ, async () => false)).map((row) => row.verification_status)).toEqual(['pending'])
+    expect((await loadOnboardingChannels(db, ORG, BIZ, async (id) => id === 'qr')).map((row) => row.verification_status)).toEqual(['verified'])
+    expect((await loadOnboardingChannels(db, ORG, BIZ, async () => { throw new Error('offline') }))[0].verification_status).toBe('pending')
+  })
+
+  test('legacy and unassigned channels do not authorize activation', async () => {
+    const { db } = setup({
+      business_profiles: { rows: [{ organization_id: ORG, business_id: BIZ, business_type_id: 'salon', timezone: 'UTC' }] },
+      channels: { rows: [
+        { id: 'legacy', organization_id: ORG, business_id: BIZ, channel_type: 'sms', is_active: true, verification_status: 'verified' },
+        { id: 'unassigned', organization_id: ORG, business_id: null, channel_type: 'whatsapp', is_active: true, verification_status: 'verified' },
+      ] },
+      ai_agents: { rows: [{ id: 'agent', organization_id: ORG, business_id: BIZ, status: 'active' }] },
+    })
+    expect((await evaluateSmokeTest(db, { organizationId: ORG })).passed).toBe(false)
   })
 
   test('a real answered reply is required while failed and skipped replies fail the stable check', async () => {
@@ -151,6 +177,7 @@ describe('onboarding smoke test', () => {
     const replyCheck = answered.checks.find((check) => check.name === 'reply_test')
     expect(replyCheck?.ok).toBe(true)
     expect(replyCheck?.message).toBe('تم اختبار رد المساعد بنجاح.')
+    expect(withReplyTestCheck(answered, 'answered').checks.filter((check) => check.name === 'reply_test')).toHaveLength(1)
 
     for (const status of ['failed', 'skipped'] as const) {
       const rejected = withReplyTestCheck(structuralOutcome, status)

@@ -1,4 +1,7 @@
 import type { createClient } from '@/lib/db/server'
+import { selectBusinessAgent } from '@/lib/runtime/business-agent'
+import { isOnboardingChannelReady } from '@/lib/channels/connect'
+import { loadOnboardingChannels } from './channel-readiness'
 
 export type SmokeTestCheck = {
   name: string
@@ -28,7 +31,7 @@ export function withReplyTestCheck(
           ? 'تعذر التحقق من رد المساعد الآن. تحقق من إعداد مزود الذكاء الاصطناعي ثم أعد الاختبار.'
           : 'لم يكتمل رد المساعد التجريبي. راجع إعداد الوكيل ثم أعد الاختبار.',
   }
-  const checks = [...outcome.checks, check]
+  const checks = [...outcome.checks.filter((item) => item.name !== 'reply_test'), check]
   const failedChecks = checks.filter((item) => !item.ok)
   const passed = failedChecks.length === 0
 
@@ -45,7 +48,7 @@ export function withReplyTestCheck(
 
 /**
  * Production readiness checks behind Go Live.
- * A saved active WhatsApp number is enough to start. Meta phone_number_id upgrades routing later.
+ * Require a verified active messaging channel scoped to the same business as its agent.
  */
 export async function evaluateSmokeTest(
   db: Awaited<ReturnType<typeof createClient>>,
@@ -87,20 +90,7 @@ export async function evaluateSmokeTest(
     message: hasTimezone ? 'Timezone is configured.' : 'Timezone must be configured before activation.',
   })
 
-  const { data: channels, error: channelsError } = await db
-    .from('channels')
-    .select('id, is_active, verification_status, external_identifier, business_id')
-    .eq('organization_id', org.organizationId)
-  if (channelsError) throw channelsError
-
-  const rows = (channels ?? []) as {
-    id: string
-    is_active: boolean | null
-    verification_status: string | null
-    external_identifier: string | null
-    business_id: string | null
-  }[]
-  const scoped = businessId ? rows.filter((row) => !row.business_id || row.business_id === businessId) : rows
+  const scoped = businessId ? await loadOnboardingChannels(db, org.organizationId, businessId) : []
   const hasChannel = scoped.some((row) => row.is_active === true)
   checks.push({
     name: 'active_channel',
@@ -110,32 +100,17 @@ export async function evaluateSmokeTest(
       : 'No active communication channel was found for this organization.',
   })
 
-  const hasVerifiedChannel = scoped.some(
-    (row) =>
-      row.is_active === true &&
-      (row.verification_status === 'verified' ||
-        (row.verification_status === 'pending' && Boolean(row.external_identifier)))
-  )
+  const hasVerifiedChannel = scoped.some(isOnboardingChannelReady)
   checks.push({
     name: 'verified_channel',
     ok: hasVerifiedChannel,
     message: hasVerifiedChannel
-      ? 'A saved channel is ready to start. Official Meta verification can finish later.'
-      : 'Save the WhatsApp number from the connect step, then retry.',
+      ? 'At least one messaging channel is active and verified.'
+      : 'Complete the connection and verification of a messaging channel, then retry.',
   })
 
-  const { data: activeAgents, error: agentsError } = businessId
-    ? await db
-        .from('ai_agents')
-        .select('id')
-        .eq('organization_id', org.organizationId)
-        .eq('business_id', businessId)
-        .eq('status', 'active')
-        .limit(1)
-    : { data: [], error: null }
-  if (agentsError) throw agentsError
-
-  const hasActiveAgent = (activeAgents ?? []).length > 0
+  const activeAgent = businessId ? await selectBusinessAgent(db, org.organizationId, businessId) : null
+  const hasActiveAgent = Boolean(activeAgent)
   checks.push({
     name: 'active_agent',
     ok: hasActiveAgent,

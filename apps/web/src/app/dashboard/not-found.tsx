@@ -12,7 +12,7 @@ export default function DashboardNotFound() {
         action={
           <Link
             href="/dashboard"
-            className="inline-flex h-11 items-center justify-center rounded-xl bg-primary px-6 text-sm font-semibold text-primary-foreground shadow-sm transition hover:bg-primary-dark active:scale-[0.99]"
+            className="inline-flex h-11 items-center justify-center rounded-xl bg-primary px-6 text-sm font-semibold text-primary-foreground shadow-sm transition hover:bg-primary-dark hover:text-primary-dark-foreground active:scale-[0.99]"
           >
             العودة للرئيسية
           </Link>

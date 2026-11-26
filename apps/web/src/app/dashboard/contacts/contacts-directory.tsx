@@ -96,7 +96,7 @@ export function ContactsDirectory({
       </section>
 
       <div className="grid grid-cols-2 gap-2.5">
-        <button type="button" onClick={() => setShowAdd(true)} disabled={!canManage} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-primary-dark px-3 text-sm font-bold text-primary disabled:opacity-50">
+        <button type="button" onClick={() => setShowAdd(true)} disabled={!canManage} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-primary-dark px-3 text-sm font-bold text-primary-dark-foreground disabled:opacity-50">
           <Plus size={17} /> إضافة عميل
         </button>
         <button type="button" onClick={() => setShowBulk(true)} disabled={!canManage || contacts.length === 0} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-secondary/20 bg-primary-light/40 px-3 text-sm font-bold text-secondary disabled:opacity-50">
@@ -111,7 +111,7 @@ export function ContactsDirectory({
 
       <div className="no-scrollbar flex items-center gap-2 overflow-x-auto pb-1" aria-label="تصفية جهات الاتصال">
         {filters.map((item) => (
-          <button key={item.id} type="button" onClick={() => setFilter(item.id)} aria-pressed={filter === item.id} className={'inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-full border px-3 text-xs font-bold transition ' + (filter === item.id ? 'border-secondary bg-primary-dark text-primary' : 'border-border bg-surface text-text-muted')}>
+          <button key={item.id} type="button" onClick={() => setFilter(item.id)} aria-pressed={filter === item.id} className={'inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-full border px-3 text-xs font-bold transition ' + (filter === item.id ? 'border-secondary bg-primary-dark text-primary-dark-foreground' : 'border-border bg-surface text-text-muted')}>
             {item.label}<span className="tabular-nums opacity-80">{item.count}</span>
           </button>
         ))}
@@ -129,7 +129,7 @@ export function ContactsDirectory({
           <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-primary-light text-secondary"><Users size={22} /></span>
           <h3 className="mt-3 text-sm font-bold text-text">{contacts.length === 0 ? 'لا توجد جهات اتصال بعد' : 'لا توجد نتائج مطابقة'}</h3>
           <p className="mt-1 text-xs leading-5 text-text-muted">{contacts.length === 0 ? 'أضف أول عميل لتبدأ في بناء قاعدة عملائك.' : 'غيّر عبارة البحث أو اختر تصفية أخرى.'}</p>
-          {contacts.length === 0 && canManage ? <button type="button" onClick={() => setShowAdd(true)} className="mt-4 rounded-xl bg-primary-dark px-4 py-2.5 text-sm font-bold text-primary">إضافة أول عميل</button> : null}
+          {contacts.length === 0 && canManage ? <button type="button" onClick={() => setShowAdd(true)} className="mt-4 rounded-xl bg-primary-dark px-4 py-2.5 text-sm font-bold text-primary-dark-foreground">إضافة أول عميل</button> : null}
         </div>
       ) : (
         <div className="space-y-2.5">
@@ -244,7 +244,7 @@ function BulkMessageDialog({
           <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-primary-light text-primary-dark"><CheckCircle2 size={24} /></span>
           <h3 className="font-extrabold text-text">حُفظت الحملة كمسودة</h3>
           <p className="text-sm leading-6 text-text-muted">لم يبدأ الإرسال. راجع الجمهور والموافقات والقناة من صفحة الحملات قبل التشغيل.</p>
-          <button type="button" onClick={() => router.push('/dashboard/campaigns')} className="min-h-11 w-full rounded-xl bg-primary-dark px-4 text-sm font-bold text-primary">متابعة إلى الحملات</button>
+          <button type="button" onClick={() => router.push('/dashboard/campaigns')} className="min-h-11 w-full rounded-xl bg-primary-dark px-4 text-sm font-bold text-primary-dark-foreground">متابعة إلى الحملات</button>
         </div>
       ) : (
         <div className="space-y-4">
@@ -276,7 +276,7 @@ function BulkMessageDialog({
           {error ? <p role="alert" className="rounded-xl bg-error-soft/60 p-3 text-xs text-error">{error}</p> : null}
           <div className="flex gap-2">
             <button type="button" onClick={onClose} className="min-h-11 flex-1 rounded-xl border border-border bg-surface text-sm font-bold text-text">إلغاء</button>
-            <button type="button" onClick={() => void saveDraft()} disabled={pending || !message.trim() || !name.trim()} className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-primary-dark px-3 text-sm font-bold text-primary disabled:opacity-50">
+            <button type="button" onClick={() => void saveDraft()} disabled={pending || !message.trim() || !name.trim()} className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-primary-dark px-3 text-sm font-bold text-primary-dark-foreground disabled:opacity-50">
               {pending ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />} حفظ كمسودة
             </button>
           </div>

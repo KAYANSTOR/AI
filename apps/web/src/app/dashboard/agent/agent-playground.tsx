@@ -208,7 +208,7 @@ export function AgentPlayground({ agentId }: { agentId: string }) {
           type="submit"
           disabled={busy || !input.trim()}
           aria-label="إرسال"
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground hover:bg-primary-dark disabled:opacity-50"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground hover:bg-primary-dark hover:text-primary-dark-foreground disabled:opacity-50"
         >
           <Send size={17} className="rtl:rotate-180" aria-hidden="true" />
         </button>

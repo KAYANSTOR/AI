@@ -23,7 +23,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
         <strong className="block font-extrabold">أكمل إعداد نشاطك</strong>
         <span className="text-text-muted">اربط القناة وجهّز الوكيل قبل التشغيل.</span>
       </span>
-      <Link href="/onboarding" className="shrink-0 rounded-xl bg-primary-dark px-3 py-2 font-bold text-primary">متابعة</Link>
+      <Link href="/onboarding" className="shrink-0 rounded-xl bg-primary-dark px-3 py-2 font-bold text-primary-dark-foreground">متابعة</Link>
     </div>
   ) : null
   const setupBanner = verifyBanner || onboardingBanner ? (
