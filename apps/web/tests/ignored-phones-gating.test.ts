@@ -1,0 +1,135 @@
+import { describe, expect, test } from 'bun:test'
+import type { DbClient } from '@/lib/db/client'
+import { createFakeDb, type FakeDb } from './support/fake-db'
+import { processInboundMessage } from '@/lib/runtime/process-inbound'
+import { setAgentTurnRunner } from '@/lib/runtime/process-inbound'
+
+const ORG = 'aaaaaaaa-0000-4000-8000-00000000000f'
+const BIZ = 'aaaaaaaa-0000-4000-8000-0000000000bf'
+const CONTACT = 'cccccccc-0000-4000-8000-00000000000f'
+const CHANNEL = 'dddddddd-0000-4000-8000-00000000000f'
+// Test numbers only (555-01xx range is reserved for fictional use).
+const NORMAL_PHONE = '+15550001'
+const IGNORED_PHONE = '+15550002'
+
+function baseTables(ignored: string[], conversation: Record<string, unknown>): FakeDb {
+  return {
+    organizations: { rows: [{ id: ORG, ignored_phones: ignored }] },
+    contacts: { rows: [{ id: CONTACT, organization_id: ORG, phone: NORMAL_PHONE, full_name: 'Customer' }] },
+    contact_identities: {
+      unique: [['contact_id', 'channel', 'external_user_id']],
+      rows: [
+        {
+          contact_id: CONTACT,
+          channel: 'whatsapp',
+          external_user_id: NORMAL_PHONE,
+          contacts: { id: CONTACT, full_name: 'Customer', phone: NORMAL_PHONE, organization_id: ORG },
+        },
+      ],
+    },
+    conversations: {
+      unique: [{ columns: ['organization_id', 'contact_id', 'channel_id'], where: (row) => row.status !== 'closed' }],
+      rows: [conversation],
+    },
+    messages: { unique: [['conversation_id', 'external_message_id']] },
+    consents: { rows: [] },
+    audit_events: { rows: [] },
+    ai_agents: { rows: [] },
+    organization_members: { rows: [] },
+    users: { rows: [] },
+    personal_assistant_settings: { rows: [] },
+  }
+}
+
+function inbound(db: DbClient, phone: string) {
+  return processInboundMessage(db, {
+    organizationId: ORG,
+    businessId: BIZ,
+    channelId: CHANNEL,
+    channelType: 'whatsapp',
+    provider: 'meta',
+    externalEventId: 'wamid.F_' + Math.random(),
+    externalUserId: phone,
+    senderPhone: phone,
+    text: 'مرحبا، أريد حجز موعد',
+  })
+}
+
+describe('F-003 ignored_phones gating', () => {
+  test('a phone on ignored_phones creates no business records and gets no commercial reply', async () => {
+    const fake = createFakeDb(
+      baseTables([IGNORED_PHONE], {
+        id: 'conv-ignored',
+        organization_id: ORG,
+        contact_id: CONTACT,
+        channel_id: CHANNEL,
+        status: 'active',
+        state: 'discovery',
+        ai_enabled: true,
+      })
+    )
+    const db = fake.client as unknown as DbClient
+
+    const result = await inbound(db, IGNORED_PHONE)
+
+    expect(result.reply).toBeNull()
+    // No business trace at all: no contact created, no message stored, no SLA armed.
+    expect(fake.store.messages.rows?.length ?? 0).toBe(0)
+    expect(fake.store.conversations.rows?.[0]?.first_response_due_at ?? null).toBeNull()
+  })
+
+  test('the owner message goes to the personal assistant without touching business records or SLA', async () => {
+    const OWNER_PHONE = '+15550003'
+    const USER = 'uuuuuuuu-0000-4000-8000-00000000000f'
+    const fake = createFakeDb(
+      baseTables([], {
+        id: 'conv-owner',
+        organization_id: ORG,
+        contact_id: CONTACT,
+        channel_id: CHANNEL,
+        status: 'active',
+        state: 'discovery',
+        ai_enabled: true,
+      })
+    )
+    const store = fake.store as unknown as Record<string, { rows?: Record<string, unknown>[] }>
+    store.users = { rows: [{ id: USER, phone: OWNER_PHONE }] }
+    store.organization_members = { rows: [{ organization_id: ORG, user_id: USER, role: 'owner' }] }
+    store.personal_assistant_settings = {
+      rows: [{ organization_id: ORG, whatsapp_channel_id: CHANNEL, whatsapp_reminders_enabled: true, user_id: USER }],
+    }
+    const db = fake.client as unknown as DbClient
+
+    const result = await inbound(db, OWNER_PHONE)
+
+    // The personal assistant answered; nothing commercial was created.
+    expect(result.reply).not.toBeNull()
+    expect(store.messages?.rows?.length ?? 0).toBe(0)
+    expect(store.conversations?.rows?.[0]?.first_response_due_at ?? null).toBeNull()
+  })
+
+  test('a normal customer completes the commercial path untouched', async () => {
+    const fake = createFakeDb(
+      baseTables([], {
+        id: 'conv-normal',
+        organization_id: ORG,
+        contact_id: CONTACT,
+        channel_id: CHANNEL,
+        status: 'active',
+        state: 'discovery',
+        ai_enabled: true,
+      })
+    )
+    const store = fake.store as unknown as Record<string, { rows?: Record<string, unknown>[] }>
+    store.ai_agents = { rows: [{ id: 'agent-1', organization_id: ORG, business_id: BIZ, status: 'active' }] }
+    setAgentTurnRunner(() => Promise.resolve('أهلاً بك! كيف أساعدك؟'))
+    const db = fake.client as unknown as DbClient
+
+    const result = await inbound(db, NORMAL_PHONE)
+
+    expect(result.reply).not.toBeNull()
+    expect(fake.store.messages.rows?.length).toBe(1)
+    expect(fake.store.conversations.rows?.[0]?.first_response_due_at ?? null).not.toBeNull()
+    setAgentTurnRunner(null)
+  })
+})

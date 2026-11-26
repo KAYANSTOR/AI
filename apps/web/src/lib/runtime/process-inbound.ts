@@ -12,6 +12,7 @@ import { ensureOpenConversation, getConversationRef } from '@/lib/runtime/conver
 import { resolveBusinessAgent } from '@/lib/runtime/tenant'
 import { executeTool } from '@/lib/ai/tools'
 import { armConversationSla } from '@/lib/sla'
+import { isIgnoredPhone, ignoredPhones } from '@/lib/channels/phone-policy'
 import { detectHumanHandoffRequest, triggerHumanHandoff } from '@/lib/ai/handoff-alert'
 import {
   assertWithinLimit,
@@ -130,6 +131,12 @@ export async function storeInboundMessage(
   db: DbClient,
   input: InboundIdentity & { messageType: InboundMessageType; content: string; media?: Record<string, unknown> | null }
 ): Promise<{ conversationId: string; contactId: string; messageId: string | null }> {
+  // F-003: guard every persistence path (text and pre-stored media) so an
+  // excluded number never becomes a business contact, conversation or message.
+  if (input.senderPhone && isIgnoredPhone(await ignoredPhones(db, input.organizationId), input.senderPhone)) {
+    throw new IgnoredPhoneError(input.organizationId)
+  }
+
   const contact = await resolveContactIdentity(db, input.organizationId, {
     channel: input.channelType,
     externalUserId: input.externalUserId,
@@ -195,6 +202,14 @@ export async function processInboundMessage(
     policy?: AiGuardPolicy
   }
 ): Promise<{ reply: string | null; conversationId: string; contactId: string }> {
+  // F-003: the ignored-phone list must be evaluated BEFORE any business contact,
+  // conversation, message or SLA record is created, so an excluded number never
+  // leaves a trace in business records and never gets a commercial reply.
+  if (input.senderPhone && isIgnoredPhone(await ignoredPhones(db, input.organizationId), input.senderPhone)) {
+    console.info('inbound_ignored_phone_dropped', { organizationId: input.organizationId, channelId: input.channelId })
+    return { reply: null, conversationId: '', contactId: '' }
+  }
+
   const stored = input.prestored ?? await storeInboundMessage(db, { ...input, messageType: 'text', content: input.text })
   const conversationId = stored.conversationId
   const contact = { contactId: stored.contactId }

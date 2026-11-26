@@ -6,6 +6,7 @@ import makeWASocket, { Browsers, BufferJSON, DisconnectReason, downloadMediaMess
 import { shouldReconnectAfterDisconnect } from './reconnect-policy.js'
 import { classifyUpsertMessage, createSentMessageRegistry } from './message-direction.js'
 import { createMediaMessageCache, extractMediaDescriptor, extractText, requestedMaxBytes } from './media.js'
+import { ignoredPhoneNumbers, isIgnoredPhone } from './phone-policy.js'
 
 const PORT = Number(process.env.WHATSAPP_GATEWAY_PORT || 3001)
 const DATABASE_URL = requiredEnv('DATABASE_URL')
@@ -167,6 +168,12 @@ async function postToApp(path, body, logKey, channelId) {
   }
 }
 async function forwardInbound(session, message, upsertType) {
+  // F-003 gateway-side pre-filter: a number on the organization's ignored_phones
+  // list is never forwarded to the app, so it cannot create business records.
+  if (session.ignoredPhones && isIgnoredPhone(session.ignoredPhones, message?.key?.remoteJid?.split('@')?.[0])) {
+    console.log('whatsapp_qr_inbound_ignored_phone', { channelId: session.channelId })
+    return
+  }
   const decision = classifyUpsertMessage(message, upsertType, {
     isBotSent: id => botSentMessages.has(session.channelId, id),
   })
@@ -224,6 +231,19 @@ async function startSocket(channelId, options = {}) {
     channelId, phoneNumber: stored.phone_number, mode: options.mode || 'qr',
     retries: options.retries || 0, creds, status: 'starting', qrDataUrl: null,
     pairingCode: null, connectedAt: stored.connected_at || null, lastError: null, sock: null,
+  }
+  // F-003: load the organization's ignored phones once per session so inbound
+  // messages from them are dropped at the gateway before reaching the app.
+  try {
+    const ignoredRows = await query(
+      "SELECT ignored_phones FROM public.organizations o JOIN public.channels c ON c.organization_id=o.id WHERE c.id=$1 LIMIT 1",
+      [channelId]
+    )
+    session.ignoredPhones = ignoredPhoneNumbers(ignoredRows[0]?.ignored_phones ?? [])
+  } catch (error) {
+    // Column may not exist yet; the app-side check remains authoritative.
+    console.log('whatsapp_qr_ignored_phones_load_failed', { channelId, reason: error instanceof Error ? error.message : 'unknown' })
+    session.ignoredPhones = ignoredPhoneNumbers([])
   }
   console.log('whatsapp_qr_socket_starting', {
     channelId,
