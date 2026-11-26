@@ -67,14 +67,12 @@ export async function createLinkCode(db: DbClient, owner: Owner, options: { now?
   const expiresAt = new Date(nowOf(options).getTime() + CODE_TTL_MINUTES * 60_000).toISOString()
   for (let attempt = 0; attempt < 5; attempt += 1) {
     const code = generateActivationCode()
-    const { data: existing } = await db.from('personal_assistant_links').select('id')
-      .eq('org_id', owner.organizationId).eq('user_id', owner.userId).maybeSingle()
-    const patch = { verification_token: code, token_expires_at: expiresAt }
-    const { error } = existing
-      ? await db.from('personal_assistant_links').update(patch).eq('id', String(existing.id))
-      : await db.from('personal_assistant_links').insert({ org_id: owner.organizationId, user_id: owner.userId, ...patch })
+    const { data, error } = await db.from('personal_assistant_links').upsert({
+      org_id: owner.organizationId, user_id: owner.userId,
+      verification_token: code, token_expires_at: expiresAt,
+    }, { onConflict: 'org_id,user_id' }).select('id').single()
     if (error?.code === '23505') continue
-    if (error) throw new Error('link_code_failed')
+    if (error || !data) throw new Error('link_code_failed')
     return { code, waLink: activationLink(options.displayNumber, code), expiresAt, configured: Boolean(options.displayNumber) }
   }
   throw new Error('link_code_failed')
@@ -86,8 +84,15 @@ async function reply(db: DbClient, owner: Owner | null, to: string, text: string
 }
 
 async function activate(db: DbClient, phone: string, code: string, msg: CentralInbound, deps: CentralDeps) {
-  const { data: link } = await db.from('personal_assistant_links').select('*').eq('verification_token', code.toUpperCase()).maybeSingle()
-  const expired = !link || !link.token_expires_at || new Date(String(link.token_expires_at)).getTime() < nowOf(deps).getTime()
+  const token = code.toUpperCase()
+  const { data: link, error: lookupError } = await db.from('personal_assistant_links')
+    .select('id, org_id, user_id, token_expires_at').eq('verification_token', token).maybeSingle()
+  if (lookupError) {
+    await deps.sendText(msg.from, 'تعذّر التحقق من رمز التفعيل الآن. حاول مرة أخرى بعد قليل.')
+    return 'activation_failed'
+  }
+  const expires = link?.token_expires_at ? new Date(String(link.token_expires_at)).getTime() : NaN
+  const expired = !link || !Number.isFinite(expires) || expires <= nowOf(deps).getTime()
   if (expired) {
     await deps.sendText(msg.from, 'رمز التفعيل غير صحيح أو انتهت صلاحيته. أنشئ رمزاً جديداً من لوحة كيان ثم أعد المحاولة.')
     return 'activation_invalid'
@@ -97,22 +102,20 @@ async function activate(db: DbClient, phone: string, code: string, msg: CentralI
     await deps.sendText(msg.from, `المساعد الشخصي غير مفعّل في حسابك. فعّله من هنا: ${appBaseUrl()}/dashboard/billing`)
     return 'not_eligible'
   }
-  // A phone belongs to one account. Proving the code moves it from any older link.
-  const { data: previous } = await db.from('personal_assistant_links').select('id').eq('whatsapp_phone', phone).maybeSingle()
-  if (previous && String(previous.id) !== String(link.id)) {
-    await db.from('personal_assistant_links').update({ whatsapp_phone: null, verified_at: null }).eq('id', String(previous.id))
-  }
-  const { error } = await db.from('personal_assistant_links').update({
-    whatsapp_phone: phone,
-    verified_at: nowOf(deps).toISOString(),
-    verification_token: null,
-    token_expires_at: null,
-  }).eq('id', String(link.id)).eq('verification_token', code.toUpperCase())
+  // The database rechecks the exact owner, token and expiry under lock. No separate unlink.
+  const { data: consumed, error } = await db.rpc('consume_central_link_activation', {
+    p_link_id: String(link.id), p_org_id: owner.organizationId, p_user_id: owner.userId,
+    p_token: token, p_phone: phone,
+  })
   if (error) {
     await deps.sendText(msg.from, 'تعذّر ربط الرقم الآن. حاول مرة أخرى بعد قليل.')
     return 'activation_failed'
   }
-  await appendThreadMessage(db, owner, { direction: 'inbound', source: 'whatsapp', content: msg.text ?? '', externalMessageId: msg.messageId })
+  if (consumed !== true) {
+    await deps.sendText(msg.from, 'رمز التفعيل غير صحيح أو انتهت صلاحيته. أنشئ رمزاً جديداً من لوحة كيان ثم أعد المحاولة.')
+    return 'activation_invalid'
+  }
+  await appendThreadMessage(db, owner, { direction: 'inbound', source: 'whatsapp', content: 'طلب تفعيل الربط', externalMessageId: msg.messageId })
   await reply(db, owner, msg.from, 'أهلاً بك. تم تفعيل Kayan AI مساعدك الشخصي على واتساب.\nاكتب أو أرسل رسالة صوتية بما تريد، وسأنفذ وأرسل لك محضراً بما تم.\nللإيقاف الفوري لكل المهام أرسل: إيقاف فوري', deps)
   return 'activated'
 }

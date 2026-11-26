@@ -73,5 +73,7 @@ jobs:
         run: node packages/db/scripts/verify-phase5-rls.mjs
       - name: Verify Phase 6 RLS and accounting on PostgreSQL
         run: node packages/db/scripts/verify-phase6-rls.mjs
+      - name: Verify atomic central link on PostgreSQL
+        run: node packages/db/scripts/verify-central-link.mjs
       - name: Verify migrations
         run: npm run db:status

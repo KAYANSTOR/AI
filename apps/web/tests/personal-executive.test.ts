@@ -26,7 +26,7 @@ const T0 = Date.parse('2026-11-24T09:00:00Z')
 function asDb(client: unknown) { return client as unknown as DbClient }
 
 function setup(extra: Record<string, { rows?: Record<string, unknown>[] }> = {}) {
-  return createFakeDb({
+  const db = createFakeDb({
     organizations: { rows: [
       { id: ORG_A, business_type: 'appointments', personal_assistant_addon_enabled: true },
       { id: ORG_B, business_type: 'appointments', personal_assistant_addon_enabled: true },
@@ -41,7 +41,19 @@ function setup(extra: Record<string, { rows?: Record<string, unknown>[] }> = {})
     personal_tasks: { rows: [] },
     user_memories: { rows: [] },
     ...extra,
+  }, {
+    consume_central_link_activation(args) {
+      const rows = db.store.personal_assistant_links.rows!
+      const target = rows.find(row => row.id === args.p_link_id && row.org_id === args.p_org_id && row.user_id === args.p_user_id && row.verification_token === args.p_token)
+      if (!target || !(Date.parse(String(target.token_expires_at)) > T0)) return false
+      for (const row of rows) {
+        if (row !== target && row.whatsapp_phone === args.p_phone) Object.assign(row, { whatsapp_phone: null, verified_at: null })
+      }
+      Object.assign(target, { whatsapp_phone: args.p_phone, verified_at: new Date(T0).toISOString(), verification_token: null, token_expires_at: null })
+      return true
+    },
   })
+  return db
 }
 
 function engineDeps(now = T0, sent: string[] = []): EngineDeps {
@@ -136,6 +148,38 @@ describe('central Kayan AI bot linking and routing', () => {
     expect(store.personal_assistant_links.rows![0].whatsapp_phone ?? null).toBeNull()
     await handleCentralInbound(asDb(client), { from: '967799999999', messageId: 'x2', type: 'text', text: 'السلام عليكم' }, deps)
     expect(sent[sent.length - 1].text).toContain('https://kayan-ai.up.railway.app/signup')
+  })
+
+  test('a token consumed between lookup and activation cannot detach an existing link or report success', async () => {
+    const { client, store } = setup()
+    const sent: { to: string; text: string }[] = []
+    const deps = centralDeps(sent)
+    const previous = await createLinkCode(asDb(client), OWNER_B, { now: deps.now, displayNumber: '12025550100' })
+    await handleCentralInbound(asDb(client), { from: '12025550101', messageId: 'prior', type: 'text', text: 'تفعيل_' + previous.code }, deps)
+    const next = await createLinkCode(asDb(client), OWNER_A, { now: deps.now, displayNumber: '12025550100' })
+    const result = await handleCentralInbound(asDb(client), { from: '12025550101', messageId: 'race', type: 'text', text: 'تفعيل_' + next.code }, {
+      ...deps,
+      hasAccess: async () => {
+        const row = store.personal_assistant_links.rows!.find(item => item.user_id === USER_A)!
+        row.verification_token = null
+        return true
+      },
+    })
+    expect(result).toBe('activation_invalid')
+    expect(store.personal_assistant_links.rows!.find(row => row.user_id === USER_B)?.whatsapp_phone).toBe('+12025550101')
+    expect(store.personal_assistant_messages.rows!.filter(row => row.external_message_id === 'race')).toHaveLength(0)
+  })
+
+  test('a consumed code cannot be replayed and the secret is not stored in the chat', async () => {
+    const { client, store } = setup()
+    const sent: { to: string; text: string }[] = []
+    const deps = centralDeps(sent)
+    const link = await createLinkCode(asDb(client), OWNER_A, { now: deps.now, displayNumber: '12025550100' })
+    const msg = { from: '12025550102', messageId: 'first', type: 'text' as const, text: 'تفعيل_' + link.code }
+    expect(await handleCentralInbound(asDb(client), msg, deps)).toBe('activated')
+    expect(await handleCentralInbound(asDb(client), { ...msg, from: '12025550103', messageId: 'replay' }, deps)).toBe('activation_invalid')
+    expect(store.personal_assistant_links.rows![0].whatsapp_phone).toBe('+12025550102')
+    expect(store.personal_assistant_messages.rows!.find(row => row.external_message_id === 'first')?.content).toBe('طلب تفعيل الربط')
   })
 
   test('voice notes are transcribed and processed as text; duplicates are ignored', async () => {
