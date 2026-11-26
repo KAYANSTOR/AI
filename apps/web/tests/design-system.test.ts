@@ -50,8 +50,8 @@ describe('KAYAN AI design system', () => {
       const [low, high] = [luminance(a), luminance(b)].sort((x, y) => x - y)
       return (high + 0.05) / (low + 0.05)
     }
-    expect(contrast('#FFFFFF', brandColors.secondary)).toBeGreaterThanOrEqual(4.5)
-    expect(contrast(brandColors.primary, brandColors.secondary)).toBeGreaterThanOrEqual(4.5)
+    expect(contrast('#FFFFFF', brandColors.secondary)).toBeGreaterThan(4.5)
+    expect(contrast(brandColors.primary, brandColors.secondary)).toBeGreaterThan(4.5)
   })
 
   test('shared UI primitives do not contain raw hex colors', () => {
