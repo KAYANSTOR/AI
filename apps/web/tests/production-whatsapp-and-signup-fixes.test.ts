@@ -15,7 +15,14 @@ import { aiGuardPolicyFor } from '@/lib/billing/free-tier'
 import { geminiProvider } from '@/lib/providers/gemini'
 import { groqProvider } from '@/lib/providers/groq'
 import { sendWhatsAppText } from '@/lib/providers/meta'
-import { processInboundMessage, setAgentTurnRunner } from '@/lib/runtime/process-inbound'
+import {
+  processInboundMessage,
+  setAgentTurnRunner,
+  setInboundGuardsFactory,
+  setPersonalTurnRunner,
+} from '@/lib/runtime/process-inbound'
+import { runAgentTurn } from '@/lib/runtime/agent-runtime'
+import { retrievePersonalMemories } from '@/lib/personal-assistant/memory-retrieval'
 import { isOAuthProvider, OAUTH_PROVIDERS } from '@/lib/auth/oauth/state'
 import { oauthErrorMessage } from '@/lib/auth/oauth/messages'
 import { resolveOAuthAccount, type OAuthAccountDeps } from '@/lib/auth/oauth/account'
@@ -42,13 +49,15 @@ const originalFetch = globalThis.fetch
 
 afterEach(() => {
   setAgentTurnRunner(null)
+  setPersonalTurnRunner(null)
+  setInboundGuardsFactory(null)
   globalThis.fetch = originalFetch
   delete process.env.GEMINI_API_KEY
   delete process.env.GROQ_API_KEY
   delete process.env.META_GRAPH_BASE_URL
 })
 
-describe('Fix 1: Owner-Only strict gate prevents personal assistant leakage to third parties', () => {
+describe('Fix 1: Owner Mode vs External Contact Mode in personal_assistant (plus group/ignored drops)', () => {
   function setupPersonalInboundDb() {
     return createFakeDb({
       organizations: {
@@ -57,7 +66,7 @@ describe('Fix 1: Owner-Only strict gate prevents personal assistant leakage to t
             id: ORG_PA,
             name: 'حساب طارق الشخصي',
             business_type: 'personal_assistant',
-            ignored_phones: [],
+            ignored_phones: ['+967788888888'],
             vertical_config: {},
           },
           {
@@ -122,6 +131,19 @@ describe('Fix 1: Owner-Only strict gate prevents personal assistant leakage to t
           },
         ],
       },
+      personal_tasks: {
+        rows: [
+          {
+            id: 'pt-secret',
+            org_id: ORG_PA,
+            user_id: OWNER_USER,
+            title: 'مراجعة العقد السري الساعة 4 عصراً',
+            status: 'pending',
+            created_at: '2026-11-26T10:00:00Z',
+          },
+        ],
+      },
+      channels: { rows: [{ id: CHAN_PA, organization_id: ORG_PA, business_id: BIZ_PA, channel_type: 'whatsapp', is_active: true }] },
       contacts: { rows: [] },
       contact_identities: { rows: [] },
       conversations: { rows: [] },
@@ -134,11 +156,13 @@ describe('Fix 1: Owner-Only strict gate prevents personal assistant leakage to t
       },
       businesses: {
         rows: [
-          { id: BIZ_PA, organization_id: ORG_PA, status: 'live' },
+          { id: BIZ_PA, organization_id: ORG_PA, status: 'draft' },
           { id: BIZ_REGULAR, organization_id: ORG_BIZ, status: 'live' },
         ],
       },
       agent_prompt_versions: { rows: [] },
+      agent_runs: { rows: [] },
+      usage_ledger: { rows: [] },
       knowledge_base: { rows: [] },
       services: { rows: [] },
       business_hours: { rows: [] },
@@ -149,48 +173,145 @@ describe('Fix 1: Owner-Only strict gate prevents personal assistant leakage to t
     })
   }
 
-  test('silently drops third-party and group messages in personal_assistant mode without reply or contact creation', async () => {
+  function installNoopGuards() {
+    setInboundGuardsFactory(() => ({
+      policy: async () => ({
+        planCode: 'growth',
+        free: false,
+        dailyLimit: null,
+        monthlyLimit: 1000,
+        mediaMonthly: null,
+        mediaMaxBytes: 5 * 1024 * 1024,
+        audioMaxSeconds: 60,
+        documentsAllowed: true,
+        maxInputChars: 2000,
+        maxOutputTokens: null,
+        floodPerMinute: 10,
+        economy: false,
+      }),
+      fingerprints: async () => [],
+      consumeQuota: async () => ({ allowed: true }),
+      consumeFlood: async () => true,
+      coalesceMs: 0,
+    }))
+  }
+
+  test('owner message enters Owner Mode with user_memories', async () => {
     const fake = setupPersonalInboundDb()
     const db = asDb(fake)
-    let agentTurnCalled = false
+    let ownerTurnCalled = false
+    let externalTurnCalled = false
+    let loadedMemories: string[] = []
+
+    setPersonalTurnRunner(async (client, owner, text) => {
+      ownerTurnCalled = true
+      const mems = await retrievePersonalMemories(client, owner, text)
+      loadedMemories = mems.map((m) => m.content)
+      return { reply: 'أبشر يا أبو علي 👋 تم تسجيل طلبك.', inputTokens: 10, outputTokens: 12, model: 'test' }
+    })
     setAgentTurnRunner(async () => {
-      agentTurnCalled = true
-      return 'أهلاً بك في حساب طارق!'
+      externalTurnCalled = true
+      return 'external'
     })
 
-    const thirdPartyRes = await processInboundMessage(db, {
+    const ownerRes = await processInboundMessage(db, {
       organizationId: ORG_PA,
       businessId: BIZ_PA,
       channelId: CHAN_PA,
       channelType: 'whatsapp',
       provider: 'whatsapp_qr',
-      externalEventId: 'qr:third-party-1',
+      externalEventId: 'qr:owner-1',
+      externalUserId: '967711111111@s.whatsapp.net',
+      senderPhone: OWNER_PHONE,
+      displayName: 'المالك',
+      text: 'ما رقم حسابي الخاص طارق؟',
+    })
+
+    expect(ownerTurnCalled).toBe(true)
+    expect(externalTurnCalled).toBe(false)
+    expect(ownerRes.reply).toContain('أبشر')
+    expect(loadedMemories.some((m) => m.includes('998877'))).toBe(true)
+  })
+
+  test('friend / external contact gets a polite reply in External Contact Mode without leaking user_memories, tasks, or owner name', async () => {
+    const fake = setupPersonalInboundDb()
+    const db = asDb(fake)
+    installNoopGuards()
+
+    let ownerTurnCalled = false
+    let capturedExternalArgs: Parameters<typeof runAgentTurn>[0] | null = null
+
+    setPersonalTurnRunner(async () => {
+      ownerTurnCalled = true
+      return 'leak'
+    })
+    setAgentTurnRunner(async (args) => {
+      capturedExternalArgs = args
+      return runAgentTurn(args)
+    })
+
+    process.env.GEMINI_API_KEY = 'test-gemini-key'
+    let capturedSystemPrompt = ''
+    let capturedToolsCount = -1
+    globalThis.fetch = (async (_url: unknown, init?: RequestInit) => {
+      const payload = JSON.parse(String(init?.body ?? '{}')) as {
+        systemInstruction?: { parts?: Array<{ text?: string }> }
+        tools?: unknown[]
+      }
+      capturedSystemPrompt = payload.systemInstruction?.parts?.[0]?.text ?? ''
+      capturedToolsCount = Array.isArray(payload.tools) ? payload.tools.length : 0
+      return new Response(
+        JSON.stringify({
+          candidates: [
+            { content: { parts: [{ text: 'أهلاً بك يا سعيد 👋 أنا المساعد الشخصي، سأوصل رسالتك لصاحب الحساب فور توفره ✨' }] } },
+          ],
+          usageMetadata: { promptTokenCount: 25, candidatesTokenCount: 30 },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } }
+      )
+    }) as unknown as typeof fetch
+
+    const friendRes = await processInboundMessage(db, {
+      organizationId: ORG_PA,
+      businessId: BIZ_PA,
+      channelId: CHAN_PA,
+      channelType: 'whatsapp',
+      provider: 'whatsapp_qr',
+      externalEventId: 'qr:friend-1',
       externalUserId: '967799999999@s.whatsapp.net',
       senderPhone: THIRD_PARTY_PHONE,
-      displayName: 'صديق خارجي',
-      text: 'مرحبا طارق كيفك؟',
+      displayName: 'سعيد',
+      text: 'هلا كيف حالك؟',
     })
 
-    expect(thirdPartyRes.reply).toBeNull()
-    expect(thirdPartyRes.conversationId).toBe('')
-    expect(agentTurnCalled).toBe(false)
-    expect(fake.rows('contacts').length).toBe(0)
-    expect(fake.rows('conversations').length).toBe(0)
-    expect(fake.rows('messages').length).toBe(0)
+    expect(ownerTurnCalled).toBe(false)
+    expect(friendRes.reply).toContain('أهلاً بك يا سعيد')
+    expect(capturedExternalArgs?.personalExternalContact?.senderName).toBe('سعيد')
+    expect(capturedToolsCount).toBe(0)
 
-    const lidRes = await processInboundMessage(db, {
-      organizationId: ORG_PA,
-      businessId: BIZ_PA,
-      channelId: CHAN_PA,
-      channelType: 'whatsapp',
-      provider: 'whatsapp_qr',
-      externalEventId: 'qr:lid-1',
-      externalUserId: '4455667788@lid',
-      senderPhone: null,
-      text: 'مرحبا',
+    // System prompt must identify the external contact, separate identities, allow emojis, and leak ZERO owner secrets
+    expect(capturedSystemPrompt).toContain('سعيد')
+    expect(capturedSystemPrompt).toContain('صديق أو جهة اتصال خارجية')
+    expect(capturedSystemPrompt).toContain('يُمنع منعاً باتاً مناداة المرسل باسم المالك')
+    expect(capturedSystemPrompt).toContain('👋')
+    expect(capturedSystemPrompt).not.toContain('998877')
+    expect(capturedSystemPrompt).not.toContain('طارق')
+    expect(capturedSystemPrompt).not.toContain('مراجعة العقد السري')
+  })
+
+  test('silently drops groups, broadcasts, channels, and ignored_phones without calling any AI runner', async () => {
+    const fake = setupPersonalInboundDb()
+    const db = asDb(fake)
+    let anyAiCalled = false
+
+    setPersonalTurnRunner(async () => {
+      anyAiCalled = true
+      return 'owner-reply'
     })
-    expect(lidRes.reply).toBeNull()
-    expect(agentTurnCalled).toBe(false)
+    setAgentTurnRunner(async () => {
+      anyAiCalled = true
+      return 'external-reply'
+    })
 
     const groupRes = await processInboundMessage(db, {
       organizationId: ORG_PA,
@@ -204,7 +325,36 @@ describe('Fix 1: Owner-Only strict gate prevents personal assistant leakage to t
       text: 'رسالة مجموعة',
     })
     expect(groupRes.reply).toBeNull()
-    expect(agentTurnCalled).toBe(false)
+    expect(groupRes.conversationId).toBe('')
+
+    const broadcastRes = await processInboundMessage(db, {
+      organizationId: ORG_PA,
+      businessId: BIZ_PA,
+      channelId: CHAN_PA,
+      channelType: 'whatsapp',
+      provider: 'whatsapp_qr',
+      externalEventId: 'qr:broadcast-1',
+      externalUserId: 'status@broadcast',
+      senderPhone: null,
+      text: 'تحديث حالة',
+    })
+    expect(broadcastRes.reply).toBeNull()
+
+    const ignoredRes = await processInboundMessage(db, {
+      organizationId: ORG_PA,
+      businessId: BIZ_PA,
+      channelId: CHAN_PA,
+      channelType: 'whatsapp',
+      provider: 'whatsapp_qr',
+      externalEventId: 'qr:ignored-1',
+      externalUserId: '967788888888@s.whatsapp.net',
+      senderPhone: '+967788888888',
+      text: 'رقم مستبعد',
+    })
+    expect(ignoredRes.reply).toBeNull()
+    expect(ignoredRes.conversationId).toBe('')
+    expect(anyAiCalled).toBe(false)
+    expect(fake.rows('contacts').length).toBe(0)
   })
 
   test('gateway classifyUpsertMessage ignores groups via remoteJidAlt and central router drops group JIDs', async () => {

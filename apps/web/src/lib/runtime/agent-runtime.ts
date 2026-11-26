@@ -252,7 +252,10 @@ export async function runAgentTurn(args: {
   economy?: boolean
   /** Plan cap on customer input characters passed to the model (history included). */
   inputCharLimit?: number
+  /** Active when an external friend/contact messages a personal_assistant workspace. */
+  personalExternalContact?: { senderName?: string | null } | null
 }) {
+  const isExternalPersonal = Boolean(args.personalExternalContact)
   const [{ data: history, error: historyError }, basePrompt, toolSet, { data: contactRow }, { data: profileRow }] = await Promise.all([
     args.db
       .from('messages')
@@ -261,18 +264,27 @@ export async function runAgentTurn(args: {
       .eq('conversation_id', args.conversationId)
       .order('created_at', { ascending: false })
       .limit(20),
-    buildBusinessSystemPrompt(args.db, args.organizationId, args.agentId, args.userText),
-    getToolDefinitionsForAgent(args.db, args.organizationId, args.agentId),
+    buildBusinessSystemPrompt(args.db, args.organizationId, args.agentId, args.userText, {
+      personalExternalContact: args.personalExternalContact ?? null,
+    }),
+    isExternalPersonal
+      ? Promise.resolve([])
+      : getToolDefinitionsForAgent(args.db, args.organizationId, args.agentId),
     args.db.from('contacts').select('id,full_name,phone').eq('id', args.contactId).eq('organization_id', args.organizationId).maybeSingle(),
     args.db.from('business_profiles').select('timezone').eq('organization_id', args.organizationId).maybeSingle(),
   ])
   if (historyError) throw new Error(historyError.message)
-  // Known customer identity (from the channel) and the business-local clock, so the agent
-  // never re-asks for a known number and maps «غداً 3 عصراً» to the right ISO time.
-  const prompt = `${basePrompt}\n\n${buildCustomerContextBlock({
-    contact: contactRow ? { id: String(contactRow.id), name: (contactRow.full_name as string | null) ?? null, phone: (contactRow.phone as string | null) ?? null } : { id: args.contactId, name: null, phone: null },
-    timezone: (profileRow?.timezone as string | null | undefined) ?? 'Asia/Aden',
-  })}`
+  // Known sender identity (from the channel). External friends in personal_assistant mode
+  // never receive business booking/order tool instructions or owner private data.
+  const senderDisplayName =
+    args.personalExternalContact?.senderName?.trim() ||
+    (contactRow?.full_name ? String(contactRow.full_name).trim() : null)
+  const prompt = isExternalPersonal
+    ? `${basePrompt}\n\n[EXTERNAL_CONTACT_INFO]\n- الاسم الظاهر للمرسل: ${senderDisplayName || 'غير معروف'}\n- أرسل رسالة طبيعية ولطيفة بالنيابة عن صاحب الحساب دون كشف أي بيانات خاصة.`
+    : `${basePrompt}\n\n${buildCustomerContextBlock({
+        contact: contactRow ? { id: String(contactRow.id), name: (contactRow.full_name as string | null) ?? null, phone: (contactRow.phone as string | null) ?? null } : { id: args.contactId, name: null, phone: null },
+        timezone: (profileRow?.timezone as string | null | undefined) ?? 'Asia/Aden',
+      })}`
 
   const messages: ModelMessage[] = (history ?? [])
     .reverse()

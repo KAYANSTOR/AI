@@ -10,6 +10,7 @@ import { runPersonalAssistantTurn } from '@/lib/personal-assistant/runtime'
 import { getPendingAction, isAffirmative, isNegative, markPendingAction } from '@/lib/runtime/pending'
 import { ensureOpenConversation, getConversationRef } from '@/lib/runtime/conversation'
 import { resolveBusinessAgent } from '@/lib/runtime/tenant'
+import { selectBusinessAgent } from '@/lib/runtime/business-agent'
 import { executeTool } from '@/lib/ai/tools'
 import { armConversationSla } from '@/lib/sla'
 import { isIgnoredPhone, ignoredPhones } from '@/lib/channels/phone-policy'
@@ -72,6 +73,12 @@ let agentTurnRunner: typeof runAgentTurn = runAgentTurn
 /** Test seam: replaces the model call while keeping every guard before it real. */
 export function setAgentTurnRunner(runner: typeof runAgentTurn | null) {
   agentTurnRunner = runner ?? runAgentTurn
+}
+
+let personalTurnRunner: typeof runPersonalAssistantTurn = runPersonalAssistantTurn
+/** Test seam: replaces the personal-assistant owner turn while keeping inbound gates real. */
+export function setPersonalTurnRunner(runner: typeof runPersonalAssistantTurn | null) {
+  personalTurnRunner = runner ?? runPersonalAssistantTurn
 }
 
 let guardsFactory: (() => InboundAiGuards) | null = null
@@ -314,19 +321,17 @@ export async function processInboundMessage(
   }
 
   const isPersonalWorkspace = await isPersonalAssistantOrganization(db, input.organizationId)
-  const personalOwner = await resolvePersonalAssistantOwner(db, input, { isPersonalWorkspace })
 
-  // Owner-Only Strict Gate for Personal Assistant mode:
-  // Never create customer replies, conversations, or leak owner identity/memories
-  // when a third party or group messages a personal assistant channel/workspace.
-  if (isPersonalWorkspace && !personalOwner) {
-    console.info('personal_assistant_third_party_dropped', {
+  // Groups, broadcasts, and channels are always ignored silently in personal_assistant mode.
+  if (isPersonalWorkspace && isGroupOrBroadcastSender(input)) {
+    console.info('personal_assistant_group_or_broadcast_dropped', {
       organizationId: input.organizationId,
       channelId: input.channelId,
-      reason: isGroupOrBroadcastSender(input) ? 'group_or_broadcast' : 'unauthorized_sender',
     })
     return { reply: null, conversationId: '', contactId: '' }
   }
+
+  const personalOwner = await resolvePersonalAssistantOwner(db, input, { isPersonalWorkspace })
 
   const stored = input.prestored ?? await storeInboundMessage(db, { ...input, messageType: 'text', content: input.text })
   const conversationId = stored.conversationId
@@ -334,7 +339,7 @@ export async function processInboundMessage(
 
   if (personalOwner) {
     try {
-      const result = await runPersonalAssistantTurn(db, {
+      const result = await personalTurnRunner(db, {
         organizationId: input.organizationId,
         userId: personalOwner.userId,
       }, input.text)
@@ -444,8 +449,12 @@ export async function processInboundMessage(
       .eq('id', conversationId)
   }
 
-  const agent = await resolveBusinessAgent(db, input.businessId)
-  if (!agent) return skipReply('no_active_agent_or_business_not_live', input, conversationId, contact.contactId)
+  const agent = isPersonalWorkspace
+    ? await selectBusinessAgent(db, input.organizationId, input.businessId)
+    : await resolveBusinessAgent(db, input.businessId)
+  if (!isPersonalWorkspace && !agent) {
+    return skipReply('no_active_agent_or_business_not_live', input, conversationId, contact.contactId)
+  }
 
   const eligibility = checkEligibility({
     channel: input.channelType,
@@ -530,11 +539,14 @@ export async function processInboundMessage(
     channel: input.channelType,
     // Media turns are already bounded by the pipeline (≤4,000 document chars, short transcripts).
     userText: input.prestored ? input.text : truncateForPlan(input.text, policy),
-    agentId: agent.id,
+    agentId: agent?.id ?? null,
     serverActionResult,
     maxOutputTokens: policy.maxOutputTokens,
     economy: policy.economy,
     inputCharLimit: policy.free ? policy.maxInputChars : undefined,
+    personalExternalContact: isPersonalWorkspace
+      ? { senderName: input.displayName?.trim() || null }
+      : null,
   })
   if (!reply) return skipReply('agent_returned_empty_reply', input, conversationId, contact.contactId)
 
