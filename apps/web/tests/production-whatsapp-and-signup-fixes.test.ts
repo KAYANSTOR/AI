@@ -485,7 +485,7 @@ describe('Fix 2: Eliminates response truncation & thinking token starvation acro
     const sentCentralBodies: string[] = []
     const cfg = getCentralBotConfig({
       NODE_ENV: 'test',
-      KAYAN_CENTRAL_WA_TOKEN: 'central-tok',
+      KAYAN_CENTRAL_WA_ACCESS_TOKEN: 'dummy-test-value',
       KAYAN_CENTRAL_WA_PHONE_NUMBER_ID: 'pn-central',
       KAYAN_CENTRAL_WA_DISPLAY_NUMBER: '+967700000000',
     })
