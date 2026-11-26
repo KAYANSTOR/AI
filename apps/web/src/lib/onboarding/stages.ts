@@ -79,3 +79,13 @@ export function previousStage(stage: OnboardingStage): OnboardingStage {
 export function isOnboardingStage(value: unknown): value is OnboardingStage {
   return value === 1 || value === 2 || value === 3 || value === 4
 }
+
+export type ReadinessChecklist = { basics: boolean; connect: boolean; agent: boolean; test: boolean }
+
+/** The next required action depends on current readiness, not the stored navigation step. */
+export function nextReadinessStage(completed: ReadinessChecklist): OnboardingStage {
+  if (!completed.basics) return 1
+  if (!completed.connect) return 2
+  if (!completed.agent) return 3
+  return 4
+}

@@ -6,9 +6,10 @@ import { FastPath } from './fastpath'
 import { stageForStoredStep } from '@/lib/onboarding/stages'
 import type { SmokeTestOutcome } from '@/lib/onboarding/smoke-test'
 import type { ReplyTestResult } from '@/lib/onboarding/reply-test'
+import { buildBusinessSystemPrompt } from '@/lib/ai/prompt'
 import { selectBusinessAgent } from '@/lib/runtime/business-agent'
 import { loadOnboardingChannels } from '@/lib/onboarding/channel-readiness'
-import { readActivationEvidence } from '@/lib/onboarding/activation-evidence'
+import { configuredActivationFingerprint, readActivationEvidence } from '@/lib/onboarding/activation-evidence'
 import { describeChannelState, selectOnboardingWhatsAppChannel, isOnboardingChannelReady } from '@/lib/channels/connect'
 
 export const metadata: Metadata = {
@@ -25,7 +26,7 @@ export default async function OnboardingPage() {
 
   const { data: profile, error: profileError } = await db
     .from('business_profiles')
-    .select('business_id, business_type_id, timezone, public_phone_number, activation_step, activation_state, setup_description, system_prompt_addition, smoke_test_result')
+    .select('business_id, business_type_id, timezone, public_phone_number, activation_step, activation_state, setup_description, system_prompt_addition, smoke_test_status, smoke_test_result')
     .eq('organization_id', context.organizationId)
     .maybeSingle()
 
@@ -57,10 +58,14 @@ export default async function OnboardingPage() {
     ? profile.smoke_test_result as Record<string, unknown>
     : null
   const rawChecks = Array.isArray(storedTest?.checks) ? storedTest.checks : null
-  // This is display-only. Activation validates the current configuration fingerprint on the server.
-  const storedProof = typeof storedTest?.fingerprint === 'string'
-    ? readActivationEvidence(storedTest, storedTest.fingerprint) : null
+  // Validate against current configuration, never the fingerprint in the stored proof itself.
   const currentReady = channels.some(isOnboardingChannelReady) && agent?.status === 'active'
+  const system = storedTest?.passed === true && currentReady && businessId && agent
+    ? await buildBusinessSystemPrompt(db, context.organizationId, String(agent.id)) : null
+  const fingerprint = businessId && agent && system
+    ? configuredActivationFingerprint(context.organizationId, businessId, agent, system) : ''
+  const storedProof = profile?.smoke_test_status === 'passed' && process.env.GEMINI_API_KEY?.trim()
+    ? readActivationEvidence(storedTest, fingerprint) : null
   const showStoredTest = storedTest?.passed !== true || Boolean(storedProof && currentReady)
   const initialOutcome: SmokeTestOutcome | null = storedTest && rawChecks && showStoredTest
     ? {
@@ -111,9 +116,11 @@ export default async function OnboardingPage() {
             : null,
           savedDescription: String(profile?.setup_description ?? ''),
           hasSavedAgentSetup: Boolean(profile?.setup_description && profile?.system_prompt_addition),
+          activated: profile?.activation_state === 'active',
+          needsRetest: storedTest?.passed === true && !showStoredTest,
           canManage: context.role === 'owner' || context.role === 'admin',
           completed: {
-            basics: Boolean(profile?.business_type_id),
+            basics: Boolean(businessId && businessResult.data?.name && profile?.business_type_id && profile?.timezone),
             connect: channels.some(isOnboardingChannelReady),
             agent: Boolean(agent?.status === 'active' && profile?.setup_description && profile?.system_prompt_addition),
             test: Boolean(initialOutcome?.passed && initialReply?.status === 'answered'),

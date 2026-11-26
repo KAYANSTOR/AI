@@ -19,7 +19,7 @@ import { isPlausiblePhoneNumber } from '@/lib/channels/connect'
 import { tryAgentReply, type ReplyTestResult } from '@/lib/onboarding/reply-test'
 import { buildBusinessSystemPrompt } from '@/lib/ai/prompt'
 import { selectBusinessAgent } from '@/lib/runtime/business-agent'
-import { activationFingerprint, readActivationEvidence } from '@/lib/onboarding/activation-evidence'
+import { configuredActivationFingerprint, readActivationEvidence } from '@/lib/onboarding/activation-evidence'
 import { normalizeChannelNumber } from '@/lib/channels/management'
 import {
   buildPromptAddition,
@@ -53,17 +53,7 @@ async function loadActivationContext(
   const businessId = typeof profile?.business_id === 'string' ? profile.business_id : null
   const agent = businessId ? await selectBusinessAgent(db, org.organizationId, businessId) : null
   const system = agent ? await buildBusinessSystemPrompt(db, org.organizationId, String(agent.id)) : null
-  const fingerprint = agent && businessId && system ? activationFingerprint({
-    organizationId: org.organizationId,
-    businessId,
-    agentId: String(agent.id),
-    provider: String(agent.model_provider ?? ''),
-    model: process.env.GEMINI_MODEL?.trim() || 'gemini-3.1-flash-lite-preview',
-    locale: String(agent.locale ?? ''),
-    temperature: String(agent.temperature ?? ''),
-    system,
-    name: String(agent.name ?? ''),
-  }) : ''
+  const fingerprint = agent && businessId && system ? configuredActivationFingerprint(org.organizationId, businessId, agent, system) : ''
   return { profile, businessId, system, fingerprint, activationState: String(profile?.activation_state ?? 'workspace_ready') }
 }
 

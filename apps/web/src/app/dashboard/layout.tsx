@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import { DashboardShell } from '@/components/dashboard/dashboard-shell'
+import { isPersonalWorkspace } from '@/lib/dashboard/navigation-policy'
 import { getDashboardContext } from '@/lib/dashboard/context'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
@@ -17,13 +18,14 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const user = await getCurrentUser()
   const verifyBanner = user?.email && !user.emailVerifiedAt ? <EmailVerificationBanner email={user.email} /> : null
 
-  const onboardingBanner = !context.setupComplete ? (
+  const canManageSetup = ['owner', 'admin'].includes(context.role)
+  const onboardingBanner = !context.setupComplete && !isPersonalWorkspace(context) ? (
     <div data-tour-target="setup" className="flex items-center justify-between gap-3 rounded-2xl border border-accent/40 bg-accent/15 px-3 py-3 text-xs text-text">
       <span className="min-w-0 leading-5">
         <strong className="block font-extrabold">أكمل إعداد نشاطك</strong>
-        <span className="text-text-muted">اربط القناة وجهّز الوكيل قبل التشغيل.</span>
+        <span className="text-text-muted">{canManageSetup ? 'تابع خطوات الإعداد لمعرفة ما يلزم قبل التشغيل.' : 'يتولى مالك النشاط أو المسؤول إكمال الإعداد.'}</span>
       </span>
-      <Link href="/onboarding" className="shrink-0 rounded-xl bg-primary-dark px-3 py-2 font-bold text-primary-dark-foreground">متابعة</Link>
+      <Link href="/onboarding" className="shrink-0 rounded-xl bg-primary-dark px-3 py-2 font-bold text-primary-dark-foreground">{canManageSetup ? 'متابعة' : 'عرض الحالة'}</Link>
     </div>
   ) : null
   const setupBanner = verifyBanner || onboardingBanner ? (

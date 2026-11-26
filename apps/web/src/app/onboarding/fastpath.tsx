@@ -1,9 +1,9 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { AlertCircle, Check, Loader2 } from 'lucide-react'
-import { ONBOARDING_STAGES, STAGE_DEFINITIONS, type OnboardingStage } from '@/lib/onboarding/stages'
+import { ONBOARDING_STAGES, STAGE_DEFINITIONS, nextReadinessStage, type ReadinessChecklist, type OnboardingStage } from '@/lib/onboarding/stages'
 import type { SmokeTestOutcome } from '@/lib/onboarding/smoke-test'
 import type { ReplyTestResult } from '@/lib/onboarding/reply-test'
 import { ar } from '@/lib/i18n/ar'
@@ -27,7 +27,9 @@ export type FastPathData = {
   savedDescription: string
   hasSavedAgentSetup: boolean
   canManage: boolean
-  completed: { basics: boolean; connect: boolean; agent: boolean; test: boolean }
+  activated: boolean
+  needsRetest: boolean
+  completed: ReadinessChecklist
 }
 
 /**
@@ -49,7 +51,12 @@ export function FastPath({
   const [transitionError, setTransitionError] = useState<string | null>(null)
   const [failedStage, setFailedStage] = useState<OnboardingStage | null>(null)
 
+  const transitioning = useRef(false)
+  const recommended = nextReadinessStage(data.completed)
+
   function go(next: OnboardingStage) {
+    if (!data.canManage || transitioning.current) return
+    transitioning.current = true
     // The move is written server-side; the UI follows the server state on refresh rather
     // than keeping a second copy of where the customer is.
     setTransitionError(null)
@@ -66,6 +73,8 @@ export function FastPath({
       } catch {
         setTransitionError(ar.errors.generic)
         setFailedStage(next)
+      } finally {
+        transitioning.current = false
       }
     })
   }
@@ -92,7 +101,7 @@ export function FastPath({
                 <button
                   type="button"
                   onClick={() => go(stage)}
-                  disabled={pending}
+                  disabled={pending || !data.canManage}
                   aria-current={isCurrent ? 'step' : undefined}
                   className="flex min-w-0 flex-1 flex-col items-center gap-1.5 py-1 disabled:opacity-60"
                 >
@@ -124,6 +133,17 @@ export function FastPath({
         </ol>
       </nav>
 
+      {!data.activated && data.canManage ? (
+        <section aria-label="الإجراء التالي" className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-surface px-4 py-3">
+          <div className="min-w-0">
+            <p className="text-xs font-bold text-secondary">الخطوة التالية المطلوبة</p>
+            <p className="mt-1 text-sm font-extrabold text-text">{data.completed.test && recommended === 4 ? 'تشغيل النشاط' : STAGE_DEFINITIONS[recommended].name}</p>
+            <p className="mt-1 text-xs leading-5 text-text-muted">{data.needsRetest && recommended === 4 ? 'انتهت صلاحية الاختبار السابق أو تغيرت الإعدادات. أعد الاختبار.' : STAGE_DEFINITIONS[recommended].description}</p>
+          </div>
+          {initialStage !== recommended ? <button type="button" disabled={pending} onClick={() => go(recommended)} className="min-h-11 rounded-xl bg-primary-dark px-4 text-xs font-bold text-primary-dark-foreground disabled:opacity-60">انتقل للخطوة</button> : null}
+        </section>
+      ) : null}
+
       {!data.canManage ? (
         <p className="rounded-xl border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-text">
           إعداد النشاط متاح لمالك النشاط أو المسؤول. يمكنك مشاهدة الحالة، وسيُكمل المالك الخطوات.
@@ -150,7 +170,7 @@ export function FastPath({
         </div>
       ) : null}
 
-      <div className="border-t border-border pt-6">
+      {data.canManage ? <div className="border-t border-border pt-6">
         {initialStage === 1 ? (
           <StageBasics
             businessName={data.businessName || data.organizationName}
@@ -188,7 +208,7 @@ export function FastPath({
             onActivated={() => router.replace('/dashboard')}
           />
         )}
-      </div>
+      </div> : null}
     </div>
   )
 }

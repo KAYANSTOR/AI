@@ -29,3 +29,16 @@ export function readActivationEvidence(
   return { reply: { status: 'answered', reply: reply.reply, message: 'الرد تم بنجاح' },
     testMessage: row.testMessage, testedAt: row.testedAt }
 }
+
+/** Shared by the activation action and the server-rendered readiness preview. */
+export function configuredActivationFingerprint(organizationId: string, businessId: string, agent: {
+  id: string; model_provider: string; locale: string | null; temperature: number | null; name: string
+}, system: string): string {
+  return activationFingerprint({
+    organizationId, businessId, agentId: String(agent.id),
+    provider: String(agent.model_provider ?? ''),
+    model: process.env.GEMINI_MODEL?.trim() || 'gemini-3.1-flash-lite-preview',
+    locale: String(agent.locale ?? ''), temperature: String(agent.temperature ?? ''),
+    system, name: String(agent.name ?? ''),
+  })
+}
