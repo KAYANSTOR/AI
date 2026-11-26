@@ -111,7 +111,9 @@ async function activate(db: DbClient, phone: string, code: string, msg: CentralI
     await deps.sendText(msg.from, 'تعذّر ربط الرقم الآن. حاول مرة أخرى بعد قليل.')
     return 'activation_failed'
   }
-  if (consumed !== true) {
+  // RPC results may be scalar even though the shared client exposes LooseData.
+  const activationResult: unknown = consumed
+  if (activationResult !== true) {
     await deps.sendText(msg.from, 'رمز التفعيل غير صحيح أو انتهت صلاحيته. أنشئ رمزاً جديداً من لوحة كيان ثم أعد المحاولة.')
     return 'activation_invalid'
   }
