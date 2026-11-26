@@ -41,8 +41,8 @@ const THIRD_PARTY_PHONE = '+967799999999'
 const ORG_BIZ = '0b000000-0000-4000-8000-000000000020'
 const BIZ_REGULAR = '0b000000-0000-4000-8000-000000000021'
 
-function asDb(client: unknown): DbClient {
-  return client as unknown as DbClient
+function asDb(fake: ReturnType<typeof createFakeDb>): DbClient {
+  return fake.client as unknown as DbClient
 }
 
 const originalFetch = globalThis.fetch
@@ -239,14 +239,14 @@ describe('Fix 1: Owner Mode vs External Contact Mode in personal_assistant (plus
     installNoopGuards()
 
     let ownerTurnCalled = false
-    let capturedExternalArgs: Parameters<typeof runAgentTurn>[0] | null = null
+    const capturedExternalArgs: Parameters<typeof runAgentTurn>[0][] = []
 
     setPersonalTurnRunner(async () => {
       ownerTurnCalled = true
-      return 'leak'
+      return { reply: 'leak', inputTokens: 0, outputTokens: 0, model: 'test' }
     })
     setAgentTurnRunner(async (args) => {
-      capturedExternalArgs = args
+      capturedExternalArgs.push(args)
       return runAgentTurn(args)
     })
 
@@ -286,7 +286,7 @@ describe('Fix 1: Owner Mode vs External Contact Mode in personal_assistant (plus
 
     expect(ownerTurnCalled).toBe(false)
     expect(friendRes.reply).toContain('أهلاً بك يا سعيد')
-    expect(capturedExternalArgs?.personalExternalContact?.senderName).toBe('سعيد')
+    expect(capturedExternalArgs[0]?.personalExternalContact?.senderName).toBe('سعيد')
     expect(capturedToolsCount).toBe(0)
 
     // System prompt must identify the external contact, separate identities, allow emojis, and leak ZERO owner secrets
@@ -306,7 +306,7 @@ describe('Fix 1: Owner Mode vs External Contact Mode in personal_assistant (plus
 
     setPersonalTurnRunner(async () => {
       anyAiCalled = true
-      return 'owner-reply'
+      return { reply: 'owner-reply', inputTokens: 0, outputTokens: 0, model: 'test' }
     })
     setAgentTurnRunner(async () => {
       anyAiCalled = true
@@ -354,7 +354,7 @@ describe('Fix 1: Owner Mode vs External Contact Mode in personal_assistant (plus
     expect(ignoredRes.reply).toBeNull()
     expect(ignoredRes.conversationId).toBe('')
     expect(anyAiCalled).toBe(false)
-    expect(fake.rows('contacts').length).toBe(0)
+    expect((fake.store.contacts?.rows ?? []).length).toBe(0)
   })
 
   test('gateway classifyUpsertMessage ignores groups via remoteJidAlt and central router drops group JIDs', async () => {
@@ -392,10 +392,10 @@ describe('Fix 1: Owner Mode vs External Contact Mode in personal_assistant (plus
 
 describe('Fix 2: Eliminates response truncation & thinking token starvation across providers and WhatsApp delivery', () => {
   test('enforceWhatsAppBrevity keeps full multi-line responses, bullet lists, and tables intact', () => {
-    expect(WHATSAPP_MAX_OUTPUT_TOKENS).toBeGreaterThanOrEqual(2048)
-    expect(DEFAULT_MAX_OUTPUT_TOKENS).toBeGreaterThanOrEqual(4096)
-    expect(maxOutputTokensForChannel('whatsapp')).toBeGreaterThanOrEqual(2048)
-    expect(aiGuardPolicyFor('trial', {}).maxOutputTokens).toBeGreaterThanOrEqual(1500)
+    expect(WHATSAPP_MAX_OUTPUT_TOKENS >= 2048).toBe(true)
+    expect(DEFAULT_MAX_OUTPUT_TOKENS >= 4096).toBe(true)
+    expect(maxOutputTokensForChannel('whatsapp') >= 2048).toBe(true)
+    expect((aiGuardPolicyFor('trial', {}).maxOutputTokens ?? 0) >= 1500).toBe(true)
 
     const longStructured = [
       'إليك الخطة الأسبوعية المقترحة لمشروعك:',
@@ -434,7 +434,7 @@ describe('Fix 2: Eliminates response truncation & thinking token starvation acro
     })
 
     const genCfg = capturedGeminiBody.generationConfig as { maxOutputTokens: number; thinkingConfig?: Record<string, unknown> }
-    expect(genCfg.maxOutputTokens).toBeGreaterThanOrEqual(2048)
+    expect(Number(genCfg.maxOutputTokens) >= 2048).toBe(true)
 
     process.env.GROQ_API_KEY = 'test-groq-key'
     let capturedGroqBody: Record<string, unknown> = {}
@@ -456,7 +456,7 @@ describe('Fix 2: Eliminates response truncation & thinking token starvation acro
       tools: [],
       isWhatsApp: true,
     })
-    expect(Number(capturedGroqBody.max_completion_tokens)).toBeGreaterThanOrEqual(2048)
+    expect(Number(capturedGroqBody.max_completion_tokens) >= 2048).toBe(true)
   })
 
   test('splitWhatsAppMessage and WhatsApp senders deliver long multi-line replies completely across chunks', async () => {
@@ -466,7 +466,7 @@ describe('Fix 2: Eliminates response truncation & thinking token starvation acro
     expect(chunks.length).toBeGreaterThan(3)
     expect(chunks.join('\n')).toContain('البند رقم 120:')
     for (const chunk of chunks) {
-      expect(chunk.length).toBeLessThanOrEqual(1200)
+      expect(chunk.length <= 1200).toBe(true)
     }
 
     process.env.META_GRAPH_BASE_URL = 'https://graph.example.test/v20.0'
@@ -484,6 +484,7 @@ describe('Fix 2: Eliminates response truncation & thinking token starvation acro
 
     const sentCentralBodies: string[] = []
     const cfg = getCentralBotConfig({
+      NODE_ENV: 'test',
       KAYAN_CENTRAL_WA_TOKEN: 'central-tok',
       KAYAN_CENTRAL_WA_PHONE_NUMBER_ID: 'pn-central',
       KAYAN_CENTRAL_WA_DISPLAY_NUMBER: '+967700000000',
