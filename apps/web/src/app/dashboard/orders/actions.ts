@@ -1,7 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { requireCapability, audit, type AuthorizedContext } from '@/lib/capabilities/guard'
+import { requireBusinessDashboardCapability, audit, type AuthorizedContext } from '@/lib/capabilities/guard'
 import { actionErrorMessage, dbActionError } from '@/lib/i18n/action-error'
 
 export type OrderResult = { ok: boolean; error?: string; orderId?: string }
@@ -26,7 +26,7 @@ export interface CreateOrderInput {
 export async function createOrderAction(input: CreateOrderInput): Promise<OrderResult> {
   let ctx: AuthorizedContext
   try {
-    ctx = await requireCapability('orders')
+    ctx = await requireBusinessDashboardCapability('orders')
   } catch (error) {
     return { ok: false, error: actionErrorMessage(error, 'غير مصرح.') }
   }
@@ -115,7 +115,7 @@ export async function createOrderAction(input: CreateOrderInput): Promise<OrderR
 export async function convertQuoteToOrderAction(quoteId: string): Promise<OrderResult> {
   let ctx: AuthorizedContext
   try {
-    ctx = await requireCapability('orders')
+    ctx = await requireBusinessDashboardCapability('orders')
   } catch (error) {
     return { ok: false, error: actionErrorMessage(error, 'غير مصرح.') }
   }
@@ -182,7 +182,7 @@ export async function changeOrderStatusAction(
 ): Promise<OrderResult> {
   let ctx: AuthorizedContext
   try {
-    ctx = await requireCapability('orders')
+    ctx = await requireBusinessDashboardCapability('orders')
   } catch (error) {
     return { ok: false, error: actionErrorMessage(error, 'غير مصرح.') }
   }

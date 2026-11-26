@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { requireCapability, CapabilityDisabledError } from '@/lib/capabilities/guard'
+import { requireBusinessDashboardCapability, CapabilityDisabledError } from '@/lib/capabilities/guard'
 import { redirect } from 'next/navigation'
 import { ar } from '@/lib/i18n/ar'
 import { formatDateTime } from '@/lib/i18n/format'
@@ -27,7 +27,7 @@ export default async function ConversationsPage({
 }) {
   let ctx
   try {
-    ctx = await requireCapability('inbox')
+    ctx = await requireBusinessDashboardCapability('inbox')
   } catch (error) {
     if (error instanceof CapabilityDisabledError) {
       return (

@@ -1,7 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { requireCapability, audit, type AuthorizedContext } from '@/lib/capabilities/guard'
+import { requireBusinessDashboardCapability, audit, type AuthorizedContext } from '@/lib/capabilities/guard'
 import { actionErrorMessage, dbActionError } from '@/lib/i18n/action-error'
 import { assertMarketingAllowed, ConsentBlockedError } from '@/lib/channels/consent'
 import { enqueueOutbound } from '@/lib/channels/outbox'
@@ -29,7 +29,7 @@ export interface CreateQuoteInput {
 export async function createQuoteAction(input: CreateQuoteInput): Promise<QuoteResult> {
   let ctx: AuthorizedContext
   try {
-    ctx = await requireCapability('quotes')
+    ctx = await requireBusinessDashboardCapability('quotes')
   } catch (error) {
     return { ok: false, error: actionErrorMessage(error, 'غير مصرح.') }
   }
@@ -116,7 +116,7 @@ export async function changeQuoteStatusAction(
 ): Promise<QuoteResult> {
   let ctx: AuthorizedContext
   try {
-    ctx = await requireCapability('quotes')
+    ctx = await requireBusinessDashboardCapability('quotes')
   } catch (error) {
     return { ok: false, error: actionErrorMessage(error, 'غير مصرح.') }
   }
@@ -186,7 +186,7 @@ export async function changeQuoteStatusAction(
 export async function sendQuoteAction(quoteId: string): Promise<QuoteResult> {
   let ctx: AuthorizedContext
   try {
-    ctx = await requireCapability('quotes')
+    ctx = await requireBusinessDashboardCapability('quotes')
   } catch (error) {
     return { ok: false, error: actionErrorMessage(error, 'غير مصرح.') }
   }

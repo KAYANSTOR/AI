@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { ArrowRight, Calendar, User } from 'lucide-react'
-import { requireCapability, CapabilityDisabledError } from '@/lib/capabilities/guard'
+import { requireBusinessDashboardCapability, CapabilityDisabledError } from '@/lib/capabilities/guard'
 import { QuoteActions } from './quote-actions'
 import { formatDateTime } from '@/lib/i18n/format'
 
@@ -14,7 +14,7 @@ export default async function QuoteDetailsPage({
 
   let ctx
   try {
-    ctx = await requireCapability('quotes')
+    ctx = await requireBusinessDashboardCapability('quotes')
   } catch (error) {
     if (error instanceof CapabilityDisabledError) redirect('/dashboard/settings')
     redirect('/login')

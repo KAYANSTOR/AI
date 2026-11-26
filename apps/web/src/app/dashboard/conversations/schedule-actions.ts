@@ -1,7 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { requireCapability, audit } from '@/lib/capabilities/guard'
+import { requireBusinessDashboardCapability, audit } from '@/lib/capabilities/guard'
 import { actionErrorMessage, dbActionError } from '@/lib/i18n/action-error'
 import { enqueueOutbound } from '@/lib/channels/outbox'
 import { getConsentStatus } from '@/lib/channels/consent'
@@ -14,7 +14,7 @@ export async function scheduleOutboundMessageAction(input: {
   scheduledAt: string
 }): Promise<ScheduleResult> {
   try {
-    const ctx = await requireCapability('inbox')
+    const ctx = await requireBusinessDashboardCapability('inbox')
     if (ctx.role === 'read_only') return { ok: false, error: 'صلاحية القراءة فقط.' }
 
     const body = input.body.trim()

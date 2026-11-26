@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation'
-import { requireCapability, CapabilityDisabledError } from '@/lib/capabilities/guard'
+import { requireBusinessDashboardCapability, CapabilityDisabledError } from '@/lib/capabilities/guard'
 import { OrderForm } from './order-form'
 import Link from 'next/link'
 import { ArrowRight } from 'lucide-react'
@@ -18,7 +18,7 @@ export default async function NewOrderPage(props: {
   const searchParams = await props.searchParams
   let ctx
   try {
-    ctx = await requireCapability('orders')
+    ctx = await requireBusinessDashboardCapability('orders')
   } catch (error) {
     if (error instanceof CapabilityDisabledError) redirect('/dashboard/settings')
     redirect('/login')

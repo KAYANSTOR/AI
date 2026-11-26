@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { ArrowRight, Phone, Sparkles } from 'lucide-react'
-import { requireCapability, CapabilityDisabledError } from '@/lib/capabilities/guard'
+import { requireBusinessDashboardCapability, CapabilityDisabledError } from '@/lib/capabilities/guard'
 import { InboxControls } from '../inbox-controls'
 import { formatDateTime } from '@/lib/i18n/format'
 import { channelLabel } from '@/lib/i18n/labels'
@@ -19,7 +19,7 @@ export default async function ConversationThreadPage({
 
   let ctx
   try {
-    ctx = await requireCapability('inbox')
+    ctx = await requireBusinessDashboardCapability('inbox')
   } catch (error) {
     if (error instanceof CapabilityDisabledError) redirect('/dashboard/settings')
     redirect('/login')

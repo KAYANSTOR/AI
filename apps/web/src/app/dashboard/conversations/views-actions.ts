@@ -1,7 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { requireCapability, audit } from '@/lib/capabilities/guard'
+import { requireBusinessDashboardCapability, audit } from '@/lib/capabilities/guard'
 import { actionErrorMessage, dbActionError } from '@/lib/i18n/action-error'
 
 export type ViewResult = { ok: true; id?: string } | { ok: false; error: string }
@@ -19,7 +19,7 @@ export async function saveInboxViewAction(input: {
   isShared?: boolean
 }): Promise<ViewResult> {
   try {
-    const ctx = await requireCapability('inbox')
+    const ctx = await requireBusinessDashboardCapability('inbox')
     const name = input.name.trim()
     if (!name) return { ok: false, error: 'الاسم مطلوب.' }
 
@@ -53,7 +53,7 @@ export async function saveInboxViewAction(input: {
 
 export async function deleteInboxViewAction(viewId: string): Promise<ViewResult> {
   try {
-    const ctx = await requireCapability('inbox')
+    const ctx = await requireBusinessDashboardCapability('inbox')
     const { error } = await ctx.db
       .from('saved_inbox_views')
       .delete()

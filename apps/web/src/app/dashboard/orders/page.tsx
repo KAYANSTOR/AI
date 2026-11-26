@@ -1,14 +1,14 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { ShoppingBag, Plus } from 'lucide-react'
-import { requireCapability, CapabilityDisabledError } from '@/lib/capabilities/guard'
+import { requireBusinessDashboardCapability, CapabilityDisabledError } from '@/lib/capabilities/guard'
 import { ar } from '@/lib/i18n/ar'
 import { formatDateTime } from '@/lib/i18n/format'
 
 export default async function OrdersPage() {
   let ctx
   try {
-    ctx = await requireCapability('orders')
+    ctx = await requireBusinessDashboardCapability('orders')
   } catch (error) {
     if (error instanceof CapabilityDisabledError) redirect('/dashboard/settings')
     redirect('/login')

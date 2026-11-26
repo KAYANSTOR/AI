@@ -2,7 +2,7 @@
 
 import { randomUUID } from 'node:crypto'
 import { revalidatePath } from 'next/cache'
-import { requireCapability, audit, type AuthorizedContext } from '@/lib/capabilities/guard'
+import { requireBusinessDashboardCapability, audit, type AuthorizedContext } from '@/lib/capabilities/guard'
 import { actionErrorMessage, dbActionError } from '@/lib/i18n/action-error'
 import { createNotification } from '@/lib/notifications'
 import { dispatchWorkflowTrigger } from '@/lib/workflows/triggers'
@@ -43,7 +43,7 @@ async function currentMemberId(ctx: AuthorizedContext): Promise<string | null> {
 export async function takeOverAction(conversationId: string, reason?: string): Promise<InboxResult> {
   let ctx: AuthorizedContext
   try {
-    ctx = await requireCapability('inbox')
+    ctx = await requireBusinessDashboardCapability('inbox')
   } catch (error) {
     return { ok: false, error: actionErrorMessage(error, 'غير مصرح.') }
   }
@@ -116,7 +116,7 @@ export async function assignConversationAction(
 ): Promise<InboxResult> {
   let ctx: AuthorizedContext
   try {
-    ctx = await requireCapability('inbox')
+    ctx = await requireBusinessDashboardCapability('inbox')
   } catch (error) {
     return { ok: false, error: actionErrorMessage(error, 'غير مصرح.') }
   }
@@ -180,7 +180,7 @@ export async function assignConversationAction(
 export async function resumeAiAction(conversationId: string): Promise<InboxResult> {
   let ctx: AuthorizedContext
   try {
-    ctx = await requireCapability('inbox')
+    ctx = await requireBusinessDashboardCapability('inbox')
   } catch (error) {
     return { ok: false, error: actionErrorMessage(error, 'غير مصرح.') }
   }
@@ -219,7 +219,7 @@ export async function resumeAiAction(conversationId: string): Promise<InboxResul
 export async function closeConversationAction(conversationId: string): Promise<InboxResult> {
   let ctx: AuthorizedContext
   try {
-    ctx = await requireCapability('inbox')
+    ctx = await requireBusinessDashboardCapability('inbox')
   } catch (error) {
     return { ok: false, error: actionErrorMessage(error, 'غير مصرح.') }
   }
@@ -253,7 +253,7 @@ export async function closeConversationAction(conversationId: string): Promise<I
 export async function reopenConversationAction(conversationId: string): Promise<InboxResult> {
   let ctx: AuthorizedContext
   try {
-    ctx = await requireCapability('inbox')
+    ctx = await requireBusinessDashboardCapability('inbox')
   } catch (error) {
     return { ok: false, error: actionErrorMessage(error, 'غير مصرح.') }
   }
@@ -286,7 +286,7 @@ export async function reopenConversationAction(conversationId: string): Promise<
 export async function addNoteAction(conversationId: string, body: string): Promise<InboxResult> {
   let ctx: AuthorizedContext
   try {
-    ctx = await requireCapability('inbox')
+    ctx = await requireBusinessDashboardCapability('inbox')
   } catch (error) {
     return { ok: false, error: actionErrorMessage(error, 'غير مصرح.') }
   }
@@ -318,7 +318,7 @@ export async function addNoteAction(conversationId: string, body: string): Promi
 export async function markAsReadAction(conversationId: string): Promise<InboxResult> {
   let ctx: AuthorizedContext
   try {
-    ctx = await requireCapability('inbox')
+    ctx = await requireBusinessDashboardCapability('inbox')
   } catch (error) {
     return { ok: false, error: actionErrorMessage(error, 'Unauthorized') }
   }
@@ -349,7 +349,7 @@ export async function sendHumanReplyAction(
 ): Promise<StaffReplyResult> {
   let ctx: AuthorizedContext
   try {
-    ctx = await requireCapability('inbox')
+    ctx = await requireBusinessDashboardCapability('inbox')
   } catch (error) {
     return { ok: false, error: actionErrorMessage(error, 'غير مصرح.') }
   }
@@ -534,7 +534,7 @@ export async function startWhatsAppConversationAction(
 ): Promise<StartWhatsAppConversationResult> {
   let ctx: AuthorizedContext
   try {
-    ctx = await requireCapability('inbox')
+    ctx = await requireBusinessDashboardCapability('inbox')
   } catch (error) {
     return { ok: false, error: actionErrorMessage(error, 'غير مصرح.') }
   }
@@ -676,7 +676,7 @@ export async function loadOlderMessagesAction(
   cursor: string
 ): Promise<{ ok: true; page: ThreadPage } | { ok: false; error: string }> {
   try {
-    const ctx = await requireCapability('inbox')
+    const ctx = await requireBusinessDashboardCapability('inbox')
     await loadConversation(ctx, conversationId)
     const page = await loadConversationMessages(ctx.db, { organizationId: ctx.organizationId, conversationId, cursor })
     return { ok: true, page }

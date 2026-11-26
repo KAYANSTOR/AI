@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation'
-import { requireCapability, CapabilityDisabledError } from '@/lib/capabilities/guard'
+import { requireBusinessDashboardCapability, CapabilityDisabledError } from '@/lib/capabilities/guard'
 import { QuoteForm } from './quote-form'
 import Link from 'next/link'
 import { ArrowRight } from 'lucide-react'
@@ -7,7 +7,7 @@ import { ArrowRight } from 'lucide-react'
 export default async function NewQuotePage() {
   let ctx
   try {
-    ctx = await requireCapability('quotes')
+    ctx = await requireBusinessDashboardCapability('quotes')
   } catch (error) {
     if (error instanceof CapabilityDisabledError) redirect('/dashboard/settings')
     redirect('/login')
