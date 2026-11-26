@@ -248,8 +248,8 @@ describe('3D · appointments with relative Arabic time', () => {
 })
 
 describe('3D · WhatsApp output budget', () => {
-  test('WhatsApp gets 350 output tokens, free plan included', () => {
-    expect(maxOutputTokensForChannel('whatsapp')).toBe(350)
+  test('WhatsApp has a 2048 channel budget while the configured trial plan retains its cap', () => {
+    expect(maxOutputTokensForChannel('whatsapp')).toBe(2048)
     const trial = PLAN_CATALOG.find((plan) => plan.code === 'trial')
     expect(Number((trial?.limits as Record<string, unknown>).max_output_tokens)).toBe(350)
   })
