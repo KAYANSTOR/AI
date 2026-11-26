@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { requireCapability, audit } from '@/lib/capabilities/guard'
 import { actionErrorMessage, dbActionError } from '@/lib/i18n/action-error'
+import { validateAppointmentInput } from '@/lib/appointments/validate-input'
 import { dispatchWorkflowTrigger } from '@/lib/workflows/triggers'
 
 export type AppointmentResult = { ok: true } | { ok: false; error: string }
@@ -36,16 +37,20 @@ export async function changeAppointmentStatusAction(
       return { ok: false, error: `انتقال غير مسموح: ${current.status} → ${nextStatus}` }
     }
 
-    const { error } = await ctx.db
+    const previousStatus = current.status
+    const { data: updated, error } = await ctx.db
       .from('appointments')
       .update({ status: nextStatus, updated_at: new Date().toISOString() })
       .eq('id', appointmentId)
       .eq('organization_id', ctx.organizationId)
+      .eq('status', previousStatus)
+      .select('id').maybeSingle()
 
     if (error) return { ok: false, error: dbActionError(error) }
+    if (!updated) return { ok: false, error: 'تغيّرت حالة الموعد. حدّث الصفحة ثم حاول مرة أخرى.' }
 
     await audit(ctx, 'appointment.status_changed', 'appointment', appointmentId, {
-      from: current.status,
+      from: previousStatus,
       to: nextStatus,
     })
 
@@ -82,12 +87,14 @@ export async function createAppointmentAction(input: {
 }): Promise<AppointmentResult> {
   try {
     const ctx = await requireCapability('appointments')
+    const validated = await validateAppointmentInput(ctx.db, ctx.organizationId, input)
+    if (!validated.ok) return validated
     const { error } = await ctx.db.from('appointments').insert({
       organization_id: ctx.organizationId,
       contact_id: input.contactId,
       service_id: input.serviceId,
-      starts_at: input.startsAt,
-      ends_at: input.endsAt,
+      starts_at: validated.startsAt,
+      ends_at: validated.endsAt,
       status: 'confirmed',
     })
     if (error) return { ok: false, error: dbActionError(error) }

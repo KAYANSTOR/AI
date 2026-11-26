@@ -35,7 +35,7 @@ export function AppointmentForm({ services, contacts }: { organizationId: string
     })
     setLoading(false)
     if (!result.ok) {
-      setError(ar.errors.save)
+      setError(result.error)
       return
     }
     setContactId('')

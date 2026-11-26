@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { deleteServiceAction } from './actions'
 import { Trash2 } from 'lucide-react'
@@ -17,13 +18,24 @@ type Service = {
   is_active: boolean
 }
 
-export function ServiceList({ services }: { services: Service[]; organizationId: string }) {
+export function ServiceList({ services, canManage }: { services: Service[]; canManage: boolean }) {
   const router = useRouter()
+  const [pendingId, setPendingId] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
   async function remove(id: string) {
-    if (!confirm(ar.services.confirmDelete)) return
-    await deleteServiceAction(id)
-    router.refresh()
+    if (!canManage || pendingId || !confirm(ar.services.confirmDelete)) return
+    setPendingId(id)
+    setError(null)
+    try {
+      const result = await deleteServiceAction(id)
+      if (!result.ok) { setError(result.error); return }
+      router.refresh()
+    } catch {
+      setError(ar.errors.delete)
+    } finally {
+      setPendingId(null)
+    }
   }
 
   if (services.length === 0) {
@@ -36,6 +48,7 @@ export function ServiceList({ services }: { services: Service[]; organizationId:
 
   return (
     <div className="min-w-0 overflow-hidden rounded-xl border border-border bg-surface shadow-sm">
+      {error && <p role="alert" className="p-3 text-sm text-error">{error}</p>}
       <ul className="divide-y divide-border md:hidden">
         {services.map((service) => (
           <li key={service.id} className="space-y-2 p-4">
@@ -45,9 +58,9 @@ export function ServiceList({ services }: { services: Service[]; organizationId:
                 {service.category ? <p className="mt-1 text-xs text-text-muted">{service.category}</p> : null}
                 {service.description && <p className="mt-1 line-clamp-2 text-xs text-text-muted">{service.description}</p>}
               </div>
-              <button type="button" onClick={() => remove(service.id)} className="inline-flex min-h-11 shrink-0 items-center gap-1 rounded-lg px-2 text-xs font-medium text-error hover:bg-error/10">
+              {canManage && <button type="button" disabled={pendingId !== null} onClick={() => remove(service.id)} className="inline-flex min-h-11 shrink-0 items-center gap-1 rounded-lg px-2 text-xs font-medium text-error hover:bg-error/10">
                 <Trash2 size={14} aria-hidden="true" /> {ar.services.delete}
-              </button>
+              </button>}
             </div>
             <div className="flex flex-wrap justify-between gap-2 text-sm text-text-muted">
               <span>{formatNumber(service.duration_minutes)} {ar.services.minutes}</span>
@@ -64,7 +77,7 @@ export function ServiceList({ services }: { services: Service[]; organizationId:
               <th className="px-4 py-3 text-start font-medium text-text-muted">الفئة</th>
               <th className="px-4 py-3 text-start font-medium text-text-muted">{ar.services.duration}</th>
               <th className="px-4 py-3 text-start font-medium text-text-muted">{ar.services.price}</th>
-              <th className="px-4 py-3 text-start font-medium text-text-muted">{ar.services.actions}</th>
+              {canManage && <th className="px-4 py-3 text-start font-medium text-text-muted">{ar.services.actions}</th>}
             </tr>
           </thead>
           <tbody>
@@ -77,11 +90,11 @@ export function ServiceList({ services }: { services: Service[]; organizationId:
                 <td className="px-4 py-3 text-text-muted">{service.category || '—'}</td>
                 <td className="px-4 py-3 text-text-muted">{formatNumber(service.duration_minutes)} {ar.services.minutes}</td>
                 <td dir="ltr" className="px-4 py-3 text-start text-text-muted">{service.price_amount != null ? `${service.price_currency} ${formatNumber(Number(service.price_amount), { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : ar.common.unknown}</td>
-                <td className="px-4 py-3">
-                  <button type="button" onClick={() => remove(service.id)} className="inline-flex min-h-11 items-center gap-1 rounded-lg px-2 text-xs font-medium text-error hover:bg-error/10">
+                {canManage && <td className="px-4 py-3">
+                  <button type="button" disabled={pendingId !== null} onClick={() => remove(service.id)} className="inline-flex min-h-11 items-center gap-1 rounded-lg px-2 text-xs font-medium text-error hover:bg-error/10">
                     <Trash2 size={14} aria-hidden="true" /> {ar.services.delete}
                   </button>
-                </td>
+                </td>}
               </tr>
             ))}
           </tbody>

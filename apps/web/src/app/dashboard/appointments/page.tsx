@@ -1,6 +1,6 @@
 import { Suspense } from 'react'
 import { Calendar } from 'lucide-react'
-import { getDashboardContext } from '@/lib/dashboard/context'
+import { requireCapability, CapabilityDisabledError, NotAuthorizedError } from '@/lib/capabilities/guard'
 import { createClient } from '@/lib/db/server'
 import { redirect } from 'next/navigation'
 import { AppointmentForm } from './appointment-form'
@@ -12,8 +12,14 @@ import { MobileEmptyState } from '@/components/ui/empty-state'
 export const dynamic = 'force-dynamic'
 
 export default async function AppointmentsPage() {
-  const context = await getDashboardContext()
-  if (!context) redirect('/login')
+  let context
+  try {
+    context = await requireCapability('appointments')
+  } catch (error) {
+    if (error instanceof CapabilityDisabledError) redirect('/dashboard')
+    if (error instanceof NotAuthorizedError) redirect('/login')
+    throw error
+  }
 
   return (
     <div className="space-y-6">
