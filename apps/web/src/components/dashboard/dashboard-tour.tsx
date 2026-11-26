@@ -249,7 +249,7 @@ function DashboardTourContent({ access, storageKey }: { access: TourAccess; stor
       setLocalExplored(updatedList)
       writeLocalExplored(storageKey, updatedList)
     },
-    [storageKey, localExplored]
+    [storageKey, localExplored, setLocalExplored]
   )
 
   // Auto-retire the screen guide once the user interacts with real controls on that screen.
