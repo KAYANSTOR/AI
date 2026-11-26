@@ -5,18 +5,20 @@ import { readCentralLinkStatus, unlinkCentralBot } from '@/lib/central-bot/link-
 import { createFakeDb } from './support/fake-db'
 
 const owner = { organizationId: 'org-a', userId: 'user-a' }
-const env = { KAYAN_CENTRAL_WA_PHONE_NUMBER_ID: '123', KAYAN_CENTRAL_WA_ACCESS_TOKEN: 'test-token', KAYAN_CENTRAL_WA_DISPLAY_NUMBER: '+1 202 555 0100' }
+const credentials = { KAYAN_CENTRAL_WA_PHONE_NUMBER_ID: '123', KAYAN_CENTRAL_WA_ACCESS_TOKEN: 'test-token', KAYAN_CENTRAL_WA_DISPLAY_NUMBER: '+1 202 555 0100' }
+const env: NodeJS.ProcessEnv = { NODE_ENV: 'test', ...credentials }
+const unconfiguredEnv: NodeJS.ProcessEnv = { NODE_ENV: 'test' }
 const asDb = (client: unknown) => client as DbClient
 
 describe('central bot local link readiness', () => {
   test('requires all credentials and a valid display number', () => {
     expect(getCentralLinkConfig(env)?.displayNumber).toBe('12025550100')
-    for (const key of Object.keys(env)) expect(getCentralLinkConfig({ ...env, [key]: '' })).toBeNull()
+    for (const key of Object.keys(credentials)) expect(getCentralLinkConfig({ ...env, [key]: '' })).toBeNull()
     for (const value of ['0', '0123456789', '1234567', '1234567890123456']) expect(getCentralLinkConfig({ ...env, KAYAN_CENTRAL_WA_DISPLAY_NUMBER: value })).toBeNull()
   })
   test('missing credentials never report configured even for a linked account', async () => {
     const { client } = createFakeDb({ personal_assistant_links: { rows: [{ org_id: owner.organizationId, user_id: owner.userId, whatsapp_phone: '+12025550101', verified_at: '2026-01-01', kill_switch_active: true }] } })
-    const status = await readCentralLinkStatus(asDb(client), owner, {})
+    const status = await readCentralLinkStatus(asDb(client), owner, unconfiguredEnv)
     expect(status.configured).toBe(false)
     expect(status.linked).toBe(true)
     expect(status.killSwitchActive).toBe(true)
