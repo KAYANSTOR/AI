@@ -6,7 +6,7 @@ import { FastPath } from './fastpath'
 import { stageForStoredStep } from '@/lib/onboarding/stages'
 import type { SmokeTestOutcome } from '@/lib/onboarding/smoke-test'
 import type { ReplyTestResult } from '@/lib/onboarding/reply-test'
-import { describeChannelState, type ChannelRowLike } from '@/lib/channels/connect'
+import { describeChannelState, selectOnboardingWhatsAppChannel } from '@/lib/channels/connect'
 
 export const metadata: Metadata = {
   title: 'إعداد النشاط وتشغيل الوكيل | Kayan AI',
@@ -36,18 +36,23 @@ export default async function OnboardingPage() {
     businessId
       ? db.from('businesses').select('name').eq('id', businessId).maybeSingle()
       : Promise.resolve({ data: null, error: null }),
-    db.from('channels')
-      .select('id, channel_type, verification_status, external_identifier, is_active')
-      .eq('organization_id', context.organizationId)
-      .eq('channel_type', 'whatsapp')
-      .maybeSingle(),
-    db.from('ai_agents')
-      .select('id, name, status')
-      .eq('organization_id', context.organizationId)
-      .neq('status', 'archived')
-      .order('created_at', { ascending: true })
-      .limit(1)
-      .maybeSingle(),
+    businessId
+      ? db.from('channels')
+          .select('id, channel_type, verification_status, external_identifier, is_active, connection_mode')
+          .eq('organization_id', context.organizationId)
+          .eq('business_id', businessId)
+          .eq('channel_type', 'whatsapp')
+      : Promise.resolve({ data: [], error: null }),
+    businessId
+      ? db.from('ai_agents')
+          .select('id, name, status')
+          .eq('organization_id', context.organizationId)
+          .eq('business_id', businessId)
+          .neq('status', 'archived')
+          .order('created_at', { ascending: true })
+          .limit(1)
+          .maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
   ])
 
   if (businessResult.error || channelResult.error || agentResult.error) {
@@ -59,8 +64,8 @@ export default async function OnboardingPage() {
     throw new Error('تعذّر تحميل بعض بيانات الإعداد. حاول تحديث الصفحة.')
   }
 
-  const channel = channelResult.data
-  const channelState = channel ? describeChannelState(channel as unknown as ChannelRowLike) : null
+  const channel = selectOnboardingWhatsAppChannel(channelResult.data ?? [])
+  const channelState = channel ? describeChannelState(channel) : null
   const storedTest = profile?.smoke_test_result && typeof profile.smoke_test_result === 'object'
     ? profile.smoke_test_result as Record<string, unknown>
     : null
@@ -105,7 +110,7 @@ export default async function OnboardingPage() {
           initialTestMessage: typeof storedTest?.testMessage === 'string' ? storedTest.testMessage : null,
           connect: {
             whatsapp: channel && channelState
-              ? { state: channelState, number: String(channel.external_identifier ?? '') || null }
+              ? { state: channelState, number: String(channel.external_identifier ?? '') || null, mode: channel.connection_mode ?? null }
               : null,
             phone: null,
           },

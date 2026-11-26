@@ -30,6 +30,21 @@ export function describeChannelState(row: ChannelRowLike | null | undefined): Ch
   return 'pending'
 }
 
+/** Select a display representative only. Never use this to resolve inbound routing or credentials.
+ * Callers must scope the rows to the authenticated organization and its current business.
+ */
+export function selectOnboardingWhatsAppChannel<T extends ChannelRowLike & { id: string; connection_mode?: string | null }>(
+  rows: readonly T[]
+): T | null {
+  const stateRank = (row: T) => row.is_active === true && row.verification_status === 'verified' ? 0
+    : row.verification_status === 'pending' ? 1 : 2
+  const modeRank = (row: T) => row.connection_mode === 'coexistence' ? 0
+    : !row.connection_mode || row.connection_mode === 'cloud_api' ? 1
+      : row.connection_mode === 'qr_unofficial' ? 2 : 3
+  return [...rows].sort((a, b) => stateRank(a) - stateRank(b)
+    || modeRank(a) - modeRank(b) || a.id.localeCompare(b.id))[0] ?? null
+}
+
 export const CONNECTION_STATE_LABELS: Record<ChannelConnectionState, string> = {
   not_connected: 'غير مربوط',
   pending: 'غير مربوط — الرقم محفوظ فقط',

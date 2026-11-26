@@ -273,13 +273,14 @@ export async function connectWhatsAppAction(input: { phoneNumber: string }): Pro
       .select('business_id, public_phone_number')
       .eq('organization_id', org.organizationId)
       .maybeSingle()
-    const { data: existing } = await db
+    const { data: existing, error: existingError } = await db
       .from('channels')
       .select('id')
       .eq('organization_id', org.organizationId)
       .eq('channel_type', 'whatsapp')
-      .maybeSingle()
-    if (!existing) {
+      .limit(1)
+    if (existingError) throw existingError
+    if (!(existing ?? []).length) {
       const { count } = await db
         .from('channels')
         .select('id', { count: 'exact', head: true })

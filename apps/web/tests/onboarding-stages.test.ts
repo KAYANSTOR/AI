@@ -6,7 +6,22 @@ import {
   stageForStoredStep,
   stepForStage,
 } from '@/lib/onboarding/stages'
+import { selectOnboardingWhatsAppChannel } from '@/lib/channels/connect'
 import { activationStateForStep } from '@/lib/onboarding/activation'
+
+describe('onboarding WhatsApp selection', () => {
+  const pending = { id: 'cloud', connection_mode: 'cloud_api', is_active: false, verification_status: 'pending' }
+  const qr = { id: 'qr', connection_mode: 'qr_unofficial', is_active: true, verification_status: 'verified' }
+  const cloud = { ...pending, is_active: true, verification_status: 'verified' }
+
+  test('supports multiple connection modes and prefers an actually connected channel', () => {
+    expect(selectOnboardingWhatsAppChannel([pending, qr])?.id).toBe('qr')
+    expect(selectOnboardingWhatsAppChannel([qr, pending])?.id).toBe('qr')
+    expect(selectOnboardingWhatsAppChannel([qr, cloud])?.id).toBe('cloud')
+    expect(selectOnboardingWhatsAppChannel([])).toBeNull()
+    expect(selectOnboardingWhatsAppChannel([pending])?.id).toBe('cloud')
+  })
+})
 
 describe('FastPath stages', () => {
   test('the four visible stages are 1..4 and nothing else is accepted', () => {

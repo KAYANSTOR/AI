@@ -11,7 +11,7 @@ import {
 } from '@/components/channels/whatsapp-embedded-signup'
 
 export type ConnectStageData = {
-  whatsapp: { state: ChannelConnectionState; number: string | null } | null
+  whatsapp: { state: ChannelConnectionState; number: string | null; mode?: string | null } | null
   phone: {
     state: ChannelConnectionState
     publicNumber: string | null
@@ -72,7 +72,7 @@ export function StageConnect({
       <div className="space-y-1">
         <h1 className="text-xl font-bold tracking-tight text-text sm:text-2xl">وصّل نشاطك</h1>
         <p className="text-sm leading-6 text-text-muted">
-          اربط واتساب بضغطة واحدة عبر Meta. هذا كل ما يحتاجه عملاؤك ليصلوا إليك.
+          اربط واتساب عبر Meta أو من صفحة القنوات، ويمكنك متابعة الإعداد عند اكتمال ربط إحدى القنوات.
         </p>
       </div>
 
@@ -147,6 +147,8 @@ export function StageConnect({
           ) : null}
         </div>
 
+        <Link href="/dashboard/channels" className="mt-3 inline-block text-sm font-medium text-secondary underline">إدارة طرق ربط واتساب</Link>
+
         {whatsappState === 'pending' ? (
           <p className="mt-3 flex items-start gap-2 rounded-lg border border-success/30 bg-success/10 px-3 py-2 text-xs leading-5 text-text">
             <CheckCircle2 size={14} className="mt-0.5 shrink-0 text-success" aria-hidden="true" />
@@ -157,7 +159,7 @@ export function StageConnect({
         {whatsappState === 'verified' ? (
           <p className="mt-3 flex items-start gap-2 rounded-lg border border-success/30 bg-success/10 px-3 py-2 text-xs leading-5 text-text">
             <CheckCircle2 size={14} className="mt-0.5 shrink-0 text-success" aria-hidden="true" />
-            رقم واتساب مربوط وجاهز لاستقبال العملاء.
+            {whatsapp?.mode === 'qr_unofficial' ? 'واتساب مربوط عبر QR (ربط غير رسمي).' : 'رقم واتساب مربوط وجاهز لاستقبال العملاء.'}
           </p>
         ) : null}
 
