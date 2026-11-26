@@ -32,7 +32,7 @@ function availableTools(kind: SpecializedAgentKind): ModelToolDefinition[] {
     input_schema: { type: 'object', properties: {
       goal: { type: 'string' }, steps: { type: 'array', items: { type: 'object', properties: {
         tool: { type: 'string', enum: executiveNames }, input: { type: 'object', description:
-          'draft_quote:{description,amount,currency} | find_business_records:{kind,query?} | escalate_customer:{conversation_id,reason} | assign_team_task:{user_id,title,due_at?,notes?} | configure_ops_daily_report:{enabled,channel_id?,local_time?,timezone?} | create_reminder:{title,due_at?,notes?} | calendar_create_event:{summary,starts_at,ends_at} | send_customer_message:{phone,body} | draft_message:{body}' },
+          'draft_quote:{description,amount,currency} | find_business_records:{kind,query?} | escalate_customer:{conversation_id,reason} | assign_team_task:{user_id,title,due_at?,notes?} | configure_ops_daily_report:{enabled,channel_id?,local_time?,timezone?} | update_agent_directives:{instruction,mode?} | get_sector_report:{period?} | send_owner_alert:{kind?,title?,body,period?} | train_agent_knowledge:{text,title?,directive?} | create_reminder:{title,due_at?,notes?} | calendar_create_event:{summary,starts_at,ends_at} | send_customer_message:{phone,body} | draft_message:{body}' },
       }, required: ['tool', 'input'] } },
     }, required: ['goal', 'steps'] },
   }]

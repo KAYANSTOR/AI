@@ -43,6 +43,10 @@ export const AGENT_TOOLS: Record<string, ToolSpec> = {
   escalate_customer: { name: 'escalate_customer', risk: 'high', readOnly: false, labelAr: 'تصعيد محادثة عميل لموظف', untouchedAr: 'لم تتأثر المحادثات الأخرى.' },
   assign_team_task: { name: 'assign_team_task', risk: 'high', readOnly: false, labelAr: 'إسناد مهمة لعضو في الفريق', untouchedAr: 'لم تُسند مهام لأي حساب آخر.' },
   configure_ops_daily_report: { name: 'configure_ops_daily_report', risk: 'high', readOnly: false, labelAr: 'جدولة تقرير عمليات يومي', untouchedAr: 'لن تُرسل التقارير لأرقام العملاء.' },
+  update_agent_directives: { name: 'update_agent_directives', risk: 'medium', readOnly: false, labelAr: 'تحديث توجيهات الوكيل', untouchedAr: 'لم تتغير قاعدة المعرفة أو صلاحيات الأدوات.' },
+  get_sector_report: { name: 'get_sector_report', risk: 'low', readOnly: true, labelAr: 'ملخص العمليات الفوري حسب القطاع', untouchedAr: 'قراءة فقط، لم يُعدّل أي سجل.' },
+  send_owner_alert: { name: 'send_owner_alert', risk: 'medium', readOnly: false, labelAr: 'إرسال تنبيه أو ملخص للمالك عبر البوت المركزي', untouchedAr: 'أُرسل التنبيه للمالك فقط دون مراسلة العملاء.' },
+  train_agent_knowledge: { name: 'train_agent_knowledge', risk: 'medium', readOnly: false, labelAr: 'إضافة معرفة وتعليمات لقاعدة المعرفة', untouchedAr: 'لم تُعدّل أو تُحذف أي سجلات عملاء.' },
 }
 
 const RISK_ORDER: RiskLevel[] = ['low', 'medium', 'high', 'financial']

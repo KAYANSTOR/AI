@@ -2,6 +2,8 @@ import type { DbClient } from '@/lib/db/client'
 import { createNotification } from '@/lib/notifications'
 import { enqueueOutbound } from '@/lib/channels/outbox'
 import { staffHandoffNotice } from '@/lib/ai/governance'
+import { getCentralBotConfig } from '@/lib/central-bot/config'
+import { sendCentralOwnerCommunication } from '@/lib/central-bot/operations'
 
 /**
  * Human handoff ("needs human") alerts.
@@ -51,6 +53,10 @@ export type HandoffAlertInput = {
 export type HandoffAlertDeps = {
   siteOrigin?: () => string
   resolveOwnerPhone?: (db: DbClient, organizationId: string) => Promise<string | null>
+  notifyCentralBot?: (
+    db: DbClient,
+    input: { organizationId: string; title: string; body: string; dedupeKey: string; entityId: string }
+  ) => Promise<void>
   now?: () => Date
 }
 
@@ -209,6 +215,34 @@ export async function triggerHumanHandoff(
     }
   } catch (error) {
     console.error('handoff_whatsapp_alert_failed', error instanceof Error ? error.message : error)
+  }
+
+  if (deps.notifyCentralBot || getCentralBotConfig()) {
+    const alertText = buildHandoffAlertText({ customerName, customerPhone, reason, lastMessage, link })
+    try {
+      if (deps.notifyCentralBot) {
+        await deps.notifyCentralBot(db, {
+          organizationId: input.organizationId,
+          title: `طلب تدخل بشري: ${customerName}`,
+          body: alertText,
+          dedupeKey: `central-${idempotencyKey}`,
+          entityId: input.conversationId,
+        })
+      } else {
+        await sendCentralOwnerCommunication(db, {
+          organizationId: input.organizationId,
+          kind: 'alert',
+          title: `طلب تدخل بشري: ${customerName}`,
+          body: alertText,
+          dedupeKey: `central-${idempotencyKey}`,
+          createInAppNotification: false,
+          entityType: 'conversation',
+          entityId: input.conversationId,
+        })
+      }
+    } catch (error) {
+      console.error('handoff_central_alert_failed', error instanceof Error ? error.message : error)
+    }
   }
 
   await db.from('audit_events').insert({

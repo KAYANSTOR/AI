@@ -6,6 +6,14 @@ import { connectorExecutors } from '@/lib/connectors/tools'
 import { searchKnowledge } from '@/lib/knowledge/retrieval'
 import { heavyTaskCreditCost, isSpecializedAgentKind, SPECIALIZED_AGENTS, type SpecializedAgentKind } from './specialized-agents'
 import { AGENT_TOOLS, effectiveRisk, evaluatePolicy, maxRisk, requiresApproval, type Provenance, type RiskLevel } from './policy'
+import {
+  executeOwnerDirective,
+  generateSectorReport,
+  sendCentralOwnerCommunication,
+  sendOperationalSummaryToOwner,
+  trainAgentFromBotConversation,
+  type ReportPeriod,
+} from '@/lib/central-bot/operations'
 
 /**
  * Executive task engine ("محضر أعمال").
@@ -76,6 +84,10 @@ export function dryRun(toolName: string, input: Record<string, unknown>): string
     case 'escalate_customer': return `ستُصعّد المحادثة ${shortRef(str(input.conversation_id, 40))} إلى الفريق.`
     case 'assign_team_task': return `ستُسند مهمة «${str(input.title, 120)}» إلى عضو الفريق ${shortRef(str(input.user_id, 40))}.`
     case 'configure_ops_daily_report': return 'سيُضبط إرسال ملخص العمليات اليومي عبر واتساب إلى الرقم المسجل في حسابك.'
+    case 'update_agent_directives': return `ستُحدّث توجيهات الوكيل: «${str(input.instruction, 160)}».`
+    case 'get_sector_report': return 'سيُستخرج ملخص العمليات الفوري للمحادثات والقطاع خلال الفترة المحددة.'
+    case 'send_owner_alert': return `سيُرسل تنبيه أو ملخص تشغيلي للمالك عبر البوت المركزي: «${str(input.title || input.body, 140)}».`
+    case 'train_agent_knowledge': return `ستُضاف معرفة جديدة لقاعدة معرفة الوكيل: «${str(input.text, 160)}».`
     default: return 'إجراء غير معروف'
   }
 }
@@ -166,6 +178,36 @@ const builtinExecutors: Record<string, ToolExecutor> = {
   },
   send_customer_message: async () => {
     throw new Error('customer_channel_not_configured')
+  },
+  update_agent_directives: async (db, owner, input) => {
+    const mode = input.mode === 'replace' ? 'replace' : 'append'
+    return executeOwnerDirective(db, owner, { instruction: str(input.instruction, 2000), mode })
+  },
+  get_sector_report: async (db, owner, input) => {
+    const period = (['today', '24h', '7d', '30d'].includes(String(input.period ?? '')) ? String(input.period) : '24h') as ReportPeriod
+    return generateSectorReport(db, owner, { period })
+  },
+  send_owner_alert: async (db, owner, input) => {
+    if (input.kind === 'operational_summary') {
+      const period = (['today', '24h', '7d', '30d'].includes(String(input.period ?? '')) ? String(input.period) : '24h') as ReportPeriod
+      return sendOperationalSummaryToOwner(db, owner, { period })
+    }
+    return sendCentralOwnerCommunication(db, {
+      organizationId: owner.organizationId,
+      targetUserId: owner.userId,
+      kind: 'alert',
+      title: str(input.title, 120) || 'تنبيه تشغيلي',
+      body: str(input.body, 2000),
+      createInAppNotification: true,
+    })
+  },
+  train_agent_knowledge: async (db, owner, input) => {
+    return trainAgentFromBotConversation(db, owner, {
+      text: str(input.text, 6000),
+      title: str(input.title, 200) || null,
+      directive: str(input.directive, 2000) || null,
+      channel: 'whatsapp_central',
+    })
   },
   ...connectorExecutors,
 }

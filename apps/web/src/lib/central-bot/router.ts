@@ -5,6 +5,7 @@ import { appendThreadMessage, threadHasExternalMessage } from '@/lib/personal-as
 import { decideApproval, setKillSwitch, type EngineDeps } from '@/lib/personal-assistant/executive/engine'
 import { appBaseUrl } from './config'
 import { routeTrainerInbound, type TrainerDeps } from '@/lib/trainer/router'
+import { tryHandleCentralOperationalCommand } from './operations'
 
 /**
  * Multi-tenant router for the central Kayan AI number.
@@ -214,6 +215,26 @@ export async function handleCentralInbound(db: DbClient, msg: CentralInbound, de
     await setKillSwitch(db, owner, false, deps.engine ?? {})
     await reply(db, owner, msg.from, 'تم الاستئناف. يمكنني تنفيذ المهام من جديد.', deps)
     return 'kill_switch_off'
+  }
+
+  const operational = await tryHandleCentralOperationalCommand(db, owner, content, {
+    sendText: deps.sendText,
+    generate: deps.trainer?.generate,
+    now: deps.now,
+    channel: 'whatsapp_central',
+  })
+  if (operational) {
+    if (operational.status !== 'summary_sent' && operational.status !== 'alert_sent') {
+      await reply(db, owner, msg.from, operational.reply, deps)
+    } else {
+      // Summary/alert communication already appended the system message and sent to linked WhatsApp;
+      // only send the confirmation text to the current chat if it didn't already receive the summary.
+      await appendThreadMessage(db, owner, { direction: 'outbound', source: 'whatsapp', content: operational.reply })
+      if (operational.status === 'alert_sent') {
+        await deps.sendText(msg.from, operational.reply)
+      }
+    }
+    return operational.status
   }
 
   let answer: string

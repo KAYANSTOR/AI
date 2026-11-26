@@ -3,6 +3,7 @@ import { requireExecutiveAssistantApi } from '@/lib/personal-assistant/api-conte
 import { appendThreadMessage, listThread } from '@/lib/personal-assistant/thread'
 import { runPersonalAssistantTurn } from '@/lib/personal-assistant/runtime'
 import { buildEngineDeps, mirrorToWhatsApp } from '@/lib/central-bot/deps'
+import { tryHandleCentralOperationalCommand } from '@/lib/central-bot/operations'
 import { assertWithinLimit, EntitlementExceededError } from '@/lib/billing/entitlements'
 import { getAiGuardPolicy } from '@/lib/billing/free-tier'
 import { guardAssistantText } from '@/lib/personal-assistant/web-media'
@@ -51,10 +52,13 @@ export async function POST(request: Request) {
   if (!guarded.ok) return NextResponse.json({ error: guarded.error, reply: guarded.reply ?? null }, { status: guarded.status })
   try {
     await appendThreadMessage(access.admin, access.owner, { direction: 'inbound', source: 'web', content: text })
-    const turn = await runPersonalAssistantTurn(access.admin, access.owner, guarded.text, { engine: buildEngineDeps(access.admin) })
-    await appendThreadMessage(access.admin, access.owner, { direction: 'outbound', source: 'web', content: turn.reply })
-    const mirrored = await mirrorToWhatsApp(access.admin, access.owner, `من الموقع: ${text.slice(0, 300)}\n\n${turn.reply}`)
-    return NextResponse.json({ reply: turn.reply, mirrored })
+    const operational = await tryHandleCentralOperationalCommand(access.admin, access.owner, guarded.text, { channel: 'web' })
+    const replyText = operational
+      ? operational.reply
+      : (await runPersonalAssistantTurn(access.admin, access.owner, guarded.text, { engine: buildEngineDeps(access.admin) })).reply
+    await appendThreadMessage(access.admin, access.owner, { direction: 'outbound', source: 'web', content: replyText })
+    const mirrored = await mirrorToWhatsApp(access.admin, access.owner, `من الموقع: ${text.slice(0, 300)}\n\n${replyText}`)
+    return NextResponse.json({ reply: replyText, mirrored, ...(operational ? { status: operational.status } : {}) })
   } catch (error) {
     console.error('personal_chat_failed', { reason: error instanceof Error ? error.message.slice(0, 120) : 'unknown' })
     return NextResponse.json({ error: 'assistant_unavailable' }, { status: 502 })

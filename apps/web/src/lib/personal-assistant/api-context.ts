@@ -41,10 +41,50 @@ export async function requirePersonalAssistantApi(overrides: Partial<AccessDeps>
   return { db, admin: deps.adminDb(), owner: { organizationId: org.organizationId, userId: user.id } }
 }
 
-export async function requireExecutiveAssistantApi() {
-  return requirePersonalAssistantApi({ hasAccess: async (db, organizationId) => {
-    if (await loadPersonalAssistantAccess(createAdminClient(), organizationId)) return true
-    const org = await getCurrentOrg()
-    return Boolean(org && canUseBusinessExecutiveAgent(await organizationAgentKind(db, organizationId), org.role))
-  } })
+export type OwnerAssistantApiContext = PersonalApiContext & {
+  role: 'owner' | 'admin'
+}
+
+export async function requireExecutiveAssistantApi(overrides: Partial<AccessDeps> = {}) {
+  const getOrg = overrides.getOrg ?? getCurrentOrg
+  const adminDb = overrides.adminDb ?? createAdminClient
+  return requirePersonalAssistantApi({
+    ...overrides,
+    hasAccess: overrides.hasAccess ?? (async (db, organizationId) => {
+      if (await loadPersonalAssistantAccess(adminDb(), organizationId)) return true
+      const org = await getOrg()
+      return Boolean(org && canUseBusinessExecutiveAgent(await organizationAgentKind(db, organizationId), org.role))
+    }),
+  })
+}
+
+/** 401 when signed out, 403 when not eligible or not an organization owner/admin. */
+export async function requireOwnerAssistantApi(
+  overrides: Partial<AccessDeps> = {}
+): Promise<OwnerAssistantApiContext | NextResponse> {
+  const getOrg = overrides.getOrg ?? getCurrentOrg
+  const org = await getOrg()
+  if (!org) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+
+  const access = await requireExecutiveAssistantApi(overrides)
+  if (access instanceof NextResponse) return access
+
+  if (org.role !== 'owner' && org.role !== 'admin') {
+    return NextResponse.json({ error: 'owner_permission_required' }, { status: 403 })
+  }
+
+  const { data: membership, error } = await access.admin
+    .from('organization_members')
+    .select('role')
+    .eq('organization_id', access.owner.organizationId)
+    .eq('user_id', access.owner.userId)
+    .maybeSingle()
+
+  if (error) return NextResponse.json({ error: 'owner_lookup_failed' }, { status: 500 })
+  const dbRole = typeof membership?.role === 'string' ? membership.role : ''
+  if (dbRole !== 'owner' && dbRole !== 'admin') {
+    return NextResponse.json({ error: 'owner_permission_required' }, { status: 403 })
+  }
+
+  return { ...access, role: dbRole }
 }
