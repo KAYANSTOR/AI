@@ -181,43 +181,88 @@ function WhatsAppLinkCard() {
   const [link, setLink] = useState<{ waLink: string; code: string; expiresAt: string } | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const operation = useRef(false)
+  const requestVersion = useRef(0)
 
   const load = useCallback(async () => {
-    try { setStatus(await getJson<LinkStatus>('/api/assistant/link')) } catch { setError('تعذّر تحميل حالة الربط.') }
+    const version = ++requestVersion.current
+    try {
+      const next = await getJson<LinkStatus>('/api/assistant/link')
+      if (version !== requestVersion.current) return
+      setStatus(next)
+      setError(null)
+      if (next.linked) setLink(null)
+    } catch {
+      if (version === requestVersion.current) setError('تعذّر تحميل حالة الربط. أعد المحاولة.')
+    }
   }, [])
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load()
   }, [load])
-  useVisiblePolling(load, Boolean(link) && !status?.linked)
+  useVisiblePolling(load, Boolean(link) && !status?.linked && !busy)
 
   async function generate() {
+    if (operation.current || !status?.configured) return
+    operation.current = true
+    ++requestVersion.current
     setBusy(true)
     setError(null)
-    const result = await postJson<{ waLink?: string; code?: string; expiresAt?: string; error?: string }>('/api/assistant/link')
-    setBusy(false)
-    if (!result.ok || !result.data.waLink || !result.data.code) { setError(result.status === 503 ? 'رقم Kayan AI المركزي غير مهيأ بعد.' : 'تعذّر إنشاء رمز التفعيل.'); return }
-    setLink({ waLink: result.data.waLink, code: result.data.code, expiresAt: result.data.expiresAt ?? '' })
+    try {
+      const result = await postJson<{ waLink?: string; code?: string; expiresAt?: string; error?: string }>('/api/assistant/link')
+      if (!result.ok || !result.data.waLink || !result.data.code) {
+        if (result.status === 503) setStatus((previous) => previous ? { ...previous, configured: false } : previous)
+        setError(result.status === 503 ? 'رقم Kayan AI المركزي غير مهيأ بعد.' : 'تعذّر إنشاء رمز التفعيل.')
+        return
+      }
+      setLink({ waLink: result.data.waLink, code: result.data.code, expiresAt: result.data.expiresAt ?? '' })
+    } catch {
+      setError('تعذّر الاتصال. حاول إنشاء الرابط مرة أخرى.')
+    } finally {
+      operation.current = false
+      setBusy(false)
+    }
   }
 
   async function unlink() {
+    if (operation.current) return
+    operation.current = true
+    ++requestVersion.current
     setBusy(true)
-    await fetch('/api/assistant/link', { method: 'DELETE' })
-    setBusy(false)
-    setLink(null)
-    await load()
+    setError(null)
+    try {
+      const response = await fetch('/api/assistant/link', { method: 'DELETE' })
+      if (!response.ok) {
+        setError('تعذّر إلغاء الربط. حاول مرة أخرى.')
+        return
+      }
+      setLink(null)
+      await load()
+    } catch {
+      setError('تعذّر الاتصال. تحقق من حالة الربط وأعد المحاولة.')
+    } finally {
+      operation.current = false
+      setBusy(false)
+    }
   }
 
-  if (!status) return null
+  if (!status) return (
+    <div className="rounded-2xl border border-border bg-surface p-4">
+      <p role={error ? 'alert' : 'status'} className="text-sm text-text-muted">{error ?? 'جارٍ التحقق من حالة ربط واتساب…'}</p>
+      {error && <Button className="mt-3" size="sm" variant="ghost" onClick={() => void load()}>إعادة المحاولة</Button>}
+    </div>
+  )
   if (status.linked) {
     return (
-      <div className="flex items-center gap-3 rounded-2xl border border-border bg-surface p-3">
+      <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-border bg-surface p-3">
         <span className="grid h-10 w-10 place-items-center rounded-xl bg-primary text-primary-dark"><CheckCircle2 size={20} aria-hidden /></span>
         <div className="min-w-0 flex-1">
           <p className="text-sm font-extrabold text-text">واتساب مرتبط</p>
           <p className="text-xs text-text-muted" dir="ltr">{status.phoneMasked}</p>
         </div>
-        <Button size="sm" variant="ghost" loading={busy} onClick={() => void unlink()}>إلغاء الربط</Button>
+        <Button size="sm" variant="ghost" loading={busy} disabled={busy} onClick={() => void unlink()}>إلغاء الربط</Button>
+        {error && <p role="alert" className="w-full rounded-xl bg-error-soft p-2.5 text-xs text-error">{error}</p>}
+        {!status.configured && <p className="w-full text-xs text-text-muted">الربط محفوظ، لكن البوت المركزي غير مهيأ حالياً.</p>}
       </div>
     )
   }
@@ -239,10 +284,11 @@ function WhatsAppLinkCard() {
           <p className="text-center text-xs text-text-muted">الرمز <span className="font-mono font-bold text-text" dir="ltr">تفعيل_{link.code}</span> صالح 15 دقيقة.</p>
         </div>
       ) : (
-        <Button className="mt-3" fullWidth loading={busy} disabled={!status.configured} onClick={() => void generate()}>
+        <Button className="mt-3" fullWidth loading={busy} disabled={busy || !status.configured} onClick={() => void generate()}>
           {status.configured ? 'إنشاء رابط التفعيل' : 'الرقم المركزي قيد التهيئة'}
         </Button>
       )}
+      {!status.configured && <Button className="mt-2" size="sm" variant="ghost" onClick={() => void load()}>إعادة فحص الجاهزية</Button>}
     </div>
   )
 }

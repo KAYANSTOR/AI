@@ -26,6 +26,12 @@ export function getCentralBotConfig(env: NodeJS.ProcessEnv = process.env): Centr
   }
 }
 
+/** Local configuration readiness for issuing activation links; not a live Meta probe. */
+export function getCentralLinkConfig(env: NodeJS.ProcessEnv = process.env): CentralBotConfig | null {
+  const config = getCentralBotConfig(env)
+  return config && /^[1-9][0-9]{7,14}$/.test(config.displayNumber) ? config : null
+}
+
 export function isCentralPhoneNumberId(phoneNumberId: string, env: NodeJS.ProcessEnv = process.env): boolean {
   const configured = String(env.KAYAN_CENTRAL_WA_PHONE_NUMBER_ID ?? '').trim()
   return Boolean(configured) && configured === phoneNumberId.trim()
