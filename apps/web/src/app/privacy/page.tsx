@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import Link from 'next/link'
 import { SiteHeader } from '@/components/site/site-header'
 import { SiteFooter } from '@/components/site/site-footer'
 
@@ -158,6 +159,9 @@ const SECTIONS: PolicySection[] = [
             ' أرسل الطلب من البريد المسجّل في الحساب عبر قنوات الدعم المتاحة في لوحة التحكم'
           )}
           ، وسنؤكد التنفيذ خلال 30 يوماً.
+        </p>
+        <p>
+          <Link href="/data-deletion">تعليمات تقديم طلب حذف البيانات</Link>
         </p>
       </>
     ),
