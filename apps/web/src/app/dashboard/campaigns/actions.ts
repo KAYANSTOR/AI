@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { requireAdminCapability, audit } from '@/lib/capabilities/guard'
 import { actionErrorMessage, dbActionError } from '@/lib/i18n/action-error'
+import { assertCampaignBusiness } from '@/lib/campaigns/access'
 import { materializeCampaignAudience } from '@/lib/campaigns'
 import type { SegmentCriteria } from '@/lib/segments'
 import { assertWithinLimit, EntitlementExceededError } from '@/lib/billing/entitlements'
@@ -20,6 +21,7 @@ export async function createCampaignAction(input: {
 }): Promise<CampaignResult> {
   try {
     const ctx = await requireAdminCapability(null)
+    await assertCampaignBusiness(ctx.db, ctx.organizationId)
     const name = input.name.trim()
     const body = input.templateBody.trim()
     if (!name) return { ok: false, error: 'الاسم مطلوب.' }
@@ -61,6 +63,7 @@ export async function startCampaignAction(campaignId: string): Promise<CampaignR
   try {
     const ctx = await requireAdminCapability(null)
 
+    await assertCampaignBusiness(ctx.db, ctx.organizationId)
     const { data: campaign, error: readError } = await ctx.db
       .from('campaigns')
       .select('id, status, segment_id, audience_criteria')
@@ -105,7 +108,7 @@ export async function startCampaignAction(campaignId: string): Promise<CampaignR
       throw err
     }
 
-    const { error } = await ctx.db
+    const { data: started, error } = await ctx.db
       .from('campaigns')
       .update({
         status: 'running',
@@ -114,8 +117,10 @@ export async function startCampaignAction(campaignId: string): Promise<CampaignR
       })
       .eq('id', campaignId)
       .eq('organization_id', ctx.organizationId)
+      .eq('status', campaign.status).select('id').maybeSingle()
 
     if (error) return { ok: false, error: dbActionError(error) }
+    if (!started) return { ok: false, error: 'تغيّرت حالة الحملة. حدّث الصفحة وحاول مجدداً.' }
 
     await audit(ctx, 'campaign.started', 'campaign', campaignId, { audienceSize })
     revalidatePath('/dashboard/campaigns')
@@ -128,14 +133,15 @@ export async function startCampaignAction(campaignId: string): Promise<CampaignR
 export async function pauseCampaignAction(campaignId: string): Promise<CampaignResult> {
   try {
     const ctx = await requireAdminCapability(null)
-    const { error } = await ctx.db
+    const { data: paused, error } = await ctx.db
       .from('campaigns')
       .update({ status: 'paused', updated_at: new Date().toISOString() })
       .eq('id', campaignId)
       .eq('organization_id', ctx.organizationId)
-      .eq('status', 'running')
+      .in('status', ['running', 'scheduled']).select('id').maybeSingle()
 
     if (error) return { ok: false, error: dbActionError(error) }
+    if (!paused) return { ok: false, error: 'الحملة ليست قيد التشغيل أو الجدولة.' }
     await audit(ctx, 'campaign.paused', 'campaign', campaignId)
     revalidatePath('/dashboard/campaigns')
     return { ok: true, campaignId }

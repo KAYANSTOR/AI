@@ -14,7 +14,7 @@ export function CampaignRowActions({
   const [error, setError] = useState<string | null>(null)
 
   const canStart = ['draft', 'scheduled', 'paused'].includes(status)
-  const canPause = status === 'running'
+  const canPause = status === 'running' || status === 'scheduled'
 
   return (
     <div className="space-y-1">

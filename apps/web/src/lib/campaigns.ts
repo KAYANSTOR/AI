@@ -2,7 +2,8 @@ import type { DbClient } from '@/lib/db/client'
 import { getConsentStatus, isMarketingConsentGranted } from '@/lib/channels/consent'
 import { enqueueOutbound } from '@/lib/channels/outbox'
 import { resolveSegmentContactIds, type SegmentCriteria } from '@/lib/segments'
-import { recordMeterUsage } from '@/lib/billing/entitlements'
+import { assertCampaignBusiness } from '@/lib/campaigns/access'
+import { assertWithinLimit, recordMeterUsage } from '@/lib/billing/entitlements'
 import { renderCampaignTemplate } from '@/lib/campaigns/template'
 
 export async function materializeCampaignAudience(
@@ -44,16 +45,51 @@ export async function materializeCampaignAudience(
     status: 'pending',
   }))
 
-  const { error } = await db.from('campaign_recipients').insert(rows)
-  if (error && error.code !== '23505') throw error
+  const { error } = await db.from('campaign_recipients').upsert(rows, { onConflict: 'campaign_id,contact_id', ignoreDuplicates: true })
+  if (error) throw error
 
   return contactIds.length
+}
+
+/** Scheduled activation must prepare the audience and validate the current plan
+ * before claiming the transition. A failed preparation leaves the schedule intact.
+ */
+export async function activateScheduledCampaign(
+  db: DbClient,
+  input: { organizationId: string; campaignId: string; now: string }
+): Promise<boolean> {
+  await assertCampaignBusiness(db, input.organizationId)
+  const { data: campaign, error } = await db.from('campaigns')
+    .select('id, segment_id, audience_criteria, scheduled_at')
+    .eq('id', input.campaignId).eq('organization_id', input.organizationId)
+    .eq('status', 'scheduled').lte('scheduled_at', input.now).maybeSingle()
+  if (error) throw error
+  if (!campaign) return false
+  const audienceSize = await materializeCampaignAudience(db, {
+    organizationId: input.organizationId,
+    campaignId: input.campaignId,
+    segmentId: campaign.segment_id,
+    criteria: campaign.audience_criteria as SegmentCriteria | null,
+  })
+  if (!audienceSize) throw new Error('campaign_empty_audience')
+  const { count, error: countError } = await db.from('campaign_recipients')
+    .select('id', { count: 'exact', head: true })
+    .eq('organization_id', input.organizationId).eq('campaign_id', input.campaignId).eq('status', 'pending')
+  if (countError || count === null || count === 0) throw new Error('campaign_audience_unavailable')
+  await assertWithinLimit(db, input.organizationId, 'campaign_sends', count)
+  const { data: claimed, error: claimError } = await db.from('campaigns')
+    .update({ status: 'running', started_at: input.now, updated_at: input.now })
+    .eq('organization_id', input.organizationId).eq('id', input.campaignId)
+    .eq('status', 'scheduled').eq('scheduled_at', campaign.scheduled_at).select('id').maybeSingle()
+  if (claimError) throw claimError
+  return Boolean(claimed)
 }
 
 export async function processCampaignBatch(
   db: DbClient,
   input: { organizationId: string; campaignId: string; limit?: number }
 ): Promise<{ queued: number; skipped: number; failed: number; completed: boolean }> {
+  await assertCampaignBusiness(db, input.organizationId)
   const { data: campaign, error } = await db
     .from('campaigns')
     .select(
@@ -65,7 +101,7 @@ export async function processCampaignBatch(
 
   if (error) throw error
   if (!campaign || campaign.status !== 'running') {
-    return { queued: 0, skipped: 0, failed: 0, completed: true }
+    return { queued: 0, skipped: 0, failed: 0, completed: false }
   }
 
   const limit = Math.min(
@@ -73,15 +109,16 @@ export async function processCampaignBatch(
     Math.max(1, campaign.rate_limit_per_minute ?? 30)
   )
 
-  const { data: recipients } = await db
+  const { data: recipients, error: recipientsError } = await db
     .from('campaign_recipients')
     .select('id, contact_id')
     .eq('campaign_id', campaign.id)
     .eq('organization_id', input.organizationId)
     .eq('status', 'pending')
-    .limit(limit)
+    .order('id').limit(limit)
+  if (recipientsError) throw recipientsError
 
-  const { data: channel } = await db
+  const { data: channel, error: channelError } = await db
     .from('channels')
     .select('id, business_id')
     .eq('organization_id', input.organizationId)
@@ -89,12 +126,26 @@ export async function processCampaignBatch(
     .eq('is_active', true)
     .limit(1)
     .maybeSingle()
+  if (channelError) throw channelError
 
   let queued = 0
   let skipped = 0
   let failed = 0
 
   for (const row of recipients ?? []) {
+    // Verify ownership before consulting consent or resolving a recipient identity.
+    const { data: contact, error: contactError } = await db
+      .from('contacts').select('phone, full_name')
+      .eq('id', row.contact_id).eq('organization_id', input.organizationId).maybeSingle()
+    if (contactError) throw contactError
+    if (!contact) {
+      const { error: skipError } = await db.from('campaign_recipients')
+        .update({ status: 'skipped', skip_reason: 'contact_not_in_workspace' })
+        .eq('id', row.id).eq('organization_id', input.organizationId).eq('status', 'pending')
+      if (skipError) throw skipError
+      skipped++
+      continue
+    }
     if (campaign.require_consent) {
       const consent = await getConsentStatus(db, row.contact_id, campaign.channel, 'marketing')
       if (!isMarketingConsentGranted(consent)) {
@@ -121,20 +172,15 @@ export async function processCampaignBatch(
       continue
     }
 
-    const { data: contact } = await db
-      .from('contacts')
-      .select('phone, full_name')
-      .eq('id', row.contact_id)
-      .eq('organization_id', input.organizationId)
-      .maybeSingle()
-
-    const { data: identity } = await db
+    const { data: identity, error: identityError } = await db
       .from('contact_identities')
       .select('external_user_id, external_phone')
       .eq('contact_id', row.contact_id)
       .eq('channel', campaign.channel)
       .limit(1)
       .maybeSingle()
+
+    if (identityError) throw identityError
 
     const recipient =
       identity?.external_user_id || identity?.external_phone || contact?.phone || ''
@@ -197,16 +243,17 @@ export async function processCampaignBatch(
     }
   }
 
-  const { count: remaining } = await db
+  const { count: remaining, error: remainingError } = await db
     .from('campaign_recipients')
     .select('id', { count: 'exact', head: true })
     .eq('campaign_id', campaign.id)
     .eq('organization_id', input.organizationId)
     .eq('status', 'pending')
 
-  const completed = (remaining ?? 0) === 0
+  if (remainingError || remaining === null) throw new Error('campaign_remaining_unavailable')
+  let completed = remaining === 0
   if (completed) {
-    await db
+    const { data: changed, error: completionError } = await db
       .from('campaigns')
       .update({
         status: 'completed',
@@ -215,7 +262,9 @@ export async function processCampaignBatch(
       })
       .eq('id', campaign.id)
       .eq('organization_id', input.organizationId)
-      .eq('status', 'running')
+      .eq('status', 'running').select('id').maybeSingle()
+    if (completionError) throw completionError
+    completed = Boolean(changed)
   }
 
   return { queued, skipped, failed, completed }

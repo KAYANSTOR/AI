@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { isAuthorizedCronRequest } from '@/lib/cron/auth'
 import { createAdminClient } from '@/lib/db/admin'
-import { processCampaignBatch } from '@/lib/campaigns'
+import { activateScheduledCampaign, processCampaignBatch } from '@/lib/campaigns'
 import { DEFAULT_SEND_WINDOW, isInQuietHours } from '@/lib/channels/quiet-hours'
 import { publicWebhookError } from '@/lib/runtime/security'
 
@@ -20,12 +20,20 @@ async function handle(req: NextRequest) {
   const db = createAdminClient()
   const now = new Date().toISOString()
 
-  // Promote due scheduled campaigns
-  await db
-    .from('campaigns')
-    .update({ status: 'running', started_at: now, updated_at: now })
-    .eq('status', 'scheduled')
-    .lte('scheduled_at', now)
+  // Prepare and verify each due campaign before promoting it.
+  const { data: scheduled, error: scheduledError } = await db.from('campaigns')
+    .select('id, organization_id').eq('status', 'scheduled').lte('scheduled_at', now)
+    .order('scheduled_at').order('id').limit(20)
+  if (scheduledError) return NextResponse.json({ error: publicWebhookError() }, { status: 500 })
+  let activationFailures = 0
+  for (const campaign of scheduled ?? []) {
+    try {
+      await activateScheduledCampaign(db, { organizationId: campaign.organization_id, campaignId: campaign.id, now })
+    } catch {
+      activationFailures++
+      console.error('scheduled_campaign_activation_failed', { campaignId: campaign.id })
+    }
+  }
 
   const { data: running, error } = await db
     .from('campaigns')
@@ -42,15 +50,21 @@ async function handle(req: NextRequest) {
   let failed = 0
   let completed = 0
 
+  let batchFailures = 0
   for (const c of running ?? []) {
-    const result = await processCampaignBatch(db, {
-      organizationId: c.organization_id,
-      campaignId: c.id,
-    })
-    queued += result.queued
-    skipped += result.skipped
-    failed += result.failed
-    if (result.completed) completed++
+    try {
+      const result = await processCampaignBatch(db, {
+        organizationId: c.organization_id,
+        campaignId: c.id,
+      })
+      queued += result.queued
+      skipped += result.skipped
+      failed += result.failed
+      if (result.completed) completed++
+    } catch {
+      batchFailures++
+      console.error('campaign_batch_failed', { campaignId: c.id })
+    }
   }
 
   return NextResponse.json({
@@ -59,7 +73,9 @@ async function handle(req: NextRequest) {
     skipped,
     failed,
     completed,
-  })
+    activationFailures,
+    batchFailures,
+  }, { status: activationFailures || batchFailures ? 503 : 200 })
 }
 
 export const GET = handle

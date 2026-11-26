@@ -137,13 +137,14 @@ export async function resolveSegmentContactIds(
   let ids = rows.map((c) => c.id as string)
 
   if (criteria.leadStatuses?.length && ids.length) {
-    const { data: leads } = await db
+    const { data: leads, error: leadsError } = await db
       .from('leads')
       .select('contact_id')
       .eq('organization_id', organizationId)
       .in('status', criteria.leadStatuses)
       .in('contact_id', ids)
 
+    if (leadsError) throw leadsError
     const withLead = new Set((leads ?? []).map((l) => l.contact_id as string))
     ids = ids.filter((id) => withLead.has(id))
   }
