@@ -51,7 +51,7 @@ describe('Gemini 3.8 provider contract', () => {
     expect(headers.get('x-goog-api-key')).toBe('test-key')
 
     const body = JSON.parse(String(request?.body))
-    expect(body.generationConfig).toEqual({ maxOutputTokens: 1024 })
+    expect(body.generationConfig).toEqual({ maxOutputTokens: 4096, thinkingConfig: { thinkingLevel: 'low' } })
     expect(body.generationConfig.temperature).toBeUndefined()
   })
 
@@ -69,7 +69,7 @@ describe('Gemini 3.8 provider contract', () => {
       isWhatsApp: true,
     })
 
-    expect(body?.generationConfig).toEqual({ maxOutputTokens: 350, thinkingConfig: { thinkingLevel: 'low' } })
+    expect(body?.generationConfig).toEqual({ maxOutputTokens: 2048, thinkingConfig: { thinkingLevel: 'low' } })
   })
 
   test('retries transient 503 responses before switching to the Flash fallback model', async () => {
