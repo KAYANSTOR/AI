@@ -20,7 +20,7 @@ export function SiteFooter() {
           <div className="space-y-4">
             <BrandLockup />
             <p className="max-w-sm text-sm leading-7 text-text-muted">
-              منصة واحدة يستقبل بها الذكاء الاصطناعي عملاء الشركات على الهاتف وواتساب، ويسجّل كل
+              منصة واحدة يستقبل بها الذكاء الاصطناعي عملاء الشركات عبر قنوات المراسلة المرتبطة، ويسجّل كل
               محادثة وعميل وموعد في مكان واحد.
             </p>
           </div>

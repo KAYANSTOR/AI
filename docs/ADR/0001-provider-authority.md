@@ -1,3 +1,3 @@
 # ADR-0001 Provider Authority
 
-Vapi is the only production voice provider. Retell is historical/deprecated. Another voice provider requires an explicit adapter and ADR.
+Current provider authority is scoped to the supported messaging integrations. Provider eligibility, exact tenant routing and signature verification are mandatory. Any new channel requires an explicit adapter, security review and product approval.

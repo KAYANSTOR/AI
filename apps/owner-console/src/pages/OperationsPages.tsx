@@ -173,8 +173,6 @@ export function ConversationsPage({
               <option value="whatsapp">WhatsApp</option>
               <option value="instagram">Instagram</option>
               <option value="telegram">Telegram</option>
-              <option value="sms">SMS</option>
-              <option value="voice_vapi">Voice Vapi</option>
               <option value="webchat">Webchat</option>
             </select>
           </div>
@@ -299,7 +297,6 @@ export function ConversationsPage({
                 <option value="whatsapp">WhatsApp</option>
                 <option value="instagram">Instagram</option>
                 <option value="telegram">Telegram</option>
-                <option value="sms">SMS</option>
                 <option value="webchat">Webchat</option>
               </select>
             </div>
@@ -338,7 +335,7 @@ export function ChannelsPage({
   const [newSecret, setNewSecret] = React.useState('');
 
   const [wsId, setWsId] = React.useState('');
-  const [channelType, setChannelType] = React.useState<'whatsapp' | 'instagram' | 'telegram' | 'sms' | 'voice_vapi' | 'webchat'>('whatsapp');
+  const [channelType, setChannelType] = React.useState<'whatsapp' | 'instagram' | 'telegram' | 'webchat'>('whatsapp');
   const [displayName, setDisplayName] = React.useState('');
   const [secretToken, setSecretToken] = React.useState('');
 
@@ -503,8 +500,6 @@ export function ChannelsPage({
                 <option value="whatsapp">WhatsApp Cloud API</option>
                 <option value="telegram">Telegram Bot</option>
                 <option value="instagram">Instagram DM</option>
-                <option value="sms">SMS (Twilio)</option>
-                <option value="voice_vapi">Voice AI (Vapi)</option>
                 <option value="webchat">Webchat</option>
               </select>
             </div>

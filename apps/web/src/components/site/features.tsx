@@ -4,7 +4,6 @@ import {
   Camera,
   Inbox,
   MessageCircle,
-  PhoneCall,
   Repeat2,
   Sparkles,
   UserPlus,
@@ -25,12 +24,6 @@ const FEATURES: readonly Feature[] = [
     icon: Bot,
     title: 'موظف الاستقبال الذكي',
     body: 'وكيل واحد يرد نيابة عن شركتك، يفهم الطلب، ويقرّر الخطوة المناسبة داخل سجل العميل.',
-    status: 'live',
-  },
-  {
-    icon: PhoneCall,
-    title: 'الهاتف',
-    body: 'اربط رقم شركتك ليستقبل الوكيل المكالمات ويجيب على أسئلة الخدمات ويحجز المواعيد.',
     status: 'live',
   },
   {
@@ -66,7 +59,7 @@ const FEATURES: readonly Feature[] = [
   {
     icon: Repeat2,
     title: 'المتابعة',
-    body: 'سلاسل متابعة تلقائية بحسب الحدث: مكالمة فائتة، عدم حضور، أو عميل جديد.',
+    body: 'سلاسل متابعة تلقائية بحسب الحدث: محادثة جديدة، عدم حضور، أو عميل جديد.',
     status: 'soon',
   },
   {

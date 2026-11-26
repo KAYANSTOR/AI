@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test'
+import { CHANNEL_SPECS, getChannelSpec } from '../src/lib/channels/management'
 import {
   CHANNEL_CREDENTIAL_FIELDS,
   PROVIDER_FOR_CHANNEL,
@@ -15,6 +16,12 @@ import {
 } from '../src/lib/channels/contracts'
 
 describe('provider channel contracts', () => {
+  test('only current messaging channels are offered in the customer channel catalog', () => {
+    expect(CHANNEL_SPECS.map((spec) => spec.type).sort()).toEqual(['instagram', 'messenger', 'telegram', 'whatsapp'])
+    expect(getChannelSpec('sms')).toBeNull()
+    expect(getChannelSpec('phone')).toBeNull()
+  })
+
   test('declares Telegram and Messenger as persisted provider channel types', () => {
     const types: ProviderChannelType[] = ['telegram', 'messenger']
     expect(types).toEqual(['telegram', 'messenger'])

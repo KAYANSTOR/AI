@@ -1,8 +1,5 @@
 # Channel Specification
 
-## Phone
-Existing business number → carrier forwarding → Vapi → authenticated webhook/runtime.
-
 ## WhatsApp
 Meta verification/signature → exact phone_number_id → Agent Runtime → Meta send.
 
@@ -11,7 +8,7 @@ Meta verification/signature → exact account ID → Agent Runtime → Meta send
 
 ## الإصدار المركّز
 
-WhatsApp هو قناة الرسائل الوحيدة الظاهرة للمستخدم في الإصدار الأول. الهاتف اختياري ومؤجل إلى ما بعد استقرار مسار WhatsApp. Instagram وSMS غير ظاهرين في تجربة العميل، ويمكن إبقاء موصلاتهما الخلفية مؤقتًا للتوافق دون اعتبارهما جزءًا من المنتج.
+يقتصر نطاق المنتج على قنوات المراسلة المدعومة: واتساب، إنستغرام، Messenger وتيليجرام بحسب إتاحة التكامل والتحقق من الربط. لا يُعد وجود موصل قديم في الكود أو سجل سابق في قاعدة البيانات دليلاً على إتاحته في المنتج.
 
 ## Universal
 Verify → deduplicate → exact tenant → identity → conversation → persist → eligibility → agent → outbound → audit/usage.

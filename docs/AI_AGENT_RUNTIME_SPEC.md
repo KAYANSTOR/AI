@@ -11,10 +11,10 @@ Tool Executor = backend validation and side effects.
 Database/provider = source of truth.
 
 ## Exact tenant keys
-Vapi phone number ID.
 WhatsApp phone_number_id.
 Instagram account ID.
-SMS destination number.
+Telegram bot ID.
+Messenger Page ID.
 There is no first-organization fallback.
 
 ## Tool execution

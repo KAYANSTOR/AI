@@ -23,7 +23,7 @@
 | `NEXT_PUBLIC_SITE_URL` و`NEXT_PUBLIC_APP_URL` | `https://${{RAILWAY_PUBLIC_DOMAIN}}` أو النطاق الخاص |
 | `CRON_SECRET` | 32 حرفاً على الأقل |
 | `GEMINI_API_KEY`، `GEMINI_MODEL` | نموذج الذكاء الاصطناعي |
-| متغيرات Meta وTwilio وVapi وStripe | حسب القنوات المفعلة (انظر `.env.example`) |
+| متغيرات Meta وStripe | حسب القنوات المفعلة (انظر `.env.example`) |
 
 متغيرات `NEXT_PUBLIC_*` تُضمَّن وقت البناء، لذا أعد النشر بعد تغييرها.
 
@@ -38,7 +38,7 @@
    ```
 
 4. نفّذ النقل بإزالة `--dry-run`. يتم كل شيء في معاملة واحدة، ويُنقل الحسابات مع تجزئة كلمات المرور كما هي، ثم يتحقق السكربت من أعداد الصفوف.
-5. حدّث روابط webhooks لدى Meta وTwilio وVapi وStripe إلى النطاق الجديد.
+5. حدّث روابط webhooks لدى Meta وStripe إلى النطاق الجديد.
 
 ## إعادة تعيين كلمة مرور
 

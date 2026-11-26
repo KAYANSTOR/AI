@@ -4,7 +4,7 @@ import { KayanSelect } from '@/components/ui/kayan-select'
 import { useCallback, useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { useHistoryDismiss } from '@/hooks/use-history-dismiss'
-import { CheckCircle2, CircleAlert, Link2, Loader2, MessageSquare, Phone, Power, RefreshCw, ArrowRight, Bot, MessageCircle } from 'lucide-react'
+import { CheckCircle2, CircleAlert, Link2, Loader2, MessageSquare, Power, RefreshCw, ArrowRight, Bot, MessageCircle } from 'lucide-react'
 import {
   saveChannelAction,
   setChannelActiveAction,
@@ -126,12 +126,6 @@ export function ChannelsConsole({
                 </svg>
               )
             }
-            if (card.type === 'phone') {
-              return <Phone className="h-6 w-6" aria-hidden="true" />
-            }
-            if (card.type === 'sms') {
-              return <MessageSquare className="h-6 w-6" aria-hidden="true" />
-            }
             if (card.type === 'messenger') return <MessageCircle className="h-6 w-6" aria-hidden="true" />
             return <MessageSquare className="h-6 w-6" aria-hidden="true" />
           }
@@ -187,7 +181,7 @@ export function ChannelsConsole({
         <div className="grid gap-3 sm:grid-cols-2">
           {cards.filter((card) => card.type !== 'whatsapp' && (!card.connected || card.verificationStatus !== 'verified')).map((card) => {
             const state = stateOf(card)
-            const getIcon = () => card.type === 'phone' ? <Phone className="h-6 w-6" aria-hidden="true" /> : card.type === 'messenger' ? <MessageCircle className="h-6 w-6" aria-hidden="true" /> : <MessageSquare className="h-6 w-6" aria-hidden="true" />
+            const getIcon = () => card.type === 'messenger' ? <MessageCircle className="h-6 w-6" aria-hidden="true" /> : <MessageSquare className="h-6 w-6" aria-hidden="true" />
             return (
               <UIChannelCard
                 key={card.key}
@@ -531,9 +525,7 @@ function ChannelDialog({
             ) : null}
             <label className="block">
               <span className="text-sm font-semibold text-text">
-                {card.type === 'instagram'
-                  ? 'معرّف حساب Instagram Business'
-                  : card.type === 'phone' ? 'معرّف رقم Vapi' : 'رقم Twilio'}
+                {spec.bindingLabel}
               </span>
               <span className="mt-1 block text-xs leading-5 text-text-muted">
                 {card.type === 'instagram'
@@ -545,7 +537,7 @@ function ChannelDialog({
                 onChange={(event) => setIdentifier(event.target.value)}
                 dir="ltr"
                 autoComplete="off"
-                inputMode={card.type === 'sms' ? 'tel' : 'numeric'}
+                inputMode="numeric"
                 placeholder={spec.bindingPlaceholder}
                 className="mt-2 min-h-12 w-full rounded-xl border border-border bg-background px-3 text-base text-text outline-none focus:border-secondary focus:ring-2 focus:ring-accent/40"
                 disabled={busy || !canManage}

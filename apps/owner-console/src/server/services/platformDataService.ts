@@ -275,7 +275,7 @@ export async function platformChannels() {
     (SELECT COUNT(*) FROM messages m JOIN conversations v ON v.id=m.conversation_id WHERE v.channel_id=c.id AND m.direction='outbound')::int messages_sent,
     (SELECT COUNT(*) FROM webhook_events e WHERE e.channel_id=c.id AND e.processing_status='failed')::int error_count,
     (SELECT COUNT(*) FROM conversations v WHERE v.channel_id=c.id)::int conversations_count
-    FROM channels c JOIN organizations o ON o.id=c.organization_id ORDER BY c.created_at DESC LIMIT 1000`)};
+    FROM channels c JOIN organizations o ON o.id=c.organization_id WHERE c.channel_type NOT IN ('sms','phone') ORDER BY c.created_at DESC LIMIT 1000`)};
 }
 
 export async function platformConversations(f:{search?:string;status?:string;channelType?:string;agentId?:string;userId?:string}={}) {
@@ -653,7 +653,7 @@ export async function platformCreateConversation(p:{workspaceId:string;userId:st
   const workspaceId=p.workspaceId.trim(),userId=p.userId.trim(),handle=p.customerHandle.trim(),message=p.initialMessage.trim();
   if(!workspaceId||!userId||handle.length<2||handle.length>255||message.length>10000)throw new Error('بيانات المحادثة غير مكتملة أو تتجاوز الحد المسموح.');
   const channelType=p.channelType==='webchat'?'website':p.channelType==='voice_vapi'?'phone':p.channelType;
-  if(!['whatsapp','instagram','telegram','sms','website','phone','messenger'].includes(channelType))throw new Error('نوع القناة غير مدعوم.');
+  if(!['whatsapp','instagram','telegram','website','messenger'].includes(channelType))throw new Error('نوع القناة غير مدعوم.');
   const [workspace]=await query<{organization_id:string;business_id:string;owner_user_id:string}>(`SELECT o.id::text organization_id,b.id::text business_id,
     (SELECT user_id::text FROM organization_members WHERE organization_id=o.id AND role='owner' ORDER BY created_at LIMIT 1) owner_user_id
     FROM organizations o LEFT JOIN businesses b ON b.organization_id=o.id WHERE o.id=$1::uuid`,[workspaceId]);
@@ -663,7 +663,7 @@ export async function platformCreateConversation(p:{workspaceId:string;userId:st
   if(!channel.is_active)throw new Error('القناة متوقفة حالياً.');
   return sql().begin(async tx=>{
     const [contact]=await tx.unsafe(`INSERT INTO contacts(organization_id,first_name) VALUES($1::uuid,$2) RETURNING id::text id`,[workspaceId,handle.slice(0,100)]);
-    if(['whatsapp','sms','phone'].includes(channelType))
+    if(channelType==='whatsapp')
       await tx.unsafe(`INSERT INTO contact_identities(contact_id,channel,external_phone) VALUES($1::uuid,$2,$3)`,[contact.id,channelType,handle]);
     else if(['telegram','website'].includes(channelType))
       await tx.unsafe(`INSERT INTO contact_identities(contact_id,channel,external_user_id) VALUES($1::uuid,$2,$3)`,[contact.id,channelType,handle]);
@@ -1056,7 +1056,7 @@ export async function platformReport(type:string) {
         CROSS JOIN LATERAL public.agent_quality_summary(o.id, now() - interval '30 days') q
         WHERE q.resolved > 0 OR q.tasks > 0 ORDER BY o.name`,
     },
-    channels:{title:'تقرير استخدام القنوات',headers:[{key:'channel_type',label:'القناة'},{key:'channels',label:'عدد القنوات'},{key:'conversations',label:'المحادثات'},{key:'messages',label:'الرسائل'}],sql:`SELECT ch.channel_type,COUNT(DISTINCT ch.id)::int channels,COUNT(DISTINCT c.id)::int conversations,COUNT(m.id)::int messages FROM channels ch LEFT JOIN conversations c ON c.channel_id=ch.id LEFT JOIN messages m ON m.conversation_id=c.id GROUP BY ch.channel_type ORDER BY channels DESC`},
+    channels:{title:'تقرير استخدام القنوات',headers:[{key:'channel_type',label:'القناة'},{key:'channels',label:'عدد القنوات'},{key:'conversations',label:'المحادثات'},{key:'messages',label:'الرسائل'}],sql:`SELECT ch.channel_type,COUNT(DISTINCT ch.id)::int channels,COUNT(DISTINCT c.id)::int conversations,COUNT(m.id)::int messages FROM channels ch LEFT JOIN conversations c ON c.channel_id=ch.id LEFT JOIN messages m ON m.conversation_id=c.id WHERE ch.channel_type NOT IN ('sms','phone') GROUP BY ch.channel_type ORDER BY channels DESC`},
     errors:{title:'تقرير الأخطاء',headers:[{key:'source',label:'المصدر'},{key:'message',label:'الخطأ'},{key:'created_at',label:'التاريخ'}],sql:`SELECT 'agent_run' source,COALESCE(error_code,'failed') message,created_at::text created_at FROM agent_runs WHERE status IN('failed','blocked') UNION ALL SELECT 'webhook_event',COALESCE(error_message,'failed'),received_at::text FROM webhook_events WHERE processing_status='failed' ORDER BY created_at DESC LIMIT 2000`},
     activity:{title:'تقرير النشاط والتدقيق',headers:[{key:'organization_name',label:'مساحة العمل'},{key:'action',label:'الإجراء'},{key:'entity_type',label:'نوع السجل'},{key:'created_at',label:'التاريخ'}],sql:`SELECT o.name organization_name,e.action,e.entity_type,e.created_at::text created_at FROM audit_events e LEFT JOIN organizations o ON o.id=e.organization_id ORDER BY e.created_at DESC LIMIT 2000`}
   };

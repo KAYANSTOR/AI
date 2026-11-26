@@ -1,6 +1,6 @@
 # KAYAN AI
 
-> KAYAN AI is an Arabic-first AI receptionist platform for businesses. It helps teams respond to customers across connected phone and messaging channels, qualify leads, book appointments, and keep customer conversations organized in one workspace.
+> KAYAN AI is an Arabic-first AI receptionist platform for businesses. It helps teams respond to customers across connected messaging channels, qualify leads, book appointments, and keep customer conversations organized in one workspace.
 
 ## Official website
 
@@ -9,7 +9,7 @@
 ## What the platform does
 
 - AI-assisted customer reception and replies using each business's configured knowledge and services.
-- Customer conversations across connected WhatsApp, Instagram, and phone channels.
+- Customer conversations across connected WhatsApp and other connected messaging channels.
 - Lead capture, qualification, status tracking, and follow-up.
 - Appointment availability, booking, confirmation, and reminders.
 - Human handoff when a customer needs a staff member.

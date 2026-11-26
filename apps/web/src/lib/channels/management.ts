@@ -50,22 +50,6 @@ export const CHANNEL_SPECS: readonly ChannelSpec[] = [
     ],
     testScope: 'أن المعرّف محفوظ ونشط وأن النظام يوجّه رسائل هذا الحساب إلى شركتك.',
   },
-  {
-    type: 'sms',
-    label: 'الرسائل النصية SMS',
-    provider: 'Twilio',
-    bindingColumn: 'external_identifier',
-    bindingLabel: 'رقم Twilio المستخدم للإرسال',
-    bindingPlaceholder: 'مثال +12025550123',
-    bindingHint: 'الرقم السحابي الذي يستقبل رسائل العملاء. الربط يتم على الرقم المُستقبِل (To) بنظام E.164.',
-    publicNumberLabel: null,
-    setup: [
-      'أنشئ رقمًا سحابيًا في Twilio.',
-      'اضبط Webhook للرسائل على عنوان مشروعك: /api/sms/webhook',
-      'أدخل الرقم بصيغة E.164 ثم اضغط ربط.',
-    ],
-    testScope: 'أن الرقم محفوظ ونشط وأن النظام يوجّه رسائل هذا الرقم إلى شركتك.',
-  },
 
   {
     type: 'telegram',
@@ -100,22 +84,6 @@ export const CHANNEL_SPECS: readonly ChannelSpec[] = [
       'سيتحقق Kayan AI من صلاحية الصفحة واشتراك Webhook قبل تفعيل القناة.',
     ],
     testScope: 'التحقق من هوية صفحة Facebook وصلاحية رمزها واشتراك التطبيق في إشعارات الرسائل.',
-  },
-  {
-    type: 'phone',
-    label: 'الهاتف والمكالمات',
-    provider: 'Vapi',
-    bindingColumn: 'provider_account_id',
-    bindingLabel: 'معرّف رقم Vapi (phone number ID)',
-    bindingPlaceholder: 'مثال 3a1b2c3d-…',
-    bindingHint: 'معرّف رقم Vapi الذي تستقبل عليه المكالمات بعد التحويل.',
-    publicNumberLabel: 'رقم شركتك الحالي (الرقم الذي يتصل به العملاء)',
-    setup: [
-      'ابنِ رقمك الحالي كما هو — لا نبيع أرقامًا ولا نطلب رقمًا جديدًا.',
-      'حوّل المكالمات من رقمك الحالي إلى رقم Vapi.',
-      'املأ رقمك الحالي ومعرّف رقم Vapi ثم اضغط ربط.',
-    ],
-    testScope: 'أن معرّف Vapi محفوظ ونشط وأن النظام يوجّه مكالمات هذا الرقم إلى شركتك.',
   },
 ]
 

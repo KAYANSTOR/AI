@@ -11,7 +11,7 @@ export const metadata: Metadata = {
 }
 
 /** Effective date shown on the page. Update it whenever the policy text changes. */
-const EFFECTIVE_DATE = '11 نوفمبر 2026'
+const EFFECTIVE_DATE = '26 نوفمبر 2026'
 
 /** Optional public contact address for privacy requests, configured per deployment. */
 const contactEmail = process.env.NEXT_PUBLIC_PRIVACY_CONTACT_EMAIL?.trim()
@@ -25,7 +25,7 @@ const SECTIONS: PolicySection[] = [
     body: (
       <p>
         تشرح هذه السياسة كيف تتعامل منصة KAYAN AI («المنصة»، «نحن») مع البيانات عند استخدام موقعنا
-        ولوحة التحكم، وعند ربط الشركات لقنواتها مثل واتساب للأعمال وإنستغرام والهاتف والرسائل النصية.
+        ولوحة التحكم، وعند ربط الشركات لقنواتها مثل واتساب للأعمال وإنستغرام وقنوات المراسلة المرتبطة.
         تعمل المنصة لصالح الشركات المشتركة («العملاء»)، وتعالج بيانات عملائهم النهائيين نيابةً عنهم
         ووفق تعليماتهم.
       </p>
@@ -98,9 +98,6 @@ const SECTIONS: PolicySection[] = [
           </li>
           <li>
             <strong>Railway:</strong> لاستضافة التطبيق وقاعدة البيانات.
-          </li>
-          <li>
-            <strong>Vapi وTwilio:</strong> للمكالمات الهاتفية والرسائل النصية عند تفعيل هذه القنوات.
           </li>
           <li>
             <strong>Stripe:</strong> لمعالجة المدفوعات عند الاشتراك. لا نخزّن بيانات البطاقات.

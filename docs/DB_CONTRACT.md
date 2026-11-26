@@ -6,11 +6,9 @@ Organization → Business → Location → Channel → Agent.
 ## Runtime tables
 businesses, business_locations, channels, ai_agents, agent_prompt_versions, agent_tool_policies, pending_actions, conversations, messages, webhook_events, outbox_events, agent_runs, tool_executions, audit_events, consents, usage_ledger, billing_entitlements.
 
-## Canonical channel bindings
-- Phone: channel_type=phone + provider_account_id=Vapi phone number ID.
+## Canonical channel bindings (current product scope)
 - WhatsApp: provider_account_id=phone_number_id.
 - Instagram: provider_account_id=account ID.
-- SMS: external_identifier=Twilio To number.
 - Telegram: channel_type=telegram; bot token and webhook secret belong in encrypted provider_credentials, never in channel identifiers.
 - Facebook Messenger: channel_type=messenger; Page identity is a provider account binding and Page access token belongs in encrypted provider_credentials.
 - Website chat: channel_type=website; public widget key is an identifier, while its signing secret belongs in encrypted provider_credentials.

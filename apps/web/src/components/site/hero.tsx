@@ -1,4 +1,4 @@
-import { ArrowLeft, CalendarCheck, Camera, Check, MessageCircle, PhoneIncoming, UserRound } from 'lucide-react'
+import { ArrowLeft, CalendarCheck, Camera, Check, MessageCircle, UserRound } from 'lucide-react'
 import { Section } from './section'
 import { PrimaryCta, SecondaryCta } from './cta'
 
@@ -7,7 +7,6 @@ const HERO_FACTS = ['إعداد موجّه خطوة بخطوة', 'واجهة و�
 const CHANNELS = [
   { icon: MessageCircle, name: 'واتساب' },
   { icon: Camera, name: 'إنستغرام' },
-  { icon: PhoneIncoming, name: 'المكالمات' },
 ] as const
 
 export function Hero() {
@@ -25,7 +24,7 @@ export function Hero() {
           </h1>
 
           <p className="mt-6 max-w-xl text-base leading-8 text-text-muted sm:text-lg sm:leading-9">
-            KAYAN AI يرد على عملائك في واتساب وإنستغرام والهاتف من معلومات شركتك، يؤهّل الطلب، يحجز
+            KAYAN AI يرد على عملائك في قنوات المراسلة المرتبطة، اعتماداً على معلومات شركتك، يؤهّل الطلب، يحجز
             الموعد، ويسلّم فريقك محادثة مرتبة في لوحة واحدة.
           </p>
 
@@ -49,7 +48,7 @@ export function Hero() {
           </ul>
 
           <div className="mt-10 flex flex-wrap items-center gap-x-5 gap-y-3 border-t border-border pt-6 text-sm text-text-muted">
-            <span className="text-xs font-medium text-text-muted">يعمل عبر</span>
+            <span className="text-xs font-medium text-text-muted">قنوات المراسلة</span>
             {CHANNELS.map(({ icon: Icon, name }) => (
               <span key={name} className="inline-flex items-center gap-2 font-medium text-text">
                 <Icon size={16} aria-hidden="true" className="text-text-muted" />

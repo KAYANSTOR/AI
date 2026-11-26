@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, CheckCircle2, Loader2, MessageCircle, Phone } from 'lucide-react'
+import { ArrowLeft, CheckCircle2, Loader2, MessageCircle } from 'lucide-react'
 import { connectWhatsAppAction } from './actions'
 import { CONNECTION_STATE_LABELS, type ChannelConnectionState } from '@/lib/channels/connect'
 import {
@@ -183,34 +183,6 @@ export function StageConnect({
               .
             </p>
           </details>
-        ) : null}
-      </section>
-
-      <section className="rounded-2xl border border-border bg-background p-5">
-        <header className="flex items-start gap-3">
-          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary-light/30 text-secondary">
-            <Phone size={22} aria-hidden="true" />
-          </span>
-          <div className="min-w-0">
-            <h2 className="text-base font-bold text-text">المكالمات</h2>
-            <p className="mt-0.5 text-xs leading-5 text-text-muted">
-              استقبل المكالمات عبر وكيل صوتي دون تغيير رقمك الحالي (تحويل المكالمات). اختياري، ويمكن تفعيله لاحقاً.
-            </p>
-          </div>
-          {data.phone?.state === 'verified' ? (
-            <span className="ms-auto shrink-0 rounded-full bg-success/15 px-3 py-1 text-xs font-semibold text-success">
-              {CONNECTION_STATE_LABELS.verified}
-            </span>
-          ) : (
-            <span className="ms-auto shrink-0 rounded-full bg-surface px-3 py-1 text-xs font-medium text-text-muted">
-              اختياري
-            </span>
-          )}
-        </header>
-        {data.phone?.publicNumber ? (
-          <p className="mt-3 text-sm text-text">
-            رقمك الحالي: <span dir="ltr" className="font-medium">{data.phone.publicNumber}</span>
-          </p>
         ) : null}
       </section>
 

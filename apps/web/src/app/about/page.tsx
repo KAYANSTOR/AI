@@ -61,7 +61,7 @@ export default function AboutPage() {
               </div>
               <h3 className="text-sm font-bold text-text">تحكم بشري كامل</h3>
               <p className="text-xs text-text-muted leading-relaxed">
-                لوحة تحكم فورية تتيح لك مراقبة كل مكالمة والتدخل البشري متى شئت.
+                لوحة تحكم فورية تتيح لك متابعة كل محادثة والتدخل البشري متى شئت.
               </p>
             </div>
           </div>
