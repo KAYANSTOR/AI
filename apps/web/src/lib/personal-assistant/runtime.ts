@@ -1,3 +1,4 @@
+import { outputTokenBudget } from '@/lib/ai/channel-format'
 import { geminiProvider } from '@/lib/providers/gemini'
 import type { ModelMessage, ModelToolDefinition } from '@/lib/providers/types'
 import type { DbClient } from '@/lib/db/client'
@@ -108,7 +109,7 @@ async function executeTool(db: DbClient, owner: Owner, name: string, input: Reco
   throw new Error('unsupported_personal_tool')
 }
 
-export async function runPersonalAssistantTurn(db: DbClient, owner: Owner, userText: string, options: { engine?: EngineDeps } = {}) {
+export async function runPersonalAssistantTurn(db: DbClient, owner: Owner, userText: string, options: { engine?: EngineDeps; readOnly?: boolean; economy?: boolean; maxOutputTokens?: number | null } = {}) {
   const [configuredKind, membership] = await Promise.all([
     organizationAgentKind(db, owner.organizationId),
     db.from('organization_members').select('role').eq('organization_id', owner.organizationId).eq('user_id', owner.userId).maybeSingle(),
@@ -116,7 +117,7 @@ export async function runPersonalAssistantTurn(db: DbClient, owner: Owner, userT
   const canManage = membership.data?.role === 'owner' || membership.data?.role === 'admin'
   const agentKind = canManage ? configuredKind ?? 'personal' : 'personal'
   const state: TurnState = { provenance: 'owner', engine: options.engine ?? {}, agentKind }
-  const tools = availableTools(agentKind)
+  const tools = options.readOnly ? [] : availableTools(agentKind)
   const memories = agentKind === 'personal' ? await retrievePersonalMemories(db, owner, userText) : []
   const context = memories.length ? `\nذاكرة ذات صلة:\n${memories.map((memory) => `- [${memory.category}] ${memory.content}`).join('\n')}` : ''
   let persona: Awaited<ReturnType<typeof loadPersonalPersona>> | null = null
@@ -140,7 +141,7 @@ export async function runPersonalAssistantTurn(db: DbClient, owner: Owner, userT
   let inputTokens = 0
   let outputTokens = 0
   for (let round = 0; round < 4; round += 1) {
-    const result = await geminiProvider.call({ system: `${system}\n${UNTRUSTED_SYSTEM_RULE}`, messages, tools, isWhatsApp: true })
+    const result = await geminiProvider.call({ system: `${system}\n${UNTRUSTED_SYSTEM_RULE}`, messages, tools, isWhatsApp: true, economy: options.economy, maxOutputTokens: outputTokenBudget('whatsapp', options.maxOutputTokens) })
     inputTokens += result.inputTokens
     outputTokens += result.outputTokens
     const toolCalls = result.content.filter((block): block is { type: 'tool_use'; id: string; name: string; input: Record<string, unknown> } => block.type === 'tool_use')

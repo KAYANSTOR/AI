@@ -1,12 +1,14 @@
 import type { DbClient } from '@/lib/db/client'
 import type { AiGuardPolicy } from '@/lib/billing/free-tier'
-import { FREE_MEDIA_QUOTA_REPLY } from '@/lib/billing/free-tier'
+import { FREE_MEDIA_QUOTA_REPLY, FREE_QUOTA_REPLY } from '@/lib/billing/free-tier'
+import { assertWithinLimit, EntitlementExceededError } from '@/lib/billing/entitlements'
 import { isFastTextChannel } from '@/lib/ai/channel-format'
 import { getConversationRef } from '@/lib/runtime/conversation'
 import { isOwnerPauseActive } from '@/lib/runtime/owner-presence'
 import {
   inboundGuards,
   classifyInboundPrivacy,
+  runPrivateInboundMedia,
   processInboundMessage,
   storeInboundMessage,
   type InboundMessageType,
@@ -158,9 +160,46 @@ export async function handleInboundMedia(
   const { attachment, ...identity } = input
   const privacy = await classifyInboundPrivacy(db, identity)
   if (privacy.kind === 'ignored') return { reply: null, conversationId: '', contactId: '', status: 'ignored' }
-  if (privacy.kind === 'owner') return { reply: 'لحماية خصوصيتك، أرسل المرفق إلى المساعد الشخصي عبر الموقع أو رقم كيان المركزي.', conversationId: '', contactId: '', status: 'personal_media_redirect' }
   const guards = inboundGuards()
   const policy = await guards.policy(db, input.organizationId)
+  if (privacy.kind === 'owner') {
+    const base = { conversationId: '', contactId: '' }
+    const ownerId = privacy.owner.userId
+    const { data: existing, error: lookupError } = await db.from('personal_assistant_messages').select('id')
+      .eq('org_id', input.organizationId).eq('user_id', ownerId)
+      .eq('external_message_id', `private:${input.channelId}:${input.externalEventId}`).maybeSingle()
+    if (lookupError) throw new Error('personal_media_duplicate_lookup_failed')
+    if (existing) return { ...base, reply: null, status: 'duplicate' }
+    try {
+      await assertWithinLimit(db, input.organizationId, 'ai_messages')
+    } catch (error) {
+      if (error instanceof EntitlementExceededError) return { ...base, reply: FREE_QUOTA_REPLY, status: 'ai_quota' }
+      throw error
+    }
+    const fingerprints = () => guards.fingerprints(db, { organizationId: input.organizationId, channelId: input.channelId })
+    const prepared = await prepareMedia(attachment, {
+      policy, channel: input.channelType, analyzer: deps.analyzer ?? geminiMediaAnalyzer({ economy: policy.economy }),
+      download: deps.download,
+      beforeDownload: async () => {
+        const floodOk = await guards.consumeFlood(db, {
+          organizationId: input.organizationId, contactId: 'user:' + ownerId, limit: policy.floodPerMinute, failClosed: true,
+        })
+        if (!floodOk) return { ok: false, code: 'flood_limited', reply: 'رسائل كثيرة خلال دقيقة. أعد المحاولة بعد قليل.' }
+        if (policy.free && policy.mediaMonthly !== null) {
+          const quota = await guards.consumeQuota(db, { organizationId: input.organizationId, fingerprints: await fingerprints(), kind: 'media', dailyLimit: null, monthlyLimit: policy.mediaMonthly })
+          if (!quota.allowed) return { ok: false, code: 'media_quota', reply: FREE_MEDIA_QUOTA_REPLY }
+        }
+        return { ok: true }
+      },
+    })
+    if (!prepared.ok) return { ...base, reply: prepared.reply || null, status: prepared.code }
+    if (policy.free) {
+      const quota = await guards.consumeQuota(db, { organizationId: input.organizationId, fingerprints: await fingerprints(), kind: 'ai', dailyLimit: policy.dailyLimit, monthlyLimit: policy.monthlyLimit })
+      if (!quota.allowed) return { ...base, reply: FREE_QUOTA_REPLY, status: 'ai_quota' }
+    }
+    const reply = await runPrivateInboundMedia(db, identity, ownerId, { kind: prepared.kind, content: prepared.content, agentText: prepared.agentText, policy, voiceNote: attachment.voiceNote })
+    return { ...base, reply, status: reply ? 'personal_analyzed' : 'ignored' }
+  }
   const stored = await storeInboundMessage(db, {
     ...identity,
     messageType: messageTypeFor(attachment.kind),
