@@ -2,7 +2,7 @@ name: Refresh npm workspace lockfile
 
 on:
   push:
-    branches: [feature/channels-expansion]
+    branches: [main]
     paths:
       - package.json
       - apps/owner-console/package.json
@@ -18,7 +18,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: feature/channels-expansion
+          ref: main
           token: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/setup-node@v4
         with:

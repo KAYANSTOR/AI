@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { usePathname } from 'next/navigation'
 import { ArrowLeft, ArrowRight, CheckCircle2, Compass, LocateFixed, Sparkles, X } from 'lucide-react'
 import {
@@ -17,6 +17,7 @@ import {
 
 const endpoint = '/api/dashboard/tour'
 const EXPLORED_STORAGE_PREFIX = 'kayan:tour:explored:'
+const EXPLORED_CHANGE_EVENT = 'kayan:tour:explored-change'
 const control =
   'inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl border border-border bg-surface px-3 text-xs font-bold text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-50'
 const primary =
@@ -26,33 +27,41 @@ function findTarget(id: string) {
   return document.querySelector<HTMLElement>('[data-tour-target="' + id + '"]')
 }
 
-function readLocalExplored(storageKey: string): Set<string> {
-  if (typeof window === 'undefined') return new Set<string>()
+function readLocalExplored(storageKey: string): string | null {
+  if (typeof window === 'undefined') return null
   try {
-    return parseExploredScreens(window.localStorage.getItem(`${EXPLORED_STORAGE_PREFIX}${storageKey}`))
+    return window.localStorage.getItem(`${EXPLORED_STORAGE_PREFIX}${storageKey}`)
   } catch (error) {
     console.warn('tour_explored_read_failed', {
       reason: error instanceof Error ? error.message : String(error),
     })
-    return new Set<string>()
+    return null
   }
+}
+
+function subscribeToExploredScreens(onChange: () => void): () => void {
+  window.addEventListener('storage', onChange)
+  window.addEventListener(EXPLORED_CHANGE_EVENT, onChange)
+  return () => {
+    window.removeEventListener('storage', onChange)
+    window.removeEventListener(EXPLORED_CHANGE_EVENT, onChange)
+  }
+}
+
+function serverExploredSnapshot(): null {
+  return null
 }
 
 function writeLocalExplored(storageKey: string, nextList: string[]): void {
   if (typeof window === 'undefined') return
   try {
     window.localStorage.setItem(`${EXPLORED_STORAGE_PREFIX}${storageKey}`, JSON.stringify(nextList))
+    window.dispatchEvent(new Event(EXPLORED_CHANGE_EVENT))
   } catch (error) {
     console.warn('tour_explored_write_failed', {
       reason: error instanceof Error ? error.message : String(error),
     })
   }
-}
-
-function recordScreenExploration(storageKey: string, explored: Set<string>, screenKey: string) {
-  const updated = markScreenExplored(explored, screenKey)
-  writeLocalExplored(storageKey, updated)
-  return new Set(updated)
 }
 
 function ScreenTourCard({
@@ -158,6 +167,10 @@ function ScreenTourCard({
  * - Auto-hides permanently once completed, paused, or explored/used, unless reopened via `#dashboard-guide`.
  */
 export function DashboardTour({ access, storageKey = 'default' }: { access: TourAccess; storageKey?: string }) {
+  return <DashboardTourContent key={storageKey} access={access} storageKey={storageKey} />
+}
+
+function DashboardTourContent({ access, storageKey }: { access: TourAccess; storageKey: string }) {
   const pathname = usePathname()
   const { steps } = dashboardTour(access)
   const [stored, setStored] = useState<TourProgress | null>(null)
@@ -166,7 +179,13 @@ export function DashboardTour({ access, storageKey = 'default' }: { access: Tour
   const [busy, setBusy] = useState(false)
   const [dismissed, setDismissed] = useState(false)
   const [reopenRequested, setReopenRequested] = useState(false)
-  const [exploredSet, setExploredSet] = useState<Set<string>>(() => new Set())
+  const exploredSnapshot = useSyncExternalStore(
+    subscribeToExploredScreens,
+    () => readLocalExplored(storageKey),
+    serverExploredSnapshot
+  )
+  const [localExplored, setLocalExplored] = useState<string[]>([])
+  const exploredSet = new Set([...parseExploredScreens(exploredSnapshot), ...localExplored])
   const saving = useRef(false)
 
   const progress = stored ? restoreTourProgress(stored, steps) : null
@@ -177,11 +196,6 @@ export function DashboardTour({ access, storageKey = 'default' }: { access: Tour
   const showHomeCard = home && shouldShowHomeTour(progress, { dismissed, reopenRequested })
   const innerGuide = !home ? screenTourGuide(pathname, access) : null
   const showInnerCard = Boolean(innerGuide && !exploredSet.has(innerGuide.screenKey))
-
-  useEffect(() => {
-    const timeout = window.setTimeout(() => setExploredSet(readLocalExplored(storageKey)), 0)
-    return () => window.clearTimeout(timeout)
-  }, [storageKey])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -231,23 +245,29 @@ export function DashboardTour({ access, storageKey = 'default' }: { access: Tour
     return () => target.removeAttribute('data-tour-active')
   }, [active, step.id])
 
-  function completeScreenExploration(screenKey: string) {
-    setExploredSet(recordScreenExploration(storageKey, exploredSet, screenKey))
-  }
+  const completeScreenExploration = useCallback(
+    (screenKey: string) => {
+      const current = new Set([...parseExploredScreens(readLocalExplored(storageKey)), ...localExplored])
+      const updatedList = markScreenExplored(current, screenKey)
+      setLocalExplored(updatedList)
+      writeLocalExplored(storageKey, updatedList)
+    },
+    [storageKey, localExplored, setLocalExplored]
+  )
 
   // Auto-retire the screen guide once the user interacts with real controls on that screen.
-  const visibleScreen = showInnerCard ? innerGuide?.screenKey : undefined
   useEffect(() => {
-    if (!visibleScreen) return
+    if (!showInnerCard || !innerGuide) return
     const main = document.getElementById('dashboard-main')
     if (!main) return
+    const screenKey = innerGuide.screenKey
 
     const handlePageUse = (event: Event) => {
       const target = event.target as HTMLElement | null
       if (!target) return
       if (target.closest('[data-screen-tour-card]')) return
       if (!target.closest('a, button, input, select, textarea, [role="button"], form')) return
-      setExploredSet(recordScreenExploration(storageKey, exploredSet, visibleScreen))
+      completeScreenExploration(screenKey)
     }
 
     main.addEventListener('click', handlePageUse, true)
@@ -256,7 +276,7 @@ export function DashboardTour({ access, storageKey = 'default' }: { access: Tour
       main.removeEventListener('click', handlePageUse, true)
       main.removeEventListener('change', handlePageUse, true)
     }
-  }, [exploredSet, storageKey, visibleScreen])
+  }, [showInnerCard, innerGuide, completeScreenExploration])
 
   async function save(next: TourProgress) {
     if (saving.current) return
