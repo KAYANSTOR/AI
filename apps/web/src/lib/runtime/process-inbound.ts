@@ -139,6 +139,7 @@ async function isPersonalAssistantOrganization(db: DbClient, organizationId: str
     db.from('organizations').select('business_type').eq('id', organizationId).maybeSingle(),
     db.from('business_profiles').select('business_type_id').eq('organization_id', organizationId).maybeSingle(),
   ])
+  if (orgRes.error || profileRes.error) throw new Error('inbound_workspace_lookup_failed')
   return (
     orgRes.data?.business_type === 'personal_assistant' ||
     profileRes.data?.business_type_id === 'personal_assistant'
@@ -149,26 +150,28 @@ async function resolveLinkedPersonalOwner(
   db: DbClient,
   input: InboundIdentity,
   senderE164: string
-): Promise<{ userId: string } | null> {
-  const { data: links } = await db
+): Promise<{ userId: string; killSwitchActive?: boolean } | null> {
+  const { data: links, error: linksError } = await db
     .from('personal_assistant_links')
     .select('user_id, whatsapp_phone, verified_at, kill_switch_active')
     .eq('org_id', input.organizationId)
+  if (linksError) throw new Error('personal_link_lookup_failed')
 
   for (const row of (links ?? []) as Array<Record<string, unknown>>) {
-    if (!row.verified_at || row.kill_switch_active === true) continue
+    if (!row.verified_at) continue
     const linkPhone = normalizeE164(String(row.whatsapp_phone ?? ''))
     if (!/^\+[1-9][0-9]{7,14}$/.test(linkPhone) || linkPhone !== senderE164) continue
     const userId = String(row.user_id ?? '')
     if (!userId) continue
-    const { data: member } = await db
+    const { data: member, error: memberError } = await db
       .from('organization_members')
       .select('role')
       .eq('organization_id', input.organizationId)
       .eq('user_id', userId)
       .maybeSingle()
+    if (memberError) throw new Error('personal_link_membership_lookup_failed')
     if (member?.role === 'owner' || member?.role === 'admin') {
-      return { userId }
+      return { userId, killSwitchActive: row.kill_switch_active === true }
     }
   }
   return null
@@ -178,7 +181,7 @@ async function resolvePersonalAssistantOwner(
   db: DbClient,
   input: InboundIdentity,
   options: { isPersonalWorkspace: boolean }
-): Promise<{ userId: string } | null> {
+): Promise<{ userId: string; killSwitchActive?: boolean } | null> {
   if (input.channelType !== 'whatsapp') return null
   if (isGroupOrBroadcastSender(input)) return null
 
@@ -206,11 +209,12 @@ async function resolvePersonalAssistantOwner(
     }
 
     if (options.isPersonalWorkspace) {
-      const { data: owners } = await db
+      const { data: owners, error: ownersError } = await db
         .from('organization_members')
         .select('user_id, role')
         .eq('organization_id', input.organizationId)
         .eq('role', 'owner')
+      if (ownersError) throw new Error('personal_workspace_owner_lookup_failed')
       for (const row of (owners ?? []) as Array<{ user_id?: unknown }>) {
         const ownerId = String(row.user_id ?? '')
         if (!ownerId) continue
@@ -240,6 +244,7 @@ export async function classifyInboundPrivacy(db: DbClient, input: InboundIdentit
   const isPersonalWorkspace = await isPersonalAssistantOrganization(db, input.organizationId)
   if (isPersonalWorkspace && isGroupOrBroadcastSender(input)) return { kind: 'ignored' as const }
   const owner = await resolvePersonalAssistantOwner(db, input, { isPersonalWorkspace })
+  if (owner?.killSwitchActive) return { kind: 'ignored' as const }
   if (owner) return { kind: 'owner' as const, owner }
   return { kind: 'business' as const, isPersonalWorkspace }
 }
@@ -258,9 +263,8 @@ export async function storeInboundMessage(
 ): Promise<{ conversationId: string; contactId: string; messageId: string | null }> {
   // F-003: guard every persistence path (text and pre-stored media) so an
   // excluded number never becomes a business contact, conversation or message.
-  if (input.senderPhone && isIgnoredPhone(await ignoredPhones(db, input.organizationId), input.senderPhone)) {
-    throw new IgnoredPhoneError(input.organizationId)
-  }
+  const privacy = await classifyInboundPrivacy(db, input)
+  if (privacy.kind !== 'business') throw new IgnoredPhoneError(input.organizationId)
 
   const contact = await resolveContactIdentity(db, input.organizationId, {
     channel: input.channelType,

@@ -79,6 +79,11 @@ jobs:
           JS
           fi
           exit "$status"
+      - name: Gateway entrypoint syntax
+        if: ${{ !cancelled() && steps.web_install.outcome == 'success' }}
+        run: |
+          node --check apps/whatsapp-gateway/src/server.js
+          node --check start-with-gateway.mjs
       - name: Gateway unit tests
         if: ${{ !cancelled() && steps.web_install.outcome == 'success' }}
         run: node --test apps/whatsapp-gateway/test/*.test.js

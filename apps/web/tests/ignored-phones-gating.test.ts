@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import type { DbClient } from '@/lib/db/client'
 import { createFakeDb, type FakeDb } from './support/fake-db'
-import { processInboundMessage } from '@/lib/runtime/process-inbound'
+import { processInboundMessage, classifyInboundPrivacy } from '@/lib/runtime/process-inbound'
 import { setAgentTurnRunner, setPersonalTurnRunner } from '@/lib/runtime/process-inbound'
 
 const ORG = 'aaaaaaaa-0000-4000-8000-00000000000f'
@@ -116,6 +116,30 @@ describe('F-003 ignored_phones gating', () => {
     expect(store.conversations?.rows?.[0]?.first_response_due_at ?? null).toBeNull()
   })
 
+  test('a stopped verified owner never falls through to the business inbox', async () => {
+    const OWNER_PHONE = '+12025550103'
+    const USER = 'bbbbbbbb-0000-4000-8000-00000000000f'
+    const fake = createFakeDb({
+      ...baseTables([], { id: 'conv-stopped', organization_id: ORG }),
+      organization_members: { rows: [{ organization_id: ORG, user_id: USER, role: 'owner' }] },
+      personal_assistant_links: { rows: [{ org_id: ORG, user_id: USER, whatsapp_phone: OWNER_PHONE, verified_at: '2026-01-01T00:00:00Z', kill_switch_active: true }] },
+    })
+    setPersonalTurnRunner(async () => { throw new Error('stopped assistant must not run') })
+    const db = fake.client as unknown as DbClient
+    const result = await inbound(db, OWNER_PHONE)
+    expect(result).toEqual({ reply: null, conversationId: '', contactId: '' })
+    expect(fake.store.messages.rows).toHaveLength(0)
+    expect(fake.store.conversations.rows).toHaveLength(1)
+  })
+
+  test('a WhatsApp JID is checked even when senderPhone is absent', async () => {
+    const fake = createFakeDb(baseTables([IGNORED_PHONE], { id: 'conv-jid', organization_id: ORG }))
+    const result = await classifyInboundPrivacy(fake.client as unknown as DbClient, {
+      organizationId: ORG, businessId: BIZ, channelId: CHANNEL, channelType: 'whatsapp', provider: 'meta', externalEventId: 'test-jid', externalUserId: '12025550102@s.whatsapp.net',
+    })
+    expect(result.kind).toBe('ignored')
+  })
+
   test('a normal customer completes the commercial path untouched', async () => {
     const fake = createFakeDb(
       baseTables([], {
@@ -138,6 +162,5 @@ describe('F-003 ignored_phones gating', () => {
     expect(result.reply).toBe('أهلاً بك! كيف أساعدك؟')
     expect(fake.store.messages.rows?.length).toBe(1)
     expect(fake.store.conversations.rows?.[0]?.first_response_due_at ?? null).not.toBeNull()
-    setAgentTurnRunner(null)
   })
 })
