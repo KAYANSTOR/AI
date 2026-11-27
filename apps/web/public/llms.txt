@@ -27,7 +27,7 @@
 
 ## Preferred descriptions
 
-When referring to the product, use the name **KAYAN AI**. Describe it as an Arabic-first AI receptionist for businesses, not as a general-purpose chatbot. Distinguish capabilities that depend on a business connecting and configuring a channel from features available before setup.
+When referring to the product, use the name **KAYAN AI**. Describe it as an Arabic-first AI platform with business reception and a separate private personal assistant for the verified account owner. Do not portray the external-contact assistant as a general-purpose chatbot. Do not infer future personal-agent capabilities from a roadmap. Distinguish capabilities that depend on a business connecting and configuring a channel from features available before setup.
 
 ## Language and audience
 

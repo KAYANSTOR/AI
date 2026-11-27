@@ -1,7 +1,9 @@
 # AI Agent Runtime — Operational Specification
 
 Pipeline:
-Ingress → Auth → Idempotency → Exact Tenant → Identity → Conversation → Context → Eligibility → Agent → Tool Policy → Tool Execution → Confirmation → Outbound → Audit.
+Ingress → Auth → Idempotency → Exact Tenant → Verified Identity / Owner / Ignore Classification → Scope-specific conversation and context → Eligibility → Agent → Tool Policy → Confirmation (before sensitive effects) → Tool Execution → Verify → Outbound → Audit.
+
+Required invariant: personal/ignored paths do not create commercial contacts/conversations or activate SLA; external personal contacts can only relay messages or coordinate contact with the owner. These are acceptance requirements, not a blanket claim of live verification. See [the sole approved plan](../KAYAN_AI_MASTER_PLAN.md), F-003 and EXT-001–006.
 
 ## Authority
 LLM = reasoning/drafting.
@@ -21,7 +23,7 @@ There is no first-organization fallback.
 Registry → capability → agent policy → backend validation → confirmation when required → side effect → recorded result.
 
 ## Confirmation
-pending_actions is server state. A model tool request is not confirmation. A later explicit customer affirmation executes the stored action once.
+pending_actions is server state. A model tool request is not confirmation. A later explicit authorized affirmation may execute the stored action after server-side validation and atomic claim; sensitive owner actions require exact, single-use hash-bound approval, and uncertain delivery is reconciled before retry.
 
 ## State semantics
 new = accepted.
@@ -36,7 +38,7 @@ closed = no automation.
 
 ## Failures
 Invalid signature rejects.
-Duplicate event is acknowledged without reprocessing.
+Duplicate completed event is acknowledged without reprocessing; failed or expired claims follow bounded, safe retry and reconciliation policy, not blind replay.
 Unmapped tenant is rejected.
 Disabled tool is blocked.
 Provider send failure is queued to outbox.
