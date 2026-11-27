@@ -34,6 +34,14 @@ export function maxOutputTokensForChannel(channel: string | null | undefined): n
     : WHATSAPP_MAX_OUTPUT_TOKENS
 }
 
+/** Apply the channel ceiling and the actual subscription ceiling together. */
+export function outputTokenBudget(channel: string | null | undefined, planLimit?: number | null): number {
+  const channelLimit = maxOutputTokensForChannel(channel)
+  return typeof planLimit === 'number' && Number.isFinite(planLimit) && planLimit > 0
+    ? Math.min(channelLimit, Math.floor(planLimit))
+    : channelLimit
+}
+
 /** Appends the WhatsApp style rule at the end of the system prompt (idempotent). */
 export function applyChannelFormatRules(systemPrompt: string, channel: string | null | undefined): string {
   if (!isFastTextChannel(channel)) return systemPrompt

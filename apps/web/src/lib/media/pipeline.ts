@@ -6,6 +6,7 @@ import { getConversationRef } from '@/lib/runtime/conversation'
 import { isOwnerPauseActive } from '@/lib/runtime/owner-presence'
 import {
   inboundGuards,
+  classifyInboundPrivacy,
   processInboundMessage,
   storeInboundMessage,
   type InboundMessageType,
@@ -154,9 +155,12 @@ export async function handleInboundMedia(
   input: InboundIdentity & { attachment: MediaAttachment },
   deps: { download: MediaDownloader; analyzer?: MediaAnalyzer }
 ): Promise<InboundMediaResult> {
+  const { attachment, ...identity } = input
+  const privacy = await classifyInboundPrivacy(db, identity)
+  if (privacy.kind === 'ignored') return { reply: null, conversationId: '', contactId: '', status: 'ignored' }
+  if (privacy.kind === 'owner') return { reply: 'لحماية خصوصيتك، أرسل المرفق إلى المساعد الشخصي عبر الموقع أو رقم كيان المركزي.', conversationId: '', contactId: '', status: 'personal_media_redirect' }
   const guards = inboundGuards()
   const policy = await guards.policy(db, input.organizationId)
-  const { attachment, ...identity } = input
   const stored = await storeInboundMessage(db, {
     ...identity,
     messageType: messageTypeFor(attachment.kind),

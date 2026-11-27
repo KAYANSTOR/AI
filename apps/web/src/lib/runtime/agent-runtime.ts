@@ -6,7 +6,7 @@ import {
   applyChannelFormatRules,
   enforceWhatsAppBrevity,
   isFastTextChannel,
-  maxOutputTokensForChannel,
+  outputTokenBudget,
 } from '@/lib/ai/channel-format'
 import { executeTool, getToolDefinitionsForAgent } from '@/lib/ai/tools'
 import { evaluateReplyGovernance, staffHandoffNotice, type GovernanceDecision } from '@/lib/ai/governance'
@@ -153,9 +153,7 @@ async function runAgentLoop(args: AgentLoopArgs): Promise<AgentLoopResult> {
       messages,
       tools: args.toolSet,
       isWhatsApp: isFastTextChannel(args.channel),
-      maxOutputTokens: args.maxOutputTokens
-        ? Math.min(args.maxOutputTokens, maxOutputTokensForChannel(args.channel))
-        : maxOutputTokensForChannel(args.channel),
+      maxOutputTokens: outputTokenBudget(args.channel, args.maxOutputTokens),
       economy: args.economy,
     }, activeProvider)
     activeProvider = generated.provider

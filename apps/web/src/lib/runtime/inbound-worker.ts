@@ -92,13 +92,13 @@ async function processJob(db: ReturnType<typeof createAdminClient>, job: Inbound
       recipient: input.senderPhone || input.senderJid,
       body: result.reply,
       idempotencyKey: input.externalEventId + ':reply',
-      conversationId: result.conversationId,
+      conversationId: result.conversationId || null,
       // This worker is a background process: send now, keep the outbox for retries.
       deliverInline: true,
       senderType: 'ai',
     })
     console.log('inbound_job_reply_delivery', { jobId: job.id, channelId: input.channelId, delivery })
-    if (delivery === 'sent') {
+    if (delivery === 'sent' && result.conversationId) {
       await recordDeliveredOutboundMessage(db, {
         organizationId: input.organizationId,
         conversationId: result.conversationId,

@@ -186,16 +186,17 @@ async function resolvePersonalAssistantOwner(
   if (!senderE164) return null
 
   const linkedOwner = await resolveLinkedPersonalOwner(db, input, senderE164)
-  if (linkedOwner && options.isPersonalWorkspace) return linkedOwner
+  if (linkedOwner) return linkedOwner
 
   try {
-    const admin = createAdminClient()
-    const { data: settings } = await admin.from('personal_assistant_settings')
+    const { data: settings, error: settingsError } = await db.from('personal_assistant_settings')
       .select('user_id').eq('organization_id', input.organizationId)
       .eq('whatsapp_channel_id', input.channelId).eq('whatsapp_reminders_enabled', true).maybeSingle()
+    if (settingsError) throw new Error('personal_settings_lookup_failed')
     if (settings?.user_id) {
-      const { data: membership } = await admin.from('organization_members').select('user_id')
+      const { data: membership, error: membershipError } = await db.from('organization_members').select('user_id')
         .eq('organization_id', input.organizationId).eq('user_id', settings.user_id).eq('role', 'owner').maybeSingle()
+      if (membershipError) throw new Error('personal_owner_membership_lookup_failed')
       if (membership?.user_id) {
         const owner = await findUserById(String(membership.user_id))
         if (owner?.phone && normalizePhone(owner.phone) === normalizePhone(senderE164)) {
@@ -224,9 +225,23 @@ async function resolvePersonalAssistantOwner(
       organizationId: input.organizationId,
       reason: error instanceof Error ? error.message.slice(0, 120) : 'lookup_failed',
     })
+    throw error
   }
 
   return null
+}
+
+/** Evaluate private routing before any contact, conversation, message or SLA write. */
+export async function classifyInboundPrivacy(db: DbClient, input: InboundIdentity) {
+  const sender = input.channelType === 'whatsapp' ? normalizedSenderE164(input) : input.senderPhone
+  if (sender && isIgnoredPhone(await ignoredPhones(db, input.organizationId), sender)) {
+    return { kind: 'ignored' as const }
+  }
+  const isPersonalWorkspace = await isPersonalAssistantOrganization(db, input.organizationId)
+  if (isPersonalWorkspace && isGroupOrBroadcastSender(input)) return { kind: 'ignored' as const }
+  const owner = await resolvePersonalAssistantOwner(db, input, { isPersonalWorkspace })
+  if (owner) return { kind: 'owner' as const, owner }
+  return { kind: 'business' as const, isPersonalWorkspace }
 }
 
 function skipReply(reason: string, input: { organizationId: string; channelId: string }, conversationId: string, contactId: string) {
@@ -296,6 +311,8 @@ export async function recordInboundMediaMessage(
   db: DbClient,
   input: InboundIdentity & { messageType: Exclude<InboundMessageType, 'text'>; content: string }
 ): Promise<{ conversationId: string; contactId: string }> {
+  const privacy = await classifyInboundPrivacy(db, input)
+  if (privacy.kind !== 'business') return { conversationId: '', contactId: '' }
   return storeInboundMessage(db, input)
 }
 
@@ -312,51 +329,27 @@ export async function processInboundMessage(
     policy?: AiGuardPolicy
   }
 ): Promise<{ reply: string | null; conversationId: string; contactId: string }> {
-  // F-003: the ignored-phone list must be evaluated BEFORE any business contact,
-  // conversation, message or SLA record is created, so an excluded number never
-  // leaves a trace in business records and never gets a commercial reply.
-  if (input.senderPhone && isIgnoredPhone(await ignoredPhones(db, input.organizationId), input.senderPhone)) {
-    console.info('inbound_ignored_phone_dropped', { organizationId: input.organizationId, channelId: input.channelId })
+  const privacy = await classifyInboundPrivacy(db, input)
+  if (privacy.kind === 'ignored') {
+    console.info('inbound_private_sender_dropped', { organizationId: input.organizationId, channelId: input.channelId })
     return { reply: null, conversationId: '', contactId: '' }
   }
-
-  const isPersonalWorkspace = await isPersonalAssistantOrganization(db, input.organizationId)
-
-  // Groups, broadcasts, and channels are always ignored silently in personal_assistant mode.
-  if (isPersonalWorkspace && isGroupOrBroadcastSender(input)) {
-    console.info('personal_assistant_group_or_broadcast_dropped', {
-      organizationId: input.organizationId,
-      channelId: input.channelId,
-    })
-    return { reply: null, conversationId: '', contactId: '' }
-  }
-
-  const personalOwner = await resolvePersonalAssistantOwner(db, input, { isPersonalWorkspace })
-
-  const stored = input.prestored ?? await storeInboundMessage(db, { ...input, messageType: 'text', content: input.text })
-  const conversationId = stored.conversationId
-  const contact = { contactId: stored.contactId }
-
-  if (personalOwner) {
+  if (privacy.kind === 'owner') {
     try {
       const result = await personalTurnRunner(db, {
         organizationId: input.organizationId,
-        userId: personalOwner.userId,
+        userId: privacy.owner.userId,
       }, input.text)
-      if (stored.messageId) {
-        await createAdminClient().from('personal_assistant_extraction_jobs').insert({
-          organization_id: input.organizationId,
-          user_id: personalOwner.userId,
-          conversation_id: conversationId,
-          source_message_id: stored.messageId,
-        })
-      }
-      return { reply: result.reply, conversationId, contactId: contact.contactId }
-    } catch (error) {
-      console.error('personal_assistant_inbound_failed', error)
-      return { reply: null, conversationId, contactId: contact.contactId }
+      return { reply: result.reply, conversationId: '', contactId: '' }
+    } catch {
+      console.error('personal_assistant_inbound_failed', { organizationId: input.organizationId })
+      return { reply: null, conversationId: '', contactId: '' }
     }
   }
+  const isPersonalWorkspace = privacy.isPersonalWorkspace
+  const stored = input.prestored ?? await storeInboundMessage(db, { ...input, messageType: 'text', content: input.text })
+  const conversationId = stored.conversationId
+  const contact = { contactId: stored.contactId }
 
   const conversation = await getConversationRef(db, conversationId, input.organizationId)
   if (!conversation || !conversation.aiEnabled || conversation.status === 'handed_off') {

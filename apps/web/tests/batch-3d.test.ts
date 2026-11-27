@@ -14,7 +14,7 @@ import { resolveArabicDateTime, localNowContext } from '@/lib/calendar/relative-
 import { ARAB_COUNTRIES, DEFAULT_COUNTRY, toE164 } from '@/lib/phone/arab-countries'
 import { parseInlineBold } from '@/lib/text/inline-bold'
 import { buildCustomerContextBlock } from '@/lib/ai/customer-context'
-import { maxOutputTokensForChannel, enforceWhatsAppBrevity } from '@/lib/ai/channel-format'
+import { maxOutputTokensForChannel, outputTokenBudget, WHATSAPP_MAX_OUTPUT_TOKENS, enforceWhatsAppBrevity } from '@/lib/ai/channel-format'
 import { PLAN_CATALOG } from '@/lib/billing/plan-catalog'
 import { FEATURED_SECTOR_IDS, featuredSectors, searchSectors } from '@/lib/verticals/featured'
 import { VERTICALS } from '@/lib/verticals/registry'
@@ -248,10 +248,15 @@ describe('3D · appointments with relative Arabic time', () => {
 })
 
 describe('3D · WhatsApp output budget', () => {
-  test('WhatsApp gets 350 output tokens, free plan included', () => {
-    expect(maxOutputTokensForChannel('whatsapp')).toBe(350)
+  test('WhatsApp supports complete replies while enforcing the free plan 350 token cap', () => {
+    expect(maxOutputTokensForChannel('whatsapp')).toBe(WHATSAPP_MAX_OUTPUT_TOKENS)
     const trial = PLAN_CATALOG.find((plan) => plan.code === 'trial')
-    expect(Number((trial?.limits as Record<string, unknown>).max_output_tokens)).toBe(350)
+    const freeLimit = Number(trial?.limits.max_output_tokens)
+    expect(freeLimit).toBe(350)
+    expect(outputTokenBudget('whatsapp', freeLimit)).toBe(350)
+    expect(outputTokenBudget('whatsapp_qr', freeLimit)).toBe(350)
+    expect(outputTokenBudget('whatsapp', 9000)).toBe(WHATSAPP_MAX_OUTPUT_TOKENS)
+    expect(outputTokenBudget('whatsapp', null)).toBe(WHATSAPP_MAX_OUTPUT_TOKENS)
   })
 
   test('WhatsApp replies never keep **', () => {
