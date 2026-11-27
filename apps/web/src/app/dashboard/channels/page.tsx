@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation'
+import Link from 'next/link'
 import { createClient } from '@/lib/db/server'
 import { getDashboardContext } from '@/lib/dashboard/context'
 import { isPersonalWorkspace } from '@/lib/dashboard/navigation-policy'
@@ -156,7 +157,12 @@ export default async function ChannelsPage({
         </p>
       )}
 
-      {channelsError && <Notice tone="error" message={channelsError} />}
+      {channelsError && (
+        <div className="space-y-2">
+          <Notice tone="error" message={channelsError} />
+          <Link href="/dashboard/channels" className="inline-flex min-h-11 items-center rounded-xl border border-border bg-surface px-4 text-sm font-semibold text-text">إعادة المحاولة</Link>
+        </div>
+      )}
       {linkNotice && <Notice tone={status === 'meta_success' ? 'success' : 'error'} message={linkNotice} />}
 
       <ChannelsConsole cards={cards} canManage={canManage} />

@@ -21,7 +21,10 @@ export async function GET() {
     scope('agent_receipts', 'id, task_id, summary_ar, executed_actions_json, untouched_scope_note, created_at').order('created_at', { ascending: false }).limit(50),
     scope('personal_assistant_links', 'kill_switch_active').maybeSingle(),
   ])
-  if (tasks.error || approvals.error || receipts.error) return NextResponse.json({ error: 'agent_list_failed' }, { status: 500 })
+  if (tasks.error || approvals.error || receipts.error || link.error) {
+    console.error('assistant_agent_read_failed', { tasks: Boolean(tasks.error), approvals: Boolean(approvals.error), receipts: Boolean(receipts.error), link: Boolean(link.error) })
+    return NextResponse.json({ error: 'agent_list_failed' }, { status: 500 })
+  }
   return NextResponse.json({
     tasks: tasks.data ?? [],
     approvals: approvals.data ?? [],
