@@ -30,9 +30,8 @@ export function isIgnoredPhone(list: string[], phone: string): boolean {
  * Reads the organization's ignored_phones list.
  *
  * The list is stored as the Postgres text[] column `ignored_phones` on
- * organizations; when the column or row is absent the list is empty so the
- * commercial path stays untouched (fail-open for the normal customer flow,
- * never for the exclusion itself: a matching phone is always dropped).
+ * organizations. A database error must not permit an excluded sender into
+ * the commercial inbox; fail closed so the webhook or worker can retry.
  */
 export async function ignoredPhones(db: DbClient, organizationId: string): Promise<string[]> {
   try {
@@ -41,10 +40,12 @@ export async function ignoredPhones(db: DbClient, organizationId: string): Promi
       .select('ignored_phones')
       .eq('id', organizationId)
       .maybeSingle()
-    if (error || !data) return []
+    if (error) throw new Error('ignored_phone_lookup_failed')
+    if (!data) return []
     const value = (data as { ignored_phones?: unknown }).ignored_phones
     return Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : []
   } catch {
-    return []
+    console.warn('ignored_phone_lookup_failed', { organizationId })
+    throw new Error('ignored_phone_lookup_failed')
   }
 }

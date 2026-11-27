@@ -33,8 +33,8 @@ export default async function DashboardPage() {
             <p className="mt-1 max-w-xl text-sm leading-6 text-white/80">احتفظ بذاكرتك ومهامك وملخصك اليومي بعيداً عن بيانات نشاطك التجاري.</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Link href="/dashboard/assistant" className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-white px-4 py-2 text-sm font-bold text-primary-dark hover:bg-white/90"><ListTodo size={16} /> افتح المساعد</Link>
-            <Link href="/dashboard/assistant?tab=memory" className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-white/40 px-4 py-2 text-sm font-bold text-white hover:bg-white/10"><Brain size={16} /> الذاكرة</Link>
+            <Link href="/dashboard/assistant" className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-white px-4 py-2 text-sm font-bold text-primary-dark hover:bg-white/90"><ListTodo size={16} /> افتح المساعد</Link>
+            <Link href="/dashboard/assistant?tab=memory" className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-white/40 px-4 py-2 text-sm font-bold text-white hover:bg-white/10"><Brain size={16} /> الذاكرة</Link>
           </div>
         </div>
       </section>

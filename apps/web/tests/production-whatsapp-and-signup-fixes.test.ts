@@ -20,6 +20,7 @@ import {
   setAgentTurnRunner,
   setInboundGuardsFactory,
   setPersonalTurnRunner,
+  setInboundOwnerIdentityLookup,
 } from '@/lib/runtime/process-inbound'
 import { runAgentTurn } from '@/lib/runtime/agent-runtime'
 import { retrievePersonalMemories } from '@/lib/personal-assistant/memory-retrieval'
@@ -35,8 +36,8 @@ const ORG_PA = '0a000000-0000-4000-8000-000000000010'
 const BIZ_PA = '0a000000-0000-4000-8000-000000000011'
 const CHAN_PA = '0a000000-0000-4000-8000-000000000012'
 const OWNER_USER = 'a0000000-0000-4000-8000-000000000010'
-const OWNER_PHONE = '+967711111111'
-const THIRD_PARTY_PHONE = '+967799999999'
+const OWNER_PHONE = '+12025550101'
+const THIRD_PARTY_PHONE = '+12025550102'
 
 const ORG_BIZ = '0b000000-0000-4000-8000-000000000020'
 const BIZ_REGULAR = '0b000000-0000-4000-8000-000000000021'
@@ -50,6 +51,7 @@ const originalFetch = globalThis.fetch
 afterEach(() => {
   setAgentTurnRunner(null)
   setPersonalTurnRunner(null)
+  setInboundOwnerIdentityLookup(null)
   setInboundGuardsFactory(null)
   globalThis.fetch = originalFetch
   delete process.env.GEMINI_API_KEY
@@ -66,7 +68,7 @@ describe('Fix 1: Owner Mode vs External Contact Mode in personal_assistant (plus
             id: ORG_PA,
             name: 'حساب طارق الشخصي',
             business_type: 'personal_assistant',
-            ignored_phones: ['+967788888888'],
+            ignored_phones: ['+12025550103'],
             vertical_config: {},
           },
           {
@@ -135,7 +137,7 @@ describe('Fix 1: Owner Mode vs External Contact Mode in personal_assistant (plus
         rows: [
           {
             id: 'pt-secret',
-            org_id: ORG_PA,
+            organization_id: ORG_PA,
             user_id: OWNER_USER,
             title: 'مراجعة العقد السري الساعة 4 عصراً',
             status: 'pending',
@@ -221,7 +223,7 @@ describe('Fix 1: Owner Mode vs External Contact Mode in personal_assistant (plus
       channelType: 'whatsapp',
       provider: 'whatsapp_qr',
       externalEventId: 'qr:owner-1',
-      externalUserId: '967711111111@s.whatsapp.net',
+      externalUserId: '12025550101@s.whatsapp.net',
       senderPhone: OWNER_PHONE,
       displayName: 'المالك',
       text: 'ما رقم حسابي الخاص طارق؟',
@@ -237,6 +239,10 @@ describe('Fix 1: Owner Mode vs External Contact Mode in personal_assistant (plus
     const fake = setupPersonalInboundDb()
     const db = asDb(fake)
     installNoopGuards()
+    setInboundOwnerIdentityLookup(async (ids) => {
+      expect(ids).toEqual([OWNER_USER])
+      return [{ id: OWNER_USER, phone: OWNER_PHONE }]
+    })
 
     let ownerTurnCalled = false
     const capturedExternal: { args?: Parameters<typeof runAgentTurn>[0] } = {}
@@ -278,7 +284,7 @@ describe('Fix 1: Owner Mode vs External Contact Mode in personal_assistant (plus
       channelType: 'whatsapp',
       provider: 'whatsapp_qr',
       externalEventId: 'qr:friend-1',
-      externalUserId: '967799999999@s.whatsapp.net',
+      externalUserId: '12025550102@s.whatsapp.net',
       senderPhone: THIRD_PARTY_PHONE,
       displayName: 'سعيد',
       text: 'هلا كيف حالك؟',
@@ -347,8 +353,8 @@ describe('Fix 1: Owner Mode vs External Contact Mode in personal_assistant (plus
       channelType: 'whatsapp',
       provider: 'whatsapp_qr',
       externalEventId: 'qr:ignored-1',
-      externalUserId: '967788888888@s.whatsapp.net',
-      senderPhone: '+967788888888',
+      externalUserId: '12025550103@s.whatsapp.net',
+      senderPhone: '+12025550103',
       text: 'رقم مستبعد',
     })
     expect(ignoredRes.reply).toBeNull()
@@ -360,7 +366,7 @@ describe('Fix 1: Owner Mode vs External Contact Mode in personal_assistant (plus
   test('gateway classifyUpsertMessage ignores groups via remoteJidAlt and central router drops group JIDs', async () => {
     expect(
       classifyUpsertMessage(
-        { key: { remoteJid: '967799999999@s.whatsapp.net', remoteJidAlt: '120363001@g.us', id: 'm1', fromMe: false } },
+        { key: { remoteJid: '12025550102@s.whatsapp.net', remoteJidAlt: '120363001@g.us', id: 'm1', fromMe: false } },
         'notify'
       )
     ).toEqual({ kind: 'ignore', reason: 'unsupported_chat' })
@@ -494,7 +500,7 @@ describe('Fix 2: Eliminates response truncation & thinking token starvation acro
     if (cfg) {
       await sendCentralText(
         cfg,
-        '+967711111111',
+        '+12025550101',
         veryLongText,
         (async (_url: unknown, init?: RequestInit) => {
           const body = JSON.parse(String(init?.body ?? '{}')) as { text?: { body?: string } }

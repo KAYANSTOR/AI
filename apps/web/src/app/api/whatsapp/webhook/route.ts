@@ -476,9 +476,9 @@ export async function POST(req: NextRequest) {
             recipient: from,
             body: result.reply,
             idempotencyKey: (isKapsoWebhook ? 'kapso:' : 'whatsapp:') + externalEventId + ':reply',
-            conversationId: result.conversationId,
+            conversationId: result.conversationId || null,
           })
-          if (delivery === 'sent') await recordDeliveredOutboundMessage(db, {
+          if (delivery === 'sent' && result.conversationId) await recordDeliveredOutboundMessage(db, {
             organizationId: channel.organizationId,
             conversationId: result.conversationId,
             body: result.reply,

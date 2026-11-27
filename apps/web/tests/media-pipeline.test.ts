@@ -18,6 +18,7 @@ import { PLAN_LIMITS_BY_CODE } from '@/lib/billing/plan-catalog'
 import {
   processInboundMessage,
   setAgentTurnRunner,
+  setPersonalTurnRunner,
   setInboundGuardsFactory,
   type InboundAiGuards,
 } from '@/lib/runtime/process-inbound'
@@ -361,7 +362,7 @@ describe('free plan fair-use guards before the model call', () => {
     modelCalls.length = 0
     setAgentTurnRunner(async (args) => { modelCalls.push(args); return 'تم' })
   })
-  afterEach(() => { setAgentTurnRunner(null); setInboundGuardsFactory(null) })
+  afterEach(() => { setAgentTurnRunner(null); setPersonalTurnRunner(null); setInboundGuardsFactory(null) })
 
   async function send(db: DbClient, id: string, text = 'كم السعر؟') {
     return processInboundMessage(db, {
@@ -516,6 +517,44 @@ describe('free plan fair-use guards before the model call', () => {
     expect(row.content).toBe('أبغى أحجز موعد بكرة الساعة خمس')
     expect((row.media as Record<string, unknown>).transcript).toBe('أبغى أحجز موعد بكرة الساعة خمس')
     expect(modelCalls[0].userText).toContain('أبغى أحجز موعد')
+  })
+
+  test('verified owner media is analyzed privately, read-only, rate-limited and deduplicated', async () => {
+    const ownerId = 'bbbbbbbb-0000-4000-8000-000000000099'
+    const ownerPhone = '+12025550109'
+    const fake = runtimeDb()
+    fake.store.organization_members = { rows: [{ organization_id: ORG, user_id: ownerId, role: 'owner' }] }
+    fake.store.personal_assistant_links = { rows: [{ org_id: ORG, user_id: ownerId, whatsapp_phone: ownerPhone, verified_at: '2026-01-01T00:00:00Z', kill_switch_active: false }] }
+    fake.store.personal_assistant_messages = { rows: [], unique: [['external_message_id']] }
+    const counter = countingGuards(FREE)
+    setInboundGuardsFactory(() => counter.guards)
+    let personalCalls = 0
+    setPersonalTurnRunner(async (_db, owner, text, options) => {
+      personalCalls++
+      expect(owner).toEqual({ organizationId: ORG, userId: ownerId })
+      expect(text).toContain('<<UNTRUSTED_DATA>>')
+      expect(options?.readOnly).toBe(true)
+      expect(options?.maxOutputTokens).toBe(350)
+      expect(options?.economy).toBe(true)
+      return { reply: 'تحليل خاص', inputTokens: 0, outputTokens: 0, model: 'test' }
+    })
+    const { analyzer, calls } = analyzerSpy()
+    const input = { organizationId: ORG, businessId: BIZ, channelId: CHANNEL, channelType: 'whatsapp' as const, provider: 'meta', externalEventId: 'owner-image', externalUserId: ownerPhone, senderPhone: ownerPhone, attachment: attachment({ channel: 'whatsapp_cloud' }) }
+    const db = fake.client as unknown as DbClient
+    const deps = { analyzer, download: inlineDownload(JPEG, 'image/jpeg').download }
+    const result = await handleInboundMedia(db, input, deps)
+    expect(result).toEqual({ conversationId: '', contactId: '', reply: 'تحليل خاص', status: 'personal_analyzed' })
+    expect(fake.store.messages.rows).toHaveLength(0)
+    expect(fake.store.conversations.rows).toHaveLength(1)
+    expect(fake.store.conversations.rows?.[0]?.first_response_due_at).toBeUndefined()
+    expect(fake.store.personal_assistant_messages.rows).toHaveLength(2)
+    expect(fake.store.personal_assistant_messages.rows?.every(row => row.org_id === ORG && row.user_id === ownerId)).toBe(true)
+    expect(counter.usage.aiDaily).toBe(1)
+    expect(counter.usage.media).toBe(1)
+    expect((await handleInboundMedia(db, input, deps)).status).toBe('duplicate')
+    expect(personalCalls).toBe(1)
+    expect(calls).toEqual(['vision'])
+    expect(modelCalls).toHaveLength(0)
   })
 
   test('a rejected .apk gets the fixed polite reply and no model call', async () => {

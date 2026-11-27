@@ -81,11 +81,19 @@ export function PersonalExecutiveApp({ initialTab, showTrainer = false, personal
   const router = useRouter()
   const [tab, setTab] = useState<AssistantTab>(initialTab)
   const [agent, setAgent] = useState<AgentData | null>(null)
+  const [agentError, setAgentError] = useState<string | null>(null)
+  const [killError, setKillError] = useState<string | null>(null)
+  const killInFlight = useRef(false)
   const [killDialog, setKillDialog] = useState(false)
   const [killBusy, setKillBusy] = useState(false)
 
   const loadAgent = useCallback(async () => {
-    try { setAgent(await getJson<AgentData>('/api/assistant/agent')) } catch { /* keep the last state */ }
+    try {
+      setAgent(await getJson<AgentData>('/api/assistant/agent'))
+      setAgentError(null)
+    } catch {
+      setAgentError('تعذّر التحقق من حالة المساعد. أعد المحاولة.')
+    }
   }, [])
 
   useEffect(() => {
@@ -102,11 +110,22 @@ export function PersonalExecutiveApp({ initialTab, showTrainer = false, personal
 
   const killActive = agent?.killSwitchActive === true
   async function toggleKill() {
+    if (killInFlight.current || !agent || agentError) return
+    killInFlight.current = true
     setKillBusy(true)
-    await postJson('/api/assistant/agent', { type: 'kill_switch', active: !killActive })
-    setKillBusy(false)
-    setKillDialog(false)
-    await loadAgent()
+    setKillError(null)
+    try {
+      const result = await postJson<{ ok?: boolean }>('/api/assistant/agent', { type: 'kill_switch', active: !killActive })
+      if (!result.ok || result.data.ok !== true) throw new Error('kill_switch_failed')
+      setKillDialog(false)
+      await loadAgent()
+    } catch {
+      setKillError('تعذّر تأكيد تغيير حالة المساعد. تحقق من الحالة قبل إعادة المحاولة.')
+      await loadAgent()
+    } finally {
+      killInFlight.current = false
+      setKillBusy(false)
+    }
   }
 
   const pendingCount = agent?.approvals.length ?? 0
@@ -125,23 +144,26 @@ export function PersonalExecutiveApp({ initialTab, showTrainer = false, personal
             {killActive ? <OctagonX size={20} aria-hidden /> : <ShieldCheck size={20} aria-hidden />}
           </span>
           <div className="min-w-0">
-            <p className="text-sm font-extrabold">{killActive ? 'الإيقاف الفوري مفعّل' : 'Kayan AI يعمل'}</p>
+            <p className="text-sm font-extrabold">{agentError ? 'حالة المساعد غير مؤكدة' : !agent ? 'جارٍ التحقق من الحالة…' : killActive ? 'الإيقاف الفوري مفعّل' : 'Kayan AI يعمل'}</p>
             <p className={cx('truncate text-xs', killActive ? 'text-text-muted' : 'text-primary/80')}>
-              {killActive ? 'لن تُنفذ أي مهمة حتى تعيد التشغيل.' : 'يمكنك إيقاف كل المهام فوراً من هنا أو بإرسال «إيقاف فوري».'}
+              {agentError || !agent ? 'انتظر تأكيد حالة التشغيل.' : killActive ? 'لن تُنفذ أي مهمة حتى تعيد التشغيل.' : 'يمكنك إيقاف كل المهام فوراً من هنا أو بإرسال «إيقاف فوري».'}
             </p>
           </div>
         </div>
         <button
           type="button"
-          onClick={() => setKillDialog(true)}
+          onClick={() => { setKillError(null); setKillDialog(true) }}
+          disabled={!agent || Boolean(agentError) || killBusy}
           className={cx(
-            'inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-xl px-3 text-sm font-extrabold transition focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus',
+            'inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-xl px-3 text-sm font-extrabold transition disabled:opacity-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus',
             killActive ? 'bg-primary-dark text-primary' : 'bg-accent text-primary-dark'
           )}
         >
           {killActive ? <><Play size={16} aria-hidden /> استئناف</> : <><OctagonX size={16} aria-hidden /> إيقاف فوري</>}
         </button>
       </section>
+
+      {agentError ? <div role="alert" className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-error/30 bg-error-soft p-3 text-sm text-text"><span>{agentError}</span><Button variant="outline" onClick={() => void loadAgent()}>إعادة المحاولة</Button></div> : null}
 
       <TabsList className={cx('grid w-full', personal ? 'grid-cols-4' : 'grid-cols-2')}>
         {TAB_LABELS.filter(({ id }) => personal || id === 'chat' || id === 'tasks').map(({ id, label, icon: Icon }) => (
@@ -155,23 +177,24 @@ export function PersonalExecutiveApp({ initialTab, showTrainer = false, personal
 
       <div role="tabpanel" id={`pa-panel-${tab}`} aria-labelledby={`pa-tab-${tab}`}>
         {tab === 'chat' ? <ChatTab personal={personal} /> : null}
-        {tab === 'tasks' ? <TasksTab data={agent} onChanged={loadAgent} /> : null}
+        {tab === 'tasks' && !agentError ? <TasksTab data={agent} onChanged={loadAgent} /> : null}
         {personal && tab === 'memory' ? <div className="space-y-4">{showTrainer ? <TrainerPanel /> : null}<PersonalAssistantMemoryPanel /></div> : null}
         {personal && tab === 'tools' ? <ToolsPanel /> : null}
       </div>
 
       <Dialog
         open={killDialog}
-        onOpenChange={setKillDialog}
+        onOpenChange={(open) => { if (!killBusy) setKillDialog(open) }}
         className="z-50"
         title={killActive ? 'استئناف تنفيذ المهام؟' : 'إيقاف فوري لكل المهام؟'}
         description={killActive ? 'سيتمكن Kayan AI من تنفيذ المهام من جديد، مع بقاء الموافقة مطلوبة للإجراءات الحساسة.' : 'ستُلغى كل المهام الجارية وطلبات الموافقة فوراً، ولن تبدأ مهام جديدة حتى تستأنف.'}
         footer={<>
           <Button variant="outline" onClick={() => setKillDialog(false)} disabled={killBusy}>تراجع</Button>
-          <Button variant={killActive ? 'primary' : 'danger'} loading={killBusy} onClick={() => void toggleKill()}>{killActive ? 'استئناف' : 'إيقاف الآن'}</Button>
+          <Button variant={killActive ? 'primary' : 'danger'} loading={killBusy} disabled={!agent || Boolean(agentError)} onClick={() => void toggleKill()}>{killActive ? 'استئناف' : 'إيقاف الآن'}</Button>
         </>}
       >
         <p className="text-sm leading-6 text-text-muted">يُطبّق القرار على الموقع وواتساب معاً.</p>
+        {killError ? <p role="alert" className="mt-3 text-sm text-error">{killError}</p> : null}
       </Dialog>
     </div>
   )
@@ -543,16 +566,21 @@ function TasksTab({ data, onChanged }: { data: AgentData | null; onChanged: () =
   const [notice, setNotice] = useState<string | null>(null)
 
   async function decide() {
-    if (!pending) return
+    if (!pending || busy) return
     setBusy(true)
-    const result = await postJson<{ status?: string; reason?: string }>('/api/assistant/agent', {
-      type: 'approval', approvalId: pending.approval.id, decision: pending.decision, hash: pending.approval.payload_hash,
-    })
-    setBusy(false)
-    setPending(null)
-    const status = result.data.status
-    setNotice(status === 'approved' ? 'تم التأكيد وبدأ التنفيذ.' : status === 'expired' ? 'انتهت صلاحية الطلب؛ لم يُنفذ شيء.' : result.data.reason === 'hash_mismatch' ? 'رُفض تلقائياً لأن المحتوى تغيّر.' : 'تم الرفض؛ لم يُنفذ شيء.')
-    await onChanged()
+    try {
+      const result = await postJson<{ status?: string; reason?: string }>('/api/assistant/agent', {
+        type: 'approval', approvalId: pending.approval.id, decision: pending.decision, hash: pending.approval.payload_hash,
+      })
+      const status = result.data.status
+      setNotice(status === 'approved' ? 'تم التأكيد وبدأ التنفيذ.' : status === 'expired' ? 'انتهت صلاحية الطلب؛ لم يُنفذ شيء.' : result.data.reason === 'hash_mismatch' ? 'رُفض تلقائياً لأن المحتوى تغيّر.' : status === 'rejected' ? 'تم الرفض؛ لم يُنفذ شيء.' : 'تعذّر تأكيد القرار. تحقق من حالة الطلب قبل إعادة المحاولة.')
+    } catch {
+      setNotice('تعذّر تأكيد القرار. تحقق من اتصالك وحالة الطلب قبل إعادة المحاولة.')
+    } finally {
+      setBusy(false)
+      setPending(null)
+      await onChanged()
+    }
   }
 
   if (!data) return <p className="py-10 text-center text-sm text-text-muted">جارٍ التحميل…</p>
@@ -569,7 +597,7 @@ function TasksTab({ data, onChanged }: { data: AgentData | null; onChanged: () =
           <article key={approval.id} className="rounded-2xl border-2 border-accent bg-surface p-4">
             <p className="text-sm leading-6 text-text">{approval.summary_ar}</p>
             <p className="mt-2 text-[11px] text-text-muted">
-              بصمة SHA-256: <span className="font-mono" dir="ltr">{approval.payload_hash.slice(0, 12)}…</span> · تنتهي {formatTime(approval.expires_at)}
+              تم تثبيت محتوى الطلب للتحقق منه · تنتهي {formatTime(approval.expires_at)}
             </p>
             <div className="mt-3 grid grid-cols-2 gap-2">
               <Button onClick={() => setPending({ approval, decision: 'approve' })} leadingIcon={<CheckCircle2 size={16} aria-hidden />}>تأكيد التنفيذ</Button>
@@ -581,10 +609,11 @@ function TasksTab({ data, onChanged }: { data: AgentData | null; onChanged: () =
 
       <section aria-labelledby="pa-active" className="space-y-2">
         <h2 id="pa-active" className="text-sm font-extrabold text-text">مهام جارية ({active.length})</h2>
+        {active.length === 0 ? <p className="rounded-2xl border border-dashed border-border p-4 text-center text-xs text-text-muted">لا توجد مهام جارية.</p> : null}
         {active.map((task) => (
           <article key={task.id} className="flex items-center justify-between gap-3 rounded-2xl border border-border bg-surface p-3">
             <p className="min-w-0 truncate text-sm text-text">{task.goal}</p>
-            <span className="shrink-0 rounded-full bg-surface-muted px-2.5 py-1 text-[11px] font-bold text-text">{STATE_LABEL[task.state] ?? task.state}</span>
+            <span className="shrink-0 rounded-full bg-surface-muted px-2.5 py-1 text-[11px] font-bold text-text">{STATE_LABEL[task.state] ?? 'حالة غير معروفة'}</span>
           </article>
         ))}
       </section>
@@ -596,14 +625,14 @@ function TasksTab({ data, onChanged }: { data: AgentData | null; onChanged: () =
           <article key={receipt.id} className="rounded-2xl border border-border bg-surface p-3">
             <p className="text-sm font-bold leading-6 text-text">{receipt.summary_ar}</p>
             <p className="mt-1 text-xs leading-5 text-text-muted">لم يُمس: {receipt.untouched_scope_note}</p>
-            <p className="mt-1 text-[11px] text-text-muted">المرجع <span className="font-mono" dir="ltr">{receipt.task_id.slice(0, 8)}</span> · {formatTime(receipt.created_at)}</p>
+            <p className="mt-1 text-[11px] text-text-muted">وقت التنفيذ · {formatTime(receipt.created_at)}</p>
           </article>
         ))}
       </section>
 
       <Dialog
         open={pending !== null}
-        onOpenChange={(open) => { if (!open) setPending(null) }}
+        onOpenChange={(open) => { if (!open && !busy) setPending(null) }}
         className="z-50"
         title={pending?.decision === 'approve' ? 'تأكيد التنفيذ' : 'رفض الطلب'}
         description={pending?.decision === 'approve' ? 'سيُنفذ هذا الإجراء بالمحتوى المعروض فقط؛ أي تغيير فيه يُرفض تلقائياً.' : 'لن يُنفذ أي شيء وستُلغى المهمة.'}

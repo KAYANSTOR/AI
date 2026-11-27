@@ -33,7 +33,7 @@ const groups = [
   { title: 'الأدوات المتقدمة', items: [
     { href:'/dashboard/settings/canned-replies',title:'الردود الجاهزة',description:'عبارات سريعة لفريقك',icon:MessageSquareText,capability:'inbox' },
     { href:'/dashboard/settings/escalation',title:'سياسات التصعيد',description:'قواعد التحويل ومهل الاستجابة',icon:Shield,capability:'inbox' },
-    { href:'/dashboard/settings/api-keys',title:'مفاتيح API',description:'مفاتيح الربط البرمجي',icon:KeyRound,adminOnly:true },
+    { href:'/dashboard/settings/api-keys',title:'مفاتيح الربط البرمجي',description:'مفاتيح الربط البرمجي',icon:KeyRound,adminOnly:true },
   ]},
 ]
 
@@ -72,10 +72,10 @@ export function SettingsHub(props: {
         </div>
         <div className="mt-4 flex items-center justify-between gap-3 border-t border-primary/15 pt-3">
           <div><p className="text-[10px] text-primary/65">الاشتراك</p><p className="mt-1 text-xs font-bold text-primary">{props.planName} · {props.subscriptionStatus}</p></div>
-          <Link href="/dashboard/billing" className="shrink-0 rounded-full bg-primary px-3 py-2 text-[11px] font-bold text-primary-dark">إدارة الباقة</Link>
+          <Link href="/dashboard/billing" className="inline-flex min-h-11 shrink-0 items-center rounded-full bg-primary px-3 py-2 text-[11px] font-bold text-primary-dark">إدارة الباقة</Link>
         </div>
         <p className="mt-3 truncate text-[11px] text-primary/75">{accountRole} · <bdi>{props.accountIdentity}</bdi></p>
-        <form action={signOutAction} className="mt-3"><button type="submit" className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-xl border border-primary/25 bg-primary/10 text-xs font-bold text-primary"><LogOut size={15}/> تسجيل الخروج</button></form>
+        <form action={signOutAction} className="mt-3"><button type="submit" className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-primary/25 bg-primary/10 text-xs font-bold text-primary"><LogOut size={15}/> تسجيل الخروج</button></form>
       </section>
       <section className="space-y-2.5">
         <h2 className="text-sm font-extrabold text-text">تفضيلات النظام</h2>

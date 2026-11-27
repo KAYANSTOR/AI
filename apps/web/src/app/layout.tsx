@@ -1,8 +1,16 @@
 import type { Metadata, Viewport } from 'next'
+import { IBM_Plex_Sans_Arabic } from 'next/font/google'
 import { siteDescription } from '@/lib/site-metadata'
 import { themeBootScript } from '@/components/theme/theme-script'
 import { brandColors } from '@/lib/design-system/tokens'
 import './globals.css'
+
+const arabicFont = IBM_Plex_Sans_Arabic({
+  subsets: ['arabic', 'latin'],
+  weight: ['400', '500', '600', '700'],
+  display: 'swap',
+  variable: '--font-kayan-arabic',
+})
 
 /** Absolute base URL for canonical and Open Graph metadata. */
 const siteUrl =
@@ -56,7 +64,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       lang="ar"
       dir="rtl"
       suppressHydrationWarning
-      className="h-full antialiased"
+      className={`${arabicFont.variable} h-full antialiased`}
     >
       <head>
         {/* Applies the saved or system theme before first paint. */}
