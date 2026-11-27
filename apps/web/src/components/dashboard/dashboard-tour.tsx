@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { usePathname } from 'next/navigation'
 import { ArrowLeft, ArrowRight, CheckCircle2, Compass, LocateFixed, Sparkles, X } from 'lucide-react'
 import {
@@ -47,6 +47,12 @@ function writeLocalExplored(storageKey: string, nextList: string[]): void {
       reason: error instanceof Error ? error.message : String(error),
     })
   }
+}
+
+function recordScreenExploration(storageKey: string, explored: Set<string>, screenKey: string) {
+  const updated = markScreenExplored(explored, screenKey)
+  writeLocalExplored(storageKey, updated)
+  return new Set(updated)
 }
 
 function ScreenTourCard({
@@ -225,30 +231,23 @@ export function DashboardTour({ access, storageKey = 'default' }: { access: Tour
     return () => target.removeAttribute('data-tour-active')
   }, [active, step.id])
 
-  const completeScreenExploration = useCallback(
-    (screenKey: string) => {
-      setExploredSet((prev) => {
-        const updatedList = markScreenExplored(prev, screenKey)
-        writeLocalExplored(storageKey, updatedList)
-        return new Set(updatedList)
-      })
-    },
-    [storageKey]
-  )
+  function completeScreenExploration(screenKey: string) {
+    setExploredSet(recordScreenExploration(storageKey, exploredSet, screenKey))
+  }
 
   // Auto-retire the screen guide once the user interacts with real controls on that screen.
+  const visibleScreen = showInnerCard ? innerGuide?.screenKey : undefined
   useEffect(() => {
-    if (!showInnerCard || !innerGuide) return
+    if (!visibleScreen) return
     const main = document.getElementById('dashboard-main')
     if (!main) return
-    const screenKey = innerGuide.screenKey
 
     const handlePageUse = (event: Event) => {
       const target = event.target as HTMLElement | null
       if (!target) return
       if (target.closest('[data-screen-tour-card]')) return
       if (!target.closest('a, button, input, select, textarea, [role="button"], form')) return
-      completeScreenExploration(screenKey)
+      setExploredSet(recordScreenExploration(storageKey, exploredSet, visibleScreen))
     }
 
     main.addEventListener('click', handlePageUse, true)
@@ -257,7 +256,7 @@ export function DashboardTour({ access, storageKey = 'default' }: { access: Tour
       main.removeEventListener('click', handlePageUse, true)
       main.removeEventListener('change', handlePageUse, true)
     }
-  }, [showInnerCard, innerGuide, completeScreenExploration])
+  }, [exploredSet, storageKey, visibleScreen])
 
   async function save(next: TourProgress) {
     if (saving.current) return

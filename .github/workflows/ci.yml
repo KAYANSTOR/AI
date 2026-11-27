@@ -57,7 +57,31 @@ jobs:
         run: npm run typecheck
       - name: Unit tests
         if: ${{ !cancelled() && steps.web_install.outcome == 'success' }}
-        run: npm test
+        shell: bash
+        run: |
+          log="$RUNNER_TEMP/unit-tests.log"
+          status=0
+          npm run test --workspace=apps/web 2>&1 | tee "$log" || status=${PIPESTATUS[0]}
+          if [ "$status" -ne 0 ]; then
+            node --input-type=module - "$log" <<'JS'
+          import { readFileSync } from 'node:fs'
+          import { stripVTControlCharacters } from 'node:util'
+          let file = ''
+          let count = 0
+          for (const line of stripVTControlCharacters(readFileSync(process.argv[2], 'utf8')).split('\n')) {
+            const testFile = /^(?:apps\/web\/)?(tests\/[\w./-]+\.test\.[tj]sx?):\s*$/.exec(line)
+            if (testFile) file = ` file=apps/web/${testFile[1]}`
+            const failure = /^\s*\(fail\)\s+(.+)/.exec(line)?.[1]
+            if (!failure) continue
+            console.log(`::error${file}::Unit test failed: ${failure.replaceAll('%', '%25').replaceAll('\r', '%0D')}`)
+            if (++count === 15) break
+          }
+          JS
+          fi
+          exit "$status"
+      - name: Gateway unit tests
+        if: ${{ !cancelled() && steps.web_install.outcome == 'success' }}
+        run: node --test apps/whatsapp-gateway/test/*.test.js
       - name: Build
         run: npm run build
 
