@@ -19,6 +19,7 @@ export function NotificationReadAction({
   if (markAll && unreadCount === 0) return null
 
   function markRead() {
+    if (pending) return
     setError(null)
     startTransition(async () => {
       try {
@@ -45,7 +46,7 @@ export function NotificationReadAction({
         disabled={pending}
         aria-label={label}
         title={label}
-        className={`inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-xl border border-border bg-surface text-primary transition-colors hover:bg-primary-light/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-wait disabled:opacity-60 ${
+        className={`inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-xl border border-border bg-surface text-text transition-colors hover:bg-primary-light/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-secondary disabled:cursor-wait disabled:opacity-60 ${
           markAll ? 'px-3 text-sm font-semibold' : ''
         }`}
       >

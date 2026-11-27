@@ -1,7 +1,7 @@
 import { isOwnerPauseActive } from '@/lib/runtime/owner-presence'
 import type { DbClient } from '@/lib/db/client'
 import { createAdminClient } from '@/lib/db/admin'
-import { findUserById, normalizePhone } from '@/lib/auth/users'
+import { findUserIdentitiesByIds, normalizePhone } from '@/lib/auth/users'
 import { normalizeE164, resolveContactIdentity } from '@/lib/channels/contacts'
 import { getConsentStatus, isOptOutMessage, recordOptOut } from '@/lib/channels/consent'
 import { checkEligibility } from '@/lib/channels/eligibility'
@@ -46,12 +46,19 @@ export type InboundAiGuards = {
   coalesceMs: number
 }
 
+type OwnerIdentityLookup = (ids: string[]) => Promise<Array<{ id: string; phone: string | null }>>
+let ownerIdentityLookup: OwnerIdentityLookup = findUserIdentitiesByIds
+/** Test seam: replace only the auth identity read, not the organization membership gate. */
+export function setInboundOwnerIdentityLookup(lookup: OwnerIdentityLookup | null) {
+  ownerIdentityLookup = lookup ?? findUserIdentitiesByIds
+}
+
 async function organizationOwnerPhone(organizationId: string): Promise<string | null> {
   try {
     const { data } = await createAdminClient().from('organization_members').select('user_id')
       .eq('organization_id', organizationId).eq('role', 'owner').limit(1).maybeSingle()
     if (!data?.user_id) return null
-    const owner = await findUserById(String(data.user_id))
+    const [owner] = await ownerIdentityLookup([String(data.user_id)])
     return owner?.phone ?? null
   } catch {
     return null
@@ -201,7 +208,7 @@ async function resolvePersonalAssistantOwner(
         .eq('organization_id', input.organizationId).eq('user_id', settings.user_id).eq('role', 'owner').maybeSingle()
       if (membershipError) throw new Error('personal_owner_membership_lookup_failed')
       if (membership?.user_id) {
-        const owner = await findUserById(String(membership.user_id))
+        const [owner] = await ownerIdentityLookup([String(membership.user_id)])
         if (owner?.phone && normalizePhone(owner.phone) === normalizePhone(senderE164)) {
           return { userId: String(owner.id) }
         }
@@ -215,12 +222,10 @@ async function resolvePersonalAssistantOwner(
         .eq('organization_id', input.organizationId)
         .eq('role', 'owner')
       if (ownersError) throw new Error('personal_workspace_owner_lookup_failed')
-      for (const row of (owners ?? []) as Array<{ user_id?: unknown }>) {
-        const ownerId = String(row.user_id ?? '')
-        if (!ownerId) continue
-        const owner = await findUserById(ownerId)
-        if (owner?.phone && normalizePhone(owner.phone) === normalizePhone(senderE164)) {
-          return { userId: String(owner.id) }
+      const ownerIds = (owners ?? []).map(row => String(row.user_id ?? '')).filter(Boolean)
+      for (const owner of await ownerIdentityLookup(ownerIds)) {
+        if (ownerIds.includes(owner.id) && owner.phone && normalizePhone(owner.phone) === normalizePhone(senderE164)) {
+          return { userId: owner.id }
         }
       }
     }

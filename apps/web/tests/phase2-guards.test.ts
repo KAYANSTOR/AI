@@ -17,6 +17,7 @@ import {
   applyChannelFormatRules,
   enforceWhatsAppBrevity,
   maxOutputTokensForChannel,
+  outputTokenBudget,
   DEFAULT_MAX_OUTPUT_TOKENS,
   WHATSAPP_BREVITY_MARKER,
   WHATSAPP_MAX_OUTPUT_TOKENS,
@@ -216,8 +217,10 @@ describe('WhatsApp brevity guard', () => {
     const runtime = readFileSync(new URL('../src/lib/runtime/agent-runtime.ts', import.meta.url), 'utf8')
     expect(runtime).toContain('system: applyChannelFormatRules(args.systemPrompt, args.channel)')
     // Channel cap always applies; the free-plan cap (3C) can only lower it.
-    expect(runtime).toContain('Math.min(args.maxOutputTokens, maxOutputTokensForChannel(args.channel))')
-    expect(runtime).toContain(': maxOutputTokensForChannel(args.channel)')
+    expect(runtime).toContain('maxOutputTokens: outputTokenBudget(args.channel, args.maxOutputTokens)')
+    expect(outputTokenBudget('whatsapp', 350)).toBe(350)
+    expect(outputTokenBudget('whatsapp', null)).toBe(WHATSAPP_MAX_OUTPUT_TOKENS)
+    expect(outputTokenBudget('whatsapp_qr', 9000)).toBe(WHATSAPP_MAX_OUTPUT_TOKENS)
   })
 
   test('normalizes headings and bold text without dropping any lines', () => {

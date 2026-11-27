@@ -17,6 +17,10 @@ export default async function SettingsPage() {
     personal ? null : db.from('capabilities').select('id, name, description').order('name'),
     loadBillingSnapshot(db, context.organizationId),
   ])
+  if (capabilities?.error) {
+    console.error('dashboard_settings_capabilities_failed')
+    throw new Error('settings_load_failed')
+  }
   const enabledMap = new Map(context.enabledCapabilities.map((id) => [id, true]))
   const capabilityRows = (capabilities?.data ?? []).map((capability) => ({
     id: String(capability.id),
@@ -40,8 +44,8 @@ export default async function SettingsPage() {
       accountIdentity={context.email ?? context.phone ?? 'الحساب'}
       role={context.role}
       setupComplete={context.setupComplete}
-      planName={plan?.name ?? snapshot.planCode}
-      subscriptionStatus={statusLabels[snapshot.status] ?? snapshot.status}
+      planName={plan?.name ?? 'باقة مخصصة'}
+      subscriptionStatus={statusLabels[snapshot.status] ?? 'حالة غير معروفة'}
       capabilityRows={capabilityRows}
       isAdmin={context.role === 'owner' || context.role === 'admin'}
       personalAssistantEnabled={context.personalAssistantEnabled}

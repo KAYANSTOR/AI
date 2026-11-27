@@ -53,7 +53,7 @@ export function Dialog({
       ref={ref}
       aria-labelledby={titleId}
       aria-describedby={description ? descriptionId : undefined}
-      onCancel={() => onOpenChange(false)}
+      onCancel={(event) => { event.preventDefault(); onOpenChange(false) }}
       onClose={() => onOpenChange(false)}
       className={cx(
         'dialog-size z-50 m-auto max-h-[calc(100dvh-2rem)] overflow-y-auto overscroll-contain rounded-card border border-border bg-surface p-0 text-text shadow-overlay backdrop:bg-overlay/70 backdrop:backdrop-blur-sm',
@@ -61,7 +61,7 @@ export function Dialog({
       )}
     >
       <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-border bg-surface p-5">
-        <div>
+        <div className="min-w-0 break-words">
           <h2 id={titleId} className="type-heading-3">{title}</h2>
           {description ? <p id={descriptionId} className="mt-1 type-body-small text-text-muted">{description}</p> : null}
         </div>
@@ -90,7 +90,7 @@ export function Drawer({
       ref={ref}
       aria-labelledby={titleId}
       aria-describedby={description ? descriptionId : undefined}
-      onCancel={() => onOpenChange(false)}
+      onCancel={(event) => { event.preventDefault(); onOpenChange(false) }}
       onClose={() => onOpenChange(false)}
       className={cx(
         'drawer-size z-50 ms-auto me-0 h-dvh max-h-none translate-x-0 border-0 border-s border-border bg-surface p-0 text-text shadow-overlay backdrop:bg-overlay/70 backdrop:backdrop-blur-sm',
@@ -99,14 +99,14 @@ export function Drawer({
     >
       <div className="flex h-full flex-col">
         <div className="flex items-start justify-between gap-4 border-b border-border p-5 pt-safe">
-          <div>
+          <div className="min-w-0 break-words">
             <h2 id={titleId} className="type-heading-3">{title}</h2>
             {description ? <p id={descriptionId} className="mt-1 type-body-small text-text-muted">{description}</p> : null}
           </div>
           <IconButton variant="ghost" size="sm" label="إغلاق" icon={<X className="h-icon-sm w-icon-sm" />} onClick={() => onOpenChange(false)} />
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto p-5">{children}</div>
-        {footer ? <footer className="flex flex-wrap justify-end gap-3 border-t border-border p-5 pb-safe">{footer}</footer> : null}
+        {footer ? <footer className="sticky bottom-0 flex shrink-0 flex-wrap justify-end gap-3 border-t border-border bg-surface p-5 pb-safe">{footer}</footer> : null}
       </div>
     </dialog>
   )

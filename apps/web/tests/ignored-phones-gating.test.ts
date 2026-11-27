@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from 'bun:test'
 import type { DbClient } from '@/lib/db/client'
 import { createFakeDb, type FakeDb } from './support/fake-db'
 import { processInboundMessage, classifyInboundPrivacy } from '@/lib/runtime/process-inbound'
-import { setAgentTurnRunner, setPersonalTurnRunner } from '@/lib/runtime/process-inbound'
+import { setAgentTurnRunner, setPersonalTurnRunner, setInboundOwnerIdentityLookup } from '@/lib/runtime/process-inbound'
 
 const ORG = 'aaaaaaaa-0000-4000-8000-00000000000f'
 const BIZ = 'aaaaaaaa-0000-4000-8000-0000000000bf'
@@ -58,7 +58,7 @@ function inbound(db: DbClient, phone: string) {
 }
 
 describe('F-003 ignored_phones gating', () => {
-  afterEach(() => { setAgentTurnRunner(null); setPersonalTurnRunner(null) })
+  afterEach(() => { setAgentTurnRunner(null); setPersonalTurnRunner(null); setInboundOwnerIdentityLookup(null) })
   test('a phone on ignored_phones creates no business records and gets no commercial reply', async () => {
     const fake = createFakeDb(
       baseTables([IGNORED_PHONE], {
@@ -114,6 +114,28 @@ describe('F-003 ignored_phones gating', () => {
     expect(store.conversations?.rows).toHaveLength(1)
     expect(store.messages?.rows?.length ?? 0).toBe(0)
     expect(store.conversations?.rows?.[0]?.first_response_due_at ?? null).toBeNull()
+  })
+
+  test('legacy configured owner is routed privately using the scoped membership and auth identity', async () => {
+    const ownerPhone = '+12025550104'
+    const userId = 'bbbbbbbb-0000-4000-8000-00000000000f'
+    const fake = createFakeDb({
+      ...baseTables([], { id: 'conv-legacy', organization_id: ORG }),
+      organization_members: { rows: [{ organization_id: ORG, user_id: userId, role: 'owner' }] },
+      personal_assistant_settings: { rows: [{ organization_id: ORG, user_id: userId, whatsapp_channel_id: CHANNEL, whatsapp_reminders_enabled: true }] },
+    })
+    setInboundOwnerIdentityLookup(async ids => {
+      expect(ids).toEqual([userId])
+      return [{ id: userId, phone: ownerPhone }]
+    })
+    setPersonalTurnRunner(async (_db, owner) => {
+      expect(owner).toEqual({ organizationId: ORG, userId })
+      return { reply: 'رد شخصي', inputTokens: 0, outputTokens: 0, model: 'test' }
+    })
+    const result = await inbound(fake.client as unknown as DbClient, ownerPhone)
+    expect(result).toEqual({ reply: 'رد شخصي', conversationId: '', contactId: '' })
+    expect(fake.store.messages.rows).toHaveLength(0)
+    expect(fake.store.conversations.rows).toHaveLength(1)
   })
 
   test('a stopped verified owner never falls through to the business inbox', async () => {

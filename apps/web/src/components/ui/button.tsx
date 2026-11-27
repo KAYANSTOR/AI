@@ -15,7 +15,7 @@ const variantClasses: Record<ButtonVariant, string> = {
 }
 
 const sizeClasses: Record<ButtonSize, string> = {
-  sm: 'min-h-9 rounded-lg px-3 text-xs',
+  sm: 'min-h-11 min-w-11 rounded-lg px-3 text-xs',
   md: 'min-h-11 rounded-xl px-4 text-sm',
   lg: 'min-h-12 rounded-xl px-6 text-base',
   icon: 'h-11 w-11 rounded-xl p-0',
@@ -97,7 +97,7 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(functio
       size="icon"
       aria-label={label}
       title={label}
-      className={cx(size === 'sm' && 'h-9 w-9 rounded-lg', className)}
+      className={cx(size === 'sm' && 'rounded-lg', className)}
       {...props}
     >
       {icon}

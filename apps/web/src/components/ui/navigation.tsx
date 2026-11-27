@@ -24,7 +24,7 @@ export function TabsTrigger({
       role="tab"
       aria-selected={active}
       className={cx(
-        'min-h-9 rounded-lg px-3 type-label transition focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus',
+        'min-h-11 min-w-0 rounded-lg px-2 type-label transition focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus',
         active ? 'bg-surface text-text shadow-card' : 'text-text-muted hover:text-text',
         className
       )}
@@ -68,7 +68,7 @@ export function DropdownItem({ className, ...props }: ButtonHTMLAttributes<HTMLB
     <button
       type="button"
       role="menuitem"
-      className={cx('flex min-h-10 w-full items-center gap-2 rounded-lg px-3 text-start type-body-small text-text transition hover:bg-surface-muted', className)}
+      className={cx('flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-start type-body-small text-text transition hover:bg-surface-muted', className)}
       {...props}
     />
   )
@@ -108,7 +108,7 @@ export function Pagination({
   className?: string
 }) {
   const linkClass =
-    'inline-flex min-h-10 items-center gap-1 rounded-lg border border-border bg-surface px-3 type-label text-text transition hover:border-border-strong aria-disabled:pointer-events-none aria-disabled:opacity-disabled'
+    'inline-flex min-h-11 items-center gap-1 rounded-lg border border-border bg-surface px-3 type-label text-text transition hover:border-border-strong aria-disabled:pointer-events-none aria-disabled:opacity-disabled'
   return (
     <nav aria-label="ترقيم الصفحات" className={cx('flex items-center justify-between gap-4', className)}>
       <Link href={previousHref || '#'} aria-disabled={!previousHref} className={linkClass}>

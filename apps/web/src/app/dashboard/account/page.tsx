@@ -33,7 +33,7 @@ export default async function AccountPage() {
         <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-primary-light text-xl font-bold text-secondary" aria-hidden="true">
           {initial}
         </div>
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <p className="truncate text-lg font-bold text-text">{context.organizationName}</p>
           <span className="mt-1 inline-flex rounded-full border border-success/30 bg-success/10 px-2.5 py-0.5 text-[11px] font-semibold text-success">
             {accountRole}
