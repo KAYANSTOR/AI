@@ -55,8 +55,8 @@ const PHONE_OWNER_B = '+967722222222'
 const T0 = Date.parse('2026-11-27T09:00:00Z')
 const RECENT = '2026-11-27T08:00:00Z'
 
-function asDb(client: unknown): DbClient {
-  return client as unknown as DbClient
+function asDb(fake: ReturnType<typeof createFakeDb>): DbClient {
+  return fake.client as unknown as DbClient
 }
 
 function setupPhase5Db() {

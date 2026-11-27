@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Brain, CheckCircle2, ClipboardList, Link2, MessageCircle, Mic, OctagonX, Paperclip, Play, Plug, Send, ShieldCheck, Smartphone, Square, XCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -271,8 +272,8 @@ function WhatsAppLinkCard() {
       <div className="flex items-start gap-3">
         <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-whatsapp/15 text-whatsapp"><Smartphone size={20} aria-hidden /></span>
         <div className="min-w-0">
-          <h2 className="text-sm font-extrabold text-text">اربط واتساب بلمسة واحدة</h2>
-          <p className="mt-0.5 text-xs leading-5 text-text-muted">تحدث مع Kayan AI من واتساب وتظهر الرسائل هنا مباشرة.</p>
+          <h2 className="text-sm font-extrabold text-text">مراسلة المساعد من واتساب</h2>
+          <p className="mt-0.5 text-xs leading-5 text-text-muted">تظهر رسائلك إلى رقم المساعد المركزي في هذه المحادثة.</p>
         </div>
       </div>
       {error ? <p role="alert" className="mt-3 rounded-xl bg-error-soft p-2.5 text-xs text-error">{error}</p> : null}
@@ -283,12 +284,16 @@ function WhatsAppLinkCard() {
           </a>
           <p className="text-center text-xs text-text-muted">الرمز <span className="font-mono font-bold text-text" dir="ltr">تفعيل_{link.code}</span> صالح 15 دقيقة.</p>
         </div>
-      ) : (
-        <Button className="mt-3" fullWidth loading={busy} disabled={busy || !status.configured} onClick={() => void generate()}>
-          {status.configured ? 'إنشاء رابط التفعيل' : 'الرقم المركزي قيد التهيئة'}
+      ) : status.configured ? (
+        <Button className="mt-3" fullWidth loading={busy} disabled={busy} onClick={() => void generate()}>
+          إنشاء رابط التفعيل
         </Button>
+      ) : (
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+          <p role="status" className="text-xs text-text-muted">رقم المساعد المركزي غير متاح حاليًا.</p>
+          <Button size="sm" variant="ghost" onClick={() => void load()}>إعادة فحص الجاهزية</Button>
+        </div>
       )}
-      {!status.configured && <Button className="mt-2" size="sm" variant="ghost" onClick={() => void load()}>إعادة فحص الجاهزية</Button>}
     </div>
   )
 }
@@ -302,6 +307,8 @@ function ChatTab({ personal }: { personal: boolean }) {
   const [uploading, setUploading] = useState(false)
   const [recordingSeconds, setRecordingSeconds] = useState<number | null>(null)
   const threadRef = useRef<HTMLDivElement>(null)
+  const composerRef = useRef<HTMLFormElement>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const recorderRef = useRef<{ recorder: MediaRecorder; timer: ReturnType<typeof setInterval>; stream: MediaStream } | null>(null)
 
@@ -385,10 +392,44 @@ function ChatTab({ personal }: { personal: boolean }) {
     void load()
   }, [load])
   useVisiblePolling(load, true)
+  const lastMessageId = messages.at(-1)?.id
   useEffect(() => {
     const thread = threadRef.current
     if (thread) thread.scrollTop = thread.scrollHeight
-  }, [messages.length])
+  }, [lastMessageId])
+
+  useEffect(() => {
+    const composer = composerRef.current
+    const input = inputRef.current
+    const scrollFrame = composer?.closest<HTMLElement>('.dashboard-main-scroll')
+    if (!composer || !input || !scrollFrame) return
+
+    const viewport = window.visualViewport
+    function syncViewport() {
+      if (!scrollFrame || !viewport) return
+      const keyboardHeight = document.activeElement === input && viewport.scale === 1
+        ? Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop)
+        : 0
+      scrollFrame.style.setProperty('--assistant-keyboard-inset', keyboardHeight > 0 ? `${keyboardHeight + 8}px` : '0px')
+    }
+    const resize = new ResizeObserver(() => {
+      scrollFrame.style.setProperty('--assistant-composer-height', `${composer.offsetHeight}px`)
+    })
+    resize.observe(composer)
+    viewport?.addEventListener('resize', syncViewport)
+    viewport?.addEventListener('scroll', syncViewport)
+    input.addEventListener('focus', syncViewport)
+    input.addEventListener('blur', syncViewport)
+    return () => {
+      resize.disconnect()
+      viewport?.removeEventListener('resize', syncViewport)
+      viewport?.removeEventListener('scroll', syncViewport)
+      input.removeEventListener('focus', syncViewport)
+      input.removeEventListener('blur', syncViewport)
+      scrollFrame.style.removeProperty('--assistant-keyboard-inset')
+      scrollFrame.style.removeProperty('--assistant-composer-height')
+    }
+  }, [])
 
   async function send(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -396,16 +437,39 @@ function ChatTab({ personal }: { personal: boolean }) {
     if (!value || sending) return
     setSending(true)
     setError(null)
-    const result = await postJson<{ reply?: string; error?: string }>('/api/assistant/chat', { text: value })
-    setSending(false)
-    if (!result.ok) { setError(result.status === 429 ? ((result.data as { reply?: string | null } | null)?.reply || 'وصلت إلى حد باقتك أو أرسلت رسائل كثيرة خلال دقيقة.') : 'تعذّر الإرسال. حاول مرة أخرى.'); return }
-    setText('')
-    await load()
+    try {
+      const result = await postJson<{ reply?: string }>('/api/assistant/chat', { text: value })
+      if (!result.ok) {
+        setError(result.status === 429
+          ? result.data.reply || 'وصلت إلى حد باقتك أو أرسلت رسائل كثيرة خلال دقيقة.'
+          : 'تعذّر الإرسال. حاول مرة أخرى.')
+        return
+      }
+      setText((draft) => draft.trim() === value ? '' : draft)
+      await load()
+      requestAnimationFrame(() => threadRef.current?.scrollIntoView({ block: 'end' }))
+    } catch (error) {
+      console.warn('Assistant chat send failed', { errorType: error instanceof Error ? error.name : 'unknown' })
+      setError('تعذّر الاتصال أثناء الإرسال. حاول مرة أخرى.')
+    } finally {
+      setSending(false)
+    }
   }
 
   return (
     <div className="space-y-3">
-      {personal ? <WhatsAppLinkCard /> : null}
+      {personal && (
+        <>
+          <Link href="/dashboard/channels" className="flex min-h-14 items-center gap-3 rounded-2xl border border-border bg-surface p-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary-light text-secondary"><Link2 size={19} aria-hidden="true" /></span>
+            <span className="min-w-0">
+              <strong className="block text-sm text-text">إدارة القنوات</strong>
+              <span className="block text-xs leading-5 text-text-muted">ربط رقم واتساب الخاص بك وإنستغرام وماسنجر وتيليجرام.</span>
+            </span>
+          </Link>
+          <WhatsAppLinkCard />
+        </>
+      )}
       <section aria-label="المحادثة الموحدة" className="rounded-2xl border border-border bg-surface">
         <div ref={threadRef} className="max-h-[55dvh] min-h-56 space-y-2 overflow-y-auto overscroll-contain p-3 pb-4" aria-live="polite">
           {messages.length === 0 ? <p className="py-10 text-center text-sm text-text-muted">ابدأ بطلب مثل: «ذكّرني بدفع الإيجار يوم الخميس».</p> : null}
@@ -427,14 +491,14 @@ function ChatTab({ personal }: { personal: boolean }) {
             )
           })}
         </div>
-        {error ? <p role="alert" className="mx-3 mb-2 rounded-xl bg-error-soft p-2 text-xs text-error">{error}</p> : null}
+        <form ref={composerRef} onSubmit={send} aria-busy={sending} className="assistant-chat-composer flex flex-wrap items-end gap-2 rounded-2xl border border-border bg-surface p-3 shadow-card">
+        {error ? <p role="alert" className="basis-full rounded-xl bg-error-soft p-2 text-xs text-error">{error}</p> : null}
         {recordingSeconds !== null ? (
-          <p role="status" className="mx-3 mb-2 flex items-center gap-2 rounded-xl bg-primary-light px-3 py-2 text-xs font-semibold text-secondary">
+          <p role="status" className="flex basis-full items-center gap-2 rounded-xl bg-primary-light px-3 py-2 text-xs font-semibold text-secondary">
             <span className="h-2 w-2 animate-pulse rounded-full bg-error" aria-hidden />
             جارٍ التسجيل {recordingSeconds} / {limits?.audioMaxSeconds ?? 30} ث — اضغط الإيقاف للإرسال
           </p>
         ) : null}
-        <form onSubmit={send} className="assistant-chat-composer flex items-end gap-2 rounded-2xl border border-border bg-surface p-3 shadow-card">
           <input
             ref={fileRef}
             type="file"
@@ -456,15 +520,17 @@ function ChatTab({ personal }: { personal: boolean }) {
           </Button>
           <label htmlFor="pa-composer" className="sr-only">اكتب طلبك</label>
           <textarea
+            ref={inputRef}
             id="pa-composer"
+            dir="auto"
             value={text}
             onChange={(event) => setText(event.target.value)}
             maxLength={limits?.maxInputChars ?? 2000}
             rows={1}
             placeholder="اكتب طلبك…"
-            className="min-h-11 min-w-0 flex-1 resize-none rounded-xl border border-border bg-surface px-3 py-2.5 text-sm text-text outline-none focus:border-primary-dark focus:ring-2 focus:ring-focus"
+            className="min-h-11 min-w-0 flex-1 resize-none rounded-xl border border-border bg-surface px-3 py-2.5 text-base text-text outline-none focus:border-primary-dark focus:ring-2 focus:ring-focus sm:text-sm"
           />
-          <Button type="submit" size="icon" aria-label="إرسال" loading={sending} disabled={!text.trim()}><Send size={18} aria-hidden /></Button>
+          <Button type="submit" size="icon" aria-label="إرسال" loading={sending} disabled={sending || !text.trim()}><Send size={18} aria-hidden /></Button>
         </form>
       </section>
     </div>

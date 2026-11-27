@@ -41,8 +41,8 @@ const THIRD_PARTY_PHONE = '+967799999999'
 const ORG_BIZ = '0b000000-0000-4000-8000-000000000020'
 const BIZ_REGULAR = '0b000000-0000-4000-8000-000000000021'
 
-function asDb(client: unknown): DbClient {
-  return client as unknown as DbClient
+function asDb(fake: ReturnType<typeof createFakeDb>): DbClient {
+  return fake.client as unknown as DbClient
 }
 
 const originalFetch = globalThis.fetch
@@ -486,9 +486,9 @@ describe('Fix 2: Eliminates response truncation & thinking token starvation acro
     const sentCentralBodies: string[] = []
     const cfg = getCentralBotConfig({
       NODE_ENV: 'test',
-      KAYAN_CENTRAL_WA_TOKEN: 'central-tok',
+      KAYAN_CENTRAL_WA_ACCESS_TOKEN: 'central-tok',
       KAYAN_CENTRAL_WA_PHONE_NUMBER_ID: 'pn-central',
-      KAYAN_CENTRAL_WA_DISPLAY_NUMBER: '+967700000000',
+      KAYAN_CENTRAL_WA_DISPLAY_NUMBER: '+12025550100',
     })
     expect(cfg).not.toBeNull()
     if (cfg) {

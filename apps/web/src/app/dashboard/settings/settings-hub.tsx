@@ -22,7 +22,7 @@ const groups = [
     { href:'/dashboard/agent',title:'المساعد الذكي',description:'إعداد الوكيل واختباره',icon:Bot },
     { href:'/dashboard/assistant?tab=memory',title:'الذاكرة الشخصية',description:'إدارة معلوماتك المحفوظة الخاصة بك',icon:Brain,personalAssistant:true },
     { href:'/dashboard/knowledge',title:'قاعدة المعرفة',description:'معلومات النشاط ومصادر الإجابة',icon:BookOpen,capability:'knowledge_base' },
-    { href:'/dashboard/channels',title:'القنوات والربط',description:'واتساب والقنوات المتصلة',icon:RadioTower },
+    { href:'/dashboard/channels',title:'القنوات والربط',description:'واتساب والقنوات المتصلة',icon:RadioTower,personalWorkspace:true },
     { href:'/dashboard/integrations',title:'التكاملات',description:'الخدمات والاتصالات الخارجية',icon:Zap },
     { href:'/dashboard/copilot',title:'مساعد الأعمال',description:'مساعدة في استخدام أدوات العمل',icon:Sparkles },
     { href:'/dashboard/workflows',title:'الأتمتة ومسارات العمل',description:'قواعد التشغيل والتدفقات',icon:Workflow },
@@ -48,7 +48,7 @@ export function SettingsHub(props: {
     ...group,
     title: props.personal ? 'المساعد الشخصي' : group.title,
     items:group.items.filter(item=>{
-      if (props.personal && !('personalAssistant' in item)) return false
+      if (props.personal && !('personalAssistant' in item) && !('personalWorkspace' in item)) return false
       if ('personalAssistant' in item && item.personalAssistant && !props.personalAssistantEnabled) return false
       if ('adminOnly' in item && item.adminOnly && !props.isAdmin) return false
       if ('capability' in item && item.capability && !props.capabilityRows.some(row=>row.id===item.capability && row.enabled)) return false

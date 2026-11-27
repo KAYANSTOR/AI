@@ -320,8 +320,8 @@
 .dashboard-page-content{width:100%;min-width:0}
 /* Keep the fixed composer in the viewport and reserve its space in the scroll frame. */
 .dashboard-page-content:has(.assistant-chat-composer){animation:none;will-change:auto}
-.dashboard-main-scroll:has(.assistant-chat-composer){padding-block-end:calc(var(--dashboard-nav-clearance) + 5rem)}
-.assistant-chat-composer{position:fixed;inset-inline:14px;inset-block-end:var(--dashboard-nav-clearance);max-width:452px;margin-inline:auto;z-index:45}
+.dashboard-main-scroll:has(.assistant-chat-composer){--assistant-bottom:max(var(--dashboard-nav-clearance),var(--assistant-keyboard-inset,0px));margin-block-end:calc(var(--assistant-bottom) + var(--assistant-composer-height,4.5rem) + 0.25rem);padding-block-end:0.75rem}
+.assistant-chat-composer{position:fixed;inset-inline:14px;inset-block-end:var(--assistant-bottom,var(--dashboard-nav-clearance));max-width:452px;margin-inline:auto;z-index:45}
 .dashboard-home-header{position:relative;flex:0 0 auto;padding:max(16px,env(safe-area-inset-top)) 16px 15px;border-radius:0 0 28px 28px;background:var(--k-primary);color:var(--k-primary-foreground);box-shadow:0 5px 18px color-mix(in srgb,var(--brand-secondary) 8%,transparent)}
 .dashboard-inner-header{position:relative;z-index:5;display:flex;min-height:76px;flex:0 0 auto;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;padding:max(12px,env(safe-area-inset-top)) 14px 12px;border-bottom:1px solid var(--k-border);background:var(--k-surface)}
 .dashboard-icon-button{display:inline-flex;min-height:44px;min-width:44px;align-items:center;justify-content:center;border:1px solid var(--k-border);border-radius:999px;background:var(--k-surface);color:var(--k-text);transition:background-color 120ms ease,border-color 120ms ease,transform 120ms ease}

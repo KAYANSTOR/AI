@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/db/server'
 import { getDashboardContext } from '@/lib/dashboard/context'
+import { isPersonalWorkspace } from '@/lib/dashboard/navigation-policy'
 import { CHANNEL_SPECS } from '@/lib/channels/management'
 import { ChannelsConsole } from './channels-console'
 import { OwnerPresencePanel, type OwnerPresenceChannel } from './owner-presence-panel'
@@ -37,6 +38,7 @@ export default async function ChannelsPage({
 
   const db = await createClient()
   const canManage = canManageMetaChannels(context.role)
+  const personal = isPersonalWorkspace(context)
 
   let rows: ChannelRow[] = []
   let channelsError: string | null = null
@@ -62,7 +64,7 @@ export default async function ChannelsPage({
   const whatsappModes = [
     { key: 'whatsapp-business-app', connectionMode: 'coexistence', label: 'واتساب للأعمال · التعايش', provider: 'ميتا', description: 'اربط الرقم مع الاستمرار في استخدام تطبيق واتساب للأعمال على الهاتف.' },
     { key: 'whatsapp-meta-api', connectionMode: 'cloud_api', label: 'واتساب للأعمال · الربط السحابي', provider: 'ميتا', description: 'اربط رقمًا بخدمة واتساب السحابية وقدّم رمز التحقق بخطوتين عند طلبه.' },
-    { key: 'whatsapp-qr', connectionMode: 'qr_unofficial', label: 'واتساب عبر QR أو رقم الهاتف', provider: 'WhatsApp Web · QR / Pairing Code', description: 'اربط حساب واتساب من هاتفك بمسح QR أو إدخال رمز الربط الذي يولّده رقم الهاتف.' },
+    { key: 'whatsapp-qr', connectionMode: 'qr_unofficial', label: 'واتساب عبر رمز المسح أو رقم الهاتف', provider: 'واتساب ويب', description: 'اربط حساب واتساب من هاتفك بمسح الرمز أو إدخال رمز الربط الذي يولّده رقم الهاتف.' },
   ] as const
 
   const whatsappCards = whatsappModes.map((mode) => {
@@ -140,7 +142,9 @@ export default async function ChannelsPage({
         <div>
           <h1 className="mt-1 text-2xl font-bold tracking-tight text-text">{ar.channels.title}</h1>
           <p className="mt-1 max-w-3xl text-sm leading-6 text-text-muted">
-            اربط قنوات التواصل التي يستخدمها عملاؤك، وأدر حالة كل قناة من مكان واحد. تظهر هنا القنوات المدعومة فعلياً في حسابك.
+            {personal
+              ? 'اربط رقم واتساب الخاص بك وحسابات الرسائل التي تديرها من مكان واحد.'
+              : 'اربط قنوات التواصل التي يستخدمها عملاؤك، وأدر حالة كل قناة من مكان واحد.'}
           </p>
         </div>
 
