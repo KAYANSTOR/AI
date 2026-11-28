@@ -293,7 +293,7 @@ function skipReply(reason: string, input: { organizationId: string; channelId: s
 export async function storeInboundMessage(
   db: DbClient,
   input: InboundIdentity & { messageType: InboundMessageType; content: string; media?: Record<string, unknown> | null }
-): Promise<{ conversationId: string; contactId: string; messageId: string | null }> {
+): Promise<{ conversationId: string; contactId: string; messageId: string | null; duplicate: boolean }> {
   // F-003: guard every persistence path (text and pre-stored media) so an
   // excluded number never becomes a business contact, conversation or message.
   const privacy = await classifyInboundPrivacy(db, input)
@@ -324,7 +324,18 @@ export async function storeInboundMessage(
     sender_type: 'contact',
     ...(input.media ? { media: input.media } : {}),
   }).select('id').maybeSingle()
-  if (stored.error && stored.error.code !== '23505') throw new Error(stored.error.message)
+  let messageId = stored.data?.id ? String(stored.data.id) : null
+  let duplicate = false
+  if (stored.error) {
+    // `ux_messages_external` already stores this provider event in this
+    // conversation. Read the existing row instead of failing or writing it again;
+    // the caller decides whether the turn itself was already completed.
+    if (stored.error.code !== '23505') throw new Error(stored.error.message)
+    duplicate = true
+    const { data: existing } = await db.from('messages').select('id')
+      .eq('conversation_id', conversationId).eq('external_message_id', input.externalEventId).maybeSingle()
+    messageId = existing?.id ? String(existing.id) : null
+  }
 
   await db
     .from('conversations')
@@ -336,7 +347,7 @@ export async function storeInboundMessage(
     conversationId,
   })
 
-  return { conversationId, contactId: contact.contactId, messageId: stored.data?.id ? String(stored.data.id) : null }
+  return { conversationId, contactId: contact.contactId, messageId, duplicate }
 }
 
 /**
@@ -347,7 +358,7 @@ export async function storeInboundMessage(
 export async function recordInboundMediaMessage(
   db: DbClient,
   input: InboundIdentity & { messageType: Exclude<InboundMessageType, 'text'>; content: string }
-): Promise<{ conversationId: string; contactId: string }> {
+): Promise<{ conversationId: string; contactId: string; messageId?: string | null; duplicate?: boolean }> {
   const privacy = await classifyInboundPrivacy(db, input)
   if (privacy.kind !== 'business') return { conversationId: '', contactId: '' }
   return storeInboundMessage(db, input)
@@ -364,8 +375,18 @@ export async function processInboundMessage(
     /** The media pipeline already counted this turn against the flood limit and policy. */
     floodChecked?: boolean
     policy?: AiGuardPolicy
+    /** Worker attempt number; only a retry may resume a stored-but-unanswered turn. */
+    attempts?: number
+    /** OPS-007: filled with measured model time for the worker's structured metrics. */
+    timings?: { modelMs?: number }
   }
-): Promise<{ reply: string | null; conversationId: string; contactId: string }> {
+): Promise<{
+  reply: string | null
+  conversationId: string
+  contactId: string
+  deduplicated?: boolean
+  deduplication?: 'duplicate_suppressed' | 'duplicate_resumed'
+}> {
   const privacy = await classifyInboundPrivacy(db, input)
   if (privacy.kind === 'ignored') {
     console.info('inbound_private_sender_dropped', { organizationId: input.organizationId, channelId: input.channelId })
@@ -387,6 +408,38 @@ export async function processInboundMessage(
   const stored = input.prestored ?? await storeInboundMessage(db, { ...input, messageType: 'text', content: input.text })
   const conversationId = stored.conversationId
   const contact = { contactId: stored.contactId }
+
+  if ('duplicate' in stored && stored.duplicate) {
+    // OPS-003: a redelivered job may arrive after the inbound row was committed but
+    // before the reply intent was reserved (crash), or after the whole turn finished
+    // (replay). The durable reply intent is the evidence that decides between them:
+    // if it exists, never call the model, reserve quota or send again.
+    const { data: replyIntent } = await db.from('outbox_events').select('id, status')
+      .eq('organization_id', input.organizationId)
+      .eq('idempotency_key', `${input.externalEventId}:reply`).maybeSingle()
+    if (replyIntent?.id || (input.attempts ?? 1) <= 1) {
+      console.info('inbound_duplicate_suppressed', {
+        organizationId: input.organizationId,
+        channelId: input.channelId,
+        conversationId,
+        reason: replyIntent?.id ? 'reply_intent_exists' : 'duplicate_on_first_attempt',
+      })
+      return {
+        reply: null,
+        conversationId,
+        contactId: contact.contactId,
+        deduplicated: true,
+        deduplication: 'duplicate_suppressed',
+      }
+    }
+    console.info('inbound_duplicate_resumed', {
+      organizationId: input.organizationId,
+      channelId: input.channelId,
+      conversationId,
+      attempt: input.attempts,
+    })
+  }
+  const deduplication = 'duplicate' in stored && stored.duplicate ? 'duplicate_resumed' : undefined
 
   const conversation = await getConversationRef(db, conversationId, input.organizationId)
   if (!conversation || !conversation.aiEnabled || conversation.status === 'handed_off') {
@@ -600,6 +653,7 @@ export async function processInboundMessage(
     throw err
   }
 
+  const modelStartedAt = Date.now()
   const reply = await agentTurnRunner({
     db,
     organizationId: input.organizationId,
@@ -621,6 +675,7 @@ export async function processInboundMessage(
         }
       : null,
   })
+  if (input.timings) input.timings.modelMs = Date.now() - modelStartedAt
   if (!reply) return skipReply('agent_returned_empty_reply', input, conversationId, contact.contactId)
 
   // EXT-002: greeting is enforced on the final text as well, so a model that
@@ -635,5 +690,10 @@ export async function processInboundMessage(
     // meter table may be absent until migration; ledger still records tokens
   }
 
-  return { reply: finalReply, conversationId, contactId: contact.contactId }
+  return {
+    reply: finalReply,
+    conversationId,
+    contactId: contact.contactId,
+    ...(deduplication ? { deduplication } : {}),
+  }
 }

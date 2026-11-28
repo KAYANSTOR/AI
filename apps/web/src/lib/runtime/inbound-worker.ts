@@ -5,13 +5,26 @@ import { runInboundJobTurn, type InboundPayload } from '@/lib/runtime/inbound-jo
 import { deliverOutbound, recordDeliveredOutboundMessage } from '@/lib/runtime/outbound'
 import { drainOutbox } from '@/lib/channels/outbox-drain'
 import { catchUpStillNeeded, runOwnerPresenceCatchUp } from '@/lib/runtime/owner-presence'
+import { logEvent } from '@/lib/observability/logger'
 
 type InboundJob = {
   id: string
   webhook_event_id: string | null
   idempotency_key: string
   attempts: number
+  created_at?: string | null
   payload: InboundPayload
+}
+
+/** OPS-007: measured fields only; nothing here contains message content or phones. */
+type InboundJobMetrics = {
+  queue_wait_ms: number | null
+  processing_duration_ms: number
+  model_duration_ms: number | null
+  outbound_duration_ms: number | null
+  delivery_status: 'sent' | 'queued' | 'blocked' | 'none'
+  retry_count: number
+  deduplication_result: 'unique' | 'duplicate_suppressed' | 'duplicate_resumed'
 }
 const workerId = `inbound-${process.pid}-${randomUUID().slice(0, 8)}`
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -33,7 +46,9 @@ async function drainOutboxPeriodically(db: ReturnType<typeof createAdminClient>)
   lastOutboxDrainAt = Date.now()
   try {
     const result = await drainOutbox(db, { limit: 25 })
-    if (result.processed > 0) console.log('outbox_drain_completed', { workerId, ...result })
+    if (result.processed > 0 || result.unconfirmed > 0) {
+      logEvent('info', 'outbox_drain_completed', { workerId, ...result })
+    }
   } catch (error) {
     console.error('outbox_drain_failed', { workerId, reason: error instanceof Error ? error.message : 'drain_error' })
   }
@@ -71,16 +86,32 @@ async function claimJob(db: ReturnType<typeof createAdminClient>): Promise<Inbou
 
 async function processJob(db: ReturnType<typeof createAdminClient>, job: InboundJob) {
   const input = job.payload
+  const processingStartedAt = Date.now()
+  const queueWaitMs = job.created_at && Number.isFinite(Date.parse(job.created_at))
+    ? Math.max(0, processingStartedAt - Date.parse(job.created_at))
+    : null
+  const timings: { attempts?: number; modelMs?: number } = { attempts: job.attempts }
   console.log('inbound_job_processing', { jobId: job.id, channelId: input.channelId, attempt: job.attempts })
   // The owner may have answered between the sweep and now: never double-reply.
   if (input.catchUp && input.conversationId && !(await catchUpStillNeeded(db, input.conversationId))) {
-    await completeJob(db, job.id)
+    await completeJob(db, job.id, {
+      queue_wait_ms: queueWaitMs,
+      processing_duration_ms: Date.now() - processingStartedAt,
+      model_duration_ms: null,
+      outbound_duration_ms: null,
+      delivery_status: 'none',
+      retry_count: Math.max(0, job.attempts - 1),
+      deduplication_result: 'unique',
+    })
     console.log('inbound_job_catch_up_skipped', { jobId: job.id, conversationId: input.conversationId })
     return
   }
-  const result = await runInboundJobTurn(db, input)
+  const result = await runInboundJobTurn(db, input, {}, timings)
+  let delivery: 'sent' | 'queued' | 'blocked' | 'none' = 'none'
+  let outboundDurationMs: number | null = null
   if (result.reply) {
-    const delivery = await deliverOutbound(db, {
+    const outboundStartedAt = Date.now()
+    const delivered = await deliverOutbound(db, {
       channel: {
         id: input.channelId,
         organizationId: input.organizationId,
@@ -97,6 +128,8 @@ async function processJob(db: ReturnType<typeof createAdminClient>, job: Inbound
       deliverInline: true,
       senderType: 'ai',
     })
+    outboundDurationMs = Date.now() - outboundStartedAt
+    delivery = delivered
     console.log('inbound_job_reply_delivery', { jobId: job.id, channelId: input.channelId, delivery })
     if (delivery === 'sent' && result.conversationId) {
       await recordDeliveredOutboundMessage(db, {
@@ -109,14 +142,34 @@ async function processJob(db: ReturnType<typeof createAdminClient>, job: Inbound
     }
   }
   if (job.webhook_event_id) await markWebhookProcessed(db, job.webhook_event_id, 'processed')
-  await completeJob(db, job.id)
-  console.log('inbound_job_completed', { jobId: job.id, channelId: input.channelId, hadReply: Boolean(result.reply) })
+  const metrics: InboundJobMetrics = {
+    queue_wait_ms: queueWaitMs,
+    processing_duration_ms: Date.now() - processingStartedAt,
+    model_duration_ms: timings.modelMs ?? null,
+    outbound_duration_ms: outboundDurationMs,
+    delivery_status: delivery,
+    retry_count: Math.max(0, job.attempts - 1),
+    deduplication_result: result.deduplication ?? 'unique',
+  }
+  await completeJob(db, job.id, metrics)
+  // Safe correlation: the job UUID links every phase; no phone, text or credentials.
+  logEvent('info', 'inbound_job_metrics', {
+    correlation_id: job.id,
+    channel_id: input.channelId,
+    ...metrics,
+  })
+  console.log('inbound_job_completed', { jobId: job.id, channelId: input.channelId, hadReply: Boolean(result.reply), delivery })
 }
 
-async function completeJob(db: ReturnType<typeof createAdminClient>, jobId: string) {
+async function completeJob(
+  db: ReturnType<typeof createAdminClient>,
+  jobId: string,
+  metrics: InboundJobMetrics
+) {
   const { error } = await db.from('inbound_jobs').update({
     status: 'completed', locked_at: null, locked_by: null, last_error: null,
     completed_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+    ...metrics,
   }).eq('id', jobId).eq('status', 'processing')
   if (error) throw new Error(error.message)
 }

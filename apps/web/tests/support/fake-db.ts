@@ -87,6 +87,48 @@ function matchesAll(row: Row, filters: Filter[]): boolean {
   })
 }
 
+/**
+ * Minimal PostgREST `or=(...)` support for the shapes the runtime uses: flat
+ * comparisons plus `and(...)` groups and `in.(a,b)` lists. Values are compared
+ * with the same `matchesAll` semantics as `.eq()`/`.lt()` filters.
+ */
+function splitTopLevel(expression: string): string[] {
+  const parts: string[] = []
+  let depth = 0
+  let start = 0
+  for (let index = 0; index < expression.length; index += 1) {
+    const char = expression[index]
+    if (char === '(') depth += 1
+    else if (char === ')') depth -= 1
+    else if (char === ',' && depth === 0) {
+      parts.push(expression.slice(start, index))
+      start = index + 1
+    }
+  }
+  parts.push(expression.slice(start))
+  return parts.filter(Boolean)
+}
+
+function comparisonFilter(term: string): Filter | null {
+  const match = /^([a-z0-9_]+)\.(eq|neq|gt|gte|lt|lte|in)\.(.*)$/i.exec(term)
+  if (!match) return null
+  const [, column, op, raw] = match
+  if (op === 'in') {
+    const list = raw.replace(/^\(/, '').replace(/\)$/, '').split(',').filter((item) => item !== '')
+    return { op: 'in', column, value: list }
+  }
+  return { op: op as Operator, column, value: raw }
+}
+
+function matchesOrExpression(row: Row, expression: string): boolean {
+  return splitTopLevel(expression).some((term) => {
+    const andMatch = /^and\((.*)\)$/i.exec(term)
+    if (andMatch) return splitTopLevel(andMatch[1]).every((inner) => matchesOrExpression(row, inner))
+    const filter = comparisonFilter(term)
+    return filter ? matchesAll(row, [filter]) : false
+  })
+}
+
 function uniqueViolation(columns: string[]): Failure {
   return {
     code: '23505',
@@ -117,6 +159,7 @@ class Builder implements PromiseLike<PostgrestResult> {
   private orderBy: { column: string; ascending: boolean } | null = null
   private limitN: number | null = null
   private offsetN = 0
+  private orExpressions: string[] = []
   private kind: 'select' | 'insert' | 'update' | 'upsert' | 'delete' = 'select'
   private current: Row | null = null
   private patch: Row | null = null
@@ -223,6 +266,13 @@ class Builder implements PromiseLike<PostgrestResult> {
     return this
   }
 
+  or(expression: string) {
+    let raw = expression.trim()
+    if (raw.startsWith('(') && raw.endsWith(')')) raw = raw.slice(1, -1)
+    this.orExpressions.push(raw)
+    return this
+  }
+
   order(column: string, options?: { ascending?: boolean }) {
     this.orderBy = { column, ascending: options?.ascending !== false }
     return this
@@ -255,7 +305,11 @@ class Builder implements PromiseLike<PostgrestResult> {
   }
 
   private matched(): Row[] {
-    let rows = this.table.rows!.filter((row) => matchesAll(row, this.filters))
+    let rows = this.table.rows!.filter(
+      (row) =>
+        matchesAll(row, this.filters) &&
+        (this.orExpressions.length === 0 || this.orExpressions.some((expression) => matchesOrExpression(row, expression)))
+    )
     if (this.orderBy) {
       const { column, ascending } = this.orderBy
       rows = [...rows].sort((a, b) => {

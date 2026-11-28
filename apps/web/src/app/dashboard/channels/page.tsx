@@ -84,7 +84,12 @@ export default async function ChannelsPage({
       publicNumberLabel: 'رقم واتساب',
       publicNumber: row?.external_identifier ?? null,
       identifier: row?.provider_account_id ?? null,
-      connected: Boolean(row?.id),
+      // OPS-002: a database row is not proof of a live WhatsApp session. The QR card
+      // is only "connected" when the gateway reconciled the channel to verified+active;
+      // a skipped/unregistered restore now also clears both flags server-side.
+      connected: mode.connectionMode === 'qr_unofficial'
+        ? row?.verification_status === 'verified' && row?.is_active === true
+        : Boolean(row?.id),
       verificationStatus: row?.verification_status ?? null,
       isActive: row?.is_active === true,
       connectionMode: mode.connectionMode,

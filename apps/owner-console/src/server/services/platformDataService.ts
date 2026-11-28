@@ -1272,7 +1272,8 @@ export async function platformBillingCatalog() {
   const [prices, wallets, providers, requests, rateRows] = await Promise.all([
     query(`SELECT pp.id::text id, p.code plan_code, p.name plan_name, pp.billing_cycle, pp.currency, pp.amount::numeric amount, pp.exchange_rate_to_usd::numeric exchange_rate_to_usd, pp.is_active FROM plan_prices pp JOIN plans p ON p.id=pp.plan_id WHERE pp.is_active=true ORDER BY p.code, pp.billing_cycle, pp.currency`),
     query(`SELECT id::text id,provider_code,display_name,account_name,account_number,instructions,is_active,sort_order,created_at::text created_at,updated_at::text updated_at FROM manual_yemen_wallets ORDER BY sort_order, display_name`),
-    query(`SELECT id::text id,code,display_name,provider_type,configuration,is_active FROM billing_payment_providers ORDER BY display_name`),
+    // OPS-004: never select credential-bearing configuration into a browser payload.
+    query(`SELECT id::text id,code,display_name,provider_type,is_active FROM billing_payment_providers ORDER BY display_name`),
     query(`SELECT r.id::text id,r.organization_id::text organization_id,r.plan_code,r.billing_cycle,r.wallet_id::text wallet_id,r.amount_usd::numeric amount_usd,r.amount_yer,r.exchange_rate,r.sender_name,r.transfer_reference,r.receipt_mime_type,r.status,r.review_note,r.reviewed_by,r.reviewed_at::text reviewed_at,r.created_at::text created_at,w.display_name wallet_name,w.account_number,o.name organization_name FROM manual_wallet_payment_requests r JOIN manual_yemen_wallets w ON w.id=r.wallet_id JOIN organizations o ON o.id=r.organization_id ORDER BY r.created_at DESC LIMIT 100`),
     query(`SELECT CASE WHEN jsonb_typeof(value)='object' THEN value->>'value' ELSE value#>>'{}' END rate FROM platform_settings WHERE key='billing.yer_per_usd' LIMIT 1`),
   ]);

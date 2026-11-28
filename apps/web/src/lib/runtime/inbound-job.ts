@@ -31,8 +31,14 @@ export type InboundPayload = {
 export async function runInboundJobTurn(
   db: DbClient,
   input: InboundPayload,
-  deps: { download?: MediaDownloader; analyzer?: MediaAnalyzer } = {}
-): Promise<{ reply: string | null; conversationId: string }> {
+  deps: { download?: MediaDownloader; analyzer?: MediaAnalyzer } = {},
+  metrics: { attempts?: number; modelMs?: number } = {}
+): Promise<{
+  reply: string | null
+  conversationId: string
+  deduplicated?: boolean
+  deduplication?: 'duplicate_suppressed' | 'duplicate_resumed'
+}> {
   const identity = {
     organizationId: input.organizationId,
     businessId: input.businessId,
@@ -55,5 +61,10 @@ export async function runInboundJobTurn(
     })
     return handleInboundMedia(db, { ...identity, attachment: input.media }, { download, analyzer: deps.analyzer })
   }
-  return processInboundMessage(db, { ...identity, text: input.text })
+  return processInboundMessage(db, {
+    ...identity,
+    text: input.text,
+    attempts: metrics.attempts,
+    timings: metrics,
+  })
 }

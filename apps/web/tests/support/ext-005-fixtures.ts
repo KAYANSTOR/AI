@@ -77,7 +77,14 @@ function baseTables(): FakeDb {
     contacts: { rows: [] },
     contact_identities: { rows: [] },
     conversations: { rows: [] },
-    messages: { rows: [] },
+    // Mirrors ux_messages_external (partial unique index in migration 0007).
+    messages: {
+      rows: [],
+      unique: [{
+        columns: ['conversation_id', 'external_message_id'],
+        where: (row) => row.external_message_id != null,
+      }],
+    },
     ai_agents: {
       rows: [{ id: 'ag-1', organization_id: EXT_ORG, business_id: EXT_BIZ, slug: 'frontdesk', status: 'active', created_at: '2026-11-26T10:00:00Z' }],
     },
@@ -278,9 +285,15 @@ export async function claimNextJob(db: DbClient): Promise<ExtJob | null> {
 export async function processClaimedJob(
   db: DbClient,
   job: ExtJob
-): Promise<{ reply: string | null; conversationId: string; delivery: 'sent' | 'queued' | 'blocked' }> {
+): Promise<{
+  reply: string | null
+  conversationId: string
+  delivery: 'sent' | 'queued' | 'blocked'
+  deduplication?: 'duplicate_suppressed' | 'duplicate_resumed'
+}> {
   const input = job.payload
-  const result = await runInboundJobTurn(db, input)
+  const metrics: { attempts?: number; modelMs?: number } = { attempts: job.attempts }
+  const result = await runInboundJobTurn(db, input, {}, metrics)
   let delivery: 'sent' | 'queued' | 'blocked' = 'queued'
   if (result.reply) {
     delivery = await deliverOutbound(db, {
@@ -307,7 +320,12 @@ export async function processClaimedJob(
     locked_by: null,
     completed_at: new Date().toISOString(),
   }).eq('id', job.id)
-  return { reply: result.reply, conversationId: result.conversationId, delivery }
+  return {
+    reply: result.reply,
+    conversationId: result.conversationId,
+    delivery,
+    ...(result.deduplication ? { deduplication: result.deduplication } : {}),
+  }
 }
 
 export async function primeOwnerLookup() {

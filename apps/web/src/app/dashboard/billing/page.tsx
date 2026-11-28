@@ -10,6 +10,7 @@ import type { EsaalatWallet } from '@/lib/billing/esaalat'
 import { PaymentPlans } from './payment-plans'
 import { createAdminClient } from '@/lib/db/admin'
 import { envYerRate, loadPlatformYerRate } from '@/lib/billing/yer-pricing'
+import { loadPublicPaymentProviders } from '@/lib/billing/payment-providers'
 
 export const dynamic = 'force-dynamic'
 
@@ -17,6 +18,7 @@ export default async function BillingPage() {
   const context = await getDashboardContext()
   if (!context) redirect('/login')
   const db = await createClient()
+  const admin = createAdminClient()
 
   const [creditWallet, creditLedger] = await Promise.all([
     db.from('org_credit_wallets').select('balance').eq('org_id', context.organizationId).maybeSingle(),
@@ -30,9 +32,9 @@ export default async function BillingPage() {
   const { data: priceRows } = await db.from('plan_prices')
     .select('plan_id,billing_cycle,currency,amount,exchange_rate_to_usd,is_active')
     .eq('is_active', true)
-  const { data: providerRows } = await db.from('billing_payment_providers')
-    .select('code,display_name,provider_type,is_active')
-    .eq('is_active', true)
+  // OPS-004: platform catalogue lives behind service-role only; read the public
+  // columns with the admin client instead of the tenant RLS client.
+  const { providers: providerRows } = await loadPublicPaymentProviders(admin)
   const planOffers = PLAN_CATALOG.filter((plan) => plan.code !== 'trial').flatMap((fallback) => {
     const row = (planRows ?? []).find((item) => item.code === fallback.code)
     if (!row || row.is_active !== true) return []
@@ -58,7 +60,7 @@ export default async function BillingPage() {
     id: string; provider_code: string; display_name: string; account_name: string; account_number: string; instructions: string | null
   }>
   // Owner-console rate first, env fallback; per-plan YER prices still win in the client.
-  const yerPerUsd = (await loadPlatformYerRate(createAdminClient())) ?? envYerRate() ?? 0
+  const yerPerUsd = (await loadPlatformYerRate(admin)) ?? envYerRate() ?? 0
   let wallets: EsaalatWallet[] = []
 
   if (walletCheckoutConfigured) {

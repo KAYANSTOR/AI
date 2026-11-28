@@ -7,6 +7,7 @@ import { shouldReconnectAfterDisconnect } from './reconnect-policy.js'
 import { classifyUpsertMessage, createSentMessageRegistry } from './message-direction.js'
 import { createMediaMessageCache, extractMediaDescriptor, extractText, requestedMaxBytes } from './media.js'
 import { ignoredPhoneNumbers, isIgnoredPhone } from './phone-policy.js'
+import { restoreSessionDecision, sessionIsConnected } from './restore-policy.js'
 
 const PORT = Number(process.env.WHATSAPP_GATEWAY_PORT || 3001)
 const DATABASE_URL = requiredEnv('DATABASE_URL')
@@ -42,11 +43,16 @@ function readEncryptionKey(value) {
   if (key.length !== 32) throw new Error('WHATSAPP_SESSION_ENCRYPTION_KEY_must_decode_to_32_bytes')
   return key
 }
+function phoneDigits(value) {
+  return String(value || '').replace(/\D/g, '')
+}
 function normalizePhoneNumber(value) {
   const phoneNumber = String(value || '').trim()
   if (!/^\+[1-9]\d{7,14}$/.test(phoneNumber)) {
     throw Object.assign(new Error('invalid_phone_number'), { status: 400 })
   }
+  // Stored provider identifiers use the bare international digits. The app may
+  // keep the display form with a leading '+', so every comparison is digit-based.
   return phoneNumber.slice(1)
 }
 async function withTimeout(promise, timeoutMs, errorCode) {
@@ -151,21 +157,44 @@ const mediaMessages = createMediaMessageCache()
 function messageText(message) {
   return extractText(message)
 }
+const APP_FORWARD_ATTEMPTS = 5
+const APP_FORWARD_RETRY_DELAYS_MS = [250, 500, 1000, 2000]
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms))
+
+/**
+ * OPS-001 — a message WhatsApp already delivered must not be lost because the app
+ * briefly reports the channel unavailable (binding/readiness write still in flight,
+ * deploy overlap, database hiccup). The app deduplicates by `externalEventId`, so a
+ * bounded retry is safe and never creates a second job.
+ */
 async function postToApp(path, body, logKey, channelId) {
-  try {
-    const response = await fetch(APP_INTERNAL_URL + path, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', authorization: 'Bearer ' + GATEWAY_TOKEN },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(15_000),
-    })
-    if (!response.ok) {
-      const reason = await response.text().catch(() => '')
-      console.error(logKey, { channelId, status: response.status, reason: reason.slice(0, 120) })
+  let lastStatus = 0
+  let lastReason = ''
+  let usedAttempts = 0
+  for (let attempt = 1; attempt <= APP_FORWARD_ATTEMPTS; attempt += 1) {
+    usedAttempts = attempt
+    try {
+      const response = await fetch(APP_INTERNAL_URL + path, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: 'Bearer ' + GATEWAY_TOKEN },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(15_000),
+      })
+      if (response.ok) return true
+      lastStatus = response.status
+      lastReason = (await response.text().catch(() => '')).slice(0, 120)
+      const retryable = response.status === 404 || response.status === 408 ||
+        response.status === 425 || response.status === 429 || response.status >= 500
+      if (!retryable || attempt === APP_FORWARD_ATTEMPTS) break
+    } catch (error) {
+      lastStatus = 0
+      lastReason = error instanceof Error ? error.message : 'network_error'
+      if (attempt === APP_FORWARD_ATTEMPTS) break
     }
-  } catch (error) {
-    console.error(logKey, { channelId, reason: error instanceof Error ? error.message : 'network_error' })
+    await sleep(APP_FORWARD_RETRY_DELAYS_MS[Math.min(attempt - 1, APP_FORWARD_RETRY_DELAYS_MS.length - 1)])
   }
+  console.error(logKey, { channelId, status: lastStatus, reason: lastReason, attempts: usedAttempts })
+  return false
 }
 async function forwardInbound(session, message, upsertType) {
   // F-003 gateway-side pre-filter: a number on the organization's ignored_phones
@@ -228,9 +257,10 @@ async function startSocket(channelId, options = {}) {
   if (!stored) throw Object.assign(new Error('qr_session_not_found'), { status: 404 })
   const creds = stored.auth_creds_ciphertext ? decryptJson(stored.auth_creds_ciphertext) : initAuthCreds()
   const session = {
-    channelId, phoneNumber: stored.phone_number, mode: options.mode || 'qr',
+    channelId, phoneNumber: phoneDigits(stored.phone_number), mode: options.mode || 'qr',
     retries: options.retries || 0, creds, status: 'starting', qrDataUrl: null,
     pairingCode: null, connectedAt: stored.connected_at || null, lastError: null, sock: null,
+    openBarrier: null,
   }
   // F-003: load the organization's ignored phones once per session so inbound
   // messages from them are dropped at the gateway before reaching the app.
@@ -324,15 +354,23 @@ async function startSocket(channelId, options = {}) {
         await persistSocketState(session)
       }
       if (update.connection === 'open') {
+        // OPS-001: Baileys emits messages.upsert right after `open`. The channel row
+        // must be marked ready before any of those messages is forwarded, otherwise
+        // the app rejects an already accepted WhatsApp message with
+        // `channel_unavailable`. Publish the barrier synchronously, then await the writes.
+        const barrier = (async () => {
+          session.status = 'connected'
+          session.qrDataUrl = null
+          session.pairingCode = null
+          session.connectedAt = new Date().toISOString()
+          session.lastError = null
+          await persistSocketState(session)
+          await query("UPDATE public.channels SET is_active=true,verification_status='verified',updated_at=now() WHERE id=$1 AND channel_type='whatsapp' AND connection_mode='qr_unofficial'",
+            [channelId])
+        })()
+        session.openBarrier = barrier
+        await barrier
         console.log('whatsapp_qr_socket_open', { channelId, mode: session.mode })
-        session.status = 'connected'
-        session.qrDataUrl = null
-        session.pairingCode = null
-        session.connectedAt = new Date().toISOString()
-        session.lastError = null
-        await persistSocketState(session)
-        await query("UPDATE public.channels SET verification_status='verified',updated_at=now() WHERE id=$1 AND channel_type='whatsapp' AND connection_mode='qr_unofficial' AND provider_account_id=$2",
-          [channelId, session.phoneNumber])
       }
       if (update.connection === 'close') {
         if (session.stopping) {
@@ -395,6 +433,8 @@ async function startSocket(channelId, options = {}) {
   })
   sock.ev.on('messages.upsert', async event => {
     if (event.type !== 'notify' && event.type !== 'append') return
+    // OPS-001: never forward before the `open` reconciliation finished.
+    try { await session.openBarrier } catch { /* the connection handler logs its own failure */ }
     for (const message of event.messages || []) await forwardInbound(session, message, event.type)
   })
 
@@ -403,13 +443,16 @@ async function startSocket(channelId, options = {}) {
 async function startSession(input) {
   const channelId = String(input.channelId || '')
   if (!/^[0-9a-f-]{36}$/i.test(channelId)) throw Object.assign(new Error('invalid_channel_id'), { status: 400 })
-  const phoneNumber = String(input.phoneNumber || '').trim()
-  normalizePhoneNumber(phoneNumber)
+  const phoneNumber = normalizePhoneNumber(String(input.phoneNumber || '').trim())
   if (!['qr', 'pairing_code'].includes(input.method)) throw Object.assign(new Error('invalid_connection_method'), { status: 400 })
   const channelRows = await query("SELECT id,organization_id,provider_account_id,external_identifier,connection_mode FROM public.channels WHERE id=$1 AND organization_id=$2 AND channel_type='whatsapp' LIMIT 1",
     [channelId, String(input.organizationId || '')])
   const channel = channelRows[0]
-  if (!channel || channel.connection_mode !== 'qr_unofficial' || channel.provider_account_id !== phoneNumber || channel.external_identifier !== phoneNumber) {
+  // OPS-001: compare identifiers by digits. The app may store the display form
+  // (`+967…`) while the session row and Baileys use bare digits.
+  if (!channel || channel.connection_mode !== 'qr_unofficial' ||
+      phoneDigits(channel.provider_account_id) !== phoneNumber ||
+      phoneDigits(channel.external_identifier) !== phoneNumber) {
     throw Object.assign(new Error('qr_channel_not_owned_or_not_configured'), { status: 403 })
   }
   const previous = sockets.get(channelId)
@@ -426,7 +469,7 @@ async function startSession(input) {
   const storedCreds = oldRows[0]?.auth_creds_ciphertext
     ? decryptJson(oldRows[0].auth_creds_ciphertext)
     : null
-  const phoneChanged = Boolean(oldRows[0] && oldRows[0].phone_number !== phoneNumber)
+  const phoneChanged = Boolean(oldRows[0] && phoneDigits(oldRows[0].phone_number) !== phoneNumber)
   // A failed phone-code attempt can persist creds.me before WhatsApp accepts the
   // companion registration. Never reuse that half-registered identity on retry.
   const incompleteAuth = Boolean(oldRows[0] && storedCreds?.pairingCode && storedCreds.registered !== true)
@@ -442,7 +485,7 @@ async function sessionStatus(channelId) {
   if (!/^[0-9a-f-]{36}$/i.test(channelId)) throw Object.assign(new Error('invalid_channel_id'), { status: 400 })
   const rows = await query("SELECT * FROM public.whatsapp_gateway_sessions WHERE channel_id=$1 LIMIT 1", [channelId])
   const status = publicStatus(rows[0])
-  if (status.status === 'connected' && sockets.get(channelId)?.status !== 'connected') {
+  if (status.status === 'connected' && !sessionIsConnected('connected', sockets.get(channelId)?.status === 'connected')) {
     return { ...status, status: 'reconnecting' }
   }
   return status
@@ -554,30 +597,59 @@ async function logoutSession(channelId) {
   return { status: 'disconnected' }
 }
 async function restoreSessions() {
-  const rows = await query("SELECT s.channel_id,s.status,s.auth_creds_ciphertext,s.updated_at::text AS updated_at FROM public.whatsapp_gateway_sessions s JOIN public.channels c ON c.id=s.channel_id WHERE c.is_active=true AND c.channel_type='whatsapp' AND c.connection_mode='qr_unofficial'")
+  // Every QR session row participates in reconciliation, so a stale `connected`
+  // status cannot survive on a channel that was deactivated after a failed restore.
+  const rows = await query("SELECT s.channel_id,s.status,s.auth_creds_ciphertext,s.updated_at::text AS updated_at,c.is_active AS channel_active FROM public.whatsapp_gateway_sessions s JOIN public.channels c ON c.id=s.channel_id WHERE c.channel_type='whatsapp' AND c.connection_mode='qr_unofficial'")
   let restored = 0
   let skipped = 0
+  let reconciled = 0
   for (const row of rows) {
+    let credentialsValid = false
     let registered = false
-    try { registered = Boolean(row.auth_creds_ciphertext && decryptJson(row.auth_creds_ciphertext).registered) } catch {
+    try {
+      credentialsValid = Boolean(row.auth_creds_ciphertext)
+      registered = credentialsValid && Boolean(decryptJson(row.auth_creds_ciphertext).registered)
+    } catch {
+      credentialsValid = false
       console.error('whatsapp_qr_session_restore_invalid_credentials', { channelId: row.channel_id })
     }
-    if (!registered) {
-      skipped += 1
-      console.warn('whatsapp_qr_session_restore_skipped_unregistered', { channelId: row.channel_id, status: row.status })
-      if (!sockets.has(row.channel_id)) {
-        // Compare the observed session before marking it failed. Do not delete credentials
-        // and do not overwrite a session that was refreshed during startup.
-        await query("WITH stale AS (UPDATE public.whatsapp_gateway_sessions SET status='failed',qr_data_url=NULL,pairing_code=NULL,last_error='restore_unregistered',updated_at=now() WHERE channel_id=$1 AND auth_creds_ciphertext IS NOT DISTINCT FROM $2::text AND updated_at=$3::timestamptz RETURNING channel_id) UPDATE public.channels SET is_active=false,verification_status='failed',updated_at=now() WHERE id IN (SELECT channel_id FROM stale) AND channel_type='whatsapp' AND connection_mode='qr_unofficial'", [row.channel_id, row.auth_creds_ciphertext, row.updated_at])
-      }
+    const decision = restoreSessionDecision({
+      hasCredentials: Boolean(row.auth_creds_ciphertext),
+      credentialsValid,
+      registered,
+      hasLiveSocket: sockets.has(row.channel_id),
+      status: row.status,
+    })
+    if (decision.action === 'restore') {
+      // A deactivated channel is not restarted, but a registered session is left intact.
+      if (!row.channel_active) continue
+      restored += 1
+      startSocket(row.channel_id, { mode: 'qr', retries: 0, resume: true }).catch(error => {
+        console.error('whatsapp_qr_session_restore_failed', { channelId: row.channel_id, reason: error instanceof Error ? error.message : 'restore_error' })
+      })
       continue
     }
-    restored += 1
-    startSocket(row.channel_id, { mode: 'qr', retries: 0, resume: true }).catch(error => {
-      console.error('whatsapp_qr_session_restore_failed', { channelId: row.channel_id, reason: error instanceof Error ? error.message : 'restore_error' })
+    if (decision.action === 'skip_live') {
+      skipped += 1
+      console.warn('whatsapp_qr_session_restore_skipped_live', { channelId: row.channel_id, status: row.status })
+      continue
+    }
+
+    // OPS-002: a session whose credentials cannot be proven registered must never
+    // keep reporting `connected`. Reconcile both rows atomically and keep the
+    // credentials/auth keys for a later explicit pairing attempt.
+    skipped += 1
+    const stale = await query("WITH stale AS (UPDATE public.whatsapp_gateway_sessions SET status='failed',qr_data_url=NULL,pairing_code=NULL,last_error='restore_unregistered',updated_at=now() WHERE channel_id=$1 AND auth_creds_ciphertext IS NOT DISTINCT FROM $2::text AND status <> 'failed' RETURNING channel_id) UPDATE public.channels SET is_active=false,verification_status='failed',updated_at=now() WHERE id IN (SELECT channel_id FROM stale) AND channel_type='whatsapp' AND connection_mode='qr_unofficial' RETURNING id",
+      [row.channel_id, row.auth_creds_ciphertext])
+    if (stale.length > 0) reconciled += 1
+    console.warn('whatsapp_qr_session_restore_skipped_unregistered', {
+      channelId: row.channel_id,
+      status: row.status,
+      reason: decision.reason,
+      reconciled: stale.length > 0,
     })
   }
-  console.log('whatsapp_qr_sessions_restore_summary', { found: rows.length, restored, skipped })
+  console.log('whatsapp_qr_sessions_restore_summary', { found: rows.length, restored, skipped, reconciled })
 }
 async function handleRequest(request, response) {
   const url = new URL(request.url || '/', 'http://localhost')

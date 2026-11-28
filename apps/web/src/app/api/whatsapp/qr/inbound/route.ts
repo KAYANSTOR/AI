@@ -4,6 +4,7 @@ import { secretEquals } from '@/lib/credentials/service'
 import { acquireWebhookEvent, markWebhookProcessed } from '@/lib/channels/idempotency'
 import { enqueueInboundJob } from '@/lib/runtime/inbound-enqueue'
 import { fromBaileysDescriptor } from '@/lib/media/attachment'
+import { evaluateQrChannelReadiness, type QrChannelReadinessRow } from '@/lib/channels/qr-readiness'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -42,10 +43,23 @@ export async function POST(req: NextRequest) {
     }
     db = createAdminClient()
     const { data: channel, error: channelError } = await db.from('channels')
-      .select('id, organization_id, business_id, provider_account_id, external_identifier, connection_mode')
+      .select('id, organization_id, business_id, provider_account_id, external_identifier, connection_mode, verification_status, is_active')
       .eq('id', channelId).eq('channel_type', 'whatsapp').eq('connection_mode', 'qr_unofficial')
-      .eq('verification_status', 'verified').eq('is_active', true).maybeSingle()
-    if (channelError || !channel?.business_id) return NextResponse.json({ error: 'channel_unavailable' }, { status: 404 })
+      .maybeSingle()
+    // OPS-001: pairing/restore writes this readiness before the gateway forwards a
+    // message; the gateway also retries this 404 because the binding write can trail
+    // the WhatsApp socket by a few milliseconds. Keep the gate strict, but log the
+    // exact reason so a real regression is diagnosable without message content.
+    const readiness = evaluateQrChannelReadiness(channelError ? null : (channel as QrChannelReadinessRow | null))
+    if (!readiness.ready) {
+      console.warn('whatsapp_qr_inbound_channel_unavailable', {
+        channelId,
+        reason: channelError ? 'lookup_failed' : readiness.reason,
+        verificationStatus: channel?.verification_status ?? null,
+        isActive: channel?.is_active ?? null,
+      })
+      return NextResponse.json({ error: 'channel_unavailable' }, { status: 404 })
+    }
     const claimed = await acquireWebhookEvent(db, 'whatsapp', externalEventId, input)
     if (claimed.status === 'duplicate') return NextResponse.json({ ok: true, duplicate: true })
     if (claimed.status === 'error') return NextResponse.json({ error: 'event_claim_failed' }, { status: 500 })

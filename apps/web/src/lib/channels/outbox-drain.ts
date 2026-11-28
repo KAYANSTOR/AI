@@ -16,17 +16,27 @@ export class OutboxDrainError extends Error {}
  * long-running inbound worker so queued replies and retries never depend on
  * the (best-effort, often delayed) external scheduler alone.
  */
+export type OutboxDrainResult = {
+  processed: number
+  sent: number
+  sentEventIds: string[]
+  cancelled: number
+  blocked: number
+  unconfirmed: number
+  retried: number
+}
+
 export async function drainOutbox(
   db: DbClient,
   { limit = 50, only }: { limit?: number; only?: { organizationId: string; idempotencyKey: string } } = {}
-): Promise<{ processed: number; sent: number; sentEventIds: string[] }> {
+): Promise<OutboxDrainResult> {
   // Stale workers (crashed mid-send) leave rows in 'processing'; they become claimable
   // again after the lock window instead of being stuck forever.
   const staleBefore = new Date(Date.now() - OUTBOX_STALE_LOCK_MS).toISOString()
   const claimable = `status.in.(pending,failed),and(status.eq.processing,locked_at.lt.${staleBefore})`
   // `only` drains a single just-queued reply (dashboard send) without touching other tenants' rows.
   let query = db.from('outbox_events')
-    .select('id, organization_id, channel_id, event_type, recipient, payload, attempts, idempotency_key')
+    .select('id, organization_id, channel_id, event_type, recipient, payload, attempts, idempotency_key, status, provider_attempted_at')
   if (only) query = query.eq('organization_id', only.organizationId).eq('idempotency_key', only.idempotencyKey)
   const { data: events, error } = await query
     .or(claimable)
@@ -47,8 +57,38 @@ export async function drainOutbox(
   for (const row of channelsResult.data ?? []) channelsById.set(row.id as string, row)
 
   let sent = 0
+  let processed = 0
+  let cancelled = 0
+  let blocked = 0
+  let unconfirmed = 0
+  let retried = 0
   const sentEventIds: string[] = []
   for (const event of events ?? []) {
+    // OPS-003: a stale `processing` row whose provider call had already started is
+    // ambiguous — the provider may have accepted and the acknowledgement write may
+    // have failed. Never resend it automatically; surface it for reconciliation.
+    if (event.status === 'processing' && event.provider_attempted_at) {
+      const { error: reconcileError } = await db.from('outbox_events').update({
+        status: 'unconfirmed',
+        locked_at: null,
+        last_error: 'provider_outcome_unconfirmed',
+        updated_at: new Date().toISOString(),
+      }).eq('id', event.id).eq('status', 'processing')
+      if (reconcileError) {
+        console.error('outbox_unconfirmed_reconcile_failed', { outboxEventId: event.id, reason: reconcileError.message.slice(0, 200) })
+      } else {
+        unconfirmed += 1
+        await db.from('audit_events').insert({
+          organization_id: event.organization_id,
+          actor_type: 'system',
+          action: 'outbox.delivery_unconfirmed',
+          entity_type: 'outbox_event',
+          entity_id: String(event.id),
+          metadata: { attempts: Number(event.attempts ?? 0) },
+        })
+      }
+      continue
+    }
     let providerAccepted = false
     let selectedChannel: { channel_type?: string | null; connection_mode?: string | null } | undefined
     const claim = await db.from('outbox_events')
@@ -58,6 +98,7 @@ export async function drainOutbox(
       .select('id')
       .maybeSingle()
     if (!claim.data) continue
+    processed += 1
 
     try {
       // A failed batch lookup fails each event individually (same retry/backoff path as before).
@@ -88,6 +129,7 @@ export async function drainOutbox(
           const stillDue = task.data && ['pending', 'snoozed'].includes(String(task.data.status)) && !task.data.reminder_sent_at && task.data.due_at && new Date(task.data.due_at).getTime() <= Date.now()
           if (!stillDue) {
             await db.from('outbox_events').update({ status: 'cancelled', locked_at: null, updated_at: new Date().toISOString(), last_error: 'personal_task_no_longer_due' }).eq('id', event.id).eq('status', 'processing')
+            cancelled += 1
             continue
           }
         }
@@ -120,6 +162,7 @@ export async function drainOutbox(
           if (surveyId && (plan.kind !== 'text' || !channel.is_active)) {
             await db.from('outbox_events').update({ status: 'cancelled', locked_at: null, last_error: 'csat_unavailable' })
               .eq('id', event.id).eq('status', 'processing')
+            cancelled += 1
             continue
           }
           if (plan.kind === 'blocked') {
@@ -129,6 +172,7 @@ export async function drainOutbox(
               last_error: 'whatsapp_template_required_outside_window',
               updated_at: new Date().toISOString(),
             }).eq('id', event.id).eq('status', 'processing')
+            blocked += 1
             await db.from('audit_events').insert({
               organization_id: event.organization_id,
               actor_type: 'system',
@@ -159,6 +203,15 @@ export async function drainOutbox(
           }
         }
       }
+
+      // OPS-003: mark the provider attempt before calling the provider. If the
+      // process dies after this write, the next drain reconciles the event to
+      // `unconfirmed` instead of sending a second copy.
+      const attemptMark = await db.from('outbox_events')
+        .update({ provider_attempted_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+        .eq('id', event.id).eq('status', 'processing')
+        .select('id').maybeSingle()
+      if (!attemptMark.data) throw new Error('outbox_provider_attempt_mark_failed')
 
       // Same delivery path as the live routes; failures here are recorded by the
       // worker itself so retries and dead-letter stay authoritative.
@@ -231,6 +284,7 @@ export async function drainOutbox(
         continue
       }
       const permanent = isPermanentOutboundError(error)
+      retried += 1
       const failure = nextOutboxFailureState(Number(event.attempts ?? 0) + 1)
       await db.from('outbox_events').update({
         status: permanent ? 'dead_letter' : failure.status,
@@ -241,5 +295,5 @@ export async function drainOutbox(
       }).eq('id', event.id)
     }
   }
-  return { processed: events?.length ?? 0, sent, sentEventIds }
+  return { processed, sent, sentEventIds, cancelled, blocked, unconfirmed, retried }
 }

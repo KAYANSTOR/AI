@@ -28,6 +28,8 @@ import {
 } from '../tests/support/ext-005-fixtures'
 import { planExternalContactTurn } from '@/lib/runtime/external-contact-policy'
 import { setAgentTurnRunner, processInboundMessage } from '@/lib/runtime/process-inbound'
+import { runInboundJobTurn } from '@/lib/runtime/inbound-job'
+import { deliverOutbound } from '@/lib/runtime/outbound'
 
 const COORDINATION_TEXT = 'أوصل رسالة لصاحب الحساب: الاجتماع تأجل إلى الغد'
 const OUT_OF_SCOPE_TEXT = 'اكتب لي كود بايثون لفرز قائمة'
@@ -178,6 +180,57 @@ async function main() {
     }
     if ((store.outbox_events.rows ?? []).length !== iterations) throw new Error('reply intents were duplicated or lost')
     results.push({ stage: 'pipeline.total_no_model', samples })
+  }
+
+  // 9. OPS-007 phases: same synthetic pipeline, but each phase timed separately so
+  // the measured model and delivery segments are reported as p50/p95. The provider is
+  // still the in-memory double, so `outbound_intent_reserve` is a DB reservation, not
+  // a network send.
+  {
+    const { db } = createExtWorld()
+    setAgentTurnRunner(async () => {
+      if (modelDelayMs > 0) await new Promise((resolve) => setTimeout(resolve, modelDelayMs))
+      return 'سأوصل رسالتك إلى صاحب الحساب.'
+    })
+    const turnSamples: number[] = []
+    const modelSamples: number[] = []
+    const outboundSamples: number[] = []
+    for (let index = 0; index < slowIterations; index += 1) {
+      const eventId = `qr:${EXT_CHANNEL}:ops007-${index}`
+      await enqueueQrInbound(db, { eventId, text: COORDINATION_TEXT })
+      const job = await claimNextJob(db)
+      if (!job) throw new Error('expected a queued job')
+      const timings: { attempts?: number; modelMs?: number } = { attempts: job.attempts }
+      const turnStarted = performance.now()
+      const result = await runInboundJobTurn(db, job.payload, {}, timings)
+      turnSamples.push(performance.now() - turnStarted)
+      if (typeof timings.modelMs === 'number') modelSamples.push(timings.modelMs)
+      if (!result.reply) throw new Error('expected a reply')
+      const outboundStarted = performance.now()
+      const delivery = await deliverOutbound(db, {
+        channel: {
+          id: EXT_CHANNEL,
+          organizationId: EXT_ORG,
+          businessId: EXT_BIZ,
+          channelType: 'whatsapp',
+          connectionMode: 'qr_unofficial',
+          providerAccountId: null,
+          externalIdentifier: null,
+        },
+        recipient: EXT_FRIEND_PHONE,
+        body: result.reply,
+        idempotencyKey: `${eventId}:reply`,
+        conversationId: result.conversationId || null,
+        senderType: 'ai',
+      })
+      outboundSamples.push(performance.now() - outboundStarted)
+      if (delivery !== 'queued') throw new Error(`expected a durable intent, got ${delivery}`)
+    }
+    results.push(
+      { stage: 'ops007.turn_total', samples: turnSamples },
+      { stage: 'ops007.model_duration', samples: modelSamples },
+      { stage: 'ops007.outbound_intent_reserve', samples: outboundSamples }
+    )
   }
 
   const refusal = planExternalContactTurn({ text: OUT_OF_SCOPE_TEXT, history: [] })
