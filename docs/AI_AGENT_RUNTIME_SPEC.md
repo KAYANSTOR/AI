@@ -7,6 +7,8 @@ Required invariant: personal/ignored paths do not create commercial contacts/con
 
 External personal contacts are gated server-side by `apps/web/src/lib/runtime/external-contact-policy.ts` before any pending action, tool, eligibility, quota or model call: out-of-scope requests get a fixed refusal, mixed requests get only the communication portion, messages about the owner's own app/website (a problem, an error, or a question about signup, subscription, link or update) are treated as coordination for the owner rather than general requests, and greeting cadence is computed from scoped persisted conversation history (first contact, or after 12 hours of silence by default; override with `EXTERNAL_CONTACT_GREETING_INACTIVITY_HOURS`). The system prompt states the same rules, but the prompt is not the enforcement point.
 
+Inbound queue retry contract: a provider event is claimed once (`webhook_events`), and `inbound_jobs.idempotency_key` is unique per event id. `apps/web/src/lib/runtime/inbound-enqueue.ts` owns the duplicate case: a `dead_letter` job is requeued so a genuine retry is not lost, while `queued`, `processing` or `completed` rows are acknowledged without a second job. Atomic claiming and stale-lock recovery stay in `claim_inbound_job` / `recover_stale_inbound_jobs`. Latency is measured locally by `apps/web/scripts/measure-ext-005-latency.ts` (synthetic fixtures, no provider network); queue wait is bounded by the worker poll interval (1500 ms) and the outbox drain interval (10 s), not by these numbers.
+
 ## Authority
 LLM = reasoning/drafting.
 Capability Registry = enabled business features.

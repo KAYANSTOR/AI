@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/db/admin'
 import { secretEquals } from '@/lib/credentials/service'
 import { acquireWebhookEvent, markWebhookProcessed } from '@/lib/channels/idempotency'
+import { enqueueInboundJob } from '@/lib/runtime/inbound-enqueue'
 import { fromBaileysDescriptor } from '@/lib/media/attachment'
 
 export const runtime = 'nodejs'
@@ -53,12 +54,12 @@ export async function POST(req: NextRequest) {
       organization_id: channel.organization_id, channel_id: channel.id,
       event_type: media ? 'message.media_received' : 'message.received', signature_verified: true,
     }).eq('id', eventRowId)
-    const { error: jobError } = await db.from('inbound_jobs').insert({
-      organization_id: channel.organization_id,
-      business_id: channel.business_id,
-      channel_id: channel.id,
-      webhook_event_id: eventRowId,
-      idempotency_key: externalEventId,
+    const queued = await enqueueInboundJob(db, {
+      organizationId: channel.organization_id,
+      businessId: channel.business_id,
+      channelId: channel.id,
+      webhookEventId: eventRowId,
+      idempotencyKey: externalEventId,
       payload: {
         channelId: channel.id,
         organizationId: channel.organization_id,
@@ -74,8 +75,8 @@ export async function POST(req: NextRequest) {
         externalIdentifier: channel.external_identifier,
       },
     })
-    if (jobError) {
-      await markWebhookProcessed(db, eventRowId, 'failed', jobError.message)
+    if (!queued.ok) {
+      await markWebhookProcessed(db, eventRowId, 'failed', queued.message)
       eventRowId = null
       return NextResponse.json({ error: 'inbound_job_enqueue_failed' }, { status: 500 })
     }
