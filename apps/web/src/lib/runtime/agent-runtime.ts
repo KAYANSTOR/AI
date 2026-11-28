@@ -251,7 +251,7 @@ export async function runAgentTurn(args: {
   /** Plan cap on customer input characters passed to the model (history included). */
   inputCharLimit?: number
   /** Active when an external friend/contact messages a personal_assistant workspace. */
-  personalExternalContact?: { senderName?: string | null } | null
+  personalExternalContact?: { senderName?: string | null; shouldGreet?: boolean } | null
 }) {
   const isExternalPersonal = Boolean(args.personalExternalContact)
   const [{ data: history, error: historyError }, basePrompt, toolSet, { data: contactRow }, { data: profileRow }] = await Promise.all([
@@ -277,8 +277,11 @@ export async function runAgentTurn(args: {
   const senderDisplayName =
     args.personalExternalContact?.senderName?.trim() ||
     (contactRow?.full_name ? String(contactRow.full_name).trim() : null)
+  const greetingLine = args.personalExternalContact?.shouldGreet === false
+    ? '- المحادثة مستمرة: لا تبدأ بتحية ولا تكرر اسم المرسل في هذه الرسالة.'
+    : '- هذه أول رسالة أو بعد انقطاع طويل: ابدأ بتحية قصيرة مرة واحدة فقط.'
   const prompt = isExternalPersonal
-    ? `${basePrompt}\n\n[EXTERNAL_CONTACT_INFO]\n- الاسم الظاهر للمرسل: ${senderDisplayName || 'غير معروف'}\n- أرسل رسالة طبيعية ولطيفة بالنيابة عن صاحب الحساب دون كشف أي بيانات خاصة.`
+    ? `${basePrompt}\n\n[EXTERNAL_CONTACT_INFO]\n- الاسم الظاهر للمرسل: ${senderDisplayName || 'غير معروف'}\n${greetingLine}\n- أرسل رسالة طبيعية ولطيفة بالنيابة عن صاحب الحساب دون كشف أي بيانات خاصة.`
     : `${basePrompt}\n\n${buildCustomerContextBlock({
         contact: contactRow ? { id: String(contactRow.id), name: (contactRow.full_name as string | null) ?? null, phone: (contactRow.phone as string | null) ?? null } : { id: args.contactId, name: null, phone: null },
         timezone: (profileRow?.timezone as string | null | undefined) ?? 'Asia/Aden',

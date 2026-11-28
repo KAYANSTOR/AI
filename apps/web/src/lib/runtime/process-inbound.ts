@@ -12,6 +12,11 @@ import { wrapUntrusted } from '@/lib/personal-assistant/executive/policy'
 import { getPendingAction, isAffirmative, isNegative, markPendingAction } from '@/lib/runtime/pending'
 import { ensureOpenConversation, getConversationRef } from '@/lib/runtime/conversation'
 import { resolveBusinessAgent } from '@/lib/runtime/tenant'
+import {
+  applyExternalContactGreeting,
+  loadExternalContactHistory,
+  planExternalContactTurn,
+} from '@/lib/runtime/external-contact-policy'
 import { selectBusinessAgent } from '@/lib/runtime/business-agent'
 import { executeTool } from '@/lib/ai/tools'
 import { armConversationSla } from '@/lib/sla'
@@ -434,6 +439,46 @@ export async function processInboundMessage(
     return { reply: handoff.customerReply, conversationId, contactId: contact.contactId }
   }
 
+  // EXT-001/EXT-003/EXT-004 — an external contact of a personal workspace is a
+  // receptionist only. Scope is decided here, on the server, before any pending
+  // action, tool, eligibility, quota or model call; the prompt only receives the
+  // resulting flags, so wording alone is never the enforcement.
+  let externalContactPolicy: { shouldGreet: boolean } | null = null
+  if (isPersonalWorkspace) {
+    const decision = planExternalContactTurn({
+      text: input.text,
+      history: await loadExternalContactHistory(db, {
+        organizationId: input.organizationId,
+        conversationId,
+      }),
+      currentMessageId: stored.messageId,
+    })
+    if (decision.action !== 'model') {
+      try {
+        await db.from('audit_events').insert({
+          organization_id: input.organizationId,
+          business_id: input.businessId,
+          actor_type: 'system',
+          action:
+            decision.action === 'refuse'
+              ? 'personal_external_contact.refused'
+              : 'personal_external_contact.relayed',
+          entity_type: 'conversation',
+          entity_id: conversationId,
+          metadata: { intent: decision.intent, reason: decision.reason },
+        })
+      } catch (error) {
+        // The scope decision stands even if the audit row cannot be written.
+        console.warn('personal_external_contact_audit_failed', {
+          organizationId: input.organizationId,
+          reason: error instanceof Error ? error.message : 'audit_write_failed',
+        })
+      }
+      return { reply: decision.reply, conversationId, contactId: contact.contactId }
+    }
+    externalContactPolicy = { shouldGreet: decision.shouldGreet }
+  }
+
   let serverActionResult: unknown
   const pending = await getPendingAction(db, conversationId)
 
@@ -570,10 +615,19 @@ export async function processInboundMessage(
     economy: policy.economy,
     inputCharLimit: policy.free ? policy.maxInputChars : undefined,
     personalExternalContact: isPersonalWorkspace
-      ? { senderName: input.displayName?.trim() || null }
+      ? {
+          senderName: input.displayName?.trim() || null,
+          shouldGreet: externalContactPolicy?.shouldGreet ?? true,
+        }
       : null,
   })
   if (!reply) return skipReply('agent_returned_empty_reply', input, conversationId, contact.contactId)
+
+  // EXT-002: greeting is enforced on the final text as well, so a model that
+  // repeats it mid-conversation cannot break the once-only greeting rule.
+  const finalReply = externalContactPolicy
+    ? applyExternalContactGreeting(reply, externalContactPolicy.shouldGreet)
+    : reply
 
   try {
     await recordMeterUsage(db, input.organizationId, 'ai_messages', 1)
@@ -581,5 +635,5 @@ export async function processInboundMessage(
     // meter table may be absent until migration; ledger still records tokens
   }
 
-  return { reply, conversationId, contactId: contact.contactId }
+  return { reply: finalReply, conversationId, contactId: contact.contactId }
 }

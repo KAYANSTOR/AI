@@ -5,6 +5,8 @@ Ingress → Auth → Idempotency → Exact Tenant → Verified Identity / Owner 
 
 Required invariant: personal/ignored paths do not create commercial contacts/conversations or activate SLA; external personal contacts can only relay messages or coordinate contact with the owner. These are acceptance requirements, not a blanket claim of live verification. See [the sole approved plan](../KAYAN_AI_MASTER_PLAN.md), F-003 and EXT-001–006.
 
+External personal contacts are gated server-side by `apps/web/src/lib/runtime/external-contact-policy.ts` before any pending action, tool, eligibility, quota or model call: out-of-scope requests get a fixed refusal, mixed requests get only the communication portion, messages about the owner's own app/website (a problem, an error, or a question about signup, subscription, link or update) are treated as coordination for the owner rather than general requests, and greeting cadence is computed from scoped persisted conversation history (first contact, or after 12 hours of silence by default; override with `EXTERNAL_CONTACT_GREETING_INACTIVITY_HOURS`). The system prompt states the same rules, but the prompt is not the enforcement point.
+
 ## Authority
 LLM = reasoning/drafting.
 Capability Registry = enabled business features.
