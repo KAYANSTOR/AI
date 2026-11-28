@@ -41,7 +41,6 @@ export async function drainOutbox(
   const { data: events, error } = await query
     .or(claimable)
     .lte('scheduled_at', new Date().toISOString())
-    .lt('attempts', OUTBOX_MAX_ATTEMPTS)
     .order('scheduled_at')
     .limit(limit)
   if (error) throw new OutboxDrainError(error.message)
@@ -67,6 +66,8 @@ export async function drainOutbox(
     // OPS-003: a stale `processing` row whose provider call had already started is
     // ambiguous — the provider may have accepted and the acknowledgement write may
     // have failed. Never resend it automatically; surface it for reconciliation.
+    // OPS-003: reconcile ambiguous rows before the attempt cap is applied, otherwise a
+    // row whose provider call started on its last allowed attempt stays `processing`.
     if (event.status === 'processing' && event.provider_attempted_at) {
       const { error: reconcileError } = await db.from('outbox_events').update({
         status: 'unconfirmed',
@@ -89,6 +90,7 @@ export async function drainOutbox(
       }
       continue
     }
+    if (event.status !== 'processing' && Number(event.attempts ?? 0) >= OUTBOX_MAX_ATTEMPTS) continue
     let providerAccepted = false
     let selectedChannel: { channel_type?: string | null; connection_mode?: string | null } | undefined
     const claim = await db.from('outbox_events')
