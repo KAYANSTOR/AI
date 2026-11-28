@@ -8,6 +8,7 @@ import { classifyUpsertMessage, createSentMessageRegistry } from './message-dire
 import { createMediaMessageCache, extractMediaDescriptor, extractText, requestedMaxBytes } from './media.js'
 import { ignoredPhoneNumbers, isIgnoredPhone } from './phone-policy.js'
 import { restoreSessionDecision, sessionIsConnected } from './restore-policy.js'
+import { createAppForwarder, createReadinessBarrier, deliverAfterReadiness } from './inbound-delivery.js'
 
 const PORT = Number(process.env.WHATSAPP_GATEWAY_PORT || 3001)
 const DATABASE_URL = requiredEnv('DATABASE_URL')
@@ -157,45 +158,11 @@ const mediaMessages = createMediaMessageCache()
 function messageText(message) {
   return extractText(message)
 }
-const APP_FORWARD_ATTEMPTS = 5
-const APP_FORWARD_RETRY_DELAYS_MS = [250, 500, 1000, 2000]
-const sleep = ms => new Promise(resolve => setTimeout(resolve, ms))
-
-/**
- * OPS-001 — a message WhatsApp already delivered must not be lost because the app
- * briefly reports the channel unavailable (binding/readiness write still in flight,
- * deploy overlap, database hiccup). The app deduplicates by `externalEventId`, so a
- * bounded retry is safe and never creates a second job.
- */
-async function postToApp(path, body, logKey, channelId) {
-  let lastStatus = 0
-  let lastReason = ''
-  let usedAttempts = 0
-  for (let attempt = 1; attempt <= APP_FORWARD_ATTEMPTS; attempt += 1) {
-    usedAttempts = attempt
-    try {
-      const response = await fetch(APP_INTERNAL_URL + path, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', authorization: 'Bearer ' + GATEWAY_TOKEN },
-        body: JSON.stringify(body),
-        signal: AbortSignal.timeout(15_000),
-      })
-      if (response.ok) return true
-      lastStatus = response.status
-      lastReason = (await response.text().catch(() => '')).slice(0, 120)
-      const retryable = response.status === 404 || response.status === 408 ||
-        response.status === 425 || response.status === 429 || response.status >= 500
-      if (!retryable || attempt === APP_FORWARD_ATTEMPTS) break
-    } catch (error) {
-      lastStatus = 0
-      lastReason = error instanceof Error ? error.message : 'network_error'
-      if (attempt === APP_FORWARD_ATTEMPTS) break
-    }
-    await sleep(APP_FORWARD_RETRY_DELAYS_MS[Math.min(attempt - 1, APP_FORWARD_RETRY_DELAYS_MS.length - 1)])
-  }
-  console.error(logKey, { channelId, status: lastStatus, reason: lastReason, attempts: usedAttempts })
-  return false
-}
+// OPS-001 — a message WhatsApp already delivered must not be lost because the app
+// briefly reports the channel unavailable (binding/readiness write still in flight,
+// deploy overlap, database hiccup). The app deduplicates by `externalEventId`, so a
+// bounded retry is safe and never creates a second job.
+const postToApp = createAppForwarder({ appUrl: APP_INTERNAL_URL, token: GATEWAY_TOKEN })
 async function forwardInbound(session, message, upsertType) {
   // F-003 gateway-side pre-filter: a number on the organization's ignored_phones
   // list is never forwarded to the app, so it cannot create business records.
@@ -358,7 +325,7 @@ async function startSocket(channelId, options = {}) {
         // must be marked ready before any of those messages is forwarded, otherwise
         // the app rejects an already accepted WhatsApp message with
         // `channel_unavailable`. Publish the barrier synchronously, then await the writes.
-        const barrier = (async () => {
+        const barrier = createReadinessBarrier(async () => {
           session.status = 'connected'
           session.qrDataUrl = null
           session.pairingCode = null
@@ -367,7 +334,7 @@ async function startSocket(channelId, options = {}) {
           await persistSocketState(session)
           await query("UPDATE public.channels SET is_active=true,verification_status='verified',updated_at=now() WHERE id=$1 AND channel_type='whatsapp' AND connection_mode='qr_unofficial'",
             [channelId])
-        })()
+        })
         session.openBarrier = barrier
         await barrier
         console.log('whatsapp_qr_socket_open', { channelId, mode: session.mode })
@@ -434,8 +401,9 @@ async function startSocket(channelId, options = {}) {
   sock.ev.on('messages.upsert', async event => {
     if (event.type !== 'notify' && event.type !== 'append') return
     // OPS-001: never forward before the `open` reconciliation finished.
-    try { await session.openBarrier } catch { /* the connection handler logs its own failure */ }
-    for (const message of event.messages || []) await forwardInbound(session, message, event.type)
+    await deliverAfterReadiness(session.openBarrier, async () => {
+      for (const message of event.messages || []) await forwardInbound(session, message, event.type)
+    })
   })
 
   return session

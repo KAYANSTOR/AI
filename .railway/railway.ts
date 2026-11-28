@@ -5,7 +5,7 @@ import { defineRailway, github, project, service } from "railway/iac";
 export const partial = "kayan-ai";
 export default defineRailway(() => {
   const kayanAi = service("kayan-ai", {
-    source: github("KAYANSTOR/AI", { branch: "branch1", checkSuites: false }),
+    source: github("KAYANSTOR/AI", { branch: "main", checkSuites: false }),
     build: { buildCommand: "npm run build", buildEnvironment: "V3", builder: "RAILPACK" },
     start: "node start-with-gateway.mjs",
     healthcheck: "/",
